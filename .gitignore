@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+build/
+dist/
+
+# Runtime data (SQLite, snapshots, logs) — never committed
+data/
+
+# Env files (never committed)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# Bun
+.bun/
+bun.lockb.bak
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Misc
+*.pid
+.tmp/
+*.tsbuildinfo
