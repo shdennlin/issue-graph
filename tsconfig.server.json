@@ -6,7 +6,7 @@
     "outDir": "build",
     "rootDir": "src",
     "lib": ["ES2022"],
-    "types": ["node"],
+    "types": ["node", "bun"],
     "noEmit": false,
     "declaration": false,
     "sourceMap": true

@@ -1,4 +1,10 @@
-import Database from 'better-sqlite3'
+// Bun's built-in SQLite. We migrated from `better-sqlite3` because Bun
+// explicitly refuses to load it (oven-sh/bun#4290) — better-sqlite3's N-API
+// surface is incompatible with Bun's runtime. `bun:sqlite` has a near-identical
+// API and ships with the runtime, so no native compile / no prebuild headaches.
+// Trade-off: this module now only runs on Bun. The previous Node-target
+// Dockerfile (`Dockerfile.node`) no longer works against this code path.
+import { Database } from 'bun:sqlite'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { loadConfig } from './lib/env.js'
@@ -53,9 +59,9 @@ const MIGRATIONS: string[] = [
    );`,
 ]
 
-let dbInstance: Database.Database | null = null
+let dbInstance: Database | null = null
 
-export function getDb(): Database.Database {
+export function getDb(): Database {
   if (dbInstance) return dbInstance
   const cfg = loadConfig()
   const log = getLogger()
@@ -68,8 +74,9 @@ export function getDb(): Database.Database {
   }
 
   const db = new Database(cfg.SQLITE_PATH)
-  db.pragma('journal_mode = WAL')
-  db.pragma('foreign_keys = ON')
+  // bun:sqlite has no `.pragma()` helper — use the run/exec pair instead.
+  db.run('PRAGMA journal_mode = WAL')
+  db.run('PRAGMA foreign_keys = ON')
 
   // user_version tracks which migrations are applied. Use it as an integer.
   const versionRow = db.prepare('PRAGMA user_version').get() as { user_version: number }
@@ -77,9 +84,11 @@ export function getDb(): Database.Database {
   for (let i = version; i < MIGRATIONS.length; i++) {
     const sql = MIGRATIONS[i]
     if (!sql) continue
-    db.exec(sql)
+    db.run(sql)
     version = i + 1
-    db.pragma(`user_version = ${version}`)
+    // PRAGMA doesn't support `?` binding, so we string-concat. `version` is a
+    // bounded integer derived from MIGRATIONS.length so injection is N/A.
+    db.run('PRAGMA user_version = ' + String(version))
     log.info({ migration: i }, 'applied migration')
   }
 

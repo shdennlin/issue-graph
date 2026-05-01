@@ -1,7 +1,9 @@
 # Build stage
 FROM oven/bun:1 AS builder
 WORKDIR /app
-COPY package.json bun.lockb* ./
+# Lockfile is the text-format `bun.lock` (since the npm→bun migration), not
+# the legacy binary `bun.lockb`. Glob matches either form.
+COPY package.json bun.lock* bun.lockb* ./
 RUN bun install --frozen-lockfile || bun install
 COPY . .
 RUN bun run build
