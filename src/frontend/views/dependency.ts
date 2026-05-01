@@ -18,7 +18,7 @@ export const dependencyView: ViewDefinition = {
       type: 'issue',
       data: { issue: i, focused: focusedId === i.identifier },
       position: { x: 0, y: 0 },
-      width: 300,
+      width: 320,
       // Prefer real measured height if we have it (post-paint re-layout pass),
       // otherwise fall back to the density estimate. Dagre uses this directly.
       height: measuredHeights?.get(i.identifier) ?? NODE_H,
@@ -38,7 +38,7 @@ export const dependencyView: ViewDefinition = {
       }
     }
 
-    const positioned = runDagre(nodes, edges, { direction: 'LR', nodeWidth: 300, nodeHeight: NODE_H })
+    const positioned = runDagre(nodes, edges, { direction: 'LR', nodeWidth: 320, nodeHeight: NODE_H })
     return { nodes: positioned, edges }
   },
 }

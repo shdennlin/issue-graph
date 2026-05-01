@@ -6,6 +6,8 @@ export function SettingsPage() {
   const open = useViewStore((s) => s.settingsOpen)
   const close = useViewStore((s) => s.setSettingsOpen)
   const setStaleDays = useViewStore((s) => s.setStaleDays)
+  const fontSize = useViewStore((s) => s.fontSize)
+  const setFontSize = useViewStore((s) => s.setFontSize)
   const [data, setData] = useState<SettingsResponse | null>(null)
   const [draft, setDraft] = useState<Record<string, unknown>>({})
 
@@ -95,6 +97,62 @@ export function SettingsPage() {
             onChange={(e) => setDraft({ ...draft, stale_days_threshold: Number(e.target.value) })}
           />
         </label>
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ marginBottom: 4 }}>Font size</div>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            {(['sm', 'md', 'lg'] as const).map((p) => (
+              <button
+                key={p}
+                onClick={() => setFontSize(p)}
+                className={fontSize === p ? 'primary' : ''}
+              >
+                {p === 'sm' ? 'Small' : p === 'md' ? 'Medium' : 'Large'}
+              </button>
+            ))}
+            {/* "Custom" indicator: highlights as primary when fontSize is a
+                numeric override so user sees at-a-glance which mode is active.
+                Shows the live px value next to it. */}
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '4px 10px',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--node-border)',
+                background: typeof fontSize === 'number' ? 'var(--accent)' : 'var(--bg-elev)',
+                color: typeof fontSize === 'number' ? 'var(--accent-fg)' : 'var(--fg)',
+                fontSize: 'var(--fs-base)',
+              }}
+            >
+              Custom
+              {typeof fontSize === 'number' && (
+                <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fontSize}px</span>
+              )}
+            </span>
+            {/* Always show the resolved px in the input — even when a preset
+                is active — so the user can see what "Medium" actually is. */}
+            <input
+              type="number"
+              min={9}
+              max={24}
+              step={1}
+              value={
+                typeof fontSize === 'number'
+                  ? fontSize
+                  : fontSize === 'sm' ? 12 : fontSize === 'lg' ? 15 : 13
+              }
+              onChange={(e) => {
+                const v = e.target.value
+                if (v === '') return
+                const n = Number(v)
+                if (Number.isFinite(n) && n >= 9 && n <= 24) setFontSize(n)
+              }}
+              style={{ width: 70 }}
+              title="Base font size in px (9–24). Other sizes derive from this."
+            />
+          </div>
+        </div>
 
         <h4>Backend</h4>
         <div style={{ color: 'var(--fg-muted)', fontSize: 12 }}>

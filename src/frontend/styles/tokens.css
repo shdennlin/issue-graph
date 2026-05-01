@@ -1,11 +1,14 @@
 :root {
   --bg: #ffffff;
-  --bg-elev: #fafafa;
+  --bg-elev: #f6f7f9;
   --fg: #0d1117;
   --fg-muted: #57606a;
-  --node-bg: #f5f5f5;
-  --node-border: #d0d7de;
-  --node-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  /* Card sits on top of panels — give it pure white in light mode so the
+     elevation reads. Previously #f5f5f5 vs --bg-elev #fafafa = 2 LU apart
+     and cards visually merged into the side panels. */
+  --node-bg: #ffffff;
+  --node-border: #d8dee4;
+  --node-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.02);
   --edge: #475569;
   --edge-cross-bucket: #d62828;
   --accent: #0a84ff;
@@ -33,6 +36,13 @@
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 10px;
+  /* 4-step spacing scale (4 / 8 / 12 / 16 / 24). Prefer these over ad-hoc
+     pixel values so the visual rhythm stays consistent across components. */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   /* Font scale — referenced by components. data-fontsize attr swaps these. */

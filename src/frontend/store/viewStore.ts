@@ -4,7 +4,9 @@ import type { IssueStateType } from '@shared/types.js'
 export type ViewId = 'dependency' | 'mix' | 'designdoc'
 export type Density = 'compact' | 'default' | 'verbose'
 export type ThemeMode = 'light' | 'dark' | 'auto'
-export type FontSize = 'sm' | 'md' | 'lg'
+// Either a preset (sm/md/lg) or a custom base px value (e.g. 14). When a
+// number, the hook derives meta/chip/title sizes as base ± offsets.
+export type FontSize = 'sm' | 'md' | 'lg' | number
 
 export interface Filters {
   stateTypes: IssueStateType[]
@@ -105,7 +107,14 @@ export const useViewStore = create<ViewState>((set) => ({
   expandedBuckets: [],
   theme: 'auto',
   density: 'default',
-  fontSize: (typeof window !== 'undefined' && (window.localStorage?.getItem('ig-font-size') as FontSize)) || 'md',
+  fontSize: (() => {
+    if (typeof window === 'undefined') return 'md' as FontSize
+    const raw = window.localStorage?.getItem('ig-font-size')
+    if (!raw) return 'md' as FontSize
+    if (raw === 'sm' || raw === 'md' || raw === 'lg') return raw
+    const n = Number(raw)
+    return Number.isFinite(n) && n >= 9 && n <= 24 ? n : ('md' as FontSize)
+  })(),
   search: '',
   inlineSearch: { open: false, query: '', activeIdx: 0 },
   settingsOpen: false,
@@ -141,7 +150,9 @@ export const useViewStore = create<ViewState>((set) => ({
   setTheme: (t) => set({ theme: t }),
   setDensity: (d) => set({ density: d }),
   setFontSize: (f) => {
-    if (typeof window !== 'undefined') window.localStorage?.setItem('ig-font-size', f)
+    if (typeof window !== 'undefined') {
+      window.localStorage?.setItem('ig-font-size', String(f))
+    }
     set({ fontSize: f })
   },
   setSearch: (q) => set({ search: q }),

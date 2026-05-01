@@ -32,6 +32,18 @@ input, select, textarea {
   padding: 4px 8px;
   font-size: var(--fs-base);
 }
+/* Retint native checkboxes/radios from the OS default (pink on macOS, blue on
+   most Win/Linux) to the app's accent. Keeps native a11y/keyboard semantics,
+   no JS, no appearance: none custom-control gymnastics. */
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
 
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -126,28 +138,56 @@ a:hover { text-decoration: underline; }
   padding: 10px;
   font-size: var(--fs-base);
 }
-.filter-panel section { margin-bottom: 14px; }
-.filter-panel h4 { margin: 0 0 6px; font-size: var(--fs-meta); color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.06em; }
-.filter-panel label { display: flex; align-items: center; gap: 6px; padding: 2px 0; cursor: pointer; }
-.filter-panel .count { color: var(--fg-muted); font-size: var(--fs-meta); margin-left: auto; }
+.filter-panel section { margin-bottom: var(--sp-4); }
+/* Section headers: dropped tiny-uppercase-letterspaced look (cramped, hard to
+   scan). Sentence-case bold at fs-base reads cleaner and matches Linear's
+   own filter sidebar treatment. */
+.filter-panel h4 { margin: 0 0 var(--sp-2); font-size: var(--fs-base); font-weight: 600; color: var(--fg); }
+.filter-panel label {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  /* Comfortable hit area; Linear-like rest spacing without inflating columns */
+  padding: 3px var(--sp-1);
+  margin: 0 calc(-1 * var(--sp-1));
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 80ms ease;
+}
+.filter-panel label:hover { background: color-mix(in srgb, var(--fg-muted) 8%, transparent); }
+.filter-panel .count {
+  color: var(--fg-muted);
+  font-size: var(--fs-meta);
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  /* Right-pad a hair so the number doesn't kiss the panel edge or scrollbar. */
+  padding-left: var(--sp-2);
+}
 
 /* Hierarchical state filter — parent type + child Linear state names. */
-.state-group { margin-bottom: 8px; }
-.state-group-header { display: flex; align-items: center; gap: 6px; }
+.state-group { margin-bottom: var(--sp-1); }
+.state-group-header { display: flex; align-items: center; gap: var(--sp-2); }
 .state-group-header .glyph { font-size: var(--fs-base); line-height: 1; }
 .state-children {
-  margin-left: 8px;
-  padding-left: 10px;
-  border-left: 1px dashed var(--node-border);
+  margin-left: var(--sp-3);
+  padding-left: var(--sp-3);
+  /* Solid 1px instead of 1px dashed — dashed reads as "boundary" / "warning"
+     and made the children look detached. Solid muted line + 25% opacity is
+     subtle enough to imply hierarchy without competing with the controls. */
+  border-left: 1px solid color-mix(in srgb, var(--fg-muted) 25%, transparent);
   margin-top: 2px;
 }
 .state-child {
   display: flex !important;
   align-items: center;
-  gap: 6px;
-  padding: 1px 0;
+  gap: var(--sp-2);
+  padding: 2px var(--sp-1);
+  margin: 0 calc(-1 * var(--sp-1));
   font-size: var(--fs-meta);
+  color: var(--fg-muted);
+  border-radius: var(--radius-sm);
 }
+.state-child:hover { background: color-mix(in srgb, var(--fg-muted) 8%, transparent); }
 
 .detail-panel {
   position: relative;
@@ -176,10 +216,10 @@ a:hover { text-decoration: underline; }
 .resize-handle:active { background: var(--accent); }
 .resize-handle-right { right: -3px; }
 .resize-handle-left { left: -3px; }
-.detail-panel h2 { margin: 0 0 4px; font-size: 16px; }
-.detail-panel .section { margin-top: 14px; }
-.detail-panel .section h3 { margin: 0 0 6px; font-size: var(--fs-meta); color: var(--fg-muted); text-transform: uppercase; }
-.detail-panel .row { display: flex; gap: 6px; padding: 2px 0; }
+.detail-panel h2 { margin: 0 0 var(--sp-1); font-size: var(--fs-title); line-height: 1.3; }
+.detail-panel .section { margin-top: var(--sp-4); }
+.detail-panel .section h3 { margin: 0 0 var(--sp-2); font-size: var(--fs-base); font-weight: 600; color: var(--fg-muted); }
+.detail-panel .row { display: flex; gap: var(--sp-2); padding: 2px 0; }
 .detail-panel .row .k { color: var(--fg-muted); min-width: 80px; }
 
 .issue-node {
@@ -187,10 +227,13 @@ a:hover { text-decoration: underline; }
   border: 1px solid var(--node-border);
   border-radius: var(--radius-md);
   box-shadow: var(--node-shadow);
-  padding: 8px 10px;
-  width: 280px;
+  padding: var(--sp-3);
+  /* 320px keeps the header (icon + type name + priority dot/name + identifier
+     + state pill) on one line in verbose mode without identifier wrapping
+     mid-token. Pair with dependency.ts dagre `nodeWidth: 320`. */
+  width: 320px;
   font-size: var(--fs-base);
-  line-height: 1.4;
+  line-height: 1.45;
   color: var(--fg);
 }
 .issue-node.focused { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
@@ -210,15 +253,21 @@ a:hover { text-decoration: underline; }
   top: 12px;
   right: 12px;
   z-index: 100;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   padding: 0;
-  border-radius: 50%;
+  /* Square with same radius as Controls / MiniMap so all three corner UI
+     pieces share a visual language instead of a circle landing in a sea of
+     rounded squares. */
+  border-radius: var(--radius-md);
   background: var(--bg-elev);
   border: 1px solid var(--node-border);
   box-shadow: var(--shadow-sm);
-  font-size: 16px;
+  font-size: 14px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .inline-search-btn:hover { background: var(--chip-bg); }
 
@@ -244,15 +293,53 @@ a:hover { text-decoration: underline; }
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
-.issue-node .top { display: flex; gap: 6px; align-items: center; }
-.issue-node .pid { font-family: var(--font-mono); color: var(--fg-muted); font-size: var(--fs-meta); }
-.issue-node .title { font-weight: 500; margin: 4px 0; word-break: break-word; }
-.issue-node .meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; color: var(--fg-muted); font-size: var(--fs-meta); }
-.issue-node .chips { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
-.issue-node .chip { padding: 1px 6px; background: var(--chip-bg); color: var(--chip-fg); border-radius: 999px; font-size: var(--fs-chip); }
-.issue-node .progress { height: 6px; background: var(--chip-bg); border-radius: 3px; overflow: hidden; margin: 6px 0 2px; }
+.issue-node .top { display: flex; gap: var(--sp-2); align-items: center; }
+.issue-node .pid { font-family: var(--font-mono); color: var(--fg-muted); font-size: var(--fs-meta); white-space: nowrap; }
+/* Title is the most important text on the card — promote to fs-title and
+   weight 600 so it dominates the hierarchy over meta and chips. */
+.issue-node .title {
+  font-size: var(--fs-title);
+  font-weight: 600;
+  line-height: 1.3;
+  margin: var(--sp-2) 0 var(--sp-2);
+  word-break: break-word;
+  letter-spacing: -0.005em;
+}
+.issue-node .meta { display: flex; gap: var(--sp-2); align-items: center; flex-wrap: wrap; color: var(--fg-muted); font-size: var(--fs-meta); }
+.issue-node .chips { display: flex; gap: var(--sp-1); flex-wrap: wrap; margin-top: var(--sp-2); }
+/* Chip system: text always in --chip-fg (theme-readable), bg/border derive
+   from --chip-tint custom property. Caller sets only `--chip-tint: <color>`
+   inline. Avoids the "white text on light yellow Linear label" readability
+   bug from the previous `background: l.color; color: #fff` approach. */
+.issue-node .chip {
+  --chip-tint: var(--chip-bg);
+  padding: 1px var(--sp-2);
+  background: color-mix(in srgb, var(--chip-tint) 16%, var(--node-bg));
+  color: var(--chip-fg);
+  border: 1px solid color-mix(in srgb, var(--chip-tint) 35%, transparent);
+  border-radius: 999px;
+  font-size: var(--fs-chip);
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+[data-theme='dark'] .issue-node .chip {
+  background: color-mix(in srgb, var(--chip-tint) 22%, var(--node-bg));
+  border-color: color-mix(in srgb, var(--chip-tint) 45%, transparent);
+}
+.issue-node .progress { height: 4px; background: var(--chip-bg); border-radius: 2px; overflow: hidden; margin: var(--sp-2) 0 2px; }
 .issue-node .progress > div { height: 100%; background: var(--accent); }
-.issue-node .progress-label { font-size: var(--fs-chip); color: var(--fg-muted); }
+.issue-node .progress-label { font-size: var(--fs-chip); color: var(--fg-muted); font-variant-numeric: tabular-nums; }
+/* Annotation count — small monospace bubble glyph, no emoji. Replaces the
+   previous 💬 emoji which rendered inconsistently across platforms. */
+.issue-node .annotation-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
 
 .priority-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .priority-0 { background: var(--priority-none); }
@@ -261,37 +348,28 @@ a:hover { text-decoration: underline; }
 .priority-3 { background: var(--priority-med); }
 .priority-4 { background: var(--priority-low); }
 
-/* State pill — shape glyph + colored chip. Visible at a glance, color-blind friendly. */
+/* State pill — shape glyph + colored chip. Visible at a glance, color-blind
+   friendly. Weight & saturation tuned so it informs but doesn't dominate
+   the card header alongside type icon, priority dot, and identifier. */
 .state-pill {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 9px 2px 7px;
+  gap: var(--sp-1);
+  padding: 1px var(--sp-2);
   border-radius: 999px;
   font-size: var(--fs-chip);
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.4;
-  border: 1px solid currentColor;
-  background: color-mix(in srgb, currentColor 22%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
+  background: color-mix(in srgb, currentColor 12%, transparent);
   white-space: nowrap;
-  letter-spacing: 0.01em;
 }
 .state-pill .glyph { font-size: var(--fs-meta); line-height: 1; }
-.state-pill.is-canceled { opacity: 0.7; text-decoration: line-through; }
-/* Dark theme: pills need a bit more bg saturation to pop against dark node bg. */
-[data-theme='dark'] .state-pill { background: color-mix(in srgb, currentColor 28%, transparent); }
-
-.bucket-node {
-  background: var(--node-bg);
-  border: 2px solid var(--node-border);
-  border-radius: var(--radius-lg);
-  padding: 10px 14px;
-  font-size: var(--fs-base);
-  text-align: center;
-  min-width: 140px;
+.state-pill.is-canceled { opacity: 0.65; }
+[data-theme='dark'] .state-pill {
+  background: color-mix(in srgb, currentColor 18%, transparent);
+  border-color: color-mix(in srgb, currentColor 55%, transparent);
 }
-.bucket-node .name { font-weight: 600; }
-.bucket-node .count { color: var(--fg-muted); font-size: var(--fs-meta); margin-top: 2px; }
 
 .mixed-container {
   background: rgba(0, 0, 0, 0.04);

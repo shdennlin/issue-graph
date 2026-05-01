@@ -9,8 +9,6 @@ export function Toolbar() {
   const setActiveView = useViewStore((s) => s.setActiveView)
   const density = useViewStore((s) => s.density)
   const setDensity = useViewStore((s) => s.setDensity)
-  const fontSize = useViewStore((s) => s.fontSize)
-  const setFontSize = useViewStore((s) => s.setFontSize)
   const search = useViewStore((s) => s.search)
   const setSearch = useViewStore((s) => s.setSearch)
   const theme = useViewStore((s) => s.theme)
@@ -83,14 +81,6 @@ export function Toolbar() {
           <option value="compact">Compact</option>
           <option value="default">Default</option>
           <option value="verbose">Verbose</option>
-        </select>
-      </div>
-      <div className="group">
-        <span style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-meta)' }}>Size</span>
-        <select value={fontSize} onChange={(e) => setFontSize(e.target.value as any)}>
-          <option value="sm">Small</option>
-          <option value="md">Medium</option>
-          <option value="lg">Large</option>
         </select>
       </div>
       <div style={{ marginLeft: 'auto' }} className="group">

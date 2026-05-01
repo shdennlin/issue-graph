@@ -73,7 +73,14 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
             <span className="glyph" aria-hidden>{stateIcon(issue.state.type)}</span>
             {issue.state.name}
           </span>
-          {annCount > 0 && <span className="meta" title={`${annCount} annotations`}>💬{annCount}</span>}
+          {annCount > 0 && (
+            <span className="annotation-count" title={`${annCount} annotations`} aria-label={`${annCount} annotations`}>
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+                <path d="M2 4.5C2 3.67 2.67 3 3.5 3h9c0.83 0 1.5 0.67 1.5 1.5v5c0 0.83-0.67 1.5-1.5 1.5H6l-3 3v-3H3.5C2.67 11 2 10.33 2 9.5v-5z" />
+              </svg>
+              {annCount}
+            </span>
+          )}
         </span>
       </div>
       {!isCompact && <div className="title">{truncate(issue.title, 80)}</div>}
@@ -83,7 +90,7 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
           {primary && (
             <span
               className="chip"
-              style={{ background: primary.color || 'var(--chip-bg)', color: '#fff' }}
+              style={primary.color ? ({ ['--chip-tint' as string]: primary.color } as React.CSSProperties) : undefined}
               title={`${primary.group?.name}: ${primary.name}`}
             >
               {primary.name}
@@ -108,7 +115,7 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
               <span
                 key={l.id}
                 className="chip"
-                style={{ background: l.color || 'var(--chip-bg)' }}
+                style={l.color ? ({ ['--chip-tint' as string]: l.color } as React.CSSProperties) : undefined}
                 title={l.name}
               >
                 {token}: {shortPrefixDisplay(l.name, token)}

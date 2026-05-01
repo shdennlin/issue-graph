@@ -20,7 +20,7 @@ export const designdocView: ViewDefinition = {
       type: 'issue',
       data: { issue: i, focused: focusedId === i.identifier },
       position: { x: 0, y: 0 },
-      width: 300,
+      width: 320,
       height: NODE_H,
     }))
     const ids = new Set(visible.map((i) => i.identifier))
@@ -32,6 +32,6 @@ export const designdocView: ViewDefinition = {
         }
       }
     }
-    return { nodes: runDagre(nodes, edges, { direction: 'LR', nodeWidth: 300, nodeHeight: NODE_H }), edges }
+    return { nodes: runDagre(nodes, edges, { direction: 'LR', nodeWidth: 320, nodeHeight: NODE_H }), edges }
   },
 }
