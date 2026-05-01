@@ -9,7 +9,7 @@ export const designdocView: ViewDefinition = {
   id: 'designdoc',
   label: 'Design docs',
   description: 'Issues that have linked design-doc changes. Phase 3.',
-  build({ data, filters, staleDays, myUserName, focusedId, density, search }) {
+  build({ data, filters, staleDays, myUserName, focusedId, density, search, measuredHeights }) {
     const visible = applyFilters(data.issues, filters, staleDays, myUserName, search).filter((i) => {
       const docs = getDesignDocsForIssue(i, data.designdocs)
       return docs.length > 0
@@ -21,7 +21,10 @@ export const designdocView: ViewDefinition = {
       data: { issue: i, focused: focusedId === i.identifier },
       position: { x: 0, y: 0 },
       width: 320,
-      height: NODE_H,
+      // Use measured DOM height when available so dagre lays out around the
+      // real card size (long titles + chip stacks). Falls back to density
+      // estimate on first paint, before measurement.
+      height: measuredHeights?.get(i.identifier) ?? NODE_H,
     }))
     const ids = new Set(visible.map((i) => i.identifier))
     const edges: Edge[] = []

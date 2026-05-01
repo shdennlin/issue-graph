@@ -7,12 +7,12 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -n server,web -c blue,green \"npm:dev:server\" \"npm:dev:web\"",
-    "dev:server": "tsx watch src/backend/index.ts",
+    "dev:server": "bun --watch src/backend/index.ts",
     "dev:web": "vite",
-    "build": "npm run build:web && npm run build:server",
+    "build": "bun run build:web && bun run build:server",
     "build:web": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
-    "start": "node build/backend/index.js",
+    "start": "bun run build/backend/index.js",
     "typecheck": "tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.web.json",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "test": "vitest run"
@@ -44,7 +44,6 @@
     "@vitejs/plugin-react": "^4.3.3",
     "concurrently": "^9.1.0",
     "eslint": "^9.14.0",
-    "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vite": "^5.4.11",
     "vitest": "^2.1.5"

@@ -6,7 +6,9 @@ import { getPrimaryLabel } from '../lib/labelSchema'
 
 const PADDING = 30
 const HEADER = 32
-const NODE_W = 280
+// Card CSS width is 320 — keep this in sync so issues fit cleanly inside the
+// container without spilling past its right edge.
+const NODE_W = 320
 const GAP_Y = 14
 const GAP_X = 30
 const CONTAINER_W = NODE_W + PADDING * 2
@@ -15,9 +17,14 @@ export const mixView: ViewDefinition = {
   id: 'mix',
   label: 'Mix',
   description: 'Buckets as containers + issues inside. Cross-bucket edges highlighted.',
-  build({ data, schema, filters, staleDays, myUserName, focusedId, density, search }) {
+  build({ data, schema, filters, staleDays, myUserName, focusedId, density, search, measuredHeights }) {
     const NODE_H = issueNodeHeight(density)
     const issues = applyFilters(data.issues, filters, staleDays, myUserName, search)
+    // Per-issue height resolver — measured value when available (post-paint
+    // re-layout pass), density estimate otherwise. Same mechanism as the
+    // dependency view; without this, tall cards (long titles + many chips)
+    // overlap within their bucket because we stack them at NODE_H steps.
+    const heightFor = (id: string): number => measuredHeights?.get(id) ?? NODE_H
 
     const buckets = new Map<string, { name: string; color: string; issues: typeof issues }>()
     for (const i of issues) {
@@ -46,7 +53,18 @@ export const mixView: ViewDefinition = {
         rowY += rowMaxH + ROW_GAP
         rowMaxH = 0
       }
-      const containerHeight = HEADER + PADDING * 2 + b.issues.length * (NODE_H + GAP_Y)
+      // Compute each issue's stacked y-position from its real (measured) or
+      // estimated height. Container height = top padding + sum of card
+      // heights + gaps between cards + bottom padding + header.
+      const issuePositions: Array<{ id: string; y: number; h: number }> = []
+      let cursorY = HEADER + PADDING / 2 // small breathing room below header
+      b.issues.forEach((iss, i) => {
+        const h = heightFor(iss.identifier)
+        issuePositions.push({ id: iss.identifier, y: cursorY, h })
+        cursorY += h
+        if (i < b.issues.length - 1) cursorY += GAP_Y
+      })
+      const containerHeight = cursorY + PADDING / 2
       rowMaxH = Math.max(rowMaxH, containerHeight)
       const containerId = `bucket:${key}`
       const xOffset = col * (CONTAINER_W + GAP_X)
@@ -61,15 +79,16 @@ export const mixView: ViewDefinition = {
       })
       b.issues.forEach((iss, i) => {
         const id = iss.identifier
+        const pos = issuePositions[i]!
         nodes.push({
           id,
           type: 'issue',
           data: { issue: iss, focused: focusedId === id },
           parentNode: containerId,
           extent: 'parent',
-          position: { x: PADDING, y: HEADER + i * (NODE_H + GAP_Y) },
+          position: { x: PADDING, y: pos.y },
           width: NODE_W,
-          height: NODE_H,
+          height: pos.h,
         })
         issueToBucket.set(id, key)
       })
