@@ -9,6 +9,7 @@ import {
   writeWorkflowStatesCached,
   writeMeta,
   readMeta,
+  readExtendedScopeDays,
 } from './cache.js'
 import { getBackend } from './sources/factory.js'
 import { AuthError, RateLimitError } from './sources/types.js'
@@ -75,8 +76,9 @@ async function doSync(): Promise<SyncResult> {
   })
 
   try {
+    const extendedDays = readExtendedScopeDays()
     const [issues, labels, viewer, workflowStates] = await Promise.all([
-      backend.fetchAllIssues({ scope: cfg.ISSUE_SCOPE, teamId: cfg.LINEAR_TEAM_ID }),
+      backend.fetchAllIssues({ scope: cfg.ISSUE_SCOPE, teamId: cfg.LINEAR_TEAM_ID, extendedDays }),
       backend.fetchLabels(),
       backend.fetchViewer().catch(() => null),
       // Optional — adapters that don't implement fetchWorkflowStates will skip

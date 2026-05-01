@@ -3,6 +3,7 @@ import { useViewStore } from '../store/viewStore'
 import { views } from '../views'
 import { api } from '../lib/api'
 import { toPng } from 'html-to-image'
+// Density + theme + search live here; Size moved to Settings → Display.
 
 export function Toolbar() {
   const activeView = useViewStore((s) => s.activeView)

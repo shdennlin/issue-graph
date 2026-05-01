@@ -435,3 +435,48 @@ a:hover { text-decoration: underline; }
   border-radius: 0;
 }
 .context-menu button:hover { background: var(--chip-bg); }
+
+/* Lightweight CSS-only tooltip — instant show on hover (no native ~500ms
+   delay), themed, no JS state. Wrap the trigger element with `.tip` and
+   add a `data-tip="..."` attribute. The bubble appears as a ::after on
+   hover/focus. Designed for short hint strings; not for rich content. */
+.tip {
+  position: relative;
+  display: inline-flex;
+  cursor: help;
+}
+.tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  /* Render BELOW the trigger so the bubble doesn't get clipped when the
+     trigger lives inside an `overflow: auto` panel near its top edge.
+     For triggers near the bottom of a panel, use `data-tip-pos="top"`. */
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-2px);
+  background: var(--fg);
+  color: var(--bg);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-meta);
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: normal;
+  width: max-content;
+  max-width: 240px;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 200;
+  transition: opacity 80ms ease, transform 80ms ease;
+  box-shadow: var(--shadow-md);
+}
+.tip[data-tip-pos='top']::after {
+  top: auto;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%) translateY(2px);
+}
+.tip:hover::after,
+.tip:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}

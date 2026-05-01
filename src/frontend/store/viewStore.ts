@@ -130,7 +130,18 @@ export const useViewStore = create<ViewState>((set) => ({
 
   setActiveView: (v) => set({ activeView: v }),
   setFilter: (k, v) => set((s) => ({ filters: { ...s.filters, [k]: v } })),
-  toggleStateType: (t) => set((s) => ({ filters: { ...s.filters, stateTypes: toggle(s.filters.stateTypes, t) } })),
+  toggleStateType: (t) =>
+    set((s) => {
+      const nextTypes = toggle(s.filters.stateTypes, t)
+      // Auto-disable activeOnly when user explicitly turns ON a non-active
+      // state — otherwise the click silently has no effect because activeOnly
+      // would still filter the issue out. Only fires when ADDING the state
+      // (toggle direction = on); turning it off keeps activeOnly as-is.
+      const isAdding = nextTypes.includes(t) && !s.filters.stateTypes.includes(t)
+      const isNonActive = t === 'completed' || t === 'canceled'
+      const activeOnly = isAdding && isNonActive ? false : s.filters.activeOnly
+      return { filters: { ...s.filters, stateTypes: nextTypes, activeOnly } }
+    }),
   toggleStateName: (name) => set((s) => ({ filters: { ...s.filters, stateNames: toggle(s.filters.stateNames, name) } })),
   togglePrimary: (id) => set((s) => ({ filters: { ...s.filters, primaryValues: toggle(s.filters.primaryValues, id) } })),
   toggleType: (id) => set((s) => ({ filters: { ...s.filters, typeValues: toggle(s.filters.typeValues, id) } })),

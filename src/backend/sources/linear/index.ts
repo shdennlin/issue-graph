@@ -17,8 +17,19 @@ interface LinearOptions {
   teamId?: string | undefined
 }
 
-/** PRD §5.3 — translate ISSUE_SCOPE into Linear IssueFilter. */
-function buildIssueFilter(scope: string, teamId?: string): Record<string, unknown> | undefined {
+/**
+ * PRD §5.3 — translate ISSUE_SCOPE into Linear IssueFilter.
+ *
+ * `extendedDays` (optional, 0–365) is a lazy add-on persisted in cache_meta.
+ * When > 0, we include canceled + completed issues whose updatedAt is within
+ * the window. Used when the user explicitly checks Canceled / Completed in
+ * the state filter so we fetch the data they're asking to see.
+ */
+function buildIssueFilter(
+  scope: string,
+  teamId?: string,
+  extendedDays = 0,
+): Record<string, unknown> | undefined {
   const filter: Record<string, unknown> = {}
   if (teamId) filter.team = { id: { eq: teamId } }
 
@@ -30,22 +41,46 @@ function buildIssueFilter(scope: string, teamId?: string): Record<string, unknow
   const stateTypes = ['backlog', 'unstarted', 'started', 'triage'] as const
   const baseStateFilter = { type: { in: stateTypes as unknown as string[] } }
 
-  if (scope === 'active') {
-    filter.state = baseStateFilter
-    return filter
-  }
+  // Build OR clauses incrementally so 'active', 'active+recent', and the
+  // optional extended scope are composable.
+  const clauses: Array<Record<string, unknown>> = [{ state: baseStateFilter }]
 
-  // 'active+recent' (default): active OR completed in last 30 days.
-  const thirtyDaysAgoIso = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
-  filter.or = [
-    { state: baseStateFilter },
-    {
+  if (scope === 'active+recent' || scope === undefined) {
+    const thirtyDaysAgoIso = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
+    clauses.push({
       and: [
         { state: { type: { eq: 'completed' } } },
         { completedAt: { gte: thirtyDaysAgoIso } },
       ],
-    },
-  ]
+    })
+  }
+
+  if (extendedDays > 0) {
+    const cutoffIso = new Date(Date.now() - extendedDays * 24 * 3600 * 1000).toISOString()
+    // canceled in window — Linear doesn't have a `canceledAt`, so we filter
+    // by updatedAt as a proxy for "recently relevant".
+    clauses.push({
+      and: [
+        { state: { type: { eq: 'canceled' } } },
+        { updatedAt: { gte: cutoffIso } },
+      ],
+    })
+    // Completed beyond 30 days, up to extendedDays — extends the existing
+    // recent-completed clause backward.
+    clauses.push({
+      and: [
+        { state: { type: { eq: 'completed' } } },
+        { completedAt: { gte: cutoffIso } },
+      ],
+    })
+  }
+
+  if (scope === 'active' && extendedDays === 0) {
+    filter.state = baseStateFilter
+    return filter
+  }
+
+  filter.or = clauses
   return filter
 }
 
@@ -103,7 +138,7 @@ export class LinearBackend implements BackendAdapter {
   }
 
   async fetchAllIssues(opts: FetchOpts): Promise<NormalizedIssue[]> {
-    const filter = buildIssueFilter(opts.scope, opts.teamId ?? this.opts.teamId)
+    const filter = buildIssueFilter(opts.scope, opts.teamId ?? this.opts.teamId, opts.extendedDays ?? 0)
     const out: NormalizedIssue[] = []
     let after: string | null = null
     type IssuesResp = {

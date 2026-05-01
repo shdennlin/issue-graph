@@ -6,6 +6,7 @@ const META_LAST_SYNC = 'last_sync_ms'
 const META_HAS_DESIGNDOC = 'has_designdoc'
 const META_DESIGNDOC_PAYLOAD = 'designdoc_payload'
 const META_WORKFLOW_STATES = 'workflow_states'
+const META_EXTENDED_SCOPE = 'extended_scope_days'
 
 interface IssueRow { identifier: string; payload: string; fetched_at: number }
 interface LabelRow { id: string; payload: string }
@@ -69,6 +70,26 @@ export function readWorkflowStatesCached(): WorkflowState[] {
 
 export function writeWorkflowStatesCached(states: WorkflowState[]): void {
   writeMeta(META_WORKFLOW_STATES, JSON.stringify(states))
+}
+
+/**
+ * Lazy-fetch extension: when the user explicitly checks Canceled or Completed
+ * in the filter, we extend the Linear query to include those state types
+ * within `extendedScopeDays` (max 365). Persisted in cache_meta so subsequent
+ * full syncs keep including them.
+ *
+ * 0 / unset = no extension (default `active+recent` only).
+ */
+export function readExtendedScopeDays(): number {
+  const raw = readMeta(META_EXTENDED_SCOPE)
+  if (!raw) return 0
+  const n = Number(raw)
+  return Number.isFinite(n) && n > 0 ? Math.min(365, Math.floor(n)) : 0
+}
+
+export function writeExtendedScopeDays(days: number): void {
+  const clamped = Math.max(0, Math.min(365, Math.floor(days)))
+  writeMeta(META_EXTENDED_SCOPE, String(clamped))
 }
 
 export function writeDesigndocsCached(payload: GraphData['designdocs'] | undefined): void {

@@ -6,6 +6,7 @@ import { useSchemaStore } from '../store/schemaStore'
 import { useResizable } from '../hooks/useResizable'
 import { stateColorVar, stateIcon, stateLabel } from '../lib/colors'
 import { applyFiltersExcluding } from '../views/filters'
+import { Tooltip } from './Tooltip'
 
 const ALL_STATES: IssueStateType[] = ['started', 'unstarted', 'backlog', 'triage', 'completed', 'canceled']
 const PRIORITIES = [1, 2, 3, 4, 0]
@@ -146,6 +147,28 @@ export function FilterPanel() {
             onChange={(e) => setFilter('activeOnly', e.target.checked)}
           />
           Active only
+          <Tooltip text="Hides completed & canceled. Click those rows in State to fetch up to 1 year back.">
+            <span
+              tabIndex={0}
+              aria-label="Active only filter help"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 14,
+                height: 14,
+                borderRadius: '50%',
+                border: '1px solid var(--fg-muted)',
+                color: 'var(--fg-muted)',
+                fontSize: 9,
+                fontWeight: 600,
+                marginLeft: 4,
+                cursor: 'help',
+              }}
+            >
+              ?
+            </span>
+          </Tooltip>
         </label>
         <label>
           <input
@@ -182,8 +205,22 @@ export function FilterPanel() {
                 <input
                   type="checkbox"
                   checked={filters.stateTypes.includes(t)}
-                  onChange={() => toggleStateType(t)}
-                  title="Toggle the whole group"
+                  onChange={() => {
+                    const willBeChecked = !filters.stateTypes.includes(t)
+                    toggleStateType(t)
+                    // Lazy-fetch: when the user opts into a state type the
+                    // default sync doesn't pull (canceled, or completed older
+                    // than 30 days), trigger backend to extend its query
+                    // window. Backend dedupes if already covered.
+                    if (willBeChecked && (t === 'canceled' || t === 'completed')) {
+                      useGraphStore.getState().extendScope(365)
+                    }
+                  }}
+                  title={
+                    t === 'canceled' || t === 'completed'
+                      ? `Toggle the whole group (will fetch up to 365 days back)`
+                      : 'Toggle the whole group'
+                  }
                 />
                 <span className="glyph" style={{ color: stateColorVar(t) }}>{stateIcon(t)}</span>
                 <span style={{ fontWeight: 600 }}>{stateLabel(t)}</span>
@@ -197,7 +234,15 @@ export function FilterPanel() {
                     <input
                       type="checkbox"
                       checked={filters.stateNames.includes(c.name)}
-                      onChange={() => toggleStateName(c.name)}
+                      onChange={() => {
+                        const willBeChecked = !filters.stateNames.includes(c.name)
+                        toggleStateName(c.name)
+                        // Same lazy-fetch trigger for the granular state name
+                        // when its canonical type isn't covered by default.
+                        if (willBeChecked && (t === 'canceled' || t === 'completed')) {
+                          useGraphStore.getState().extendScope(365)
+                        }
+                      }}
                     />
                     <span style={{ color: 'var(--fg-muted)' }}>{c.name}</span>
                     <span className="count">{c.count}</span>

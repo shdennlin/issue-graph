@@ -31,6 +31,10 @@ export function applyFiltersExcluding(
     case 'state':
       f.stateTypes = []
       f.stateNames = []
+      // activeOnly is a state-dimension shortcut ("state ∈ active set").
+      // Drop it too so counts for Canceled / Completed reflect reality
+      // instead of always showing 0 because activeOnly hides them.
+      f.activeOnly = false
       break
     case 'priority':
       f.priorities = []
@@ -68,13 +72,17 @@ export function applyFilters(
       const hay = `${i.identifier} ${i.title} ${i.assignee?.displayName ?? ''}`.toLowerCase()
       if (!hay.includes(q)) return false
     }
-    if (filters.activeOnly && (i.state.type === 'completed' || i.state.type === 'canceled')) return false
-    // State filter: stateNames (specific Linear state names) takes precedence
-    // when non-empty; otherwise fall back to canonical stateTypes.
+    // State filter precedence:
+    //   stateNames (explicit Linear state.name pick) > stateTypes + activeOnly
+    // When user explicitly picks named states, the activeOnly shortcut is
+    // overridden — it's a quick filter, not a hard gate. Without this, a
+    // user picking "Duplicate" (canonical=canceled) with activeOnly still
+    // on would silently see nothing.
     if (filters.stateNames.length > 0) {
       if (!filters.stateNames.includes(i.state.name)) return false
-    } else if (filters.stateTypes.length > 0) {
-      if (!filters.stateTypes.includes(i.state.type)) return false
+    } else {
+      if (filters.activeOnly && (i.state.type === 'completed' || i.state.type === 'canceled')) return false
+      if (filters.stateTypes.length > 0 && !filters.stateTypes.includes(i.state.type)) return false
     }
     if (filters.priorities.length > 0 && !filters.priorities.includes(i.priority)) return false
     if (filters.assignees.length > 0) {

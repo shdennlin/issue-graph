@@ -4,6 +4,12 @@ export interface FetchOpts {
   /** PRD §5.3 — 'active' | 'active+recent' | 'all' */
   scope: string
   teamId?: string
+  /**
+   * Optional lazy-fetch extension (0–365 days). When > 0, the adapter
+   * additionally fetches canceled + completed issues within this window.
+   * Set when the user explicitly checks Canceled/Completed in the filter UI.
+   */
+  extendedDays?: number
 }
 
 export interface IssueDetail extends NormalizedIssue {
