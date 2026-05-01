@@ -70,8 +70,8 @@ export function SettingsPage() {
             onChange={(e) => setDraft({ ...draft, default_view: e.target.value })}
           >
             <option value="dependency">Dependency</option>
-            <option value="bucket">Bucket</option>
             <option value="mix">Mix</option>
+            <option value="designdoc">Design docs</option>
           </select>
         </label>
         <label style={{ display: 'block', marginBottom: 8 }}>

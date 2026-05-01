@@ -1,9 +1,11 @@
 import type {
   AnnotationDTO,
+  DesignDocCoverage,
   DetectedSchema,
   GraphResponse,
   SyncLogEntry,
   Viewer,
+  WorkflowState,
 } from '@shared/types.js'
 
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
@@ -20,6 +22,7 @@ export interface LabelsResponse {
   typeIcons: Record<string, string>
   yaml: unknown
   primaryGroupSingular: string | null
+  workflowStates: WorkflowState[]
 }
 
 export interface SettingsResponse {
@@ -68,4 +71,5 @@ export const api = {
   fetchSnapshotDiff: (from: number, to: number) =>
     http<SnapshotDiff>(`/api/snapshot-diff?from=${from}&to=${to}`),
   exportUrl: (format: 'csv' | 'md') => `/api/export?format=${format}`,
+  fetchCoverage: () => http<DesignDocCoverage>('/api/designdoc/coverage'),
 }

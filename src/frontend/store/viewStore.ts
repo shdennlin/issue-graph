@@ -1,12 +1,17 @@
 import { create } from 'zustand'
 import type { IssueStateType } from '@shared/types.js'
 
-export type ViewId = 'dependency' | 'bucket' | 'mix' | 'timeline' | 'designdoc'
+export type ViewId = 'dependency' | 'mix' | 'designdoc'
 export type Density = 'compact' | 'default' | 'verbose'
 export type ThemeMode = 'light' | 'dark' | 'auto'
+export type FontSize = 'sm' | 'md' | 'lg'
 
 export interface Filters {
   stateTypes: IssueStateType[]
+  // Specific Linear state names (e.g. "Review Spec", "Duplicate"). When empty,
+  // stateTypes is used as the coarse filter. When non-empty, stateNames takes
+  // precedence — only issues whose state.name is in this list pass.
+  stateNames: string[]
   activeOnly: boolean
   myIssuesOnly: boolean
   staleOnly: boolean
@@ -26,15 +31,23 @@ export interface ViewState {
   expandedBuckets: string[]
   theme: ThemeMode
   density: Density
+  fontSize: FontSize
+  search: string                 // toolbar filter search (narrows visible set)
+  inlineSearch: { open: boolean; query: string; activeIdx: number }
   settingsOpen: boolean
   syncHistoryOpen: boolean
+  coverageOpen: boolean
   selection: string[] // multi-select identifiers
+  highlightedEdgeId: string | null // when set, the edge + its endpoints stay opaque, others dim
+  highlightedNodeId: string | null // when set, the node + its connected edges/neighbors stay opaque
   contextMenu: { x: number; y: number; targetIdentifier: string } | null
   staleDays: number
+  filterPanelOpen: boolean
 
   setActiveView: (v: ViewId) => void
   setFilter: <K extends keyof Filters>(k: K, v: Filters[K]) => void
   toggleStateType: (t: IssueStateType) => void
+  toggleStateName: (name: string) => void
   togglePrimary: (id: string) => void
   toggleType: (id: string) => void
   togglePriority: (p: number) => void
@@ -43,13 +56,24 @@ export interface ViewState {
   setFocusedId: (id: string | null) => void
   setTheme: (t: ThemeMode) => void
   setDensity: (d: Density) => void
+  setFontSize: (f: FontSize) => void
+  setSearch: (q: string) => void
+  openInlineSearch: () => void
+  closeInlineSearch: () => void
+  setInlineSearchQuery: (q: string) => void
+  setInlineSearchActiveIdx: (i: number) => void
   setSettingsOpen: (b: boolean) => void
   setSyncHistoryOpen: (b: boolean) => void
+  setCoverageOpen: (b: boolean) => void
   setSelection: (s: string[]) => void
   toggleSelection: (id: string) => void
   clearSelection: () => void
+  setHighlightedEdgeId: (id: string | null) => void
+  setHighlightedNodeId: (id: string | null) => void
   setContextMenu: (m: ViewState['contextMenu']) => void
   setStaleDays: (n: number) => void
+  setFilterPanelOpen: (b: boolean) => void
+  toggleFilterPanel: () => void
   resetFilters: () => void
 }
 
@@ -57,6 +81,7 @@ const ACTIVE_STATES: IssueStateType[] = ['started', 'unstarted', 'backlog', 'tri
 
 const defaultFilters: Filters = {
   stateTypes: ACTIVE_STATES,
+  stateNames: [],
   activeOnly: true,
   myIssuesOnly: false,
   staleOnly: false,
@@ -80,15 +105,24 @@ export const useViewStore = create<ViewState>((set) => ({
   expandedBuckets: [],
   theme: 'auto',
   density: 'default',
+  fontSize: (typeof window !== 'undefined' && (window.localStorage?.getItem('ig-font-size') as FontSize)) || 'md',
+  search: '',
+  inlineSearch: { open: false, query: '', activeIdx: 0 },
   settingsOpen: false,
   syncHistoryOpen: false,
+  coverageOpen: false,
   selection: [],
+  highlightedEdgeId: null,
+  highlightedNodeId: null,
   contextMenu: null,
   staleDays: 14,
+  filterPanelOpen:
+    typeof window !== 'undefined' && window.localStorage?.getItem('ig-filter-panel') === '0' ? false : true,
 
   setActiveView: (v) => set({ activeView: v }),
   setFilter: (k, v) => set((s) => ({ filters: { ...s.filters, [k]: v } })),
   toggleStateType: (t) => set((s) => ({ filters: { ...s.filters, stateTypes: toggle(s.filters.stateTypes, t) } })),
+  toggleStateName: (name) => set((s) => ({ filters: { ...s.filters, stateNames: toggle(s.filters.stateNames, name) } })),
   togglePrimary: (id) => set((s) => ({ filters: { ...s.filters, primaryValues: toggle(s.filters.primaryValues, id) } })),
   toggleType: (id) => set((s) => ({ filters: { ...s.filters, typeValues: toggle(s.filters.typeValues, id) } })),
   togglePriority: (p) => set((s) => ({ filters: { ...s.filters, priorities: toggle(s.filters.priorities, p) } })),
@@ -106,12 +140,40 @@ export const useViewStore = create<ViewState>((set) => ({
   setFocusedId: (id) => set({ focusedId: id }),
   setTheme: (t) => set({ theme: t }),
   setDensity: (d) => set({ density: d }),
+  setFontSize: (f) => {
+    if (typeof window !== 'undefined') window.localStorage?.setItem('ig-font-size', f)
+    set({ fontSize: f })
+  },
+  setSearch: (q) => set({ search: q }),
+  openInlineSearch: () => set((s) => ({ inlineSearch: { ...s.inlineSearch, open: true } })),
+  closeInlineSearch: () => set({ inlineSearch: { open: false, query: '', activeIdx: 0 } }),
+  setInlineSearchQuery: (q) =>
+    set((s) => ({ inlineSearch: { ...s.inlineSearch, query: q, activeIdx: 0 } })),
+  setInlineSearchActiveIdx: (i) =>
+    set((s) => ({ inlineSearch: { ...s.inlineSearch, activeIdx: i } })),
   setSettingsOpen: (b) => set({ settingsOpen: b }),
   setSyncHistoryOpen: (b) => set({ syncHistoryOpen: b }),
+  setCoverageOpen: (b) => set({ coverageOpen: b }),
   setSelection: (s) => set({ selection: s }),
   toggleSelection: (id) => set((s) => ({ selection: toggle(s.selection, id) })),
   clearSelection: () => set({ selection: [] }),
+  setHighlightedEdgeId: (id) => set({ highlightedEdgeId: id }),
+  setHighlightedNodeId: (id) => set({ highlightedNodeId: id }),
   setContextMenu: (m) => set({ contextMenu: m }),
   setStaleDays: (n) => set({ staleDays: n }),
+  setFilterPanelOpen: (b) => {
+    if (typeof window !== 'undefined') {
+      window.localStorage?.setItem('ig-filter-panel', b ? '1' : '0')
+    }
+    set({ filterPanelOpen: b })
+  },
+  toggleFilterPanel: () =>
+    set((s) => {
+      const next = !s.filterPanelOpen
+      if (typeof window !== 'undefined') {
+        window.localStorage?.setItem('ig-filter-panel', next ? '1' : '0')
+      }
+      return { filterPanelOpen: next }
+    }),
   resetFilters: () => set({ filters: defaultFilters }),
 }))

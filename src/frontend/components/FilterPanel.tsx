@@ -3,7 +3,8 @@ import type { IssueStateType } from '@shared/types.js'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { useSchemaStore } from '../store/schemaStore'
-import { stateLabel } from '../lib/colors'
+import { useResizable } from '../hooks/useResizable'
+import { stateColorVar, stateIcon, stateLabel } from '../lib/colors'
 
 const ALL_STATES: IssueStateType[] = ['started', 'unstarted', 'backlog', 'triage', 'completed', 'canceled']
 const PRIORITIES = [1, 2, 3, 4, 0]
@@ -12,7 +13,7 @@ const PRIORITY_NAMES: Record<number, string> = { 0: 'No priority', 1: 'Urgent', 
 export function FilterPanel() {
   const graph = useGraphStore((s) => s.graph)
   const filters = useViewStore((s) => s.filters)
-  const { schema, primaryGroupSingular } = useSchemaStore()
+  const { schema, primaryGroupSingular, workflowStates } = useSchemaStore()
   const setFilter = useViewStore((s) => s.setFilter)
   const toggleStateType = useViewStore((s) => s.toggleStateType)
   const togglePrimary = useViewStore((s) => s.togglePrimary)
@@ -20,24 +21,58 @@ export function FilterPanel() {
   const togglePriority = useViewStore((s) => s.togglePriority)
   const toggleAssignee = useViewStore((s) => s.toggleAssignee)
   const togglePrefix = useViewStore((s) => s.togglePrefix)
+  const toggleStateName = useViewStore((s) => s.toggleStateName)
   const resetFilters = useViewStore((s) => s.resetFilters)
 
   const issues = graph?.data.issues ?? []
 
   const counts = useMemo(() => {
     const byState: Record<string, number> = {}
+    const byStateName = new Map<string, { name: string; type: IssueStateType; count: number }>()
     const byPrio: Record<number, number> = {}
     const byAssignee = new Map<string, number>()
     const byLabel = new Map<string, number>()
     for (const i of issues) {
       byState[i.state.type] = (byState[i.state.type] ?? 0) + 1
+      const sn = byStateName.get(i.state.name)
+      if (sn) sn.count += 1
+      else byStateName.set(i.state.name, { name: i.state.name, type: i.state.type, count: 1 })
       byPrio[i.priority] = (byPrio[i.priority] ?? 0) + 1
       const a = i.assignee?.displayName ?? '(unassigned)'
       byAssignee.set(a, (byAssignee.get(a) ?? 0) + 1)
       for (const l of i.labels) byLabel.set(l.id, (byLabel.get(l.id) ?? 0) + 1)
     }
-    return { byState, byPrio, byAssignee, byLabel }
+    return { byState, byStateName, byPrio, byAssignee, byLabel }
   }, [issues])
+
+  // Group state names by canonical type. Source = union of:
+  //   1. Workflow states fetched from the backend (full list, including ones
+  //      with 0 current matches — e.g. "Review", "Duplicate" if no issue is
+  //      currently in those states).
+  //   2. State names observed on cached issues (covers backends that don't
+  //      implement fetchWorkflowStates).
+  // Counts come from cached data (a state with 0 issues shows count=0).
+  const stateNamesByType = useMemo(() => {
+    const groups: Record<IssueStateType, { name: string; count: number; position: number }[]> = {
+      backlog: [], unstarted: [], started: [], completed: [], canceled: [], triage: [],
+    }
+    const seen = new Map<string, { type: IssueStateType; position: number }>() // name → meta
+    // Pass 1: workflow states from API (carry their declared position).
+    for (const ws of workflowStates) {
+      seen.set(ws.name, { type: ws.type, position: ws.position ?? 999 })
+      groups[ws.type].push({ name: ws.name, count: counts.byStateName.get(ws.name)?.count ?? 0, position: ws.position ?? 999 })
+    }
+    // Pass 2: cached issue states not already covered.
+    for (const { name, type, count } of counts.byStateName.values()) {
+      if (seen.has(name)) continue
+      groups[type].push({ name, count, position: 1000 })
+    }
+    // Sort each group by Linear's `position` first, then by name for stability.
+    for (const k of Object.keys(groups) as IssueStateType[]) {
+      groups[k].sort((a, b) => a.position - b.position || a.name.localeCompare(b.name))
+    }
+    return groups
+  }, [counts.byStateName, workflowStates])
 
   const primaryLabels = useMemo(() => {
     if (!schema.primaryGroup) return []
@@ -63,8 +98,20 @@ export function FilterPanel() {
 
   const showDesigndocFilter = (graph?.hasDesigndoc ?? false) && (graph?.data.designdocs?.length ?? 0) > 0
 
+  const { width, startResize, resizing } = useResizable({
+    storageKey: 'ig-filter-panel-w',
+    defaultWidth: 240,
+    min: 180,
+    max: 480,
+    side: 'left',
+  })
+
   return (
-    <aside className="filter-panel">
+    <aside
+      className={`filter-panel${resizing ? ' is-resizing' : ''}`}
+      style={{ width, flexShrink: 0 }}
+    >
+      <div className="resize-handle resize-handle-right" onMouseDown={startResize} title="Drag to resize" />
       <section>
         <h4>Quick</h4>
         <label>
@@ -95,13 +142,46 @@ export function FilterPanel() {
 
       <section>
         <h4>State</h4>
-        {ALL_STATES.map((s) => (
-          <label key={s}>
-            <input type="checkbox" checked={filters.stateTypes.includes(s)} onChange={() => toggleStateType(s)} />
-            {stateLabel(s)}
-            <span className="count">{counts.byState[s] ?? 0}</span>
-          </label>
-        ))}
+        {/* Hierarchical: each canonical type is a row; if multiple actual state
+            names roll up to it, they appear as indented children. Empty types
+            are hidden. Toggle the type checkbox to select the whole group; the
+            child checkboxes filter by the literal Linear state.name. */}
+        {/* Hide types whose count is 0 — including ones in default stateTypes
+            like 'triage' that the workspace doesn't actually use. */}
+        {ALL_STATES.filter((t) => stateNamesByType[t].length > 0).map((t) => {
+          const children = stateNamesByType[t]
+          const groupCount = counts.byState[t] ?? 0
+          return (
+            <div key={t} className="state-group">
+              <label className="state-group-header">
+                <input
+                  type="checkbox"
+                  checked={filters.stateTypes.includes(t)}
+                  onChange={() => toggleStateType(t)}
+                  title="Toggle the whole group"
+                />
+                <span className="glyph" style={{ color: stateColorVar(t) }}>{stateIcon(t)}</span>
+                <span style={{ fontWeight: 600 }}>{stateLabel(t)}</span>
+                <span className="count">{groupCount}</span>
+              </label>
+              {/* Always show children — the user can see the actual Linear state
+                  names even when there's only one (matches what they see in Linear). */}
+              <div className="state-children">
+                {children.map((c) => (
+                  <label key={c.name} className="state-child">
+                    <input
+                      type="checkbox"
+                      checked={filters.stateNames.includes(c.name)}
+                      onChange={() => toggleStateName(c.name)}
+                    />
+                    <span style={{ color: 'var(--fg-muted)' }}>{c.name}</span>
+                    <span className="count">{c.count}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )
+        })}
       </section>
 
       {primaryLabels.length > 0 && (

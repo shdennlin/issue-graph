@@ -6,7 +6,7 @@
   --node-bg: #f5f5f5;
   --node-border: #d0d7de;
   --node-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  --edge: #8c8c8c;
+  --edge: #475569;
   --edge-cross-bucket: #d62828;
   --accent: #0a84ff;
   --accent-fg: #ffffff;
@@ -18,6 +18,14 @@
   --priority-med: #fcbf49;
   --priority-low: #a0a0a0;
   --priority-none: #c8c8c8;
+  /* State colors — distinct hues so any two states are visually different,
+     not just shape glyphs. Tuned to be recognizable on light bg. */
+  --state-backlog: #64748b;     /* slate — not ready */
+  --state-unstarted: #7c3aed;   /* violet — queued / todo */
+  --state-started: #2563eb;     /* blue — actively worked */
+  --state-completed: #16a34a;   /* green — done */
+  --state-canceled: #9ca3af;    /* dim gray — closed without completion */
+  --state-triage: #ea580c;      /* orange — needs decision */
   --chip-bg: #eaeef2;
   --chip-fg: #24292f;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -27,23 +35,55 @@
   --radius-lg: 10px;
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  /* Font scale — referenced by components. data-fontsize attr swaps these. */
+  --fs-base: 13px;
+  --fs-meta: 11px;
+  --fs-chip: 10px;
+  --fs-title: 16px;
+}
+
+/* Font-size modes (sm/md/lg). Set on <html> by useFontSize hook. */
+[data-fontsize='sm'] {
+  --fs-base: 12px;
+  --fs-meta: 10px;
+  --fs-chip: 9px;
+  --fs-title: 14px;
+}
+[data-fontsize='md'] {
+  --fs-base: 13px;
+  --fs-meta: 11px;
+  --fs-chip: 10px;
+  --fs-title: 16px;
+}
+[data-fontsize='lg'] {
+  --fs-base: 15px;
+  --fs-meta: 12px;
+  --fs-chip: 11px;
+  --fs-title: 18px;
 }
 
 [data-theme='dark'] {
-  --bg: #0d1117;
-  --bg-elev: #161b22;
-  --fg: #e6e6e6;
-  --fg-muted: #8b949e;
-  --node-bg: #161b22;
-  --node-border: #30363d;
-  --node-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-  --edge: #58a6ff;
-  --edge-cross-bucket: #ff6b6b;
-  --accent: #58a6ff;
-  --accent-fg: #0d1117;
-  --danger: #ff6b6b;
-  --warn: #f0c000;
-  --ok: #56d364;
-  --chip-bg: #21262d;
-  --chip-fg: #c9d1d9;
+  --bg: #1c1f26;
+  --bg-elev: #262a33;
+  --fg: #ebeef2;
+  --fg-muted: #9aa4b1;
+  --node-bg: #2a2f38;
+  --node-border: #3d4452;
+  --node-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --edge: #94a3b8;
+  --edge-cross-bucket: #ff8a8a;
+  --accent: #6ea8fb;
+  --accent-fg: #1c1f26;
+  --danger: #ff8a8a;
+  --warn: #f5c84b;
+  --ok: #6dd47e;
+  --chip-bg: #323843;
+  --chip-fg: #d6dde6;
+  /* State colors tuned for dark bg — slightly lighter / more saturated. */
+  --state-backlog: #94a3b8;
+  --state-unstarted: #a78bfa;
+  --state-started: #60a5fa;
+  --state-completed: #4ade80;
+  --state-canceled: #6b7280;
+  --state-triage: #fb923c;
 }

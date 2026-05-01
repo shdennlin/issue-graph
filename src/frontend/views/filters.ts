@@ -8,11 +8,24 @@ export function applyFilters(
   filters: Filters,
   staleDays: number,
   myUserName: string | null,
+  search?: string,
 ): NormalizedIssue[] {
   const cutoff = Date.now() - staleDays * 24 * 3600 * 1000
+  const q = (search ?? '').trim().toLowerCase()
   return issues.filter((i) => {
+    if (q.length > 0) {
+      // Match against identifier, title, or assignee. Case-insensitive substring.
+      const hay = `${i.identifier} ${i.title} ${i.assignee?.displayName ?? ''}`.toLowerCase()
+      if (!hay.includes(q)) return false
+    }
     if (filters.activeOnly && (i.state.type === 'completed' || i.state.type === 'canceled')) return false
-    if (filters.stateTypes.length > 0 && !filters.stateTypes.includes(i.state.type)) return false
+    // State filter: stateNames (specific Linear state names) takes precedence
+    // when non-empty; otherwise fall back to canonical stateTypes.
+    if (filters.stateNames.length > 0) {
+      if (!filters.stateNames.includes(i.state.name)) return false
+    } else if (filters.stateTypes.length > 0) {
+      if (!filters.stateTypes.includes(i.state.type)) return false
+    }
     if (filters.priorities.length > 0 && !filters.priorities.includes(i.priority)) return false
     if (filters.assignees.length > 0) {
       const name = i.assignee?.displayName ?? '(unassigned)'

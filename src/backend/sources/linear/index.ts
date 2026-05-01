@@ -1,4 +1,4 @@
-import type { NormalizedIssue, NormalizedLabel, Viewer } from '@shared/types.js'
+import type { IssueStateType, NormalizedIssue, NormalizedLabel, Viewer, WorkflowState } from '@shared/types.js'
 import { getLogger } from '../../lib/log.js'
 import {
   AuthError,
@@ -8,7 +8,7 @@ import {
   type IssueDetail,
   type RateLimitInfo,
 } from '../types.js'
-import { ISSUES_QUERY, ISSUE_DETAIL_QUERY, LABELS_QUERY, VIEWER_QUERY } from './queries.js'
+import { ISSUES_QUERY, ISSUE_DETAIL_QUERY, LABELS_QUERY, VIEWER_QUERY, WORKFLOW_STATES_QUERY } from './queries.js'
 import { normalizeIssue, normalizeLabel } from './normalize.js'
 
 interface LinearOptions {
@@ -134,6 +134,20 @@ export class LinearBackend implements BackendAdapter {
       displayName: String(data.viewer.displayName ?? ''),
       email: data.viewer.email ?? null,
     }
+  }
+
+  async fetchWorkflowStates(teamId?: string): Promise<WorkflowState[]> {
+    const filter = teamId ? { team: { id: { eq: teamId } } } : undefined
+    type Resp = { workflowStates: { nodes: any[] } }
+    const data = await this.gql<Resp>(WORKFLOW_STATES_QUERY, { filter })
+    return data.workflowStates.nodes.map((n) => ({
+      id: String(n.id),
+      name: String(n.name),
+      type: String(n.type) as IssueStateType,
+      color: n.color ?? null,
+      position: typeof n.position === 'number' ? n.position : null,
+      teamKey: n.team?.key ?? null,
+    }))
   }
 
   async fetchLabels(): Promise<NormalizedLabel[]> {

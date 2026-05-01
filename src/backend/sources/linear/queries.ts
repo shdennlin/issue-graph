@@ -85,3 +85,18 @@ export const LABELS_QUERY = /* GraphQL */ `
     }
   }
 `
+
+export const WORKFLOW_STATES_QUERY = /* GraphQL */ `
+  query WorkflowStates($filter: WorkflowStateFilter) {
+    workflowStates(first: 250, filter: $filter) {
+      nodes {
+        id
+        name
+        type
+        color
+        position
+        team { key }
+      }
+    }
+  }
+`

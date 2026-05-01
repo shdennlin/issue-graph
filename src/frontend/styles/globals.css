@@ -17,7 +17,7 @@ button {
   padding: 4px 10px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 button:hover { background: var(--chip-bg); }
 button:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -30,7 +30,7 @@ input, select, textarea {
   border: 1px solid var(--node-border);
   border-radius: var(--radius-sm);
   padding: 4px 8px;
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 
 a { color: var(--accent); text-decoration: none; }
@@ -52,7 +52,39 @@ a:hover { text-decoration: underline; }
   flex: 1;
   position: relative;
   min-width: 0;
+  background: var(--bg);
 }
+.canvas .react-flow { background: var(--bg); }
+/* Edge stroke — fall back to var(--edge); cross-bucket override stays in mix.ts class. */
+.react-flow__edge-path { stroke: var(--edge); }
+
+/* Theme-aware Controls — RF defaults are white-only, so we override. */
+.react-flow__controls {
+  background: var(--bg-elev);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.react-flow__controls-button {
+  background: var(--bg-elev) !important;
+  border: none !important;
+  border-bottom: 1px solid var(--node-border) !important;
+  color: var(--fg) !important;
+  width: 30px;
+  height: 30px;
+}
+.react-flow__controls-button:last-child { border-bottom: none !important; }
+.react-flow__controls-button:hover { background: var(--chip-bg) !important; }
+.react-flow__controls-button svg { fill: var(--fg); }
+[data-theme='dark'] .react-flow__controls-button svg { fill: var(--fg); }
+.react-flow__edge.cross-bucket-edge .react-flow__edge-path {
+  stroke: var(--edge-cross-bucket);
+  stroke-width: 2.2;
+}
+.react-flow__arrowhead { fill: var(--edge); }
 
 .banner {
   display: flex;
@@ -61,7 +93,7 @@ a:hover { text-decoration: underline; }
   padding: 6px 12px;
   background: var(--bg-elev);
   border-bottom: 1px solid var(--node-border);
-  font-size: 13px;
+  font-size: var(--fs-base);
   gap: 12px;
 }
 
@@ -85,29 +117,68 @@ a:hover { text-decoration: underline; }
 .toolbar .sep { width: 1px; height: 20px; background: var(--node-border); margin: 0 6px; }
 
 .filter-panel {
-  width: 240px;
+  /* width comes from inline style (useResizable). Keep position relative so the
+     absolute-positioned resize-handle anchors here. */
+  position: relative;
   border-right: 1px solid var(--node-border);
   background: var(--bg-elev);
   overflow-y: auto;
   padding: 10px;
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 .filter-panel section { margin-bottom: 14px; }
-.filter-panel h4 { margin: 0 0 6px; font-size: 12px; color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.filter-panel h4 { margin: 0 0 6px; font-size: var(--fs-meta); color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.06em; }
 .filter-panel label { display: flex; align-items: center; gap: 6px; padding: 2px 0; cursor: pointer; }
-.filter-panel .count { color: var(--fg-muted); font-size: 11px; margin-left: auto; }
+.filter-panel .count { color: var(--fg-muted); font-size: var(--fs-meta); margin-left: auto; }
+
+/* Hierarchical state filter — parent type + child Linear state names. */
+.state-group { margin-bottom: 8px; }
+.state-group-header { display: flex; align-items: center; gap: 6px; }
+.state-group-header .glyph { font-size: var(--fs-base); line-height: 1; }
+.state-children {
+  margin-left: 8px;
+  padding-left: 10px;
+  border-left: 1px dashed var(--node-border);
+  margin-top: 2px;
+}
+.state-child {
+  display: flex !important;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 0;
+  font-size: var(--fs-meta);
+}
 
 .detail-panel {
-  width: 380px;
+  position: relative;
   border-left: 1px solid var(--node-border);
   background: var(--bg-elev);
   overflow-y: auto;
   padding: 14px;
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
+
+/* Resize handle — invisible 6px strip on panel edge, cursor=col-resize, lights
+   up subtly on hover. Lives inside the panel via position:absolute. */
+.resize-handle {
+  position: absolute;
+  top: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 5;
+  user-select: none;
+  background: transparent;
+  transition: background 120ms ease;
+}
+.resize-handle:hover { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+.is-resizing .resize-handle,
+.resize-handle:active { background: var(--accent); }
+.resize-handle-right { right: -3px; }
+.resize-handle-left { left: -3px; }
 .detail-panel h2 { margin: 0 0 4px; font-size: 16px; }
 .detail-panel .section { margin-top: 14px; }
-.detail-panel .section h3 { margin: 0 0 6px; font-size: 12px; color: var(--fg-muted); text-transform: uppercase; }
+.detail-panel .section h3 { margin: 0 0 6px; font-size: var(--fs-meta); color: var(--fg-muted); text-transform: uppercase; }
 .detail-panel .row { display: flex; gap: 6px; padding: 2px 0; }
 .detail-panel .row .k { color: var(--fg-muted); min-width: 80px; }
 
@@ -118,20 +189,70 @@ a:hover { text-decoration: underline; }
   box-shadow: var(--node-shadow);
   padding: 8px 10px;
   width: 280px;
-  font-size: 12px;
+  font-size: var(--fs-base);
   line-height: 1.4;
   color: var(--fg);
 }
 .issue-node.focused { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.issue-node.search-hit {
+  border-color: var(--warn);
+  box-shadow: 0 0 0 1.5px var(--warn);
+}
+.issue-node.search-active {
+  border-color: var(--warn);
+  box-shadow: 0 0 0 3px var(--warn), 0 0 12px color-mix(in srgb, var(--warn) 60%, transparent);
+}
+
+/* Floating inline-search button + bar. Lives in canvas top-right corner so
+   the browser's native Cmd+F stays free for other page text. */
+.inline-search-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 100;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--bg-elev);
+  border: 1px solid var(--node-border);
+  box-shadow: var(--shadow-sm);
+  font-size: 16px;
+  cursor: pointer;
+}
+.inline-search-btn:hover { background: var(--chip-bg); }
+
+.inline-search {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--bg-elev);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  z-index: 100;
+  font-size: var(--fs-base);
+}
+.inline-search .counter {
+  color: var(--fg-muted);
+  font-size: var(--fs-meta);
+  min-width: 50px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
 .issue-node .top { display: flex; gap: 6px; align-items: center; }
-.issue-node .pid { font-family: var(--font-mono); color: var(--fg-muted); font-size: 11px; }
+.issue-node .pid { font-family: var(--font-mono); color: var(--fg-muted); font-size: var(--fs-meta); }
 .issue-node .title { font-weight: 500; margin: 4px 0; word-break: break-word; }
-.issue-node .meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; color: var(--fg-muted); font-size: 11px; }
+.issue-node .meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; color: var(--fg-muted); font-size: var(--fs-meta); }
 .issue-node .chips { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
-.issue-node .chip { padding: 1px 6px; background: var(--chip-bg); color: var(--chip-fg); border-radius: 999px; font-size: 10px; }
+.issue-node .chip { padding: 1px 6px; background: var(--chip-bg); color: var(--chip-fg); border-radius: 999px; font-size: var(--fs-chip); }
 .issue-node .progress { height: 6px; background: var(--chip-bg); border-radius: 3px; overflow: hidden; margin: 6px 0 2px; }
 .issue-node .progress > div { height: 100%; background: var(--accent); }
-.issue-node .progress-label { font-size: 10px; color: var(--fg-muted); }
+.issue-node .progress-label { font-size: var(--fs-chip); color: var(--fg-muted); }
 
 .priority-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .priority-0 { background: var(--priority-none); }
@@ -140,24 +261,47 @@ a:hover { text-decoration: underline; }
 .priority-3 { background: var(--priority-med); }
 .priority-4 { background: var(--priority-low); }
 
+/* State pill — shape glyph + colored chip. Visible at a glance, color-blind friendly. */
+.state-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px 2px 7px;
+  border-radius: 999px;
+  font-size: var(--fs-chip);
+  font-weight: 600;
+  line-height: 1.4;
+  border: 1px solid currentColor;
+  background: color-mix(in srgb, currentColor 22%, transparent);
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+.state-pill .glyph { font-size: var(--fs-meta); line-height: 1; }
+.state-pill.is-canceled { opacity: 0.7; text-decoration: line-through; }
+/* Dark theme: pills need a bit more bg saturation to pop against dark node bg. */
+[data-theme='dark'] .state-pill { background: color-mix(in srgb, currentColor 28%, transparent); }
+
 .bucket-node {
   background: var(--node-bg);
   border: 2px solid var(--node-border);
   border-radius: var(--radius-lg);
   padding: 10px 14px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   text-align: center;
   min-width: 140px;
 }
 .bucket-node .name { font-weight: 600; }
-.bucket-node .count { color: var(--fg-muted); font-size: 12px; margin-top: 2px; }
+.bucket-node .count { color: var(--fg-muted); font-size: var(--fs-meta); margin-top: 2px; }
 
 .mixed-container {
-  background: rgba(0, 0, 0, 0.02);
-  border: 1px dashed var(--node-border);
+  background: rgba(0, 0, 0, 0.04);
+  border: 2px dashed color-mix(in srgb, var(--fg-muted) 50%, transparent);
   border-radius: var(--radius-lg);
 }
-[data-theme='dark'] .mixed-container { background: rgba(255, 255, 255, 0.02); }
+[data-theme='dark'] .mixed-container {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: color-mix(in srgb, var(--fg-muted) 60%, transparent);
+}
 
 .cross-bucket-edge { stroke: var(--edge-cross-bucket) !important; stroke-width: 2 !important; }
 
@@ -201,7 +345,7 @@ a:hover { text-decoration: underline; }
   box-shadow: var(--shadow-md);
   padding: 4px 0;
   z-index: 100;
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 .context-menu button {
   display: block;

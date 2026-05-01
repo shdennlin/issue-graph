@@ -11,6 +11,18 @@ export type IssueStateType =
 
 export type Priority = 0 | 1 | 2 | 3 | 4
 
+// One row from the backend's full workflow-states list. We fetch this
+// alongside issues so the filter UI can show all possible states (including
+// ones with 0 current matches) instead of inferring from cached issues.
+export interface WorkflowState {
+  id: string
+  name: string                // literal Linear state name, e.g. "Review Spec"
+  type: IssueStateType        // canonical type
+  color?: string | null
+  position?: number | null    // for ordering
+  teamKey?: string | null     // multi-team workspaces — null = all/unknown
+}
+
 export type RelationType = 'blocks' | 'duplicate' | 'related'
 
 export interface NormalizedLabelGroup {
@@ -68,6 +80,8 @@ export interface Viewer {
 
 export type DesignDocStatus = 'active' | 'parked' | 'archived'
 
+export type DesignDocLinkStrategy = 'frontmatter' | 'folderName' | 'regexLine'
+
 export interface DesignDocChange {
   name: string
   issueIdentifiers: string[]
@@ -76,6 +90,29 @@ export interface DesignDocChange {
   doneTasks: number
   progress: number
   filePath: string
+  // Per-strategy breakdown of which Linear IDs each linkage method found.
+  // Used by the diagnostic page to surface why a change is/isn't linked.
+  linkSources?: Record<DesignDocLinkStrategy, string[]>
+}
+
+export interface DesignDocCoverage {
+  totalChanges: number
+  linkedChanges: number
+  unlinkedChanges: number
+  byStrategy: Record<DesignDocLinkStrategy, number>  // count of changes linked via this strategy (>=1 ID)
+  perChange: Array<{
+    name: string
+    filePath: string
+    status: DesignDocStatus
+    ids: string[]
+    sources: Record<DesignDocLinkStrategy, string[]>
+  }>
+  issuesMissingDoc: Array<{
+    identifier: string
+    title: string
+    state: IssueStateType
+    url: string
+  }>
 }
 
 export interface AnnotationDTO {

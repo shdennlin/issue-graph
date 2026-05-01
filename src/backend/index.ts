@@ -15,6 +15,7 @@ import { annotationRoutes } from './routes/annotations.js'
 import { settingsRoutes } from './routes/settings.js'
 import { snapshotRoutes } from './routes/snapshots.js'
 import { exportRoutes } from './routes/exportRoutes.js'
+import { coverageRoutes } from './routes/coverage.js'
 
 function findStaticRoot(): string | null {
   const candidates = [
@@ -43,6 +44,7 @@ export function createApp(): Hono {
   app.route('/', settingsRoutes)
   app.route('/', snapshotRoutes)
   app.route('/', exportRoutes)
+  app.route('/', coverageRoutes)
 
   app.get('/robots.txt', (c) => c.text('User-agent: *\nDisallow: /\n'))
 

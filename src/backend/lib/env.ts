@@ -1,5 +1,13 @@
 import { z } from 'zod'
 
+// Load .env from CWD if present (no-op in production where env comes from Docker).
+// Uses Node's built-in loader (≥20.12) — avoids the dotenv dependency.
+try {
+  process.loadEnvFile?.()
+} catch {
+  // .env missing — that's fine, fall through to process.env defaults.
+}
+
 const truthyBool = z
   .union([z.string(), z.boolean()])
   .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'yes', 'on'].includes(v.toLowerCase())))
@@ -56,7 +64,7 @@ const ConfigSchema = z.object({
   TYPE_ICONS: optStr,
 
   // Cache & retention
-  CACHE_TTL_SECONDS: intDefault(300),
+  CACHE_TTL_SECONDS: intDefault(900),
   DAILY_SNAPSHOT_HOUR: intDefault(2),
   SNAPSHOT_RETENTION_DAYS: intDefault(365),
   SYNC_LOG_RETENTION: strDefault('forever'),

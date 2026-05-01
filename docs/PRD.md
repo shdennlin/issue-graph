@@ -1390,7 +1390,7 @@ TYPE_ICONS=                             # JSON map override, e.g. '{"Bug":"🐛"
 # For full control: drop a label-schema.yaml at LABEL_SCHEMA_PATH
 
 # ─── Cache & data retention ──────────────────────────────────
-CACHE_TTL_SECONDS=300                   # 5 min
+CACHE_TTL_SECONDS=900                   # 15 min
 DAILY_SNAPSHOT_HOUR=2                   # 0–23, local server time
 SNAPSHOT_RETENTION_DAYS=365             # 1 year
 SYNC_LOG_RETENTION=forever              # forever | rolling-N (e.g. rolling-1000)

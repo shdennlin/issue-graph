@@ -1,4 +1,4 @@
-import type { NormalizedIssue, NormalizedLabel, Viewer } from '@shared/types.js'
+import type { NormalizedIssue, NormalizedLabel, Viewer, WorkflowState } from '@shared/types.js'
 
 export interface FetchOpts {
   /** PRD §5.3 — 'active' | 'active+recent' | 'all' */
@@ -36,6 +36,12 @@ export interface BackendAdapter {
   fetchIssueDetail(idOrIdentifier: string): Promise<IssueDetail>
   fetchViewer(): Promise<Viewer>
   fetchLabels(): Promise<NormalizedLabel[]>
+  /**
+   * Optional — return the full list of workflow states configured in the
+   * backend. Adapters that don't support this can skip it; the UI will fall
+   * back to inferring states from cached issues.
+   */
+  fetchWorkflowStates?(teamId?: string): Promise<WorkflowState[]>
   /** Last fetch's rate-limit info for sync_log. */
   lastRateLimit(): RateLimitInfo
 }

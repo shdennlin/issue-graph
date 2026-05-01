@@ -1,5 +1,6 @@
 import type { Edge, Node } from 'reactflow'
 import type { ViewDefinition } from './types'
+import { issueNodeHeight } from './types'
 import { runDagre } from '../lib/layout'
 import { applyFilters } from './filters'
 
@@ -7,9 +8,10 @@ export const dependencyView: ViewDefinition = {
   id: 'dependency',
   label: 'Dependency',
   description: 'Issues + blocks edges. Best for "what should I work on next?".',
-  build({ data, filters, staleDays, myUserName, focusedId }) {
-    const issues = applyFilters(data.issues, filters, staleDays, myUserName)
+  build({ data, filters, staleDays, myUserName, focusedId, density, search, measuredHeights }) {
+    const issues = applyFilters(data.issues, filters, staleDays, myUserName, search)
     const ids = new Set(issues.map((i) => i.identifier))
+    const NODE_H = issueNodeHeight(density)
 
     const nodes: Node[] = issues.map((i) => ({
       id: i.identifier,
@@ -17,7 +19,9 @@ export const dependencyView: ViewDefinition = {
       data: { issue: i, focused: focusedId === i.identifier },
       position: { x: 0, y: 0 },
       width: 300,
-      height: 100,
+      // Prefer real measured height if we have it (post-paint re-layout pass),
+      // otherwise fall back to the density estimate. Dagre uses this directly.
+      height: measuredHeights?.get(i.identifier) ?? NODE_H,
     }))
 
     const edges: Edge[] = []
@@ -34,7 +38,7 @@ export const dependencyView: ViewDefinition = {
       }
     }
 
-    const positioned = runDagre(nodes, edges, { direction: 'LR', nodeWidth: 300, nodeHeight: 100 })
+    const positioned = runDagre(nodes, edges, { direction: 'LR', nodeWidth: 300, nodeHeight: NODE_H })
     return { nodes: positioned, edges }
   },
 }

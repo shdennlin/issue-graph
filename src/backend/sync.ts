@@ -6,6 +6,7 @@ import {
   writeLabelCache,
   writeLastSyncMs,
   writeDesigndocsCached,
+  writeWorkflowStatesCached,
   writeMeta,
   readMeta,
 } from './cache.js'
@@ -74,10 +75,18 @@ async function doSync(): Promise<SyncResult> {
   })
 
   try {
-    const [issues, labels, viewer] = await Promise.all([
+    const [issues, labels, viewer, workflowStates] = await Promise.all([
       backend.fetchAllIssues({ scope: cfg.ISSUE_SCOPE, teamId: cfg.LINEAR_TEAM_ID }),
       backend.fetchLabels(),
       backend.fetchViewer().catch(() => null),
+      // Optional — adapters that don't implement fetchWorkflowStates will skip
+      // this and the UI falls back to inferring states from issues.
+      backend.fetchWorkflowStates
+        ? backend.fetchWorkflowStates(cfg.LINEAR_TEAM_ID).catch((e: unknown) => {
+            log.warn({ err: e }, 'workflowStates fetch failed; continuing')
+            return [] as Awaited<ReturnType<NonNullable<typeof backend.fetchWorkflowStates>>>
+          })
+        : Promise.resolve([]),
     ])
 
     // Optional design-doc scan (silent if disabled).
@@ -89,6 +98,7 @@ async function doSync(): Promise<SyncResult> {
     writeIssueCache(issues)
     writeLabelCache(labels)
     writeDesigndocsCached(designdocs)
+    if (workflowStates.length > 0) writeWorkflowStatesCached(workflowStates)
     if (viewer) writeMeta(VIEWER_KEY, JSON.stringify(viewer))
     writeLastSyncMs(Date.now())
 

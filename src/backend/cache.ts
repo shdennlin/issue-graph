@@ -1,10 +1,11 @@
-import type { GraphData, NormalizedIssue, NormalizedLabel, AnnotationDTO } from '@shared/types.js'
+import type { GraphData, NormalizedIssue, NormalizedLabel, AnnotationDTO, WorkflowState } from '@shared/types.js'
 import { getDb } from './db.js'
 import { loadConfig } from './lib/env.js'
 
 const META_LAST_SYNC = 'last_sync_ms'
 const META_HAS_DESIGNDOC = 'has_designdoc'
 const META_DESIGNDOC_PAYLOAD = 'designdoc_payload'
+const META_WORKFLOW_STATES = 'workflow_states'
 
 interface IssueRow { identifier: string; payload: string; fetched_at: number }
 interface LabelRow { id: string; payload: string }
@@ -53,6 +54,21 @@ export function readDesigndocsCached(): GraphData['designdocs'] | undefined {
   } catch {
     return undefined
   }
+}
+
+export function readWorkflowStatesCached(): WorkflowState[] {
+  const raw = readMeta(META_WORKFLOW_STATES)
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as WorkflowState[]) : []
+  } catch {
+    return []
+  }
+}
+
+export function writeWorkflowStatesCached(states: WorkflowState[]): void {
+  writeMeta(META_WORKFLOW_STATES, JSON.stringify(states))
 }
 
 export function writeDesigndocsCached(payload: GraphData['designdocs'] | undefined): void {

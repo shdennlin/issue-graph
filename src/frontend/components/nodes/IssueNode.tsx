@@ -12,7 +12,7 @@ import {
   unionProgress,
   shortPrefixDisplay,
 } from '../../lib/labelSchema'
-import { priorityClass, priorityLabel, stateLabel } from '../../lib/colors'
+import { priorityClass, priorityLabel, stateColorVar, stateIcon, stateLabel } from '../../lib/colors'
 
 interface IssueNodeData {
   issue: NormalizedIssue
@@ -46,12 +46,34 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
     <div className={`issue-node${focused ? ' focused' : ''}`}>
       <Handle type="target" position={Position.Left} />
       <div className="top">
-        {typeIcon && <span title={type?.name ?? ''}>{typeIcon}</span>}
-        <span className={priorityClass(issue.priority)} title={priorityLabel(issue.priority)} />
+        {typeIcon && (
+          <span
+            title={type?.name ?? ''}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}
+          >
+            <span aria-hidden>{typeIcon}</span>
+            {isVerbose && type?.name && (
+              <span className="meta" style={{ fontSize: 11 }}>{type.name}</span>
+            )}
+          </span>
+        )}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+          <span className={priorityClass(issue.priority)} title={priorityLabel(issue.priority)} />
+          {isVerbose && issue.priority !== 0 && (
+            <span className="meta" style={{ fontSize: 11 }}>{priorityLabel(issue.priority)}</span>
+          )}
+        </span>
         <span className="pid">{issue.identifier}</span>
-        <span style={{ marginLeft: 'auto' }} className="meta">
-          {stateLabel(issue.state.type)}
-          {annCount > 0 && <span style={{ marginLeft: 6 }} title={`${annCount} annotations`}>💬{annCount}</span>}
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+          <span
+            className={`state-pill is-${issue.state.type}`}
+            style={{ color: stateColorVar(issue.state.type) }}
+            title={`${issue.state.name} (${stateLabel(issue.state.type)})`}
+          >
+            <span className="glyph" aria-hidden>{stateIcon(issue.state.type)}</span>
+            {issue.state.name}
+          </span>
+          {annCount > 0 && <span className="meta" title={`${annCount} annotations`}>💬{annCount}</span>}
         </span>
       </div>
       {!isCompact && <div className="title">{truncate(issue.title, 80)}</div>}

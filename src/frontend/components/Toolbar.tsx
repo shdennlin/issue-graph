@@ -1,6 +1,5 @@
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
-import { useSchemaStore } from '../store/schemaStore'
 import { views } from '../views'
 import { api } from '../lib/api'
 import { toPng } from 'html-to-image'
@@ -10,13 +9,19 @@ export function Toolbar() {
   const setActiveView = useViewStore((s) => s.setActiveView)
   const density = useViewStore((s) => s.density)
   const setDensity = useViewStore((s) => s.setDensity)
+  const fontSize = useViewStore((s) => s.fontSize)
+  const setFontSize = useViewStore((s) => s.setFontSize)
+  const search = useViewStore((s) => s.search)
+  const setSearch = useViewStore((s) => s.setSearch)
   const theme = useViewStore((s) => s.theme)
   const setTheme = useViewStore((s) => s.setTheme)
   const setSettingsOpen = useViewStore((s) => s.setSettingsOpen)
+  const setCoverageOpen = useViewStore((s) => s.setCoverageOpen)
+  const filterPanelOpen = useViewStore((s) => s.filterPanelOpen)
+  const toggleFilterPanel = useViewStore((s) => s.toggleFilterPanel)
   const selection = useViewStore((s) => s.selection)
   const clearSelection = useViewStore((s) => s.clearSelection)
   const graph = useGraphStore((s) => s.graph)
-  const { primaryGroupSingular } = useSchemaStore()
 
   const exportSelection = () => {
     if (selection.length === 0) return
@@ -37,6 +42,16 @@ export function Toolbar() {
   return (
     <div className="toolbar">
       <div className="group">
+        <button
+          onClick={toggleFilterPanel}
+          title={filterPanelOpen ? 'Hide filters' : 'Show filters'}
+          aria-pressed={filterPanelOpen}
+        >
+          {filterPanelOpen ? '◀' : '▶'} Filters
+        </button>
+      </div>
+      <div className="sep" />
+      <div className="group">
         {views.map((v) => (
           <button
             key={v.id}
@@ -44,26 +59,38 @@ export function Toolbar() {
             onClick={() => setActiveView(v.id as any)}
             title={v.description}
           >
-            {v.label === 'Bucket' && primaryGroupSingular ? primaryGroupSingular + 's' : v.label}
+            {v.label}
           </button>
         ))}
       </div>
       <div className="sep" />
       <div className="group">
-        <span style={{ color: 'var(--fg-muted)', fontSize: 12 }}>Density</span>
+        <input
+          type="search"
+          placeholder="🔍 Search id / title / assignee…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ width: 220 }}
+        />
+        {search && (
+          <button onClick={() => setSearch('')} title="Clear search">×</button>
+        )}
+      </div>
+      <div className="sep" />
+      <div className="group">
+        <span style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-meta)' }}>Density</span>
         <select value={density} onChange={(e) => setDensity(e.target.value as any)}>
           <option value="compact">Compact</option>
           <option value="default">Default</option>
           <option value="verbose">Verbose</option>
         </select>
       </div>
-      <div className="sep" />
       <div className="group">
-        <span style={{ color: 'var(--fg-muted)', fontSize: 12 }}>Theme</span>
-        <select value={theme} onChange={(e) => setTheme(e.target.value as any)}>
-          <option value="auto">Auto</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
+        <span style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-meta)' }}>Size</span>
+        <select value={fontSize} onChange={(e) => setFontSize(e.target.value as any)}>
+          <option value="sm">Small</option>
+          <option value="md">Medium</option>
+          <option value="lg">Large</option>
         </select>
       </div>
       <div style={{ marginLeft: 'auto' }} className="group">
@@ -82,6 +109,13 @@ export function Toolbar() {
           <button>Export MD</button>
         </a>
         <button onClick={screenshot} title="Cmd+Shift+S">📷</button>
+        <button onClick={() => setCoverageOpen(true)} title="Design-doc coverage report">📊</button>
+        <button
+          onClick={() => setTheme(theme === 'dark' ? 'light' : theme === 'light' ? 'auto' : 'dark')}
+          title={`Theme: ${theme} (click to cycle)`}
+        >
+          {theme === 'dark' ? '🌙' : theme === 'light' ? '☀️' : '🖥️'}
+        </button>
         <button onClick={() => setSettingsOpen(true)}>⚙️</button>
       </div>
     </div>

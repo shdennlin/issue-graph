@@ -67,4 +67,53 @@ describe('spectraAdapter', () => {
   it('returns empty when no openspec/changes', () => {
     expect(spectraAdapter.scan(root)).toEqual([])
   })
+
+  it('extracts ids from frontmatter (linear: [...])', () => {
+    mkChange(
+      'fm-array',
+      `---\nlinear: [PROJ-100, PROJ-101]\n---\n\n# Change\n`,
+      '- [ ] task',
+    )
+    const out = spectraAdapter.scan(root)
+    expect(out[0]!.issueIdentifiers.sort()).toEqual(['PROJ-100', 'PROJ-101'])
+    expect(out[0]!.linkSources?.frontmatter.sort()).toEqual(['PROJ-100', 'PROJ-101'])
+    expect(out[0]!.linkSources?.regexLine).toEqual([])
+  })
+
+  it('extracts ids from frontmatter (linear: PROJ-1 single)', () => {
+    mkChange('fm-single', `---\nlinear: PROJ-1\n---\n`, '')
+    const out = spectraAdapter.scan(root)
+    expect(out[0]!.issueIdentifiers).toEqual(['PROJ-1'])
+    expect(out[0]!.linkSources?.frontmatter).toEqual(['PROJ-1'])
+  })
+
+  it('extracts ids from folder name', () => {
+    mkChange('PROJ-42-some-feature', '# No linear mention here\n', '')
+    const out = spectraAdapter.scan(root)
+    expect(out[0]!.issueIdentifiers).toEqual(['PROJ-42'])
+    expect(out[0]!.linkSources?.folderName).toEqual(['PROJ-42'])
+  })
+
+  it('unions ids from all three strategies', () => {
+    mkChange(
+      'PROJ-1-feature',
+      `---\nlinear: PROJ-2\n---\n\nLinear: PROJ-3\n`,
+      '',
+    )
+    const out = spectraAdapter.scan(root)
+    expect(out[0]!.issueIdentifiers.sort()).toEqual(['PROJ-1', 'PROJ-2', 'PROJ-3'])
+    expect(out[0]!.linkSources?.folderName).toEqual(['PROJ-1'])
+    expect(out[0]!.linkSources?.frontmatter).toEqual(['PROJ-2'])
+    expect(out[0]!.linkSources?.regexLine).toEqual(['PROJ-3'])
+  })
+
+  it('handles "Related Linear issues:" line', () => {
+    mkChange(
+      'related-format',
+      'Related Linear issues: PROJ-105 (resume), PROJ-107, PROJ-70.\n',
+      '',
+    )
+    const out = spectraAdapter.scan(root)
+    expect(out[0]!.issueIdentifiers.sort()).toEqual(['PROJ-105', 'PROJ-107', 'PROJ-70'])
+  })
 })

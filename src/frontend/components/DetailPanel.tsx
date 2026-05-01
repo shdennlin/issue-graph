@@ -4,6 +4,7 @@ import type { AnnotationDTO, NormalizedIssue } from '@shared/types.js'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { useSchemaStore } from '../store/schemaStore'
+import { useResizable } from '../hooks/useResizable'
 import { api } from '../lib/api'
 import { stateLabel, priorityLabel } from '../lib/colors'
 import { getDesignDocsForIssue } from '../lib/labelSchema'
@@ -42,6 +43,14 @@ export function DetailPanel() {
       .finally(() => setDescLoading(false))
   }, [issue?.identifier])
 
+  const { width, startResize, resizing } = useResizable({
+    storageKey: 'ig-detail-panel-w',
+    defaultWidth: 380,
+    min: 280,
+    max: 720,
+    side: 'right',
+  })
+
   if (!issue) return null
 
   const annotations: AnnotationDTO[] = (graph?.data.annotations ?? []).filter(
@@ -77,7 +86,11 @@ export function DetailPanel() {
   )
 
   return (
-    <aside className="detail-panel">
+    <aside
+      className={`detail-panel${resizing ? ' is-resizing' : ''}`}
+      style={{ width, flexShrink: 0 }}
+    >
+      <div className="resize-handle resize-handle-left" onMouseDown={startResize} title="Drag to resize" />
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
         <h2 style={{ flex: 1 }}>
           <span style={{ color: 'var(--fg-muted)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
