@@ -1,0 +1,49 @@
+:root {
+  --bg: #ffffff;
+  --bg-elev: #fafafa;
+  --fg: #0d1117;
+  --fg-muted: #57606a;
+  --node-bg: #f5f5f5;
+  --node-border: #d0d7de;
+  --node-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --edge: #8c8c8c;
+  --edge-cross-bucket: #d62828;
+  --accent: #0a84ff;
+  --accent-fg: #ffffff;
+  --danger: #d62828;
+  --warn: #f0a800;
+  --ok: #2ea043;
+  --priority-urgent: #d62828;
+  --priority-high: #f77f00;
+  --priority-med: #fcbf49;
+  --priority-low: #a0a0a0;
+  --priority-none: #c8c8c8;
+  --chip-bg: #eaeef2;
+  --chip-fg: #24292f;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+[data-theme='dark'] {
+  --bg: #0d1117;
+  --bg-elev: #161b22;
+  --fg: #e6e6e6;
+  --fg-muted: #8b949e;
+  --node-bg: #161b22;
+  --node-border: #30363d;
+  --node-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --edge: #58a6ff;
+  --edge-cross-bucket: #ff6b6b;
+  --accent: #58a6ff;
+  --accent-fg: #0d1117;
+  --danger: #ff6b6b;
+  --warn: #f0c000;
+  --ok: #56d364;
+  --chip-bg: #21262d;
+  --chip-fg: #c9d1d9;
+}

@@ -1,0 +1,23 @@
+# Optional Node-runtime image (Phase 2 deliverable per PRD §11.4).
+# Builds and runs the same source on Node 20 instead of Bun.
+
+FROM node:20-slim AS builder
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci || npm install
+COPY . .
+RUN npm run build
+
+FROM node:20-slim
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/build ./build
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json .
+RUN mkdir -p /app/data && chown -R node:node /app/data
+EXPOSE 31415
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD curl -fsS http://localhost:31415/api/health || exit 1
+USER node
+CMD ["node", "build/backend/index.js"]

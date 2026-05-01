@@ -1,0 +1,35 @@
+import type { Edge, Node } from 'reactflow'
+import type { ViewDefinition } from './types'
+import { applyFilters } from './filters'
+import { getDesignDocsForIssue } from '../lib/labelSchema'
+import { runDagre } from '../lib/layout'
+
+export const designdocView: ViewDefinition = {
+  id: 'designdoc',
+  label: 'Design docs',
+  description: 'Issues that have linked design-doc changes. Phase 3.',
+  build({ data, filters, staleDays, myUserName, focusedId }) {
+    const visible = applyFilters(data.issues, filters, staleDays, myUserName).filter((i) => {
+      const docs = getDesignDocsForIssue(i, data.designdocs)
+      return docs.length > 0
+    })
+    const nodes: Node[] = visible.map((i) => ({
+      id: i.identifier,
+      type: 'issue',
+      data: { issue: i, focused: focusedId === i.identifier },
+      position: { x: 0, y: 0 },
+      width: 300,
+      height: 110,
+    }))
+    const ids = new Set(visible.map((i) => i.identifier))
+    const edges: Edge[] = []
+    for (const i of visible) {
+      for (const r of i.relations) {
+        if (r.type === 'blocks' && ids.has(r.targetIdentifier)) {
+          edges.push({ id: `${i.identifier}->${r.targetIdentifier}`, source: i.identifier, target: r.targetIdentifier })
+        }
+      }
+    }
+    return { nodes: runDagre(nodes, edges, { direction: 'LR' }), edges }
+  },
+}

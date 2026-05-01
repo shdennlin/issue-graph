@@ -1,0 +1,17 @@
+services:
+  app:
+    build: .
+    image: issue-graph:latest
+    container_name: issue-graph
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${PORT:-31415}:31415"
+    volumes:
+      - ./data:/app/data
+      - ${REPO_HOST_PATH:-./}:/repo:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:31415/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

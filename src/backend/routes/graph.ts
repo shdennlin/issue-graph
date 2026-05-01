@@ -1,0 +1,54 @@
+import { Hono } from 'hono'
+import type { GraphResponse } from '@shared/types.js'
+import { loadConfig, isAuthConfigured } from '../lib/env.js'
+import {
+  isCacheFresh,
+  readCachedIssues,
+  readCachedLabels,
+  readDesigndocsCached,
+  readLastSyncMs,
+  readAnnotations,
+} from '../cache.js'
+import { kickBackgroundSync, syncOnce, readViewerCached } from '../sync.js'
+import { getActiveDesignDocAdapter } from '../designdoc/factory.js'
+
+export const graphRoutes = new Hono()
+
+graphRoutes.get('/api/graph', async (c) => {
+  const cfg = loadConfig()
+  const fresh = isCacheFresh()
+  const cacheEmpty = readLastSyncMs() === null
+
+  if (cacheEmpty && isAuthConfigured(cfg)) {
+    // First-run blocking sync so the user sees data immediately.
+    await syncOnce({ force: true })
+  } else if (!fresh) {
+    kickBackgroundSync()
+  }
+
+  const issues = readCachedIssues()
+  const labels = readCachedLabels()
+  const designdocs = readDesigndocsCached()
+  const annotations = readAnnotations()
+  const viewer = readViewerCached()
+  const fetchedAt = readLastSyncMs() ?? 0
+  const adapter = getActiveDesignDocAdapter(cfg.REPO_PATH, cfg.DESIGNDOC_ADAPTER)
+
+  const body: GraphResponse = {
+    data: {
+      issues,
+      labels,
+      designdocs,
+      annotations,
+      viewer,
+      fetchedAt,
+    },
+    stale: !fresh,
+    fetchedAt,
+    instanceLabel: cfg.INSTANCE_LABEL,
+    hasDesigndoc: adapter !== null,
+    cacheEmpty: issues.length === 0 && cacheEmpty,
+    authError: !isAuthConfigured(cfg),
+  }
+  return c.json(body)
+})
