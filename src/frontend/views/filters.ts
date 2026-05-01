@@ -3,6 +3,56 @@
 import type { NormalizedIssue } from '@shared/types.js'
 import type { Filters } from '../store/viewStore'
 
+// Filter-panel "leave-one-out" counting: when showing the count next to e.g.
+// "(unassigned)", we want it to reflect "if you click this, how many issues
+// will be visible?" — not "how many unassigned issues exist in cache total"
+// (which would include canceled ones the active-only filter hides).
+//
+// Achieved by clearing only the named dimension's filter values, then re-
+// running applyFilters. All other dimensions stay applied.
+export type FilterDimension =
+  | 'state'
+  | 'priority'
+  | 'assignee'
+  | 'primary'
+  | 'type'
+  | 'prefix'
+
+export function applyFiltersExcluding(
+  issues: NormalizedIssue[],
+  filters: Filters,
+  staleDays: number,
+  myUserName: string | null,
+  search: string | undefined,
+  exclude: FilterDimension,
+): NormalizedIssue[] {
+  const f: Filters = { ...filters }
+  switch (exclude) {
+    case 'state':
+      f.stateTypes = []
+      f.stateNames = []
+      break
+    case 'priority':
+      f.priorities = []
+      break
+    case 'assignee':
+      f.assignees = []
+      // myIssuesOnly is part of the assignee dimension conceptually.
+      f.myIssuesOnly = false
+      break
+    case 'primary':
+      f.primaryValues = []
+      break
+    case 'type':
+      f.typeValues = []
+      break
+    case 'prefix':
+      f.prefixSelections = {}
+      break
+  }
+  return applyFilters(issues, f, staleDays, myUserName, search)
+}
+
 export function applyFilters(
   issues: NormalizedIssue[],
   filters: Filters,

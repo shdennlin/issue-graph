@@ -5,6 +5,7 @@ import { useViewStore } from '../store/viewStore'
 import { useSchemaStore } from '../store/schemaStore'
 import { useResizable } from '../hooks/useResizable'
 import { stateColorVar, stateIcon, stateLabel } from '../lib/colors'
+import { applyFiltersExcluding } from '../views/filters'
 
 const ALL_STATES: IssueStateType[] = ['started', 'unstarted', 'backlog', 'triage', 'completed', 'canceled']
 const PRIORITIES = [1, 2, 3, 4, 0]
@@ -25,25 +26,49 @@ export function FilterPanel() {
   const resetFilters = useViewStore((s) => s.resetFilters)
 
   const issues = graph?.data.issues ?? []
+  const staleDays = useViewStore((s) => s.staleDays)
+  const search = useViewStore((s) => s.search)
+  const myUserName = graph?.data.viewer?.displayName ?? null
 
+  // Leave-one-out counts: for each filter dimension, count issues that pass
+  // ALL OTHER active filters. So "(unassigned) 11" means clicking it would
+  // reveal 11 issues — not "11 unassigned issues exist somewhere in cache,
+  // most of which are hidden by Active-only".
   const counts = useMemo(() => {
     const byState: Record<string, number> = {}
     const byStateName = new Map<string, { name: string; type: IssueStateType; count: number }>()
     const byPrio: Record<number, number> = {}
     const byAssignee = new Map<string, number>()
     const byLabel = new Map<string, number>()
-    for (const i of issues) {
+
+    // State counts (excluding state filter from applied set)
+    for (const i of applyFiltersExcluding(issues, filters, staleDays, myUserName, search, 'state')) {
       byState[i.state.type] = (byState[i.state.type] ?? 0) + 1
       const sn = byStateName.get(i.state.name)
       if (sn) sn.count += 1
       else byStateName.set(i.state.name, { name: i.state.name, type: i.state.type, count: 1 })
+    }
+    // Priority counts (excluding priority filter)
+    for (const i of applyFiltersExcluding(issues, filters, staleDays, myUserName, search, 'priority')) {
       byPrio[i.priority] = (byPrio[i.priority] ?? 0) + 1
+    }
+    // Assignee counts (excluding assignee + myIssuesOnly)
+    for (const i of applyFiltersExcluding(issues, filters, staleDays, myUserName, search, 'assignee')) {
       const a = i.assignee?.displayName ?? '(unassigned)'
       byAssignee.set(a, (byAssignee.get(a) ?? 0) + 1)
+    }
+    // Label counts: primary, type, prefix all live in i.labels. Use the
+    // strictest leave-one-out (drop only the relevant label dimension) but
+    // since all label-based filters share a key into i.labels, we count all
+    // three from each respective leave-one-out set. For simplicity, count
+    // labels from the base "all-but-prefix" pass; primary/type users will
+    // see counts that respect prefix filters too. Acceptable approximation.
+    const labelSet = applyFiltersExcluding(issues, filters, staleDays, myUserName, search, 'primary')
+    for (const i of labelSet) {
       for (const l of i.labels) byLabel.set(l.id, (byLabel.get(l.id) ?? 0) + 1)
     }
     return { byState, byStateName, byPrio, byAssignee, byLabel }
-  }, [issues])
+  }, [issues, filters, staleDays, myUserName, search])
 
   // Group state names by canonical type. Source = union of:
   //   1. Workflow states fetched from the backend (full list, including ones
