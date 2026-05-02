@@ -18,7 +18,7 @@ Direction, not commitment. Issues and PRs welcome on anything below.
 - [ ] Resolve the 4 known `react-hooks/exhaustive-deps` warnings in `FilterPanel` and `DetailPanel`
 - [ ] Migrate the remaining v7 hook-rule violations (`set-state-in-effect`, `purity`)
 - [ ] Document the JSON shape of `/api/export` so users can build their own tools on top
-- [ ] Settings → "Reset cache" button that calls `POST /api/reset-cache` (endpoint already exists in v1.0)
+- [ ] Detect workspace change automatically via `viewer.organization.urlKey` and offer the user a one-click reset (today: manual via the Settings → "Reset cache" button)
 
 ## v1.2+ — likely
 
