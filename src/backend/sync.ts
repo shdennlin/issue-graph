@@ -10,6 +10,7 @@ import {
   writeMeta,
   readMeta,
   readExtendedScopeDays,
+  countCachedIssues,
 } from './cache.js'
 import { getBackend } from './sources/factory.js'
 import { AuthError, RateLimitError } from './sources/types.js'
@@ -96,6 +97,23 @@ async function doSync(): Promise<SyncResult> {
       log.warn({ err: e }, 'designdoc scan failed; continuing')
       return undefined
     })
+
+    // Workspace-switch sniff test: if the cache holds many more issues than
+    // we just fetched, the user likely changed LINEAR_API_KEY to a different
+    // workspace. Issues from the previous workspace stay in cache (the
+    // identifiers don't collide), polluting the graph. We can't detect this
+    // perfectly without storing the workspace ID, so use a generous heuristic:
+    // cached count > 2x fetched count AND fetched > 0 (avoid false positives
+    // on initial sync or rate-limited partial responses).
+    const cachedBefore = countCachedIssues()
+    if (cachedBefore > issues.length * 2 && issues.length > 0) {
+      log.warn(
+        { cachedBefore, syncedNow: issues.length },
+        'Cache holds far more issues than this sync returned. ' +
+          'If you switched LINEAR_API_KEY to a different workspace, ' +
+          'POST /api/reset-cache to clear stale data.',
+      )
+    }
 
     writeIssueCache(issues)
     writeLabelCache(labels)

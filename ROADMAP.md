@@ -18,6 +18,7 @@ Direction, not commitment. Issues and PRs welcome on anything below.
 - [ ] Resolve the 4 known `react-hooks/exhaustive-deps` warnings in `FilterPanel` and `DetailPanel`
 - [ ] Migrate the remaining v7 hook-rule violations (`set-state-in-effect`, `purity`)
 - [ ] Document the JSON shape of `/api/export` so users can build their own tools on top
+- [ ] Settings → "Reset cache" button that calls `POST /api/reset-cache` (endpoint already exists in v1.0)
 
 ## v1.2+ — likely
 
