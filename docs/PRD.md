@@ -1,5 +1,15 @@
 # Issue Graph — Engineering PRD
 
+> [!NOTE]
+> **Historical document — pre-implementation snapshot from 2026-05-01.**
+> Some planned items shifted during implementation:
+> - **Bucket view** and **Mix view** merged into a single Mix view (the toolbar no longer has a separate Bucket button).
+> - **Timeline view** was deferred — daily snapshots are still written to SQLite (`scripts/backup.sh`, `snapshot` table) but no UI surfaces them yet.
+> - **Phasing language** ("Phase 1a / 1b / 2 / 3") is internal planning vocabulary; v1.0 ships everything that was Phases 1a → 3.
+> - **Stack:** migrated from `better-sqlite3` to `bun:sqlite` post-spec (Bun refused to load the N-API binding — see [oven-sh/bun#4290](https://github.com/oven-sh/bun/issues/4290)).
+>
+> For **current capabilities**, see [`../README.md`](../README.md). For **what's planned next**, see [`../ROADMAP.md`](../ROADMAP.md). This PRD is preserved for design rationale and decision history (§16).
+
 **Status:** Approved · Phase 1a ready to start
 **Author:** shdennlin
 **Created:** 2026-05-01

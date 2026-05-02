@@ -5,17 +5,15 @@ services:
     container_name: issue-graph
     restart: unless-stopped
     env_file: .env
-    environment:
-      REPO_PATH: /repo
     ports:
       - "${PORT:-31415}:31415"
     volumes:
       - ./data:/app/data
-      # Default mounts an empty dir so the design-doc adapter stays disabled
-      # until the user opts in by setting REPO_HOST_PATH. (Mounting `./` here
-      # — the previous default — would silently mount the issue-graph repo
-      # itself, which is surprising and exposes our own files at /repo.)
-      - ${REPO_HOST_PATH:-./.docker/empty-repo}:/repo:ro
+      # REPO_PATH (from .env) is bind-mounted at the same absolute path inside
+      # the container, so the backend's REPO_PATH env var works identically in
+      # local dev and Docker. Default points at a placeholder so the design-doc
+      # adapter stays disabled when REPO_PATH is unset.
+      - ${REPO_PATH:-./.docker/empty-repo}:${REPO_PATH:-/var/empty/issue-graph-no-repo}:ro
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:31415/api/health"]
       interval: 30s

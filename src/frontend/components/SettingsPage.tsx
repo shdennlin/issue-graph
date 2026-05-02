@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useViewStore } from '../store/viewStore'
+import { useGraphStore } from '../store/graphStore'
 import { api, type SettingsResponse } from '../lib/api'
 
 export function SettingsPage() {
@@ -8,8 +9,10 @@ export function SettingsPage() {
   const setStaleDays = useViewStore((s) => s.setStaleDays)
   const fontSize = useViewStore((s) => s.fontSize)
   const setFontSize = useViewStore((s) => s.setFontSize)
+  const reloadGraph = useGraphStore((s) => s.load)
   const [data, setData] = useState<SettingsResponse | null>(null)
   const [draft, setDraft] = useState<Record<string, unknown>>({})
+  const [resetting, setResetting] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -28,6 +31,29 @@ export function SettingsPage() {
     a.href = URL.createObjectURL(blob)
     a.download = `annotations-${new Date().toISOString().slice(0, 10)}.json`
     a.click()
+  }
+
+  const resetCache = async () => {
+    const ok = confirm(
+      'Reset cache?\n\n' +
+        'This wipes the cached issue + label data and the workspace-tied ' +
+        'meta entries (design-doc payload, workflow states), then re-syncs ' +
+        'from Linear.\n\n' +
+        'Annotations, snapshots, and sync history are preserved.\n\n' +
+        'Use this after switching LINEAR_API_KEY to a different workspace.',
+    )
+    if (!ok) return
+    setResetting(true)
+    try {
+      const result = await api.resetCache()
+      await api.forceSync()
+      await reloadGraph()
+      alert(`Cleared ${result.cleared.issues} issues + ${result.cleared.labels} labels. Re-synced from Linear.`)
+    } catch (err) {
+      alert(`Reset failed: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setResetting(false)
+    }
   }
 
   const importAnnotations = async () => {
@@ -163,6 +189,14 @@ export function SettingsPage() {
           Identified as: {data?.viewer?.displayName ?? 'unknown'}
           <br />
           Issue scope: {env.issue_scope as string}
+        </div>
+        <div style={{ marginTop: 10 }}>
+          <button onClick={resetCache} disabled={resetting} title="Wipe issue/label cache and re-sync. Use after switching LINEAR_API_KEY to a different workspace.">
+            {resetting ? 'Resetting…' : 'Reset cache & re-sync'}
+          </button>
+          <div style={{ color: 'var(--fg-muted)', fontSize: 11, marginTop: 4 }}>
+            Use after changing <code>LINEAR_API_KEY</code> to a different workspace. Preserves annotations + snapshots.
+          </div>
         </div>
 
         <h4>Annotations</h4>
