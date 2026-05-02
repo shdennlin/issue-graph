@@ -12,7 +12,17 @@ Direction, not commitment. Issues and PRs welcome on anything below.
 - Auto-detected label schema with optional `label-schema.yaml` override
 - Single-binary Docker image
 
-## v1.1 — next
+## v1.1 — shipped
+
+- Unified `REPO_PATH` env var (replaces the `REPO_HOST_PATH` / in-container `/repo` split — works identically in `bun run dev` and `docker compose up`); startup warning when `REPO_PATH` is non-absolute
+- `POST /api/reset-cache` endpoint to wipe issue + label cache and workspace-tied meta (preserves annotations, snapshots, sync history)
+- Settings → "Reset cache & re-sync" button — one-click recovery after switching `LINEAR_API_KEY` to a different workspace
+- Sync-time warning when cached count >> synced count (heuristic for "you probably switched workspaces")
+- `demo-repo/` — sample `openspec/` directory shipped with the repo, demonstrates all three linkage strategies
+- README hero + design-doc screenshots, GitHub `[!WARNING]` / `[!TIP]` alert syntax
+- Doc alignment: dropped pre-1.0 phasing language and stale view names (Bucket / Timeline)
+
+## v1.2 — next
 
 - [ ] Optional auth (basic-auth or token gate) for non-localhost deployments
 - [ ] Resolve the 4 known `react-hooks/exhaustive-deps` warnings in `FilterPanel` and `DetailPanel`
@@ -20,7 +30,7 @@ Direction, not commitment. Issues and PRs welcome on anything below.
 - [ ] Document the JSON shape of `/api/export` so users can build their own tools on top
 - [ ] Detect workspace change automatically via `viewer.organization.urlKey` and offer the user a one-click reset (today: manual via the Settings → "Reset cache" button)
 
-## v1.2+ — likely
+## v1.3+ — likely
 
 - [ ] **GitHub Issues backend** — same `Source` interface as Linear; high-value for OSS teams
 - [ ] Multi-workspace / multi-team toggle in the UI (currently env-pinned)
@@ -48,5 +58,5 @@ Direction, not commitment. Issues and PRs welcome on anything below.
 
 ---
 
-If you want to work on something in **v1.1** or **v1.2+**, open an issue first so we can align on scope.
+If you want to work on something in **v1.2** or **v1.3+**, open an issue first so we can align on scope.
 For **Maybe** items, open an issue to gauge interest before writing code.
