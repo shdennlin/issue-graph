@@ -44,7 +44,7 @@ Everything else has a sane default. See `.env.example` for the full list.
 
 ### Optional design-doc integration
 
-If your team writes design docs / RFCs / change proposals as markdown files alongside your code, `issue-graph` can read them and show **per-issue progress bars** on the graph (e.g. `4/9 tasks done`). Currently only the **[Spectra](https://spectra.5xcamp.us/) / [OpenSpec](https://openspec.dev/)** layout is supported — proposals at `openspec/changes/<name>/proposal.md` with a `tasks.md` containing `- [ ]` / `- [x]` checkboxes.
+If your team writes design docs / RFCs / change proposals as markdown files alongside your code — common in **Spec-Driven Development (SDD)** workflows — `issue-graph` can read them and show **per-issue progress bars** on the graph (e.g. `4/9 tasks done`). Currently only the **[Spectra](https://spectra.5xcamp.us/) / [OpenSpec](https://openspec.dev/)** layout is supported — proposals at `openspec/changes/<name>/proposal.md` with a `tasks.md` containing `- [ ]` / `- [x]` checkboxes.
 
 ![Design-doc view — only issues with linked proposals, each showing a per-issue progress bar derived from the proposal's tasks.md](docs/screenshots/designdoc.png)
 
@@ -124,7 +124,7 @@ If your design docs aren't in `openspec/`, the adapter doesn't auto-detect anyth
 
 ## Fifteen-minute customization
 
-### Layer 2 — env-var schema overrides
+### Quick override (env vars)
 
 Out of the box, `issue-graph` autodetects label groups whose names match `service|component|owner|module|team|area|domain` (used to group issues into buckets) and `type|kind|category` (used to pick a leading icon).
 
@@ -138,7 +138,7 @@ TYPE_ICONS={"Bug":"🐛","Feature":"✨","Spike":"🔬"}
 
 Restart, and the bucket view, filter sidebar, and node icons all pick up the override.
 
-### Layer 3 — `label-schema.yaml`
+### Full control (`label-schema.yaml`)
 
 For full control over how every label group and prefix renders, drop a YAML file at `LABEL_SCHEMA_PATH` (default `/app/data/label-schema.yaml`). See `label-schema.example.yaml` for a complete reference. The file is hot-reloaded — edit it, then click "Refresh" in the banner to pick up changes without restarting the container.
 
@@ -182,12 +182,12 @@ Share a link in chat — your teammate sees the same view.
 ## Development
 
 ```bash
-npm install
-npm run dev        # concurrent backend + frontend (Vite proxies /api → :31415)
-npm run typecheck
-npm run lint
-npm test
-npm run build      # production build → dist/ + build/
+bun install
+bun run dev        # concurrent backend + frontend (Vite proxies /api → :31415)
+bun run typecheck
+bun run lint
+bun run test
+bun run build      # production build → dist/ + build/
 ```
 
 ## Troubleshooting
