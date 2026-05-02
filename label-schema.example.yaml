@@ -1,0 +1,55 @@
+# label-schema.yaml — declares exactly how each label group/prefix is rendered.
+# Anything not listed here falls back to Layer 1 auto-detection (PRD §8.1).
+# Drop next to your docker compose file and set LABEL_SCHEMA_PATH accordingly.
+
+groups:
+  service:
+    role: primary
+    label_singular: Service
+    label_plural: Services
+    display:
+      kind: bucket
+      color: from-linear
+
+  Type:
+    role: type
+    display:
+      kind: icon-leading
+      icons:
+        Bug: 🐛
+        Feature: ✨
+        Improvement: ⚡
+        Refactor: 🔧
+        Chore: 🧹
+        Documentation: 📝
+        Testing: 🧪
+        Observability: 📊
+
+prefixes:
+  "affects: ":
+    display:
+      kind: footer-list
+      label: "↓ affects:"
+      color: gray
+      max_show: 4
+
+  "risk: ":
+    display:
+      kind: chip-corner
+      max_show: 2
+      color_map:
+        security: '#d62828'
+        breaking-change: '#f77f00'
+        migration: '#fcbf49'
+        data-loss: '#d62828'
+
+  "process: ":
+    display:
+      kind: badge-overlay
+      color: '#0a84ff'
+
+orphan_labels:
+  display:
+    kind: chip-bottom
+    color: from-linear
+    max_show: 3
