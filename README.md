@@ -2,6 +2,8 @@
 
 Self-hosted, read-only graph viewer for issue dependencies. Fetches from Linear, renders an interactive graph of issues, buckets, and `blocks` relationships. Optionally enriches with local design-doc progress.
 
+![Issue Graph — dependency view with detail panel showing the selected issue's design-doc progress, blocks/blocked-by, and annotations](docs/screenshots/dependency.png)
+
 > **Status:** Phases 1a → 3 implemented · Linear backend · Spectra/OpenSpec adapter included.
 
 ## What it shows
@@ -44,6 +46,8 @@ Everything else has a sane default. See `.env.example` for the full list.
 ### Optional design-doc integration
 
 If your team writes design docs / RFCs / change proposals as markdown files alongside your code, `issue-graph` can read them and show **per-issue progress bars** on the graph (e.g. `4/9 tasks done`). Currently only the **Spectra/OpenSpec** layout is supported — proposals at `openspec/changes/<name>/proposal.md` with a `tasks.md` containing `- [ ]` / `- [x]` checkboxes.
+
+![Design-doc view — only issues with linked proposals, each showing a per-issue progress bar derived from the proposal's tasks.md](docs/screenshots/designdoc.png)
 
 #### 1. Point at your repo
 
