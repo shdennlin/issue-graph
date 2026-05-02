@@ -136,6 +136,41 @@ export function writeLabelCache(labels: NormalizedLabel[]): void {
   txn(labels)
 }
 
+/**
+ * Returns the number of issues currently in the cache. Used for the
+ * sync-time stale-cache warning (see sync.ts) — if the cache holds many
+ * more issues than the latest sync returned, the user likely switched
+ * LINEAR_API_KEY to a different workspace.
+ */
+export function countCachedIssues(): number {
+  const row = getDb().prepare('SELECT COUNT(*) AS n FROM issue_cache').get() as { n: number }
+  return row.n
+}
+
+/**
+ * Wipe everything tied to the configured backend/workspace so the next
+ * sync rebuilds from scratch. Intentionally preserves user-created data:
+ * annotations, snapshots, sync_log. Use after switching LINEAR_API_KEY
+ * to a different workspace, or to recover from a corrupted cache.
+ */
+export function resetCache(): { issues: number; labels: number } {
+  const db = getDb()
+  const issues = countCachedIssues()
+  const labelRow = db.prepare('SELECT COUNT(*) AS n FROM label_cache').get() as { n: number }
+  const labels = labelRow.n
+  db.transaction(() => {
+    db.prepare('DELETE FROM issue_cache').run()
+    db.prepare('DELETE FROM label_cache').run()
+    // Also clear workspace-tied meta entries so the design-doc filter and
+    // workflow-state info don't show stale data from the previous workspace.
+    writeMeta(META_HAS_DESIGNDOC, '0')
+    writeMeta(META_DESIGNDOC_PAYLOAD, '')
+    writeMeta(META_WORKFLOW_STATES, '[]')
+    writeMeta(META_LAST_SYNC, '0')
+  })()
+  return { issues, labels }
+}
+
 export function readAnnotations(): AnnotationDTO[] {
   const rows = getDb()
     .prepare(

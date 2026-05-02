@@ -42,6 +42,8 @@ export interface SnapshotDiff {
 export const api = {
   fetchGraph: () => http<GraphResponse>('/api/graph'),
   forceSync: () => http<{ ok: boolean; count: number; durationMs: number }>('/api/sync', { method: 'POST' }),
+  resetCache: () =>
+    http<{ ok: boolean; cleared: { issues: number; labels: number } }>('/api/reset-cache', { method: 'POST' }),
   // Lazy fetch extension: tell backend to also pull Canceled/Completed issues
   // within `days` (max 365). 0 clears. Triggers force-sync when days > 0.
   extendSyncScope: (days: number) =>

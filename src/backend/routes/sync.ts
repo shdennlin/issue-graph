@@ -1,7 +1,8 @@
 import { Hono } from 'hono'
 import { syncOnce } from '../sync.js'
 import { getDb } from '../db.js'
-import { readExtendedScopeDays, writeExtendedScopeDays } from '../cache.js'
+import { readExtendedScopeDays, writeExtendedScopeDays, resetCache } from '../cache.js'
+import { getLogger } from '../lib/log.js'
 import type { SyncLogEntry } from '@shared/types.js'
 
 export const syncRoutes = new Hono()
@@ -9,6 +10,20 @@ export const syncRoutes = new Hono()
 syncRoutes.post('/api/sync', async (c) => {
   const result = await syncOnce({ force: true })
   return c.json(result, result.ok ? 200 : 500)
+})
+
+/**
+ * Wipe issue + label cache + workspace-tied meta (designdoc payload, workflow
+ * states, last_sync_ms). Use after switching LINEAR_API_KEY to a different
+ * workspace, or to recover from a corrupted cache. Snapshots, annotations,
+ * and sync history are preserved.
+ *
+ * Next sync will rebuild from scratch.
+ */
+syncRoutes.post('/api/reset-cache', (c) => {
+  const cleared = resetCache()
+  getLogger().warn(cleared, 'cache reset via /api/reset-cache')
+  return c.json({ ok: true, cleared })
 })
 
 /**

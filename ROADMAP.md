@@ -5,8 +5,8 @@ Direction, not commitment. Issues and PRs welcome on anything below.
 ## v1.0 — shipped
 
 - Linear backend (read-only sync, configurable team/scope)
-- Views: dependency, bucket, mix, design-doc, timeline
-- Spectra/OpenSpec adapter (frontmatter, folder-name, regex-line strategies)
+- Views: dependency, mix, design-doc
+- [Spectra](https://spectra.5xcamp.us/) / [OpenSpec](https://openspec.dev/) adapter (frontmatter, folder-name, regex-line strategies)
 - SQLite persistence, daily snapshots with retention
 - Annotations, settings page, PNG export
 - Auto-detected label schema with optional `label-schema.yaml` override
@@ -18,13 +18,19 @@ Direction, not commitment. Issues and PRs welcome on anything below.
 - [ ] Resolve the 4 known `react-hooks/exhaustive-deps` warnings in `FilterPanel` and `DetailPanel`
 - [ ] Migrate the remaining v7 hook-rule violations (`set-state-in-effect`, `purity`)
 - [ ] Document the JSON shape of `/api/export` so users can build their own tools on top
+- [ ] Detect workspace change automatically via `viewer.organization.urlKey` and offer the user a one-click reset (today: manual via the Settings → "Reset cache" button)
 
 ## v1.2+ — likely
 
 - [ ] **GitHub Issues backend** — same `Source` interface as Linear; high-value for OSS teams
 - [ ] Multi-workspace / multi-team toggle in the UI (currently env-pinned)
 - [ ] Saved views (named filter sets, not just URL params)
-- [ ] Bucket view: drag to reorder, collapsible groups
+- [ ] **Mix view layout improvements** — the bucket-as-container layout gets cramped past ~15 nodes:
+  - Collapsible buckets (click header to collapse to a `▶ docs (3)` chip)
+  - Per-bucket auto-density (large buckets switch to compact cards automatically; small buckets keep full detail)
+  - Zoom-aware bucket summary (when zoomed out, replace cards with a state-count chip like `backend ◯3 ⏳2 ✓1`)
+  - Drag to reorder buckets
+- [ ] Timeline view — surface the daily snapshot data (already persisted; needs a UI)
 
 ## Maybe — no commitment
 
