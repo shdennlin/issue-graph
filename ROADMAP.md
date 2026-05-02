@@ -25,7 +25,7 @@ Direction, not commitment. Issues and PRs welcome on anything below.
 - [ ] **GitHub Issues backend** — same `Source` interface as Linear; high-value for OSS teams
 - [ ] Multi-workspace / multi-team toggle in the UI (currently env-pinned)
 - [ ] Saved views (named filter sets, not just URL params)
-- [ ] Bucket view: drag to reorder, collapsible groups
+- [ ] Mix view: drag to reorder buckets, collapsible groups
 
 ## Maybe — no commitment
 

@@ -7,10 +7,8 @@ Self-hosted, read-only graph viewer for issue dependencies. Fetches from Linear,
 ## What it shows
 
 - **Dependency view** — `blocks` edges between issues. Default landing view. Answers "what should I work on next?"
-- **Bucket view** — issues grouped by a configurable Linear label group (`service`, `module`, `team`, `area` — auto-detected).
-- **Mix view** — buckets as containers + issues inside; cross-bucket `blocks` edges highlighted in red.
+- **Mix view** — issues grouped into buckets by a configurable Linear label group (`service`, `module`, `team`, `area` — auto-detected); cross-bucket `blocks` edges highlighted in red.
 - **Design-doc view** — issues with linked design-doc changes only.
-- **Timeline view** — historical state counts from daily snapshots.
 
 ## Five-minute setup
 
@@ -136,7 +134,7 @@ TYPE_GROUP=Type
 TYPE_ICONS={"Bug":"🐛","Feature":"✨","Spike":"🔬"}
 ```
 
-Restart, and the bucket view, filter sidebar, and node icons all pick up the override.
+Restart, and the Mix view buckets, filter sidebar, and node icons all pick up the override.
 
 ### Full control (`label-schema.yaml`)
 
@@ -150,10 +148,9 @@ For full control over how every label group and prefix renders, drop a YAML file
 
 ## Architecture
 
-- **Single Docker image** running both backend (Hono + better-sqlite3) and frontend (React + React Flow + dagre).
+- **Single Docker image** running both backend (Hono + Bun's built-in SQLite) and frontend (React + React Flow + dagre).
 - **Pluggable backend adapter** (`src/backend/sources/`) — Linear in v1; Jira / Plane / GitHub Projects in future.
 - **Pluggable design-doc adapter** (`src/backend/designdoc/`) — [Spectra](https://spectra.5xcamp.us/) / [OpenSpec](https://openspec.dev/) in v1.
-- **Code is Node-compatible**; the official image runs Bun. A `Dockerfile.node` is also provided.
 
 For full design rationale, see [`docs/PRD.md`](docs/PRD.md).
 
@@ -194,10 +191,7 @@ bun run build      # production build → dist/ + build/
 
 ### I changed my `LINEAR_API_KEY` and the graph still shows the old workspace's issues
 
-Issue-graph caches issues by identifier in `data/graph.db`. If you switch
-`LINEAR_API_KEY` to a different workspace, the old issues stay in the cache
-(their identifiers don't collide with the new ones), polluting the graph.
-
+Issue-graph caches issues by identifier in `data/graph.db`. If you switch `LINEAR_API_KEY` to a different workspace, the old issues stay in the cache (their identifiers don't collide with the new ones), polluting the graph.
 The next sync will log a warning when it notices this:
 
 ```
@@ -206,9 +200,7 @@ LINEAR_API_KEY to a different workspace, POST /api/reset-cache to clear
 stale data.
 ```
 
-Fix it with a single request — clears `issue_cache`, `label_cache`, and
-the workspace-tied meta entries (design-doc payload, workflow states).
-Snapshots, annotations, and sync history are preserved:
+Fix it with a single request — clears `issue_cache`, `label_cache`, and the workspace-tied meta entries (design-doc payload, workflow states).  Snapshots, annotations, and sync history are preserved:
 
 ```bash
 curl -X POST http://localhost:31415/api/reset-cache
