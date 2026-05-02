@@ -5,6 +5,8 @@ services:
     container_name: issue-graph
     restart: unless-stopped
     env_file: .env
+    environment:
+      REPO_PATH: /repo
     ports:
       - "${PORT:-31415}:31415"
     volumes:

@@ -40,6 +40,16 @@ If your team writes design docs / RFCs / change proposals as markdown files alon
 
 #### 1. Mount your repo
 
+For Docker, set only the host repo path:
+
+```bash
+REPO_HOST_PATH=/path/to/your/repo
+```
+
+Docker mounts that folder at `/repo` inside the container, and `docker-compose.yml` sets `REPO_PATH=/repo` for the app.
+
+Or mount it directly in a compose override:
+
 ```yaml
 # docker-compose.yml override
 volumes:
