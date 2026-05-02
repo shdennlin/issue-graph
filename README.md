@@ -4,15 +4,13 @@ Self-hosted, read-only graph viewer for issue dependencies. Fetches from Linear,
 
 ![Issue Graph — dependency view with detail panel showing the selected issue's design-doc progress, blocks/blocked-by, and annotations](docs/screenshots/dependency.png)
 
-> **Status:** Phases 1a → 3 implemented · Linear backend · Spectra/OpenSpec adapter included.
-
 ## What it shows
 
 - **Dependency view** — `blocks` edges between issues. Default landing view. Answers "what should I work on next?"
 - **Bucket view** — issues grouped by a configurable Linear label group (`service`, `module`, `team`, `area` — auto-detected).
 - **Mix view** — buckets as containers + issues inside; cross-bucket `blocks` edges highlighted in red.
-- **Design-doc view** *(Phase 3)* — issues with linked design-doc changes only.
-- **Timeline view** *(Phase 3)* — historical state counts from daily snapshots.
+- **Design-doc view** — issues with linked design-doc changes only.
+- **Timeline view** — historical state counts from daily snapshots.
 
 ## Five-minute setup
 
@@ -28,7 +26,8 @@ open http://localhost:31415
 
 When the page loads, the backend pulls active+recent issues from Linear, scans the optional repo at `REPO_PATH` for design docs, and renders the dependency graph.
 
-> ⚠️ **Security: do not expose this port to a LAN or the internet without auth.**
+> [!WARNING]
+> **Do not expose this port to a LAN or the internet without auth.**
 > `issue-graph` ships with **no authentication**. The write endpoints (`POST /api/sync`,
 > `POST/DELETE /api/annotations`, `POST /api/settings`) are open to anyone who can reach
 > the port. The default Docker compose binds `31415` on all interfaces — fine for
@@ -61,6 +60,7 @@ Used identically by `bun run dev` and `docker compose up` — under Docker the p
 
 If `openspec/` doesn't exist under `REPO_PATH`, the integration is silently disabled — no errors, the design-doc filter just doesn't appear in the UI.
 
+> [!TIP]
 > Curious what proposals look like? See [`demo-repo/`](demo-repo) — a sample `openspec/` directory used by the project's own screenshots. Set `REPO_PATH=/absolute/path/to/issue-graph/demo-repo` to load it.
 
 #### 2. Link issues to design-doc changes
