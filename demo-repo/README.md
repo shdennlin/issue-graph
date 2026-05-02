@@ -3,7 +3,7 @@
 Sample design-doc proposals used to populate `issue-graph`'s **design-doc view**
 in screenshots and demos. Not real product specs.
 
-Each subdirectory under `openspec/changes/` is a Spectra/OpenSpec-style proposal
+Each subdirectory under `openspec/changes/` is a [Spectra](https://spectra.5xcamp.us/) / [OpenSpec](https://openspec.dev/) -style proposal
 with a `proposal.md` and a `tasks.md` (checkbox list). The adapter links each
 proposal to one or more Linear issues via three strategies — this directory
 demonstrates all three:

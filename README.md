@@ -44,7 +44,7 @@ Everything else has a sane default. See `.env.example` for the full list.
 
 ### Optional design-doc integration
 
-If your team writes design docs / RFCs / change proposals as markdown files alongside your code, `issue-graph` can read them and show **per-issue progress bars** on the graph (e.g. `4/9 tasks done`). Currently only the **Spectra/OpenSpec** layout is supported — proposals at `openspec/changes/<name>/proposal.md` with a `tasks.md` containing `- [ ]` / `- [x]` checkboxes.
+If your team writes design docs / RFCs / change proposals as markdown files alongside your code, `issue-graph` can read them and show **per-issue progress bars** on the graph (e.g. `4/9 tasks done`). Currently only the **[Spectra](https://spectra.5xcamp.us/) / [OpenSpec](https://openspec.dev/)** layout is supported — proposals at `openspec/changes/<name>/proposal.md` with a `tasks.md` containing `- [ ]` / `- [x]` checkboxes.
 
 ![Design-doc view — only issues with linked proposals, each showing a per-issue progress bar derived from the proposal's tasks.md](docs/screenshots/designdoc.png)
 
@@ -152,7 +152,7 @@ For full control over how every label group and prefix renders, drop a YAML file
 
 - **Single Docker image** running both backend (Hono + better-sqlite3) and frontend (React + React Flow + dagre).
 - **Pluggable backend adapter** (`src/backend/sources/`) — Linear in v1; Jira / Plane / GitHub Projects in future.
-- **Pluggable design-doc adapter** (`src/backend/designdoc/`) — Spectra/OpenSpec in v1.
+- **Pluggable design-doc adapter** (`src/backend/designdoc/`) — [Spectra](https://spectra.5xcamp.us/) / [OpenSpec](https://openspec.dev/) in v1.
 - **Code is Node-compatible**; the official image runs Bun. A `Dockerfile.node` is also provided.
 
 For full design rationale, see [`docs/PRD.md`](docs/PRD.md).

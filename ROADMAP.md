@@ -6,7 +6,7 @@ Direction, not commitment. Issues and PRs welcome on anything below.
 
 - Linear backend (read-only sync, configurable team/scope)
 - Views: dependency, bucket, mix, design-doc, timeline
-- Spectra/OpenSpec adapter (frontmatter, folder-name, regex-line strategies)
+- [Spectra](https://spectra.5xcamp.us/) / [OpenSpec](https://openspec.dev/) adapter (frontmatter, folder-name, regex-line strategies)
 - SQLite persistence, daily snapshots with retention
 - Annotations, settings page, PNG export
 - Auto-detected label schema with optional `label-schema.yaml` override
