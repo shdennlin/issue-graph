@@ -45,27 +45,19 @@ Everything else has a sane default. See `.env.example` for the full list.
 
 If your team writes design docs / RFCs / change proposals as markdown files alongside your code, `issue-graph` can read them and show **per-issue progress bars** on the graph (e.g. `4/9 tasks done`). Currently only the **Spectra/OpenSpec** layout is supported — proposals at `openspec/changes/<name>/proposal.md` with a `tasks.md` containing `- [ ]` / `- [x]` checkboxes.
 
-#### 1. Mount your repo
+#### 1. Point at your repo
 
-For Docker, set only the host repo path:
+Set one absolute path in `.env`:
 
 ```bash
-REPO_HOST_PATH=/path/to/your/repo
+REPO_PATH=/path/to/your/repo
 ```
 
-Docker mounts that folder at `/repo` inside the container, and `docker-compose.yml` sets `REPO_PATH=/repo` for the app.
+Used identically by `bun run dev` and `docker compose up` — under Docker the path is bind-mounted at the same location inside the container, so the backend reads it the same way in both modes. Path **must** be absolute.
 
-Or mount it directly in a compose override:
+If `openspec/` doesn't exist under `REPO_PATH`, the integration is silently disabled — no errors, the design-doc filter just doesn't appear in the UI.
 
-```yaml
-# docker-compose.yml override
-volumes:
-  - /path/to/your/repo:/repo:ro
-```
-
-For local dev (no Docker), set `REPO_PATH=/path/to/your/repo` in `.env`.
-
-If `openspec/` doesn't exist at that path, the integration is silently disabled — no errors, the design-doc filter just doesn't appear in the UI.
+> Curious what proposals look like? See [`demo-repo/`](demo-repo) — a sample `openspec/` directory used by the project's own screenshots. Set `REPO_PATH=/absolute/path/to/issue-graph/demo-repo` to load it.
 
 #### 2. Link issues to design-doc changes
 

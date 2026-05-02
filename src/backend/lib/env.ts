@@ -96,6 +96,17 @@ export function loadConfig(): Config {
     // Don't throw — server runs and the onboarding screen tells the user what to do.
     // (Throwing would mean the container can't even start to render onboarding.)
   }
+  // REPO_PATH must be absolute so the same value works in `bun run dev` and in
+  // `docker compose up` (where it's bind-mounted at the same path inside the
+  // container). A relative path silently breaks under Docker.
+  if (parsed.REPO_PATH && !parsed.REPO_PATH.startsWith('/')) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[issue-graph] REPO_PATH="${parsed.REPO_PATH}" is not absolute. ` +
+        `This works for local dev but will break under Docker (bind mounts require absolute paths). ` +
+        `Recommended: use an absolute path.`,
+    )
+  }
   cached = parsed
   return parsed
 }

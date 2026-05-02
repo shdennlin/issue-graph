@@ -13,6 +13,7 @@ data/
 .env.local
 .env.*.local
 !.env.example
+.envrc
 
 # Logs
 *.log
