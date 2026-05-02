@@ -1,6 +1,6 @@
 {
   "name": "issue-graph",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Self-hosted, read-only graph viewer for issue dependencies (Linear backend in v1).",
   "license": "MIT",
   "private": true,
@@ -44,6 +44,7 @@
     "@vitejs/plugin-react": "^4.3.3",
     "concurrently": "^9.1.0",
     "eslint": "^9.14.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "typescript": "^5.6.3",
     "vite": "^5.4.11",
     "vitest": "^2.1.5"

@@ -2,7 +2,6 @@ import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { views } from '../views'
 import { api } from '../lib/api'
-import { toPng } from 'html-to-image'
 // Density + theme + search live here; Size moved to Settings → Display.
 
 export function Toolbar() {
@@ -31,6 +30,8 @@ export function Toolbar() {
   const screenshot = async () => {
     const el = document.querySelector('.react-flow') as HTMLElement | null
     if (!el) return
+    // Lazy-load html-to-image (~50kB) only on actual screenshot.
+    const { toPng } = await import('html-to-image')
     const dataUrl = await toPng(el, { cacheBust: true })
     const a = document.createElement('a')
     a.href = dataUrl

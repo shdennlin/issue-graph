@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { useGraphStore } from './store/graphStore'
 import { useSchemaStore } from './store/schemaStore'
 import { useViewStore } from './store/viewStore'
@@ -10,12 +10,17 @@ import { Toolbar } from './components/Toolbar'
 import { FilterPanel } from './components/FilterPanel'
 import { SyncBanner } from './components/SyncBanner'
 import { Onboarding } from './components/Onboarding'
-import { DetailPanel } from './components/DetailPanel'
-import { SyncHistoryModal } from './components/SyncHistoryModal'
-import { CoverageModal } from './components/CoverageModal'
-import { SettingsPage } from './components/SettingsPage'
 import { ContextMenu } from './components/ContextMenu'
-import { toPng } from 'html-to-image'
+
+// Code-split conditional surfaces. DetailPanel pulls in `marked`; the three
+// modals are heavy and only open on user action — splitting them keeps the
+// initial bundle lean.
+const DetailPanel = lazy(() => import('./components/DetailPanel').then((m) => ({ default: m.DetailPanel })))
+const SyncHistoryModal = lazy(() =>
+  import('./components/SyncHistoryModal').then((m) => ({ default: m.SyncHistoryModal })),
+)
+const CoverageModal = lazy(() => import('./components/CoverageModal').then((m) => ({ default: m.CoverageModal })))
+const SettingsPage = lazy(() => import('./components/SettingsPage').then((m) => ({ default: m.SettingsPage })))
 
 export function App() {
   useTheme()
@@ -28,6 +33,9 @@ export function App() {
   const loadSchema = useSchemaStore((s) => s.load)
   const focusedId = useViewStore((s) => s.focusedId)
   const filterPanelOpen = useViewStore((s) => s.filterPanelOpen)
+  const syncHistoryOpen = useViewStore((s) => s.syncHistoryOpen)
+  const coverageOpen = useViewStore((s) => s.coverageOpen)
+  const settingsOpen = useViewStore((s) => s.settingsOpen)
 
   useEffect(() => {
     loadGraph().then(() => loadSchema())
@@ -47,6 +55,8 @@ export function App() {
         e.preventDefault()
         const el = document.querySelector('.react-flow') as HTMLElement | null
         if (!el) return
+        // Lazy-load html-to-image (~50kB) only when the user actually screenshots.
+        const { toPng } = await import('html-to-image')
         const dataUrl = await toPng(el, { cacheBust: true })
         const a = document.createElement('a')
         a.href = dataUrl
@@ -87,16 +97,22 @@ export function App() {
       <div className="app-main">
         {filterPanelOpen && <FilterPanel />}
         <GraphCanvas />
-        {focusedId && <DetailPanel />}
+        {focusedId && (
+          <Suspense fallback={null}>
+            <DetailPanel />
+          </Suspense>
+        )}
       </div>
       {status === 'error' && error && (
         <div className="banner" style={{ background: 'var(--danger)', color: '#fff' }}>
           {error}
         </div>
       )}
-      <SyncHistoryModal />
-      <CoverageModal />
-      <SettingsPage />
+      <Suspense fallback={null}>
+        {syncHistoryOpen && <SyncHistoryModal />}
+        {coverageOpen && <CoverageModal />}
+        {settingsOpen && <SettingsPage />}
+      </Suspense>
       <ContextMenu />
     </div>
   )

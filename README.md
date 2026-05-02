@@ -26,6 +26,13 @@ open http://localhost:31415
 
 When the page loads, the backend pulls active+recent issues from Linear, scans the optional repo at `REPO_PATH` for design docs, and renders the dependency graph.
 
+> ⚠️ **Security: do not expose this port to a LAN or the internet without auth.**
+> `issue-graph` ships with **no authentication**. The write endpoints (`POST /api/sync`,
+> `POST/DELETE /api/annotations`, `POST /api/settings`) are open to anyone who can reach
+> the port. The default Docker compose binds `31415` on all interfaces — fine for
+> `localhost`-only use, but if you need remote access put it behind a reverse proxy
+> with auth (Tailscale, Cloudflare Access, basic-auth nginx, etc.).
+
 ### Required env vars
 
 | Var | Purpose |
@@ -186,6 +193,10 @@ npm run lint
 npm test
 npm run build      # production build → dist/ + build/
 ```
+
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for what's planned, what's likely, and what's explicitly out of scope. The original engineering PRD lives at [`docs/PRD.md`](docs/PRD.md) for historical context.
 
 ## License
 
