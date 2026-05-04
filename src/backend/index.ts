@@ -54,18 +54,17 @@ export function createApp(): Hono {
   // of silently serving an old build that looks like missing changes.
   const staticRoot = cfg.SERVE_STATIC ? findStaticRoot() : null
   if (!cfg.SERVE_STATIC) {
-    // Compute Vite's actual dev port. If VITE_PORT collides with backend PORT,
-    // vite.config.ts auto-shifts (31415→31414 special case, otherwise +1).
-    // Mirror that here so the message points the user to the right URL.
+    // Dev mode: the user shouldn't have to think about which port is the
+    // backend vs. the Vite UI. If they land on the backend root by mistake,
+    // 302 them to Vite so the dev experience is "open one URL and go."
+    // Compute Vite's actual port (mirroring the collision-shift in
+    // vite.config.ts) so the redirect lands somewhere real.
     let vitePort = cfg.VITE_PORT
     if (vitePort === cfg.PORT) {
       vitePort = cfg.PORT === 31415 ? 31414 : cfg.PORT + 1
     }
-    app.get('/', (c) =>
-      c.text(
-        `API only (SERVE_STATIC=false). Open the Vite dev server at http://localhost:${vitePort} for the UI.`,
-      ),
-    )
+    const viteUrl = `http://localhost:${vitePort}`
+    app.get('/', (c) => c.redirect(viteUrl, 302))
   }
   if (staticRoot) {
     app.use(
