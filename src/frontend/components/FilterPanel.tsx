@@ -26,7 +26,12 @@ export function FilterPanel() {
   const toggleStateName = useViewStore((s) => s.toggleStateName)
   const resetFilters = useViewStore((s) => s.resetFilters)
 
-  const issues = graph?.data.issues ?? []
+  // Stable reference for the issues array so the leave-one-out useMemos
+  // below have a referentially-stable dependency. `graph?.data.issues ?? []`
+  // would produce a fresh `[]` literal each render whenever graph is null,
+  // tripping react-hooks/exhaustive-deps and forcing recomputation.
+  const rawIssues = graph?.data.issues
+  const issues = useMemo(() => rawIssues ?? [], [rawIssues])
   const staleDays = useViewStore((s) => s.staleDays)
   const search = useViewStore((s) => s.search)
   const myUserName = graph?.data.viewer?.displayName ?? null

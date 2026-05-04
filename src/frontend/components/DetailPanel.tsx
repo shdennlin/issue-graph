@@ -32,16 +32,20 @@ export function DetailPanel() {
 
   const issue = focusedId ? graph?.data.issues.find((i) => i.identifier === focusedId) : null
 
+  // Extract identifier to a top-level binding so the effect's dep array
+  // references it directly. Avoids react-hooks/exhaustive-deps complaining
+  // about deriving the dep from `issue?.identifier` inside the deps array.
+  const issueId = issue?.identifier
   useEffect(() => {
     setDescription(null)
-    if (!issue) return
+    if (!issueId) return
     setDescLoading(true)
     api
-      .fetchIssueDetail(issue.identifier)
+      .fetchIssueDetail(issueId)
       .then((res) => setDescription(res.data.description ?? ''))
       .catch(() => setDescription(null))
       .finally(() => setDescLoading(false))
-  }, [issue?.identifier])
+  }, [issueId])
 
   const { width, startResize, resizing } = useResizable({
     storageKey: 'ig-detail-panel-w',
