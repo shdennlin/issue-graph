@@ -19,6 +19,7 @@ function format(age: number): string {
 export function SyncBanner() {
   const graph = useGraphStore((s) => s.graph)
   const status = useGraphStore((s) => s.status)
+  const syncing = useGraphStore((s) => s.syncing)
   const forceSync = useGraphStore((s) => s.forceSync)
   const setSyncHistoryOpen = useViewStore((s) => s.setSyncHistoryOpen)
   const [tick, setTick] = useState(0)
@@ -43,7 +44,7 @@ export function SyncBanner() {
           style={{ cursor: 'pointer' }}
           title="Click for sync history"
         >
-          {`Last sync: ${isFinite(age) ? format(age) : 'never'}`}
+          {`Last sync: ${graph === null ? 'loading…' : isFinite(age) ? format(age) : 'never'}`}
           {graph?.stale && ' (stale)'}
         </span>
       </div>
@@ -58,7 +59,7 @@ export function SyncBanner() {
           disabled={status === 'loading'}
           title="Shift-click to force a fresh fetch"
         >
-          {status === 'loading' ? '⏳ Syncing…' : '↻ Refresh'}
+          {syncing ? '⏳ Syncing…' : status === 'loading' ? '⏳ Loading…' : '↻ Refresh'}
         </button>
       </div>
     </div>
