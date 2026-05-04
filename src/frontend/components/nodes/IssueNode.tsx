@@ -102,20 +102,47 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
             bottom: 6,
             right: 6,
             display: 'inline-flex',
-            gap: 4,
+            gap: 6,
+            alignItems: 'baseline',
             background: 'var(--bg-elev, rgba(0,0,0,0.35))',
-            color: 'var(--fg-muted)',
-            fontSize: 10,
+            color: 'var(--fg)',
+            fontSize: 12,
+            fontWeight: 600,
             lineHeight: 1,
-            padding: '2px 5px',
-            borderRadius: 4,
+            padding: '3px 7px',
+            borderRadius: 5,
             fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
             pointerEvents: 'none',
           }}
         >
-          {connectivity.out > 0 && <span>→{connectivity.out}</span>}
-          {connectivity.in > 0 && <span>←{connectivity.in}</span>}
-          {connectivity.related > 0 && <span>⊸{connectivity.related}</span>}
+          {/* Glyphs chosen for stronger fill at small sizes:
+                ⇨ U+21E8 Rightwards White Arrow
+                ⇦ U+21E6 Leftwards White Arrow
+                ╍ U+254D Box Drawings Heavy Double Dash Horizontal
+              ⇨/⇦ are paired (same Arrows block, matched weight). The
+              dashed-bar glyph reads as "non-directional connection" and
+              echoes the dashed `related` edge style on the canvas. */}
+          {/* Symbols rendered larger than the surrounding number for at-a-
+              glance shape recognition. Numbers inherit the badge's 12px so
+              they stay legible without dominating the card. */}
+          {connectivity.out > 0 && (
+            <span>
+              <span style={{ fontSize: 18, fontWeight: 800 }} aria-hidden>⇨</span>
+              {connectivity.out}
+            </span>
+          )}
+          {connectivity.in > 0 && (
+            <span>
+              <span style={{ fontSize: 18, fontWeight: 800 }} aria-hidden>⇦</span>
+              {connectivity.in}
+            </span>
+          )}
+          {connectivity.related > 0 && (
+            <span>
+              <span style={{ fontSize: 18, fontWeight: 800 }} aria-hidden>╍</span>
+              {connectivity.related}
+            </span>
+          )}
         </span>
       )}
       <Handle type="target" position={Position.Left} />
