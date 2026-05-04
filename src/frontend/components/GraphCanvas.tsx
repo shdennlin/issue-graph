@@ -373,7 +373,16 @@ function CanvasInner() {
     }
   }
 
+  // Edge-click pin (sticky highlight) is only useful on touch devices —
+  // there's no hover, so tap is the only way to highlight an edge. On
+  // desktop with a real pointer, hovering already drives the highlight,
+  // and a click here only creates accidental "I clicked somewhere and the
+  // graph dimmed" surprises. Disable click-pin when hover is supported.
   const onEdgeClick: EdgeMouseHandler = (event, edge) => {
+    if (typeof window !== 'undefined' && window.matchMedia('(hover: hover)').matches) {
+      // Desktop / mouse — hover-driven highlight is enough; ignore the click.
+      return
+    }
     event.stopPropagation()
     if (highlightedNodeId) setHighlightedNodeId(null)
     setHighlightedEdgeId(highlightedEdgeId === edge.id ? null : edge.id)
