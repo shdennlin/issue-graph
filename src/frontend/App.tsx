@@ -112,6 +112,19 @@ export function App() {
         if (e.key === 'C') bumpLayout()
         return
       }
+      // 'r' — re-layout. Bumps layoutBump → dagre re-runs from scratch
+      // (discards user-dragged positions) → camera follows. Works in any
+      // view, doesn't require a focused issue. Same guards as 'c': no
+      // modifier keys, no input/textarea/contentEditable focused.
+      if (e.key === 'r' || e.key === 'R') {
+        if (e.metaKey || e.ctrlKey || e.altKey) return
+        const target = e.target as HTMLElement | null
+        const tag = target?.tagName?.toLowerCase()
+        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        e.preventDefault()
+        bumpLayout()
+        return
+      }
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 's') {
         e.preventDefault()
         const el = document.querySelector('.react-flow') as HTMLElement | null

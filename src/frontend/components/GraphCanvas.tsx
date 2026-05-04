@@ -172,11 +172,13 @@ function CanvasInner() {
   }, [built.nodes, activeView, density, measuredHeights])
 
   // Reset measured-heights cache when the layout context changes (view switch,
-  // density change). The next paint will re-measure under the new conditions.
+  // density change, or an explicit layout bump). Clearing forces the measure
+  // effect above to re-run on the next paint, which in turn drives the
+  // unified fitView consumer below to fire (when a fit was requested).
   useEffect(() => {
     measuredSigRef.current = null
     setMeasuredHeights(null)
-  }, [activeView, density])
+  }, [activeView, density, layoutBump])
   // Save viewport snapshot whenever user clicks fit-view, so they can revert.
   // Stored in a ref (not store) — purely UI ephemeral, doesn't affect rendering.
   const lastViewportRef = useRef<Viewport | null>(null)
@@ -191,33 +193,72 @@ function CanvasInner() {
     rf.setViewport(lastViewportRef.current, { duration: 400 })
     setHasSavedViewport(false)
   }, [rf])
-  // Re-fit only on view switch or first non-empty load. Density / filter changes
-  // intentionally do NOT refit — that would yank the user's viewport away from
-  // wherever they were looking. They can hit the "fit view" button in <Controls />
-  // if they want to recenter manually.
+  // Unified fitView pipeline. A "fit request" is a flag set by the producers
+  // below (first load / view switch / layout bump). The consumer fires
+  // rf.fitView() only when measuredHeights actually settles — that's the
+  // signal that dagre's second pass (using real card heights) is done and
+  // positions are final. Replaces three separate setTimeout(80–120ms) hacks
+  // that had to guess when layout finished; on slow machines the timer could
+  // fire too early and frame the wrong region.
+  //
+  // Density / filter changes deliberately don't set the flag — they reset
+  // measuredHeights for re-measurement, but no fitView fires.
+  const pendingFitViewRef = useRef<{ padding: number; preserveFocus?: boolean } | null>(null)
+  useEffect(() => {
+    if (!pendingFitViewRef.current) return
+    if (!measuredHeights) return  // wait until layout has settled
+    const { padding, preserveFocus } = pendingFitViewRef.current
+    pendingFitViewRef.current = null
+    // Re-layout flow: if a node is focused, recenter on it instead of
+    // framing the whole graph. After dagre re-runs, the focused issue may
+    // have moved across the canvas — fitView would yank the camera to
+    // wherever the new bounding box happens to be, losing the user's
+    // visual anchor. setCenter on the focused node keeps "what I was
+    // looking at" fixed while everything around it reflows.
+    if (preserveFocus && focusedId) {
+      const node = nodes.find((n) => n.id === focusedId)
+      if (node?.position) {
+        const w = (node.width ?? 320) as number
+        const h = (node.height ?? 110) as number
+        rf.setCenter(node.position.x + w / 2, node.position.y + h / 2, {
+          zoom: rf.getZoom(),
+          duration: 600,
+        })
+        return
+      }
+    }
+    rf.fitView({ duration: 600, padding, minZoom: 0.8 })
+  }, [measuredHeights, rf, focusedId, nodes])
+
+  // Producer 1: first non-empty load.
   const hasFitOnceRef = useRef(false)
   useEffect(() => {
     if (nodes.length === 0) return
-    const isFirstLoad = !hasFitOnceRef.current
+    if (hasFitOnceRef.current) return
     hasFitOnceRef.current = true
-    if (!isFirstLoad) return  // fitView only on first non-empty load
-    const id = window.setTimeout(() => {
-      // minZoom caps how far fitView is allowed to zoom out, so cards stay
-      // readable even with many nodes. User can still zoom out via pinch /
-      // <Controls /> after the initial fit.
-      rf.fitView({ duration: 600, padding: 0.1, minZoom: 0.8 })
-    }, 80)
-    return () => window.clearTimeout(id)
-  }, [nodes.length, rf])
-  // Separate effect for view-switch refits — bypasses the "first load" gate.
+    pendingFitViewRef.current = { padding: 0.1 }
+  }, [nodes.length])
+
+  // Producer 2: view switch (e.g. dependency → mix).
   useEffect(() => {
     if (nodes.length === 0) return
-    const id = window.setTimeout(() => {
-      rf.fitView({ duration: 600, padding: 0.1, minZoom: 0.8 })
-    }, 80)
-    return () => window.clearTimeout(id)
+    pendingFitViewRef.current = { padding: 0.1 }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView])
+
+  // Producer 3: explicit layout bump (chain auto-layout, chain clear, manual
+  // re-layout button, 'r' shortcut). Padding is slightly looser since chain
+  // views are usually small graphs and look nicer with more breathing room.
+  // preserveFocus: re-layout shouldn't make the user lose their place — if
+  // a node was focused, the consumer recenters on it instead of fitView.
+  const lastLayoutBumpRef = useRef(layoutBump)
+  useEffect(() => {
+    if (lastLayoutBumpRef.current === layoutBump) return
+    lastLayoutBumpRef.current = layoutBump
+    if (nodes.length === 0) return
+    pendingFitViewRef.current = { padding: 0.15, preserveFocus: true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layoutBump])
 
   // Auto-bump layout when chain isolation is *cleared* (chainRootId goes
   // non-null → null). Without this, exiting chain mode keeps the chain
@@ -236,26 +277,12 @@ function CanvasInner() {
     }
   }, [chainRootId, bumpLayout])
 
-  // "Isolate chain (auto-layout)" — when the user picks the re-layout variant
-  // we bump layoutBump, which forces dagre to recompute positions. The new
-  // chain may sit anywhere in flow-coords, so refit the viewport so the user
-  // actually sees the result. Skip the very first render (initial load fit
-  // already handles it) by using a ref to track whether we've seen at least
-  // one bump value.
-  const lastLayoutBumpRef = useRef(layoutBump)
-  useEffect(() => {
-    if (lastLayoutBumpRef.current === layoutBump) return
-    lastLayoutBumpRef.current = layoutBump
-    if (nodes.length === 0) return
-    // Wait for the new dagre layout + RF re-render to settle before fitting.
-    // 120ms > the 80ms used elsewhere because dagre's first pass + measured-
-    // height re-layout is two render cycles when card heights differ.
-    const id = window.setTimeout(() => {
-      rf.fitView({ duration: 600, padding: 0.15, minZoom: 0.8 })
-    }, 120)
-    return () => window.clearTimeout(id)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layoutBump])
+  // Manual re-layout button handler. Bumps layoutBump → measured cache
+  // clears → dagre re-runs from scratch (ignores user-dragged positions) →
+  // pendingFitViewRef set → measured re-fires → camera follows.
+  const manualRelayout = useCallback(() => {
+    bumpLayout()
+  }, [bumpLayout])
 
   // Intentionally no auto-center on focus — selecting a node should just open
   // the detail panel without yanking the viewport. Users can hit fit-view if
@@ -424,6 +451,12 @@ function CanvasInner() {
               ↶
             </ControlButton>
           )}
+          <ControlButton
+            onClick={manualRelayout}
+            title="Re-layout (shortcut: r) — re-run dagre from scratch and refit. Discards user-dragged positions."
+          >
+            ⤴
+          </ControlButton>
         </Controls>
         <Panel position="bottom-left" style={{ marginLeft: 50, fontSize: 'var(--fs-meta)', color: 'var(--fg-muted)' }}>
           {hasSavedViewport && '↶ revert available'}
