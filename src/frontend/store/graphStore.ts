@@ -19,6 +19,13 @@ interface GraphState {
    * fresher data. Updates `graph` only when fetchedAt actually moved.
    */
   refetchIfNewer: () => Promise<void>
+  /**
+   * Silent always-replace. Used by SSE event handlers (e.g. designdoc-
+   * changed) where the trigger isn't tied to fetchedAt — local file edits
+   * don't bump last_sync_ms — so we just want to pull the latest graph
+   * state and replace. No loading flash.
+   */
+  refetchSilent: () => Promise<void>
   forceSync: () => Promise<void>
   /**
    * Lazy-fetch extension. Used by the State filter when the user explicitly
@@ -52,6 +59,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     } catch {
       // Silent — this is opportunistic. If polling fails, the next manual
       // refresh / sync will surface a real error.
+    }
+  },
+  async refetchSilent() {
+    try {
+      const fresh = await api.fetchGraph()
+      set({ graph: fresh })
+    } catch {
+      // Silent — caller is a real-time event handler; failing once is fine,
+      // the next event or the polling cycle will catch up.
     }
   },
   async forceSync() {
