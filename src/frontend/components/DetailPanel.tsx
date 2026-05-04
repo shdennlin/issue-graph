@@ -126,16 +126,23 @@ export function DetailPanel() {
           {docs.length > 1 && (
             <div
               style={{
-                color: 'var(--warn-fg, #92400e)',
+                // Body text uses --fg so it inherits the active theme's
+                // foreground (dark on light bg, light on dark bg). The
+                // amber accent lives on the border + ⚠ icon, not the
+                // text itself — using a fixed amber-fg color (the prior
+                // var(--warn-fg) which wasn't defined and fell back to
+                // dark amber) was unreadable on dark backgrounds.
+                color: 'var(--fg)',
                 fontSize: 12,
                 marginBottom: 8,
                 padding: '6px 8px',
-                border: '1px solid var(--warn, #f59e0b)',
+                border: '1px solid var(--warn)',
                 borderRadius: 4,
                 background: 'rgba(245, 158, 11, 0.10)',
               }}
             >
-              ⚠ This issue spans <strong>{docs.length}</strong> design-doc changes (specs).
+              <span style={{ color: 'var(--warn)', fontWeight: 700, marginRight: 4 }}>⚠</span>
+              This issue spans <strong>{docs.length}</strong> design-doc changes (specs).
               A spec is one delivery batch — an issue covering multiple specs is usually
               too large for a single batch. Consider splitting it into per-spec sub-issues.
             </div>
