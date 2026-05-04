@@ -109,10 +109,16 @@ export type ActiveWorkspaceInfo = {
 
 let cached: Config | null = null
 let cachedWorkspace: ActiveWorkspaceInfo | null = null
+// Base (pre-profile) SQLITE_PATH. The active-workspace.json override must live
+// next to this path, NOT next to the profile-resolved cfg.SQLITE_PATH (which
+// already includes a workspaces/<id>/ component and would route the override
+// into a per-workspace subdirectory where loadConfig() cannot find it).
+let cachedBaseSqlitePath: string | null = null
 
 export function loadConfig(): Config {
   if (cached) return cached
   const base = ConfigSchema.parse(process.env)
+  cachedBaseSqlitePath = base.SQLITE_PATH
   const workspace = buildWorkspaceConfig({
     env: process.env as Record<string, string | undefined>,
     activeOverride: readActiveWorkspaceOverride(base.SQLITE_PATH),
@@ -168,4 +174,12 @@ export function getWorkspaceInfo(): ActiveWorkspaceInfo {
 export function resetConfigCache(): void {
   cached = null
   cachedWorkspace = null
+  cachedBaseSqlitePath = null
+}
+
+export function getBaseSqlitePath(): string {
+  if (cachedBaseSqlitePath) return cachedBaseSqlitePath
+  // Cold path: callers may invoke before loadConfig(). Trigger a load to populate.
+  loadConfig()
+  return cachedBaseSqlitePath ?? '/app/data/graph.db'
 }

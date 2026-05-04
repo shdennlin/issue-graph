@@ -192,6 +192,22 @@ describe('active-workspace.json file I/O', () => {
     expect(readActiveWorkspaceOverride(sqlitePath)).toBe('client_a')
   })
 
+  // Regression: passing a profile-resolved path (e.g. data/workspaces/<id>/graph.db)
+  // to writeActiveWorkspaceOverride writes to data/workspaces/<id>/active-workspace.json,
+  // which loadConfig — reading next to the BASE SQLITE_PATH — never sees. The route
+  // handler must call getBaseSqlitePath(), never cfg.SQLITE_PATH, for the override file.
+  it('write+read are only symmetric when both use the same base path', () => {
+    const baseSqlitePath = sqlitePath
+    const profileSqlitePath = join(tmpDir, 'workspaces', 'verdikra', 'graph.db')
+
+    // Simulate the broken behaviour: writer used the profile path.
+    writeActiveWorkspaceOverride(profileSqlitePath, 'onelegion')
+    // The file lives in the per-workspace subdir, not next to the base.
+    expect(readActiveWorkspaceOverride(profileSqlitePath)).toBe('onelegion')
+    // The reader (loadConfig) looks next to the base path and finds nothing.
+    expect(readActiveWorkspaceOverride(baseSqlitePath)).toBeNull()
+  })
+
   it('returns null for a missing file', () => {
     expect(readActiveWorkspaceOverride(sqlitePath)).toBeNull()
   })

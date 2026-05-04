@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { closeDb } from '../db.js'
-import { loadConfig, getWorkspaceInfo, resetConfigCache } from '../lib/env.js'
+import { getBaseSqlitePath, getWorkspaceInfo, loadConfig, resetConfigCache } from '../lib/env.js'
 import { resetBackendCache } from '../sources/factory.js'
 import { isSyncInFlight, kickBackgroundSync } from '../sync.js'
 import { startDesignDocWatcher, stopDesignDocWatcher } from '../designdoc/watcher.js'
@@ -34,7 +34,7 @@ workspaceRoutes.post('/api/workspaces/active', async (c) => {
   const parsed = SwitchSchema.safeParse(body)
   if (!parsed.success) return c.json({ error: { code: 'invalid', message: parsed.error.message } }, 400)
 
-  const cfg = loadConfig()
+  loadConfig()
   const info = getWorkspaceInfo()
   if (info.profiles.length === 0) {
     return c.json({ error: { code: 'legacy_mode', message: 'No WORKSPACE_* profiles are configured.' } }, 400)
@@ -54,9 +54,11 @@ workspaceRoutes.post('/api/workspaces/active', async (c) => {
 
   switching = true
   const previousActiveId = info.active?.id ?? null
-  // Use the loaded Config (profile-aware) rather than process.env so a profile
-  // override of SQLITE_PATH still resolves the correct active-workspace.json path.
-  const sqlitePath = cfg.SQLITE_PATH
+  // Override file MUST live next to the base SQLITE_PATH, NOT cfg.SQLITE_PATH.
+  // cfg.SQLITE_PATH is profile-resolved (e.g. data/workspaces/<id>/graph.db) and
+  // would route the override into a per-workspace subdir that loadConfig() never
+  // reads from — making the switch silently never persist.
+  const sqlitePath = getBaseSqlitePath()
   try {
     writeActiveWorkspaceOverride(sqlitePath, next.id)
     closeDb()
