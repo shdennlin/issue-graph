@@ -4,6 +4,7 @@ import { issueNodeHeight } from './types'
 import { runDagre } from '../lib/layout'
 import { applyFilters } from './filters'
 import { computeChain } from './chain'
+import { computeConnectivity } from './connectivity'
 
 export const dependencyView: ViewDefinition = {
   id: 'dependency',
@@ -25,6 +26,11 @@ export const dependencyView: ViewDefinition = {
     const ids = new Set(issues.map((i) => i.identifier))
     const NODE_H = issueNodeHeight(density)
 
+    // Connectivity counts (cache-wide, not view-bound). Reading from the full
+    // data.issues set so the badge says "this is a hub" globally, even when
+    // chain mode hides some of the connections from view.
+    const conn = computeConnectivity(data.issues)
+
     const nodes: Node[] = issues.map((i) => ({
       id: i.identifier,
       type: 'issue',
@@ -35,6 +41,7 @@ export const dependencyView: ViewDefinition = {
         // can render a ring/star accent — useful when you've drilled into a
         // chain and need to see at a glance which issue you started from.
         isChainRoot: chainRootId === i.identifier,
+        connectivity: conn.get(i.identifier),
       },
       position: { x: 0, y: 0 },
       width: 320,

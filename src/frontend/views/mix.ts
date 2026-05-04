@@ -3,6 +3,7 @@ import type { ViewDefinition } from './types'
 import { issueNodeHeight } from './types'
 import { applyFilters } from './filters'
 import { getPrimaryLabel } from '../lib/labelSchema'
+import { computeConnectivity } from './connectivity'
 
 const PADDING = 30
 const HEADER = 32
@@ -20,6 +21,7 @@ export const mixView: ViewDefinition = {
   build({ data, schema, filters, staleDays, myUserName, focusedId, density, search, measuredHeights }) {
     const NODE_H = issueNodeHeight(density)
     const issues = applyFilters(data.issues, filters, staleDays, myUserName, search)
+    const conn = computeConnectivity(data.issues)
     // Per-issue height resolver — measured value when available (post-paint
     // re-layout pass), density estimate otherwise. Same mechanism as the
     // dependency view; without this, tall cards (long titles + many chips)
@@ -83,7 +85,7 @@ export const mixView: ViewDefinition = {
         nodes.push({
           id,
           type: 'issue',
-          data: { issue: iss, focused: focusedId === id },
+          data: { issue: iss, focused: focusedId === id, connectivity: conn.get(id) },
           parentNode: containerId,
           extent: 'parent',
           position: { x: PADDING, y: pos.y },

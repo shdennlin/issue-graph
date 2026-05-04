@@ -4,6 +4,7 @@ import { issueNodeHeight } from './types'
 import { applyFilters } from './filters'
 import { getDesignDocsForIssue } from '../lib/labelSchema'
 import { runDagre } from '../lib/layout'
+import { computeConnectivity } from './connectivity'
 
 export const designdocView: ViewDefinition = {
   id: 'designdoc',
@@ -15,10 +16,11 @@ export const designdocView: ViewDefinition = {
       return docs.length > 0
     })
     const NODE_H = issueNodeHeight(density)
+    const conn = computeConnectivity(data.issues)
     const nodes: Node[] = visible.map((i) => ({
       id: i.identifier,
       type: 'issue',
-      data: { issue: i, focused: focusedId === i.identifier },
+      data: { issue: i, focused: focusedId === i.identifier, connectivity: conn.get(i.identifier) },
       position: { x: 0, y: 0 },
       width: 320,
       // Use measured DOM height when available so dagre lays out around the
