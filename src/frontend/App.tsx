@@ -125,11 +125,24 @@ export function App() {
         useViewStore.getState().setShortcutsOpen(true)
         return
       }
-      // 'r' — re-layout. Bumps layoutBump → dagre re-runs from scratch
-      // (discards user-dragged positions) → camera follows. Works in any
-      // view, doesn't require a focused issue. Same guards as 'c': no
-      // modifier keys, no input/textarea/contentEditable focused.
-      if (e.key === 'r' || e.key === 'R') {
+      // 'r' — toggle the Related-edges overlay (dependency view only). The
+      // case-shifted variant 'R' (Shift+R) is reserved for re-layout below.
+      // Same input-focus guards as the other letter shortcuts.
+      if (e.key === 'r') {
+        if (e.metaKey || e.ctrlKey || e.altKey) return
+        const target = e.target as HTMLElement | null
+        const tag = target?.tagName?.toLowerCase()
+        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        const s = useViewStore.getState()
+        if (s.activeView !== 'dependency') return
+        e.preventDefault()
+        s.setShowRelated(!s.showRelated)
+        return
+      }
+      // 'R' (Shift+R) — re-layout. Bumps layoutBump → dagre re-runs from
+      // scratch (discards user-dragged positions) → camera follows. Works
+      // in any view, doesn't require a focused issue.
+      if (e.key === 'R') {
         if (e.metaKey || e.ctrlKey || e.altKey) return
         const target = e.target as HTMLElement | null
         const tag = target?.tagName?.toLowerCase()

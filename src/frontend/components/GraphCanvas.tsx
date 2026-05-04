@@ -455,7 +455,7 @@ function CanvasInner() {
           )}
           <ControlButton
             onClick={manualRelayout}
-            title="Re-layout (shortcut: r) — re-run dagre from scratch and refit. Discards user-dragged positions."
+            title="Re-layout (shortcut: Shift+R) — re-run dagre from scratch and refit. Discards user-dragged positions."
           >
             ⤴
           </ControlButton>

@@ -24,8 +24,8 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ['c'], description: 'Isolate chain on focused issue (preserve positions) — dependency view only', group: 'Chain isolation' },
   { keys: ['Shift', 'C'], description: 'Isolate chain (auto-layout — re-runs dagre and refits camera)', group: 'Chain isolation' },
 
-  { keys: ['r'], description: 'Re-layout: re-run dagre from scratch; recenters on focused issue if any', group: 'Layout' },
-  { keys: ['Click'], description: 'Toggle Related-edges overlay (dependency view): the "⊞ Related" toolbar button', group: 'Layout' },
+  { keys: ['r'], description: 'Toggle Related-edges overlay (dependency view) — dashed gray lines for `related` issue links', group: 'Layout' },
+  { keys: ['Shift', 'R'], description: 'Re-layout: re-run dagre from scratch; recenters on focused issue if any', group: 'Layout' },
 
   { keys: ['Cmd', 'Shift', 'S'], description: 'Save canvas screenshot as PNG', group: 'Other' },
 ]

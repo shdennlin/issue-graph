@@ -125,8 +125,8 @@ export function Toolbar() {
               className={showRelated ? 'active' : ''}
               title={
                 showRelated
-                  ? 'Hide related-issue edges (currently shown as dashed gray lines)'
-                  : 'Show "related" issue links as dashed edges (in addition to blocks arrows)'
+                  ? 'Hide related-issue edges (shortcut: r). Currently shown as dashed gray lines.'
+                  : 'Show "related" issue links as dashed edges (shortcut: r).'
               }
               aria-pressed={showRelated}
             >
