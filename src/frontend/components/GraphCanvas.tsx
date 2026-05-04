@@ -37,6 +37,7 @@ function CanvasInner() {
   const chainRootId = useViewStore((s) => s.chainRootId)
   const setChainRootId = useViewStore((s) => s.setChainRootId)
   const layoutBump = useViewStore((s) => s.layoutBump)
+  const bumpLayout = useViewStore((s) => s.bumpLayout)
   const staleDays = useViewStore((s) => s.staleDays)
   const density = useViewStore((s) => s.density)
   const search = useViewStore((s) => s.search)
@@ -217,6 +218,23 @@ function CanvasInner() {
     return () => window.clearTimeout(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView])
+
+  // Auto-bump layout when chain isolation is *cleared* (chainRootId goes
+  // non-null → null). Without this, exiting chain mode keeps the chain
+  // members' tightly-packed positions and the previously-hidden nodes get
+  // fresh dagre positions inserted around them — they overlap. We don't bump
+  // when entering chain mode: plain "Isolate chain" deliberately preserves
+  // positions ("Isolate chain (auto-layout)" is the entry path that wants
+  // a fresh layout, and it bumps explicitly in the context-menu handler).
+  const prevChainRef = useRef<string | null>(chainRootId)
+  useEffect(() => {
+    const wasSet = prevChainRef.current !== null
+    const isCleared = chainRootId === null
+    prevChainRef.current = chainRootId
+    if (wasSet && isCleared) {
+      bumpLayout()
+    }
+  }, [chainRootId, bumpLayout])
 
   // "Isolate chain (auto-layout)" — when the user picks the re-layout variant
   // we bump layoutBump, which forces dagre to recompute positions. The new
