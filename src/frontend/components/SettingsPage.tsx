@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useViewStore } from '../store/viewStore'
 import { api, type SettingsResponse } from '../lib/api'
+import { Tooltip } from './Tooltip'
 
 export function SettingsPage() {
   const open = useViewStore((s) => s.settingsOpen)
@@ -327,9 +328,10 @@ export function SettingsPage() {
 
         <h4>About</h4>
         <div style={{ color: 'var(--fg-muted)', fontSize: 12 }}>
-          <span title="Cosmetic UI nickname for this issue-graph instance. Set via INSTANCE_LABEL in .env. Does NOT affect which Linear workspace the data comes from — see Workspace under Backend for that.">
-            Display label: {env.instance_label as string} <span style={{ opacity: 0.6 }}>ⓘ</span>
-          </span>
+          Display label: {env.instance_label as string}{' '}
+          <Tooltip text="Cosmetic UI nickname for this issue-graph instance. Set via INSTANCE_LABEL in .env. Does NOT affect which Linear workspace the data comes from — see Workspace under Backend for that.">
+            <span style={{ opacity: 0.6, cursor: 'help' }}>ⓘ</span>
+          </Tooltip>
           <br />
           Backend: {env.backend as string}
         </div>
