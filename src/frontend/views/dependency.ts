@@ -3,20 +3,37 @@ import type { ViewDefinition } from './types'
 import { issueNodeHeight } from './types'
 import { runDagre } from '../lib/layout'
 import { applyFilters } from './filters'
+import { computeChain } from './chain'
 
 export const dependencyView: ViewDefinition = {
   id: 'dependency',
   label: 'Dependency',
   description: 'Issues + blocks edges. Best for "what should I work on next?".',
-  build({ data, filters, staleDays, myUserName, focusedId, density, search, measuredHeights }) {
-    const issues = applyFilters(data.issues, filters, staleDays, myUserName, search)
+  build({ data, filters, staleDays, myUserName, focusedId, chainRootId, density, search, measuredHeights }) {
+    // Chain isolation: when a root is set, show its connected component over
+    // `blocks` edges (both directions, transitive) — bypassing other filters
+    // so an off-state blocker doesn't fragment the chain.
+    let issues
+    if (chainRootId) {
+      const { members } = computeChain(data.issues, chainRootId)
+      issues = data.issues.filter((i) => members.has(i.identifier))
+    } else {
+      issues = applyFilters(data.issues, filters, staleDays, myUserName, search)
+    }
     const ids = new Set(issues.map((i) => i.identifier))
     const NODE_H = issueNodeHeight(density)
 
     const nodes: Node[] = issues.map((i) => ({
       id: i.identifier,
       type: 'issue',
-      data: { issue: i, focused: focusedId === i.identifier },
+      data: {
+        issue: i,
+        focused: focusedId === i.identifier,
+        // Marks the root issue when chain isolation is active so IssueNode
+        // can render a ring/star accent — useful when you've drilled into a
+        // chain and need to see at a glance which issue you started from.
+        isChainRoot: chainRootId === i.identifier,
+      },
       position: { x: 0, y: 0 },
       width: 320,
       // Prefer real measured height if we have it (post-paint re-layout pass),

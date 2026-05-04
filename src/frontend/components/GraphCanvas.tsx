@@ -34,6 +34,10 @@ function CanvasInner() {
   const activeView = useViewStore((s) => s.activeView)
   const filters = useViewStore((s) => s.filters)
   const focusedId = useViewStore((s) => s.focusedId)
+  const chainRootId = useViewStore((s) => s.chainRootId)
+  const setChainRootId = useViewStore((s) => s.setChainRootId)
+  const layoutBump = useViewStore((s) => s.layoutBump)
+  const bumpLayout = useViewStore((s) => s.bumpLayout)
   const staleDays = useViewStore((s) => s.staleDays)
   const density = useViewStore((s) => s.density)
   const search = useViewStore((s) => s.search)
@@ -71,11 +75,12 @@ function CanvasInner() {
       myUserName,
       selection,
       focusedId,
+      chainRootId,
       density,
       search,
       measuredHeights: measuredHeights ?? undefined,
     })
-  }, [graph, schema, activeView, filters, staleDays, focusedId, selection, myUserId, myUserName, density, search, measuredHeights])
+  }, [graph, schema, activeView, filters, staleDays, focusedId, chainRootId, selection, myUserId, myUserName, density, search, measuredHeights])
 
   // Local node state so user drags persist between renders within the same
   // layout-equivalent context. Anything that changes node sizes (density) or
@@ -85,7 +90,7 @@ function CanvasInner() {
   // Include `measuredHeights ? 'm' : 'e'` so the post-measure re-layout pass is
   // treated as a sig change — that forces the freshly-laid-out positions in,
   // instead of preserving the pre-measure (overlapping) positions.
-  const layoutSig = `${activeView}|${density}|${measuredHeights ? 'm' : 'e'}`
+  const layoutSig = `${activeView}|${density}|${measuredHeights ? 'm' : 'e'}|${layoutBump}`
   const lastSigRef = useRef(layoutSig)
   useEffect(() => {
     const sigChanged = lastSigRef.current !== layoutSig
@@ -214,6 +219,44 @@ function CanvasInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView])
 
+  // Auto-bump layout when chain isolation is *cleared* (chainRootId goes
+  // non-null → null). Without this, exiting chain mode keeps the chain
+  // members' tightly-packed positions and the previously-hidden nodes get
+  // fresh dagre positions inserted around them — they overlap. We don't bump
+  // when entering chain mode: plain "Isolate chain" deliberately preserves
+  // positions ("Isolate chain (auto-layout)" is the entry path that wants
+  // a fresh layout, and it bumps explicitly in the context-menu handler).
+  const prevChainRef = useRef<string | null>(chainRootId)
+  useEffect(() => {
+    const wasSet = prevChainRef.current !== null
+    const isCleared = chainRootId === null
+    prevChainRef.current = chainRootId
+    if (wasSet && isCleared) {
+      bumpLayout()
+    }
+  }, [chainRootId, bumpLayout])
+
+  // "Isolate chain (auto-layout)" — when the user picks the re-layout variant
+  // we bump layoutBump, which forces dagre to recompute positions. The new
+  // chain may sit anywhere in flow-coords, so refit the viewport so the user
+  // actually sees the result. Skip the very first render (initial load fit
+  // already handles it) by using a ref to track whether we've seen at least
+  // one bump value.
+  const lastLayoutBumpRef = useRef(layoutBump)
+  useEffect(() => {
+    if (lastLayoutBumpRef.current === layoutBump) return
+    lastLayoutBumpRef.current = layoutBump
+    if (nodes.length === 0) return
+    // Wait for the new dagre layout + RF re-render to settle before fitting.
+    // 120ms > the 80ms used elsewhere because dagre's first pass + measured-
+    // height re-layout is two render cycles when card heights differ.
+    const id = window.setTimeout(() => {
+      rf.fitView({ duration: 600, padding: 0.15, minZoom: 0.8 })
+    }, 120)
+    return () => window.clearTimeout(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layoutBump])
+
   // Intentionally no auto-center on focus — selecting a node should just open
   // the detail panel without yanking the viewport. Users can hit fit-view if
   // they want to recenter.
@@ -308,6 +351,30 @@ function CanvasInner() {
   return (
     <div className="canvas" ref={rfRef} style={{ position: 'relative' }}>
       <InlineSearch />
+      {chainRootId && activeView === 'dependency' && built.nodes.length === 0 && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 5,
+            padding: '14px 18px',
+            background: 'var(--bg-elevated, #fff)',
+            border: '1px solid var(--border, #d0d7de)',
+            borderRadius: 8,
+            fontSize: 'var(--fs-meta)',
+            color: 'var(--fg)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            alignItems: 'center',
+          }}
+        >
+          <div>Chain root <strong>{chainRootId}</strong> not found in current data.</div>
+          <button onClick={() => setChainRootId(null)}>Clear chain</button>
+        </div>
+      )}
       <ReactFlow
         // Force a clean RF instance only on view change (different parentNode
         // tree). Density change doesn't change the tree, so we keep the same

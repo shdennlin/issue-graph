@@ -56,6 +56,8 @@ export function App() {
   }, [refetchIfNewer])
 
   const openInlineSearch = useViewStore((s) => s.openInlineSearch)
+  const setChainRootId = useViewStore((s) => s.setChainRootId)
+  const bumpLayout = useViewStore((s) => s.bumpLayout)
 
   // Hybrid Cmd+F:
   //   - When the canvas is focused (or the user is hovering it after clicking
@@ -65,6 +67,51 @@ export function App() {
   // Cmd+Shift+S still always screenshots.
   useEffect(() => {
     const onKey = async (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        // Esc peels one layer at a time, in priority order. Modals (Settings
+        // / SyncHistory / Coverage) own Esc fully — they handle dismissal
+        // and we don't peel under them.
+        //
+        // Otherwise the priority is: Find → context menu → chain. We need
+        // this *window-level* peel because the prior bug was: open Find,
+        // then right-click → Isolate chain. After right-click, focus left
+        // the Find input — so InlineSearch's input-level onKeyDown stopped
+        // firing, and the old chain-clear guard (`!inlineSearchOpen`) made
+        // chain-clear bail too. Result: Esc did nothing. Now the window
+        // handler closes Find directly when its input no longer has focus.
+        const s = useViewStore.getState()
+        const modalOpen = s.settingsOpen || s.syncHistoryOpen || s.coverageOpen
+        if (modalOpen) return
+        if (s.inlineSearch.open) {
+          s.closeInlineSearch()
+          return
+        }
+        if (s.contextMenu) {
+          s.setContextMenu(null)
+          return
+        }
+        if (s.chainRootId) {
+          setChainRootId(null)
+          return
+        }
+      }
+      // 'c' / 'C' — isolate chain on the currently focused issue. 'C' (shift)
+      // additionally bumps layout, matching the "auto-layout" context-menu
+      // entry. Only fires when no modifier is held, no input is focused,
+      // we're in dependency view, and an issue is actually focused.
+      if (e.key === 'c' || e.key === 'C') {
+        if (e.metaKey || e.ctrlKey || e.altKey) return
+        const target = e.target as HTMLElement | null
+        const tag = target?.tagName?.toLowerCase()
+        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        const s = useViewStore.getState()
+        if (s.activeView !== 'dependency') return
+        if (!s.focusedId) return
+        e.preventDefault()
+        setChainRootId(s.focusedId)
+        if (e.key === 'C') bumpLayout()
+        return
+      }
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 's') {
         e.preventDefault()
         const el = document.querySelector('.react-flow') as HTMLElement | null
@@ -92,7 +139,7 @@ export function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [openInlineSearch])
+  }, [openInlineSearch, setChainRootId, bumpLayout])
 
   // Onboarding when backend unconfigured AND no cached data.
   if (graph?.authError && (graph?.data.issues.length ?? 0) === 0) {

@@ -17,6 +17,10 @@ import { priorityClass, priorityLabel, stateColorVar, stateIcon, stateLabel } fr
 interface IssueNodeData {
   issue: NormalizedIssue
   focused?: boolean
+  /** Set by the dependency view when chain isolation is active and this is
+   * the root the chain was rooted at. Renders a star + accent ring so the
+   * user can see at a glance where the chain started from. */
+  isChainRoot?: boolean
 }
 
 function truncate(s: string, n: number): string {
@@ -25,7 +29,7 @@ function truncate(s: string, n: number): string {
 }
 
 function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
-  const { issue, focused } = data
+  const { issue, focused, isChainRoot } = data
   const { schema, typeIcons } = useSchemaStore()
   const density = useViewStore((s) => s.density)
   const annotations = useGraphStore((s) => s.graph?.data.annotations ?? [])
@@ -43,7 +47,43 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
   const isVerbose = density === 'verbose'
 
   return (
-    <div className={`issue-node${focused ? ' focused' : ''}`}>
+    <div
+      className={`issue-node${focused ? ' focused' : ''}${isChainRoot ? ' chain-root' : ''}`}
+      style={
+        isChainRoot
+          ? {
+              // position: relative so the absolutely-positioned chain-root
+              // star (below) anchors to this card. Outline rather than
+              // border so it doesn't shift the layout dagre calculated.
+              position: 'relative',
+              outline: '2px solid var(--accent, #2563eb)',
+              outlineOffset: 2,
+              boxShadow: '0 0 0 4px rgba(37, 99, 235, 0.15)',
+            }
+          : undefined
+      }
+    >
+      {isChainRoot && (
+        <span
+          title="Chain root — this is the issue you isolated the chain from"
+          aria-label="Chain root"
+          style={{
+            position: 'absolute',
+            top: -8,
+            left: -8,
+            background: 'var(--accent, #2563eb)',
+            color: '#fff',
+            fontSize: 11,
+            lineHeight: 1,
+            padding: '3px 6px',
+            borderRadius: 999,
+            fontWeight: 700,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+          }}
+        >
+          ★
+        </span>
+      )}
       <Handle type="target" position={Position.Left} />
       <div className="top">
         {typeIcon && (

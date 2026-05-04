@@ -6,6 +6,9 @@ export function ContextMenu() {
   const menu = useViewStore((s) => s.contextMenu)
   const close = () => useViewStore.getState().setContextMenu(null)
   const setFocusedId = useViewStore((s) => s.setFocusedId)
+  const setChainRootId = useViewStore((s) => s.setChainRootId)
+  const bumpLayout = useViewStore((s) => s.bumpLayout)
+  const activeView = useViewStore((s) => s.activeView)
   const graph = useGraphStore((s) => s.graph)
 
   useEffect(() => {
@@ -28,6 +31,22 @@ export function ContextMenu() {
       <button onClick={() => { window.open(issue.url, '_blank', 'noreferrer'); close() }}>Open in source ↗</button>
       <button onClick={() => { navigator.clipboard.writeText(issue.identifier); close() }}>Copy ID</button>
       <button onClick={() => { setFocusedId(issue.identifier); close() }}>Focus</button>
+      {activeView === 'dependency' && (
+        <>
+          <button
+            onClick={() => { setChainRootId(issue.identifier); close() }}
+            title="Shortcut: focus an issue, press c"
+          >
+            Isolate chain <span style={{ opacity: 0.5, marginLeft: 6, fontSize: 11 }}>c</span>
+          </button>
+          <button
+            onClick={() => { setChainRootId(issue.identifier); bumpLayout(); close() }}
+            title="Shortcut: focus an issue, press Shift+C"
+          >
+            Isolate chain (auto-layout) <span style={{ opacity: 0.5, marginLeft: 6, fontSize: 11 }}>⇧C</span>
+          </button>
+        </>
+      )}
     </div>
   )
 }
