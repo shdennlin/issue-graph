@@ -49,6 +49,7 @@ export interface ViewState {
   settingsOpen: boolean
   syncHistoryOpen: boolean
   coverageOpen: boolean
+  shortcutsOpen: boolean
   selection: string[] // multi-select identifiers
   highlightedEdgeId: string | null // when set, the edge + its endpoints stay opaque, others dim
   highlightedNodeId: string | null // when set, the node + its connected edges/neighbors stay opaque
@@ -79,6 +80,7 @@ export interface ViewState {
   setSettingsOpen: (b: boolean) => void
   setSyncHistoryOpen: (b: boolean) => void
   setCoverageOpen: (b: boolean) => void
+  setShortcutsOpen: (b: boolean) => void
   setSelection: (s: string[]) => void
   toggleSelection: (id: string) => void
   clearSelection: () => void
@@ -134,6 +136,7 @@ export const useViewStore = create<ViewState>((set) => ({
   settingsOpen: false,
   syncHistoryOpen: false,
   coverageOpen: false,
+  shortcutsOpen: false,
   selection: [],
   highlightedEdgeId: null,
   highlightedNodeId: null,
@@ -192,6 +195,7 @@ export const useViewStore = create<ViewState>((set) => ({
   setSettingsOpen: (b) => set({ settingsOpen: b }),
   setSyncHistoryOpen: (b) => set({ syncHistoryOpen: b }),
   setCoverageOpen: (b) => set({ coverageOpen: b }),
+  setShortcutsOpen: (b) => set({ shortcutsOpen: b }),
   setSelection: (s) => set({ selection: s }),
   toggleSelection: (id) => set((s) => ({ selection: toggle(s.selection, id) })),
   clearSelection: () => set({ selection: [] }),
