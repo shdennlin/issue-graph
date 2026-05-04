@@ -12,7 +12,8 @@ interface Shortcut {
 }
 
 const SHORTCUTS: Shortcut[] = [
-  { keys: ['Cmd', 'F'], description: 'Find on canvas (focus required: click into canvas first)', group: 'Navigation' },
+  { keys: ['Cmd', 'F'], description: 'Open Find on canvas (focus required: click into canvas first)', group: 'Navigation' },
+  { keys: ['Enter'], description: 'In Find: jump to next match, focus it, then return keyboard to the canvas (so c / r / ⇧C / ⇧R target the match)', group: 'Navigation' },
   { keys: ['Esc'], description: 'Peel one layer: Find → context menu → focused issue → chain isolation', group: 'Navigation' },
   { keys: ['?'], description: 'Show this shortcut cheat sheet', group: 'Navigation' },
 

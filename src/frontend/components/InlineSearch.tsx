@@ -24,6 +24,7 @@ export function InlineSearch() {
   const close = useViewStore((s) => s.closeInlineSearch)
   const setQuery = useViewStore((s) => s.setInlineSearchQuery)
   const setIdx = useViewStore((s) => s.setInlineSearchActiveIdx)
+  const setFocusedId = useViewStore((s) => s.setFocusedId)
   // CRITICAL: never create a new array/object inline in the selector — `?? []`
   // produces a fresh `[]` reference each call when graph is null, which zustand
   // sees as a "new snapshot" and re-renders forever. Select the raw value, then
@@ -46,9 +47,16 @@ export function InlineSearch() {
       .map((i) => i.identifier)
   }, [issues, query])
 
-  // Focus input on open.
+  // Focus input on open AND select all text. Pairs with closeInlineSearch
+  // preserving the query: re-opening (Cmd+F again) lands you on the previous
+  // query already highlighted, so typing immediately replaces it without a
+  // second clear-step. Arrow keys / mouse drag still work for editing.
   useEffect(() => {
-    if (open) inputRef.current?.focus()
+    if (!open) return
+    const el = inputRef.current
+    if (!el) return
+    el.focus()
+    el.select()
   }, [open])
 
   // Toggle a body-level class so IssueNode can read match state via DOM
@@ -122,6 +130,7 @@ export function InlineSearch() {
   return (
     <div className="inline-search">
       <input
+        id="inline-search"
         ref={inputRef}
         type="search"
         placeholder="Find on canvas…"
@@ -133,7 +142,18 @@ export function InlineSearch() {
             close()
           } else if (e.key === 'Enter') {
             e.preventDefault()
-            goto(e.shiftKey ? -1 : 1)
+            // Advance to next/prev match AND commit it as focusedId, then
+            // blur the input. This hands keyboard control back to the
+            // canvas so a subsequent shortcut (c, r, ⇧C, ⇧R) targets the
+            // match the user just searched for. To keep cycling matches
+            // afterwards, click the ↑/↓ buttons or refocus the input.
+            const delta = e.shiftKey ? -1 : 1
+            if (total === 0) return
+            const nextIdx = (activeIdx + delta + total) % total
+            setIdx(nextIdx)
+            const target = matchIds[nextIdx]
+            if (target) setFocusedId(target)
+            inputRef.current?.blur()
           }
         }}
         style={{ width: 220 }}
@@ -141,8 +161,8 @@ export function InlineSearch() {
       <span className="counter">
         {total === 0 && query ? '0 / 0' : total > 0 ? `${activeIdx + 1} / ${total}` : ''}
       </span>
-      <button onClick={() => goto(-1)} disabled={total === 0} title="Previous (Shift+Enter)">↑</button>
-      <button onClick={() => goto(1)} disabled={total === 0} title="Next (Enter)">↓</button>
+      <button onClick={() => goto(-1)} disabled={total === 0} title="Previous match">↑</button>
+      <button onClick={() => goto(1)} disabled={total === 0} title="Next match">↓</button>
       <button onClick={close} title="Close (Esc)">×</button>
     </div>
   )

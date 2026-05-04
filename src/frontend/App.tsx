@@ -180,7 +180,22 @@ export function App() {
         const focusInCanvas = active === canvas || (active && canvas.contains(active)) || active === document.body
         if (focusInCanvas) {
           e.preventDefault()
-          openInlineSearch()
+          const s = useViewStore.getState()
+          if (s.inlineSearch.open) {
+            // Bar is already mounted (e.g. user pressed Enter which blurs
+            // the input but keeps the bar visible). Calling
+            // openInlineSearch() here would be a no-op — `open` is already
+            // true, so the focus-on-open useEffect inside InlineSearch
+            // doesn't re-fire. Refocus the input directly so the user can
+            // type again.
+            const el = document.getElementById('inline-search') as HTMLInputElement | null
+            if (el) {
+              el.focus()
+              el.select()
+            }
+          } else {
+            openInlineSearch()
+          }
         }
         // else: focus is in toolbar/sidebar/modal — let the browser handle Cmd+F.
       }

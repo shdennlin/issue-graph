@@ -194,7 +194,11 @@ export const useViewStore = create<ViewState>((set) => ({
   },
   setSearch: (q) => set({ search: q }),
   openInlineSearch: () => set((s) => ({ inlineSearch: { ...s.inlineSearch, open: true } })),
-  closeInlineSearch: () => set({ inlineSearch: { open: false, query: '', activeIdx: 0 } }),
+  // Preserve query + activeIdx on close. Cmd+F again should bring back the
+  // user's last search (with the input pre-selected for fast replace) rather
+  // than starting from scratch every time.
+  closeInlineSearch: () =>
+    set((s) => ({ inlineSearch: { ...s.inlineSearch, open: false } })),
   setInlineSearchQuery: (q) =>
     set((s) => ({ inlineSearch: { ...s.inlineSearch, query: q, activeIdx: 0 } })),
   setInlineSearchActiveIdx: (i) =>
