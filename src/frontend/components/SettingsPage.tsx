@@ -13,6 +13,12 @@ export function SettingsPage() {
   const [data, setData] = useState<SettingsResponse | null>(null)
   const [draft, setDraft] = useState<Record<string, unknown>>({})
   const [resetting, setResetting] = useState(false)
+  // Phased progress for the reset flow. Each phase is visible to the user as
+  // a labelled step in the blocking overlay so they can see why the screen is
+  // frozen instead of guessing whether the app hung.
+  type ResetPhase = 'idle' | 'clearing' | 'syncing' | 'done' | 'error'
+  const [resetPhase, setResetPhase] = useState<ResetPhase>('idle')
+  const [resetMessage, setResetMessage] = useState<string>('')
 
   useEffect(() => {
     if (!open) return
@@ -45,12 +51,24 @@ export function SettingsPage() {
     if (!ok) return
     setResetting(true)
     try {
+      setResetPhase('clearing')
+      setResetMessage('Clearing local cache…')
       const result = await api.resetCache()
+      setResetPhase('syncing')
+      setResetMessage('Re-syncing from Linear (this can take a few seconds)…')
       await api.forceSync()
-      await reloadGraph()
-      alert(`Cleared ${result.cleared.issues} issues + ${result.cleared.labels} labels. Re-synced from Linear.`)
+      setResetPhase('done')
+      setResetMessage(
+        `Cleared ${result.cleared.issues} issues + ${result.cleared.labels} labels. ` +
+          'Reloading page to pick up the new workspace…',
+      )
+      // Hard-reload so every store re-initializes from the fresh cache. This
+      // avoids stale labels / filters / focusedIds left over from the previous
+      // workspace's data being silently re-applied to the new graph.
+      window.setTimeout(() => window.location.reload(), 800)
     } catch (err) {
-      alert(`Reset failed: ${err instanceof Error ? err.message : String(err)}`)
+      setResetPhase('error')
+      setResetMessage(err instanceof Error ? err.message : String(err))
     } finally {
       setResetting(false)
     }
@@ -85,8 +103,79 @@ export function SettingsPage() {
   const storedStale = stored.stale_days_threshold ? Number(stored.stale_days_threshold) : undefined
   const stale = (draft.stale_days_threshold ?? storedStale ?? env.stale_days) as number
 
+  const overlay = resetPhase !== 'idle' && (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 9999,
+        background: 'rgba(0, 0, 0, 0.55)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+      // Block clicks so the user can't dismiss / interact during the reset.
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div
+        style={{
+          background: 'var(--bg-elev, #fff)',
+          color: 'var(--fg)',
+          padding: '24px 28px',
+          borderRadius: 10,
+          minWidth: 320,
+          maxWidth: 480,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+          textAlign: 'center',
+        }}
+      >
+        <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 'var(--fs-base)' }}>
+          {resetPhase === 'clearing' && 'Resetting cache'}
+          {resetPhase === 'syncing' && 'Re-syncing from Linear'}
+          {resetPhase === 'done' && 'Done'}
+          {resetPhase === 'error' && 'Reset failed'}
+        </div>
+        {/* Indeterminate progress bar — shows motion so user knows we're alive. */}
+        {(resetPhase === 'clearing' || resetPhase === 'syncing') && (
+          <div
+            style={{
+              height: 4,
+              background: 'var(--node-border, #d0d7de)',
+              borderRadius: 2,
+              overflow: 'hidden',
+              marginBottom: 12,
+            }}
+          >
+            <div
+              style={{
+                height: '100%',
+                width: '40%',
+                background: 'var(--accent, #2563eb)',
+                animation: 'reset-bar 1.2s ease-in-out infinite',
+              }}
+            />
+          </div>
+        )}
+        <div style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-meta)' }}>{resetMessage}</div>
+        {resetPhase === 'error' && (
+          <button onClick={() => setResetPhase('idle')} style={{ marginTop: 14 }}>
+            Dismiss
+          </button>
+        )}
+      </div>
+      <style>{`
+        @keyframes reset-bar {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(350%); }
+        }
+      `}</style>
+    </div>
+  )
+
   return (
-    <div className="modal-backdrop" onClick={() => close(false)}>
+    <>
+      {overlay}
+      <div className="modal-backdrop" onClick={() => close(false)}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h3 style={{ marginTop: 0 }}>Settings</h3>
 
@@ -220,5 +309,6 @@ export function SettingsPage() {
         </div>
       </div>
     </div>
+    </>
   )
 }
