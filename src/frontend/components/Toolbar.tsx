@@ -26,6 +26,8 @@ export function Toolbar() {
   const clearSelection = useViewStore((s) => s.clearSelection)
   const chainRootId = useViewStore((s) => s.chainRootId)
   const setChainRootId = useViewStore((s) => s.setChainRootId)
+  const showRelated = useViewStore((s) => s.showRelated)
+  const setShowRelated = useViewStore((s) => s.setShowRelated)
   const graph = useGraphStore((s) => s.graph)
   const extendScope = useGraphStore((s) => s.extendScope)
   const syncing = useGraphStore((s) => s.syncing)
@@ -112,6 +114,25 @@ export function Toolbar() {
           <button onClick={() => setSearch('')} title="Clear search">×</button>
         )}
       </div>
+      {activeView === 'dependency' && (
+        <>
+          <div className="sep" />
+          <div className="group">
+            <button
+              onClick={() => setShowRelated(!showRelated)}
+              className={showRelated ? 'active' : ''}
+              title={
+                showRelated
+                  ? 'Hide related-issue edges (currently shown as dashed gray lines)'
+                  : 'Show "related" issue links as dashed edges (in addition to blocks arrows)'
+              }
+              aria-pressed={showRelated}
+            >
+              {showRelated ? '⊟ Related' : '⊞ Related'}
+            </button>
+          </div>
+        </>
+      )}
       <div className="sep" />
       <div className="group">
         <span style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-meta)' }}>Density</span>

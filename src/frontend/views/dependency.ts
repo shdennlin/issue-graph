@@ -9,7 +9,7 @@ export const dependencyView: ViewDefinition = {
   id: 'dependency',
   label: 'Dependency',
   description: 'Issues + blocks edges. Best for "what should I work on next?".',
-  build({ data, filters, staleDays, myUserName, focusedId, chainRootId, density, search, measuredHeights }) {
+  build({ data, filters, staleDays, myUserName, focusedId, chainRootId, showRelated, density, search, measuredHeights }) {
     // Chain isolation: when a root is set, show its connected component over
     // `blocks` edges (both directions, transitive) — bypassing other filters
     // so an off-state blocker doesn't fragment the chain.
@@ -42,16 +42,37 @@ export const dependencyView: ViewDefinition = {
     }))
 
     const edges: Edge[] = []
+    // `related` is bidirectional in Linear — emit only one edge per
+    // unordered pair to avoid drawing it twice when both endpoints declare
+    // the relation. Track via a sorted-pair key.
+    const seenRelated = new Set<string>()
     for (const i of issues) {
       for (const r of i.relations) {
-        if (r.type !== 'blocks') continue
         if (!ids.has(r.targetIdentifier)) continue
-        edges.push({
-          id: `${i.identifier}->${r.targetIdentifier}`,
-          source: i.identifier,
-          target: r.targetIdentifier,
-          markerEnd: { type: 'arrowclosed' as any },
-        })
+        if (r.type === 'blocks') {
+          edges.push({
+            id: `${i.identifier}->${r.targetIdentifier}`,
+            source: i.identifier,
+            target: r.targetIdentifier,
+            markerEnd: { type: 'arrowclosed' as any },
+            data: { relationType: 'blocks' },
+          })
+        } else if (r.type === 'related' && showRelated) {
+          const a = i.identifier
+          const b = r.targetIdentifier
+          const key = a < b ? `${a}~${b}` : `${b}~${a}`
+          if (seenRelated.has(key)) continue
+          seenRelated.add(key)
+          edges.push({
+            id: `rel:${key}`,
+            source: a,
+            target: b,
+            // Dashed gray, no arrow — visual signal that this is a weaker,
+            // bidirectional connection vs. the directed `blocks` arrows.
+            style: { strokeDasharray: '6 4', stroke: 'var(--fg-muted)', strokeWidth: 1.4, opacity: 0.7 },
+            data: { relationType: 'related' },
+          })
+        }
       }
     }
 
