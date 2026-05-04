@@ -203,14 +203,32 @@ function CanvasInner() {
   //
   // Density / filter changes deliberately don't set the flag — they reset
   // measuredHeights for re-measurement, but no fitView fires.
-  const pendingFitViewRef = useRef<{ padding: number } | null>(null)
+  const pendingFitViewRef = useRef<{ padding: number; preserveFocus?: boolean } | null>(null)
   useEffect(() => {
     if (!pendingFitViewRef.current) return
     if (!measuredHeights) return  // wait until layout has settled
-    const { padding } = pendingFitViewRef.current
+    const { padding, preserveFocus } = pendingFitViewRef.current
     pendingFitViewRef.current = null
+    // Re-layout flow: if a node is focused, recenter on it instead of
+    // framing the whole graph. After dagre re-runs, the focused issue may
+    // have moved across the canvas — fitView would yank the camera to
+    // wherever the new bounding box happens to be, losing the user's
+    // visual anchor. setCenter on the focused node keeps "what I was
+    // looking at" fixed while everything around it reflows.
+    if (preserveFocus && focusedId) {
+      const node = nodes.find((n) => n.id === focusedId)
+      if (node?.position) {
+        const w = (node.width ?? 320) as number
+        const h = (node.height ?? 110) as number
+        rf.setCenter(node.position.x + w / 2, node.position.y + h / 2, {
+          zoom: rf.getZoom(),
+          duration: 600,
+        })
+        return
+      }
+    }
     rf.fitView({ duration: 600, padding, minZoom: 0.8 })
-  }, [measuredHeights, rf])
+  }, [measuredHeights, rf, focusedId, nodes])
 
   // Producer 1: first non-empty load.
   const hasFitOnceRef = useRef(false)
@@ -229,14 +247,16 @@ function CanvasInner() {
   }, [activeView])
 
   // Producer 3: explicit layout bump (chain auto-layout, chain clear, manual
-  // re-layout button). Padding is slightly looser since chain views are
-  // usually small graphs and look nicer with more breathing room.
+  // re-layout button, 'r' shortcut). Padding is slightly looser since chain
+  // views are usually small graphs and look nicer with more breathing room.
+  // preserveFocus: re-layout shouldn't make the user lose their place — if
+  // a node was focused, the consumer recenters on it instead of fitView.
   const lastLayoutBumpRef = useRef(layoutBump)
   useEffect(() => {
     if (lastLayoutBumpRef.current === layoutBump) return
     lastLayoutBumpRef.current = layoutBump
     if (nodes.length === 0) return
-    pendingFitViewRef.current = { padding: 0.15 }
+    pendingFitViewRef.current = { padding: 0.15, preserveFocus: true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layoutBump])
 
