@@ -123,6 +123,23 @@ export function DetailPanel() {
       {docs.length > 0 && (
         <div className="section">
           <h3>Design docs ({docs.length})</h3>
+          {docs.length > 1 && (
+            <div
+              style={{
+                color: 'var(--danger, #dc2626)',
+                fontSize: 12,
+                marginBottom: 8,
+                padding: '6px 8px',
+                border: '1px solid var(--danger, #dc2626)',
+                borderRadius: 4,
+                background: 'rgba(220, 38, 38, 0.08)',
+              }}
+            >
+              ⚠ This issue is linked to <strong>{docs.length}</strong> design-doc changes.
+              Usually each issue should map to one spec — consider splitting the issue
+              or merging the specs.
+            </div>
+          )}
           {docs.map((d) => (
             <details key={d.name} open={docs.length === 1}>
               <summary>

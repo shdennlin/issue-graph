@@ -205,7 +205,25 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
             <div style={{ width: `${Math.round(progress.ratio * 100)}%` }} />
           </div>
           <div className="progress-label">
-            {progress.done}/{progress.total} · {docs.length === 1 ? docs[0]!.name : `${docs.length} changes`}
+            {progress.done}/{progress.total} ·{' '}
+            {docs.length === 1 ? (
+              docs[0]!.name
+            ) : (
+              // Multi-spec warning: linking one issue to multiple design docs
+              // is rare and usually a smell — typically the issue should be
+              // split, or the docs should be split, or the linkage is wrong.
+              // Make it red so the human reviewer notices and decides.
+              <span
+                style={{ color: 'var(--danger, #dc2626)', fontWeight: 600 }}
+                title={
+                  `This issue is linked to ${docs.length} design-doc changes:\n` +
+                  docs.map((d) => `  • ${d.name}`).join('\n') +
+                  `\n\nUsually each issue should map to one spec. Consider splitting the issue or merging the specs.`
+                }
+              >
+                ⚠ {docs.length} specs
+              </span>
+            )}
           </div>
         </>
       )}
