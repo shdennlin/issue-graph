@@ -68,13 +68,29 @@ export function App() {
   useEffect(() => {
     const onKey = async (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        // Chain isolation is the lowest-priority Esc target: only clear it
-        // when nothing else (modal, inline search, context menu) wants Esc.
+        // Esc peels one layer at a time, in priority order. Modals (Settings
+        // / SyncHistory / Coverage) own Esc fully — they handle dismissal
+        // and we don't peel under them.
+        //
+        // Otherwise the priority is: Find → context menu → chain. We need
+        // this *window-level* peel because the prior bug was: open Find,
+        // then right-click → Isolate chain. After right-click, focus left
+        // the Find input — so InlineSearch's input-level onKeyDown stopped
+        // firing, and the old chain-clear guard (`!inlineSearchOpen`) made
+        // chain-clear bail too. Result: Esc did nothing. Now the window
+        // handler closes Find directly when its input no longer has focus.
         const s = useViewStore.getState()
         const modalOpen = s.settingsOpen || s.syncHistoryOpen || s.coverageOpen
-        const inlineSearchOpen = s.inlineSearch.open
-        const contextMenuOpen = !!s.contextMenu
-        if (s.chainRootId && !modalOpen && !inlineSearchOpen && !contextMenuOpen) {
+        if (modalOpen) return
+        if (s.inlineSearch.open) {
+          s.closeInlineSearch()
+          return
+        }
+        if (s.contextMenu) {
+          s.setContextMenu(null)
+          return
+        }
+        if (s.chainRootId) {
           setChainRootId(null)
           return
         }
