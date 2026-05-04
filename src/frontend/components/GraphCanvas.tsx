@@ -218,6 +218,27 @@ function CanvasInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView])
 
+  // "Isolate chain (auto-layout)" — when the user picks the re-layout variant
+  // we bump layoutBump, which forces dagre to recompute positions. The new
+  // chain may sit anywhere in flow-coords, so refit the viewport so the user
+  // actually sees the result. Skip the very first render (initial load fit
+  // already handles it) by using a ref to track whether we've seen at least
+  // one bump value.
+  const lastLayoutBumpRef = useRef(layoutBump)
+  useEffect(() => {
+    if (lastLayoutBumpRef.current === layoutBump) return
+    lastLayoutBumpRef.current = layoutBump
+    if (nodes.length === 0) return
+    // Wait for the new dagre layout + RF re-render to settle before fitting.
+    // 120ms > the 80ms used elsewhere because dagre's first pass + measured-
+    // height re-layout is two render cycles when card heights differ.
+    const id = window.setTimeout(() => {
+      rf.fitView({ duration: 600, padding: 0.15, minZoom: 0.8 })
+    }, 120)
+    return () => window.clearTimeout(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layoutBump])
+
   // Intentionally no auto-center on focus — selecting a node should just open
   // the detail panel without yanking the viewport. Users can hit fit-view if
   // they want to recenter.

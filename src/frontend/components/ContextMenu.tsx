@@ -34,7 +34,7 @@ export function ContextMenu() {
       {activeView === 'dependency' && (
         <>
           <button onClick={() => { setChainRootId(issue.identifier); close() }}>Isolate chain</button>
-          <button onClick={() => { setChainRootId(issue.identifier); bumpLayout(); close() }}>Isolate chain (re-arrange)</button>
+          <button onClick={() => { setChainRootId(issue.identifier); bumpLayout(); close() }}>Isolate chain (auto-layout)</button>
         </>
       )}
     </div>
