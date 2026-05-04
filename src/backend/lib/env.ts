@@ -55,6 +55,10 @@ const ConfigSchema = z.object({
   // a stale dist/ doesn't shadow the live Vite dev server.
   SERVE_STATIC: z.string().optional().default('true').transform((v) => truthyBool.parse(v)),
 
+  // Vite dev server port — only consumed by the friendly "use Vite at..."
+  // message shown when SERVE_STATIC is off. Mirrors vite.config.ts's default.
+  VITE_PORT: intDefault(31414),
+
   // Storage
   SQLITE_PATH: strDefault('/app/data/graph.db'),
   REPO_PATH: strDefault('/repo'),

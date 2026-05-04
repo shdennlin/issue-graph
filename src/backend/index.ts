@@ -54,9 +54,16 @@ export function createApp(): Hono {
   // of silently serving an old build that looks like missing changes.
   const staticRoot = cfg.SERVE_STATIC ? findStaticRoot() : null
   if (!cfg.SERVE_STATIC) {
+    // Compute Vite's actual dev port. If VITE_PORT collides with backend PORT,
+    // vite.config.ts auto-shifts (31415→31414 special case, otherwise +1).
+    // Mirror that here so the message points the user to the right URL.
+    let vitePort = cfg.VITE_PORT
+    if (vitePort === cfg.PORT) {
+      vitePort = cfg.PORT === 31415 ? 31414 : cfg.PORT + 1
+    }
     app.get('/', (c) =>
       c.text(
-        'API only (SERVE_STATIC=false). Open the Vite dev server (default http://localhost:31414) for the UI.',
+        `API only (SERVE_STATIC=false). Open the Vite dev server at http://localhost:${vitePort} for the UI.`,
       ),
     )
   }
