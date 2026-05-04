@@ -160,6 +160,20 @@ export function App() {
         bumpLayout()
         return
       }
+      // Cmd/Ctrl+Shift+F → focus the toolbar's filter search box. Distinct
+      // from Cmd+F (which opens the inline find-on-canvas). Pre-selects any
+      // existing query for fast replace, mirroring InlineSearch's reopen
+      // behavior. Always intercepts — there's no useful native browser
+      // action for this combo.
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        const el = document.getElementById('toolbar-search') as HTMLInputElement | null
+        if (el) {
+          el.focus()
+          el.select()
+        }
+        return
+      }
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 's') {
         e.preventDefault()
         const el = document.querySelector('.react-flow') as HTMLElement | null
@@ -173,7 +187,10 @@ export function App() {
         a.click()
         return
       }
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'f') {
+        // Plain Cmd+F (no Shift) — inline canvas finder. The Cmd+Shift+F
+        // case is handled above and returns early; this guard keeps that
+        // branch from also firing here when shift is held.
         const canvas = document.querySelector('.canvas') as HTMLElement | null
         if (!canvas) return
         const active = document.activeElement

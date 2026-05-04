@@ -106,6 +106,7 @@ export function Toolbar() {
       <div className="sep" />
       <div className="group">
         <input
+          id="toolbar-search"
           type="search"
           placeholder="🔍 Search id / title / assignee…"
           value={search}
