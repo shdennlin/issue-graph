@@ -1,8 +1,12 @@
+import { useEffect, useMemo, useState } from 'react'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { views } from '../views'
 import { api } from '../lib/api'
+import { computeChain } from '../views/chain'
 // Density + theme + search live here; Size moved to Settings → Display.
+
+const FULL_HISTORY_DAYS = 365
 
 export function Toolbar() {
   const activeView = useViewStore((s) => s.activeView)
@@ -15,11 +19,47 @@ export function Toolbar() {
   const setTheme = useViewStore((s) => s.setTheme)
   const setSettingsOpen = useViewStore((s) => s.setSettingsOpen)
   const setCoverageOpen = useViewStore((s) => s.setCoverageOpen)
+  const setShortcutsOpen = useViewStore((s) => s.setShortcutsOpen)
   const filterPanelOpen = useViewStore((s) => s.filterPanelOpen)
   const toggleFilterPanel = useViewStore((s) => s.toggleFilterPanel)
   const selection = useViewStore((s) => s.selection)
   const clearSelection = useViewStore((s) => s.clearSelection)
+  const chainRootId = useViewStore((s) => s.chainRootId)
+  const setChainRootId = useViewStore((s) => s.setChainRootId)
+  const showRelated = useViewStore((s) => s.showRelated)
+  const setShowRelated = useViewStore((s) => s.setShowRelated)
   const graph = useGraphStore((s) => s.graph)
+  const extendScope = useGraphStore((s) => s.extendScope)
+  const syncing = useGraphStore((s) => s.syncing)
+
+  // Chain-mode dangling-ref check: when chain isolation is active, we
+  // recompute the chain (cheap BFS) to find references pointing to issues
+  // outside the current cache. If any are found AND the user hasn't already
+  // extended the sync window, surface a "Load older history" button.
+  const chainStats = useMemo(() => {
+    if (!chainRootId || !graph) return null
+    const { members, dangling } = computeChain(graph.data.issues, chainRootId, {
+      includeRelatedNeighbors: showRelated,
+    })
+    return { memberCount: members.size, dangling: dangling.size }
+  }, [chainRootId, graph, showRelated])
+  const chainDangling = chainStats && chainStats.dangling > 0 ? chainStats.dangling : null
+
+  // Backend's current extended-scope window (0 = default 30-day Done window).
+  // Fetched lazily so we don't pull it for users who never use chain mode.
+  const [scopeDays, setScopeDays] = useState<number | null>(null)
+  useEffect(() => {
+    if (!chainRootId) return
+    if (scopeDays !== null) return
+    api.getSyncScope().then((r) => setScopeDays(r.days)).catch(() => setScopeDays(0))
+  }, [chainRootId, scopeDays])
+
+  const showLoadFullHistory = chainRootId && chainDangling && (scopeDays ?? 0) < FULL_HISTORY_DAYS
+
+  const loadFullHistory = async () => {
+    await extendScope(FULL_HISTORY_DAYS)
+    setScopeDays(FULL_HISTORY_DAYS)
+  }
 
   const exportSelection = () => {
     if (selection.length === 0) return
@@ -66,6 +106,7 @@ export function Toolbar() {
       <div className="sep" />
       <div className="group">
         <input
+          id="toolbar-search"
           type="search"
           placeholder="🔍 Search id / title / assignee…"
           value={search}
@@ -76,6 +117,25 @@ export function Toolbar() {
           <button onClick={() => setSearch('')} title="Clear search">×</button>
         )}
       </div>
+      {activeView === 'dependency' && (
+        <>
+          <div className="sep" />
+          <div className="group">
+            <button
+              onClick={() => setShowRelated(!showRelated)}
+              className={showRelated ? 'active' : ''}
+              title={
+                showRelated
+                  ? 'Hide related-issue edges (shortcut: r). Currently shown as dashed gray lines.'
+                  : 'Show "related" issue links as dashed edges (shortcut: r).'
+              }
+              aria-pressed={showRelated}
+            >
+              {showRelated ? '⊟ Related' : '⊞ Related'}
+            </button>
+          </div>
+        </>
+      )}
       <div className="sep" />
       <div className="group">
         <span style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-meta)' }}>Density</span>
@@ -85,6 +145,38 @@ export function Toolbar() {
           <option value="verbose">Verbose</option>
         </select>
       </div>
+      {chainRootId && (
+        <>
+          <div className="sep" />
+          <div className="group" title="Showing only the dependency chain rooted at this issue">
+            <span style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-meta)' }}>Chain:</span>
+            <span style={{ fontSize: 'var(--fs-meta)', fontWeight: 600 }}>{chainRootId}</span>
+            {chainStats && (
+              <span style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-meta)' }}>
+                ({chainStats.memberCount} {chainStats.memberCount === 1 ? 'issue' : 'issues'})
+              </span>
+            )}
+            <button onClick={() => setChainRootId(null)} title="Clear chain isolation (Esc)">×</button>
+            {showLoadFullHistory && (
+              <button
+                onClick={loadFullHistory}
+                disabled={syncing}
+                title={`This chain references ${chainDangling} issue(s) not in the current cache (likely older Done/Canceled). Click to extend sync window to ${FULL_HISTORY_DAYS} days.`}
+                style={{
+                  background: 'var(--warn, #f59e0b)',
+                  color: '#000',
+                  fontSize: 'var(--fs-meta)',
+                  fontWeight: 500,
+                }}
+              >
+                {syncing
+                  ? '⏳ Loading…'
+                  : `+ Load full history (${chainDangling} missing)`}
+              </button>
+            )}
+          </div>
+        </>
+      )}
       <div style={{ marginLeft: 'auto' }} className="group">
         {selection.length > 0 && (
           <>
@@ -102,6 +194,7 @@ export function Toolbar() {
         </a>
         <button onClick={screenshot} title="Cmd+Shift+S">📷</button>
         <button onClick={() => setCoverageOpen(true)} title="Design-doc coverage report">📊</button>
+        <button onClick={() => setShortcutsOpen(true)} title="Keyboard shortcuts (?)">⌨</button>
         <button
           onClick={() => setTheme(theme === 'dark' ? 'light' : theme === 'light' ? 'auto' : 'dark')}
           title={`Theme: ${theme} (click to cycle)`}

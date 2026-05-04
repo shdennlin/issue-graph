@@ -5,14 +5,14 @@ services:
     container_name: issue-graph
     restart: unless-stopped
     env_file: .env
+    environment:
+      PORT: 31415  # pinned; overrides any PORT in .env
     ports:
-      - "${PORT:-31415}:31415"
+      - "31415:31415"
     volumes:
       - ./data:/app/data
-      # REPO_PATH (from .env) is bind-mounted at the same absolute path inside
-      # the container, so the backend's REPO_PATH env var works identically in
-      # local dev and Docker. Default points at a placeholder so the design-doc
-      # adapter stays disabled when REPO_PATH is unset.
+      # REPO_PATH bind-mounted at the same path inside; default is an
+      # empty placeholder so the design-doc adapter stays disabled when unset.
       - ${REPO_PATH:-./.docker/empty-repo}:${REPO_PATH:-/var/empty/issue-graph-no-repo}:ro
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:31415/api/health"]

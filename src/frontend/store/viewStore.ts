@@ -30,6 +30,16 @@ export interface ViewState {
   activeView: ViewId
   filters: Filters
   focusedId: string | null
+  // When set, the dependency view filters to the connected component over
+  // `blocks` edges (both directions, transitive) rooted at this identifier.
+  // Other filters are bypassed while this is active so the chain doesn't
+  // fragment. Ignored by mix/designdoc views.
+  chainRootId: string | null
+  // Monotonic counter — bump to force a fresh dagre layout pass even when
+  // the layout signature (view/density) hasn't changed. Used by
+  // "Isolate chain (re-arrange)" so the new chain lays out cleanly instead
+  // of inheriting whatever positions the user had dragged before.
+  layoutBump: number
   expandedBuckets: string[]
   theme: ThemeMode
   density: Density
@@ -39,6 +49,12 @@ export interface ViewState {
   settingsOpen: boolean
   syncHistoryOpen: boolean
   coverageOpen: boolean
+  shortcutsOpen: boolean
+  // When true, dependency view also draws `related` relations as dashed
+  // edges (in addition to the always-on `blocks` edges). Off by default so
+  // the dependency view stays focused on the dependency signal — turn on
+  // when you want the wider context of "what's related but not blocking".
+  showRelated: boolean
   selection: string[] // multi-select identifiers
   highlightedEdgeId: string | null // when set, the edge + its endpoints stay opaque, others dim
   highlightedNodeId: string | null // when set, the node + its connected edges/neighbors stay opaque
@@ -56,6 +72,8 @@ export interface ViewState {
   toggleAssignee: (name: string) => void
   togglePrefix: (token: string, id: string) => void
   setFocusedId: (id: string | null) => void
+  setChainRootId: (id: string | null) => void
+  bumpLayout: () => void
   setTheme: (t: ThemeMode) => void
   setDensity: (d: Density) => void
   setFontSize: (f: FontSize) => void
@@ -67,6 +85,8 @@ export interface ViewState {
   setSettingsOpen: (b: boolean) => void
   setSyncHistoryOpen: (b: boolean) => void
   setCoverageOpen: (b: boolean) => void
+  setShortcutsOpen: (b: boolean) => void
+  setShowRelated: (b: boolean) => void
   setSelection: (s: string[]) => void
   toggleSelection: (id: string) => void
   clearSelection: () => void
@@ -104,6 +124,8 @@ export const useViewStore = create<ViewState>((set) => ({
   activeView: 'dependency',
   filters: defaultFilters,
   focusedId: null,
+  chainRootId: null,
+  layoutBump: 0,
   expandedBuckets: [],
   theme: 'auto',
   density: 'default',
@@ -120,6 +142,8 @@ export const useViewStore = create<ViewState>((set) => ({
   settingsOpen: false,
   syncHistoryOpen: false,
   coverageOpen: false,
+  shortcutsOpen: false,
+  showRelated: false,
   selection: [],
   highlightedEdgeId: null,
   highlightedNodeId: null,
@@ -158,6 +182,8 @@ export const useViewStore = create<ViewState>((set) => ({
       }
     }),
   setFocusedId: (id) => set({ focusedId: id }),
+  setChainRootId: (id) => set({ chainRootId: id }),
+  bumpLayout: () => set((s) => ({ layoutBump: s.layoutBump + 1 })),
   setTheme: (t) => set({ theme: t }),
   setDensity: (d) => set({ density: d }),
   setFontSize: (f) => {
@@ -168,7 +194,11 @@ export const useViewStore = create<ViewState>((set) => ({
   },
   setSearch: (q) => set({ search: q }),
   openInlineSearch: () => set((s) => ({ inlineSearch: { ...s.inlineSearch, open: true } })),
-  closeInlineSearch: () => set({ inlineSearch: { open: false, query: '', activeIdx: 0 } }),
+  // Preserve query + activeIdx on close. Cmd+F again should bring back the
+  // user's last search (with the input pre-selected for fast replace) rather
+  // than starting from scratch every time.
+  closeInlineSearch: () =>
+    set((s) => ({ inlineSearch: { ...s.inlineSearch, open: false } })),
   setInlineSearchQuery: (q) =>
     set((s) => ({ inlineSearch: { ...s.inlineSearch, query: q, activeIdx: 0 } })),
   setInlineSearchActiveIdx: (i) =>
@@ -176,6 +206,8 @@ export const useViewStore = create<ViewState>((set) => ({
   setSettingsOpen: (b) => set({ settingsOpen: b }),
   setSyncHistoryOpen: (b) => set({ syncHistoryOpen: b }),
   setCoverageOpen: (b) => set({ coverageOpen: b }),
+  setShortcutsOpen: (b) => set({ shortcutsOpen: b }),
+  setShowRelated: (b) => set({ showRelated: b }),
   setSelection: (s) => set({ selection: s }),
   toggleSelection: (id) => set((s) => ({ selection: toggle(s.selection, id) })),
   clearSelection: () => set({ selection: [] }),
@@ -197,5 +229,5 @@ export const useViewStore = create<ViewState>((set) => ({
       }
       return { filterPanelOpen: next }
     }),
-  resetFilters: () => set({ filters: defaultFilters }),
+  resetFilters: () => set({ filters: defaultFilters, chainRootId: null }),
 }))

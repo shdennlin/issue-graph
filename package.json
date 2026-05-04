@@ -1,13 +1,13 @@
 {
   "name": "issue-graph",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Self-hosted, read-only graph viewer for issue dependencies (Linear backend in v1).",
   "license": "MIT",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "concurrently -n server,web -c blue,green \"npm:dev:server\" \"npm:dev:web\"",
-    "dev:server": "bun --watch src/backend/index.ts",
+    "dev:server": "SERVE_STATIC=false bun --watch src/backend/index.ts",
     "dev:web": "vite",
     "build": "bun run build:web && bun run build:server",
     "build:web": "vite build",

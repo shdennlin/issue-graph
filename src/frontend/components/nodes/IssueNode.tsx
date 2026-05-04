@@ -17,6 +17,19 @@ import { priorityClass, priorityLabel, stateColorVar, stateIcon, stateLabel } fr
 interface IssueNodeData {
   issue: NormalizedIssue
   focused?: boolean
+  /** Set by the dependency view when chain isolation is active and this is
+   * the root the chain was rooted at. Renders a star + accent ring so the
+   * user can see at a glance where the chain started from. */
+  isChainRoot?: boolean
+  /** Cache-wide connectivity counts for the small "→3 ←2 ⊸1" badge so the
+   * user sees hub-ness at a glance without tracing edges. Optional —
+   * absent for views that haven't computed it. */
+  connectivity?: { out: number; in: number; related: number }
+  /** View-bound counts (only edges actually rendered in the current view).
+   * Differs from `connectivity` when chain mode hides connections. Used
+   * by the badge tooltip to clarify "X visible / Y total" so the user
+   * understands why the badge shows 5 but only 2 edges are drawn. */
+  visibleConnectivity?: { out: number; in: number; related: number }
 }
 
 function truncate(s: string, n: number): string {
@@ -25,7 +38,7 @@ function truncate(s: string, n: number): string {
 }
 
 function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
-  const { issue, focused } = data
+  const { issue, focused, isChainRoot, connectivity, visibleConnectivity } = data
   const { schema, typeIcons } = useSchemaStore()
   const density = useViewStore((s) => s.density)
   const annotations = useGraphStore((s) => s.graph?.data.annotations ?? [])
@@ -43,7 +56,114 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
   const isVerbose = density === 'verbose'
 
   return (
-    <div className={`issue-node${focused ? ' focused' : ''}`}>
+    <div
+      className={`issue-node${focused ? ' focused' : ''}${isChainRoot ? ' chain-root' : ''}`}
+      style={{
+        // position: relative so absolutely-positioned children (chain-root
+        // star, connectivity badge) anchor to this card.
+        position: 'relative',
+        ...(isChainRoot && {
+          // Outline rather than border so it doesn't shift the layout
+          // dagre calculated.
+          outline: '2px solid var(--accent, #2563eb)',
+          outlineOffset: 2,
+          boxShadow: '0 0 0 4px rgba(37, 99, 235, 0.15)',
+        }),
+      }}
+    >
+      {isChainRoot && (
+        <span
+          title="Chain root — this is the issue you isolated the chain from"
+          aria-label="Chain root"
+          style={{
+            position: 'absolute',
+            top: -8,
+            left: -8,
+            background: 'var(--accent, #2563eb)',
+            color: '#fff',
+            fontSize: 11,
+            lineHeight: 1,
+            padding: '3px 6px',
+            borderRadius: 999,
+            fontWeight: 700,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+          }}
+        >
+          ★
+        </span>
+      )}
+      {connectivity && !isCompact && (connectivity.out > 0 || connectivity.in > 0 || connectivity.related > 0) && (
+        // Connectivity badge — global blocks/blocked-by/related counts so the
+        // user can spot hubs without tracing edges. Hidden in compact density
+        // (cards are too short) and when all counts are zero. Position is
+        // anchored relative to the card so it survives node drag/zoom.
+        <span
+          title={(() => {
+            const v = visibleConnectivity
+            const c = connectivity
+            const hidden =
+              v &&
+              (v.out !== c.out || v.in !== c.in || v.related !== c.related)
+            const base =
+              `Blocks ${c.out} • Blocked by ${c.in}` +
+              (c.related > 0 ? ` • Related ${c.related}` : '')
+            if (!hidden) return base
+            return (
+              base +
+              `\n\nVisible in current view: → ${v!.out} • ← ${v!.in}` +
+              (v!.related > 0 || c.related > 0 ? ` • ↔ ${v!.related}` : '') +
+              `\n(Counts above are cache-wide; some connections are hidden ` +
+              `by chain isolation or filters.)`
+            )
+          })()}
+          style={{
+            position: 'absolute',
+            bottom: 6,
+            right: 6,
+            display: 'inline-flex',
+            gap: 6,
+            alignItems: 'baseline',
+            background: 'var(--bg-elev, rgba(0,0,0,0.35))',
+            color: 'var(--fg)',
+            fontSize: 12,
+            fontWeight: 600,
+            lineHeight: 1,
+            padding: '3px 7px',
+            borderRadius: 5,
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+            pointerEvents: 'none',
+          }}
+        >
+          {/* Glyphs chosen for stronger fill at small sizes:
+                ⇨ U+21E8 Rightwards White Arrow
+                ⇦ U+21E6 Leftwards White Arrow
+                ╍ U+254D Box Drawings Heavy Double Dash Horizontal
+              ⇨/⇦ are paired (same Arrows block, matched weight). The
+              dashed-bar glyph reads as "non-directional connection" and
+              echoes the dashed `related` edge style on the canvas. */}
+          {/* Symbols rendered larger than the surrounding number for at-a-
+              glance shape recognition. Numbers inherit the badge's 12px so
+              they stay legible without dominating the card. */}
+          {connectivity.out > 0 && (
+            <span>
+              <span style={{ fontSize: 18, fontWeight: 800 }} aria-hidden>⇨</span>
+              {connectivity.out}
+            </span>
+          )}
+          {connectivity.in > 0 && (
+            <span>
+              <span style={{ fontSize: 18, fontWeight: 800 }} aria-hidden>⇦</span>
+              {connectivity.in}
+            </span>
+          )}
+          {connectivity.related > 0 && (
+            <span>
+              <span style={{ fontSize: 18, fontWeight: 800 }} aria-hidden>╍</span>
+              {connectivity.related}
+            </span>
+          )}
+        </span>
+      )}
       <Handle type="target" position={Position.Left} />
       <div className="top">
         {typeIcon && (
@@ -104,7 +224,27 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
             <div style={{ width: `${Math.round(progress.ratio * 100)}%` }} />
           </div>
           <div className="progress-label">
-            {progress.done}/{progress.total} · {docs.length === 1 ? docs[0]!.name : `${docs.length} changes`}
+            {progress.done}/{progress.total} ·{' '}
+            {docs.length === 1 ? (
+              docs[0]!.name
+            ) : (
+              // Multi-spec warning: linking one issue to multiple design docs
+              // is rare and usually a smell — typically the issue should be
+              // split, or the docs should be split, or the linkage is wrong.
+              // Make it red so the human reviewer notices and decides.
+              <span
+                style={{ color: 'var(--warn, #f59e0b)', fontWeight: 600 }}
+                title={
+                  `This issue is linked to ${docs.length} design-doc changes (specs):\n` +
+                  docs.map((d) => `  • ${d.name}`).join('\n') +
+                  `\n\nA spec is one delivery batch. An issue spanning multiple specs ` +
+                  `usually means the issue is too large to fit in one batch — split it ` +
+                  `into per-spec sub-issues so each batch has contained scope.`
+                }
+              >
+                ⚠ {docs.length} specs
+              </span>
+            )}
           </div>
         </>
       )}

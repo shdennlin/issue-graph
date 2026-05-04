@@ -16,6 +16,8 @@ function buildUrl(): string {
   const params = new URLSearchParams()
   if (s.activeView !== 'dependency') params.set('view', s.activeView)
   if (s.focusedId) params.set('focus', s.focusedId)
+  if (s.chainRootId) params.set('chain', s.chainRootId)
+  if (s.showRelated) params.set('related', '1')
   if (s.theme !== 'auto') params.set('theme', s.theme)
   if (s.density !== 'default') params.set('density', s.density)
 
@@ -62,6 +64,11 @@ function parseUrl(): void {
 
   const focus = params.get('focus')
   if (focus) set({ focusedId: focus })
+
+  const chain = params.get('chain')
+  if (chain) set({ chainRootId: chain })
+
+  if (params.get('related') === '1') set({ showRelated: true })
 
   const theme = params.get('theme') as ThemeMode | null
   if (theme) set({ theme })

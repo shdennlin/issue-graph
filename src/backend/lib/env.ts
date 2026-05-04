@@ -50,6 +50,15 @@ const ConfigSchema = z.object({
   LOG_LEVEL: strDefault('info'),
   LOG_TO_FILE: z.string().optional().default('false').transform((v) => truthyBool.parse(v)),
 
+  // Server static-serving toggle. Default true (production / docker behavior:
+  // backend serves built dist/ at the root). Dev script sets this to false so
+  // a stale dist/ doesn't shadow the live Vite dev server.
+  SERVE_STATIC: z.string().optional().default('true').transform((v) => truthyBool.parse(v)),
+
+  // Vite dev server port — only consumed by the friendly "use Vite at..."
+  // message shown when SERVE_STATIC is off. Mirrors vite.config.ts's default.
+  VITE_PORT: intDefault(31414),
+
   // Storage
   SQLITE_PATH: strDefault('/app/data/graph.db'),
   REPO_PATH: strDefault('/repo'),
@@ -100,7 +109,6 @@ export function loadConfig(): Config {
   // `docker compose up` (where it's bind-mounted at the same path inside the
   // container). A relative path silently breaks under Docker.
   if (parsed.REPO_PATH && !parsed.REPO_PATH.startsWith('/')) {
-    // eslint-disable-next-line no-console
     console.warn(
       `[issue-graph] REPO_PATH="${parsed.REPO_PATH}" is not absolute. ` +
         `This works for local dev but will break under Docker (bind mounts require absolute paths). ` +

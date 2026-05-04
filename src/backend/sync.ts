@@ -119,7 +119,27 @@ async function doSync(): Promise<SyncResult> {
     writeLabelCache(labels)
     writeDesigndocsCached(designdocs)
     if (workflowStates.length > 0) writeWorkflowStatesCached(workflowStates)
-    if (viewer) writeMeta(VIEWER_KEY, JSON.stringify(viewer))
+
+    // Workspace-change detection (precise — uses Linear's organization.urlKey).
+    // If the freshly-fetched workspace differs from the previously-cached
+    // one, stash both into a meta key the /api/graph route exposes so the
+    // frontend banner can warn the user before they look at issue URLs and
+    // wonder why they don't match.
+    if (viewer?.organization?.urlKey) {
+      const newKey = viewer.organization.urlKey
+      const prevViewer = readViewerCached()
+      const prevKey = prevViewer?.organization?.urlKey
+      if (prevKey && prevKey !== newKey) {
+        writeMeta(
+          'workspace_change_warning',
+          JSON.stringify({ previous: prevKey, current: newKey, detectedAt: Date.now() }),
+        )
+        log.warn({ prevKey, newKey }, 'workspace changed — surfacing warning to UI')
+      }
+      writeMeta(VIEWER_KEY, JSON.stringify(viewer))
+    } else if (viewer) {
+      writeMeta(VIEWER_KEY, JSON.stringify(viewer))
+    }
     writeLastSyncMs(Date.now())
 
     // Daily snapshot (PRD §5.8 — written on first successful sync of the day after configured hour).
@@ -219,11 +239,11 @@ function maybeWriteSnapshot(issues: unknown, labels: unknown, designdocs: unknow
   db.prepare('DELETE FROM snapshot WHERE ts < ?').run(cutoff)
 }
 
-export function readViewerCached(): { id: string; displayName: string; email?: string | null } | null {
+export function readViewerCached(): import('@shared/types.js').Viewer | null {
   const v = readMeta(VIEWER_KEY)
   if (!v) return null
   try {
-    return JSON.parse(v)
+    return JSON.parse(v) as import('@shared/types.js').Viewer
   } catch {
     return null
   }

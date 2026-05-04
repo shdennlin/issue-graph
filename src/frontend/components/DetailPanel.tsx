@@ -32,16 +32,20 @@ export function DetailPanel() {
 
   const issue = focusedId ? graph?.data.issues.find((i) => i.identifier === focusedId) : null
 
+  // Extract identifier to a top-level binding so the effect's dep array
+  // references it directly. Avoids react-hooks/exhaustive-deps complaining
+  // about deriving the dep from `issue?.identifier` inside the deps array.
+  const issueId = issue?.identifier
   useEffect(() => {
     setDescription(null)
-    if (!issue) return
+    if (!issueId) return
     setDescLoading(true)
     api
-      .fetchIssueDetail(issue.identifier)
+      .fetchIssueDetail(issueId)
       .then((res) => setDescription(res.data.description ?? ''))
       .catch(() => setDescription(null))
       .finally(() => setDescLoading(false))
-  }, [issue?.identifier])
+  }, [issueId])
 
   const { width, startResize, resizing } = useResizable({
     storageKey: 'ig-detail-panel-w',
@@ -85,6 +89,27 @@ export function DetailPanel() {
     other.relations.some((r) => r.type === 'blocks' && r.targetIdentifier === issue.identifier),
   )
 
+  // Related links — bidirectional in Linear, so collect from both
+  // directions and dedupe per identifier. Filter to only those present in
+  // cache so we don't show ghost links the user can't click into.
+  const allIssues = graph?.data.issues ?? []
+  const inCache = new Set(allIssues.map((i) => i.identifier))
+  const relatedIds = new Set<string>()
+  for (const r of issue.relations) {
+    if (r.type === 'related' && inCache.has(r.targetIdentifier)) relatedIds.add(r.targetIdentifier)
+  }
+  for (const other of allIssues) {
+    if (other.identifier === issue.identifier) continue
+    for (const r of other.relations) {
+      if (r.type === 'related' && r.targetIdentifier === issue.identifier) {
+        relatedIds.add(other.identifier)
+      }
+    }
+  }
+  const relatedList: NormalizedIssue[] = Array.from(relatedIds)
+    .map((id) => allIssues.find((i) => i.identifier === id))
+    .filter((i): i is NormalizedIssue => i !== undefined)
+
   return (
     <aside
       className={`detail-panel${resizing ? ' is-resizing' : ''}`}
@@ -119,6 +144,30 @@ export function DetailPanel() {
       {docs.length > 0 && (
         <div className="section">
           <h3>Design docs ({docs.length})</h3>
+          {docs.length > 1 && (
+            <div
+              style={{
+                // Body text uses --fg so it inherits the active theme's
+                // foreground (dark on light bg, light on dark bg). The
+                // amber accent lives on the border + ⚠ icon, not the
+                // text itself — using a fixed amber-fg color (the prior
+                // var(--warn-fg) which wasn't defined and fell back to
+                // dark amber) was unreadable on dark backgrounds.
+                color: 'var(--fg)',
+                fontSize: 12,
+                marginBottom: 8,
+                padding: '6px 8px',
+                border: '1px solid var(--warn)',
+                borderRadius: 4,
+                background: 'rgba(245, 158, 11, 0.10)',
+              }}
+            >
+              <span style={{ color: 'var(--warn)', fontWeight: 700, marginRight: 4 }}>⚠</span>
+              This issue spans <strong>{docs.length}</strong> design-doc changes (specs).
+              A spec is one delivery batch — an issue covering multiple specs is usually
+              too large for a single batch. Consider splitting it into per-spec sub-issues.
+            </div>
+          )}
           {docs.map((d) => (
             <details key={d.name} open={docs.length === 1}>
               <summary>
@@ -158,6 +207,28 @@ export function DetailPanel() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {relatedList.length > 0 && (
+        <div className="section">
+          <h3>Related ({relatedList.length})</h3>
+          {/* `related` is bidirectional — no in/out split, just list. The
+              ↔ icon mirrors the dashed-edge style on the canvas + the
+              connectivity-badge ╍ glyph, keeping visual grammar consistent. */}
+          {relatedList.map((r) => (
+            <div key={r.identifier}>
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault()
+                  useViewStore.getState().setFocusedId(r.identifier)
+                }}
+              >
+                ↔ {r.identifier} {r.title}
+              </a>
+            </div>
+          ))}
         </div>
       )}
 

@@ -11,6 +11,8 @@ export interface ViewContext {
   myUserName: string | null
   selection: string[]
   focusedId: string | null
+  chainRootId: string | null
+  showRelated: boolean
   density: Density
   search: string
   // Measured heights from React Flow after first paint, keyed by node id.

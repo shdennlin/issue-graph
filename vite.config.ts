@@ -1,28 +1,48 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath, URL } from 'node:url'
 
-export default defineConfig({
-  root: 'src/frontend',
-  plugins: [react()],
-  resolve: {
-    alias: {
-      '@shared': fileURLToPath(new URL('./src/shared', import.meta.url)),
-      '@frontend': fileURLToPath(new URL('./src/frontend', import.meta.url)),
-    },
-  },
-  server: {
-    port: 31414,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:31415',
-        changeOrigin: false,
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  const backendPort = Number(env.PORT) || 31415
+  let vitePort = Number(env.VITE_PORT) || 31414
+  // Collision guard: if a user sets PORT=31414 in .env without also setting
+  // VITE_PORT, both default-resolve to 31414. The backend grabs the port
+  // first; Vite silently fails to bind, and the browser then hits the
+  // backend's static-fallback (serving stale dist/) instead of the live Vite
+  // dev server — looking like "old data" with no obvious cause. Auto-shift
+  // and warn loudly instead of failing silently.
+  if (vitePort === backendPort) {
+    const next = backendPort === 31415 ? 31414 : backendPort + 1
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[vite.config] VITE_PORT (${vitePort}) collides with backend PORT (${backendPort}). ` +
+        `Falling back to ${next}. Set VITE_PORT explicitly in .env to silence this.`,
+    )
+    vitePort = next
+  }
+  return {
+    root: 'src/frontend',
+    plugins: [react()],
+    resolve: {
+      alias: {
+        '@shared': fileURLToPath(new URL('./src/shared', import.meta.url)),
+        '@frontend': fileURLToPath(new URL('./src/frontend', import.meta.url)),
       },
     },
-  },
-  build: {
-    outDir: '../../dist',
-    emptyOutDir: true,
-    sourcemap: true,
-  },
+    server: {
+      port: vitePort,
+      proxy: {
+        '/api': {
+          target: `http://localhost:${backendPort}`,
+          changeOrigin: false,
+        },
+      },
+    },
+    build: {
+      outDir: '../../dist',
+      emptyOutDir: true,
+      sourcemap: true,
+    },
+  }
 })

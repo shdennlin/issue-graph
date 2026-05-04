@@ -44,6 +44,8 @@ export const api = {
   forceSync: () => http<{ ok: boolean; count: number; durationMs: number }>('/api/sync', { method: 'POST' }),
   resetCache: () =>
     http<{ ok: boolean; cleared: { issues: number; labels: number } }>('/api/reset-cache', { method: 'POST' }),
+  acknowledgeWorkspaceChange: () =>
+    http<{ ok: boolean }>('/api/acknowledge-workspace-change', { method: 'POST' }),
   // Lazy fetch extension: tell backend to also pull Canceled/Completed issues
   // within `days` (max 365). 0 clears. Triggers force-sync when days > 0.
   extendSyncScope: (days: number) =>

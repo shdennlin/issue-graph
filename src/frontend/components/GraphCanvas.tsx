@@ -34,6 +34,11 @@ function CanvasInner() {
   const activeView = useViewStore((s) => s.activeView)
   const filters = useViewStore((s) => s.filters)
   const focusedId = useViewStore((s) => s.focusedId)
+  const chainRootId = useViewStore((s) => s.chainRootId)
+  const showRelated = useViewStore((s) => s.showRelated)
+  const setChainRootId = useViewStore((s) => s.setChainRootId)
+  const layoutBump = useViewStore((s) => s.layoutBump)
+  const bumpLayout = useViewStore((s) => s.bumpLayout)
   const staleDays = useViewStore((s) => s.staleDays)
   const density = useViewStore((s) => s.density)
   const search = useViewStore((s) => s.search)
@@ -71,11 +76,13 @@ function CanvasInner() {
       myUserName,
       selection,
       focusedId,
+      chainRootId,
+      showRelated,
       density,
       search,
       measuredHeights: measuredHeights ?? undefined,
     })
-  }, [graph, schema, activeView, filters, staleDays, focusedId, selection, myUserId, myUserName, density, search, measuredHeights])
+  }, [graph, schema, activeView, filters, staleDays, focusedId, chainRootId, showRelated, selection, myUserId, myUserName, density, search, measuredHeights])
 
   // Local node state so user drags persist between renders within the same
   // layout-equivalent context. Anything that changes node sizes (density) or
@@ -85,7 +92,7 @@ function CanvasInner() {
   // Include `measuredHeights ? 'm' : 'e'` so the post-measure re-layout pass is
   // treated as a sig change — that forces the freshly-laid-out positions in,
   // instead of preserving the pre-measure (overlapping) positions.
-  const layoutSig = `${activeView}|${density}|${measuredHeights ? 'm' : 'e'}`
+  const layoutSig = `${activeView}|${density}|${measuredHeights ? 'm' : 'e'}|${layoutBump}`
   const lastSigRef = useRef(layoutSig)
   useEffect(() => {
     const sigChanged = lastSigRef.current !== layoutSig
@@ -167,11 +174,13 @@ function CanvasInner() {
   }, [built.nodes, activeView, density, measuredHeights])
 
   // Reset measured-heights cache when the layout context changes (view switch,
-  // density change). The next paint will re-measure under the new conditions.
+  // density change, or an explicit layout bump). Clearing forces the measure
+  // effect above to re-run on the next paint, which in turn drives the
+  // unified fitView consumer below to fire (when a fit was requested).
   useEffect(() => {
     measuredSigRef.current = null
     setMeasuredHeights(null)
-  }, [activeView, density])
+  }, [activeView, density, layoutBump])
   // Save viewport snapshot whenever user clicks fit-view, so they can revert.
   // Stored in a ref (not store) — purely UI ephemeral, doesn't affect rendering.
   const lastViewportRef = useRef<Viewport | null>(null)
@@ -186,33 +195,96 @@ function CanvasInner() {
     rf.setViewport(lastViewportRef.current, { duration: 400 })
     setHasSavedViewport(false)
   }, [rf])
-  // Re-fit only on view switch or first non-empty load. Density / filter changes
-  // intentionally do NOT refit — that would yank the user's viewport away from
-  // wherever they were looking. They can hit the "fit view" button in <Controls />
-  // if they want to recenter manually.
+  // Unified fitView pipeline. A "fit request" is a flag set by the producers
+  // below (first load / view switch / layout bump). The consumer fires
+  // rf.fitView() only when measuredHeights actually settles — that's the
+  // signal that dagre's second pass (using real card heights) is done and
+  // positions are final. Replaces three separate setTimeout(80–120ms) hacks
+  // that had to guess when layout finished; on slow machines the timer could
+  // fire too early and frame the wrong region.
+  //
+  // Density / filter changes deliberately don't set the flag — they reset
+  // measuredHeights for re-measurement, but no fitView fires.
+  const pendingFitViewRef = useRef<{ padding: number; preserveFocus?: boolean } | null>(null)
+  useEffect(() => {
+    if (!pendingFitViewRef.current) return
+    if (!measuredHeights) return  // wait until layout has settled
+    const { padding, preserveFocus } = pendingFitViewRef.current
+    pendingFitViewRef.current = null
+    // Re-layout flow: if a node is focused, recenter on it instead of
+    // framing the whole graph. After dagre re-runs, the focused issue may
+    // have moved across the canvas — fitView would yank the camera to
+    // wherever the new bounding box happens to be, losing the user's
+    // visual anchor. setCenter on the focused node keeps "what I was
+    // looking at" fixed while everything around it reflows.
+    if (preserveFocus && focusedId) {
+      const node = nodes.find((n) => n.id === focusedId)
+      if (node?.position) {
+        const w = (node.width ?? 320) as number
+        const h = (node.height ?? 110) as number
+        rf.setCenter(node.position.x + w / 2, node.position.y + h / 2, {
+          zoom: rf.getZoom(),
+          duration: 600,
+        })
+        return
+      }
+    }
+    rf.fitView({ duration: 600, padding, minZoom: 0.8 })
+  }, [measuredHeights, rf, focusedId, nodes])
+
+  // Producer 1: first non-empty load.
   const hasFitOnceRef = useRef(false)
   useEffect(() => {
     if (nodes.length === 0) return
-    const isFirstLoad = !hasFitOnceRef.current
+    if (hasFitOnceRef.current) return
     hasFitOnceRef.current = true
-    if (!isFirstLoad) return  // fitView only on first non-empty load
-    const id = window.setTimeout(() => {
-      // minZoom caps how far fitView is allowed to zoom out, so cards stay
-      // readable even with many nodes. User can still zoom out via pinch /
-      // <Controls /> after the initial fit.
-      rf.fitView({ duration: 600, padding: 0.1, minZoom: 0.8 })
-    }, 80)
-    return () => window.clearTimeout(id)
-  }, [nodes.length, rf])
-  // Separate effect for view-switch refits — bypasses the "first load" gate.
+    pendingFitViewRef.current = { padding: 0.1 }
+  }, [nodes.length])
+
+  // Producer 2: view switch (e.g. dependency → mix).
   useEffect(() => {
     if (nodes.length === 0) return
-    const id = window.setTimeout(() => {
-      rf.fitView({ duration: 600, padding: 0.1, minZoom: 0.8 })
-    }, 80)
-    return () => window.clearTimeout(id)
+    pendingFitViewRef.current = { padding: 0.1 }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView])
+
+  // Producer 3: explicit layout bump (chain auto-layout, chain clear, manual
+  // re-layout button, 'r' shortcut). Padding is slightly looser since chain
+  // views are usually small graphs and look nicer with more breathing room.
+  // preserveFocus: re-layout shouldn't make the user lose their place — if
+  // a node was focused, the consumer recenters on it instead of fitView.
+  const lastLayoutBumpRef = useRef(layoutBump)
+  useEffect(() => {
+    if (lastLayoutBumpRef.current === layoutBump) return
+    lastLayoutBumpRef.current = layoutBump
+    if (nodes.length === 0) return
+    pendingFitViewRef.current = { padding: 0.15, preserveFocus: true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layoutBump])
+
+  // Auto-bump layout when chain isolation is *cleared* (chainRootId goes
+  // non-null → null). Without this, exiting chain mode keeps the chain
+  // members' tightly-packed positions and the previously-hidden nodes get
+  // fresh dagre positions inserted around them — they overlap. We don't bump
+  // when entering chain mode: plain "Isolate chain" deliberately preserves
+  // positions ("Isolate chain (auto-layout)" is the entry path that wants
+  // a fresh layout, and it bumps explicitly in the context-menu handler).
+  const prevChainRef = useRef<string | null>(chainRootId)
+  useEffect(() => {
+    const wasSet = prevChainRef.current !== null
+    const isCleared = chainRootId === null
+    prevChainRef.current = chainRootId
+    if (wasSet && isCleared) {
+      bumpLayout()
+    }
+  }, [chainRootId, bumpLayout])
+
+  // Manual re-layout button handler. Bumps layoutBump → measured cache
+  // clears → dagre re-runs from scratch (ignores user-dragged positions) →
+  // pendingFitViewRef set → measured re-fires → camera follows.
+  const manualRelayout = useCallback(() => {
+    bumpLayout()
+  }, [bumpLayout])
 
   // Intentionally no auto-center on focus — selecting a node should just open
   // the detail panel without yanking the viewport. Users can hit fit-view if
@@ -224,17 +296,38 @@ function CanvasInner() {
   //   - Edge clicked → active edge = that one, active nodes = its endpoints.
   //   - Node clicked → active node = that one + neighbors, active edges = all
   //     edges touching it.
+  // Hover state lives in component memory (ephemeral, no persistence). It
+  // takes priority over the click-pinned highlight and over focusedId so the
+  // user gets instant feedback while moving the mouse without losing the
+  // pinned/focused state when they leave.
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null)
+
+  // Effective highlight target — priority order:
+  //   1. hovered edge / node (instant, ephemeral)
+  //   2. click-pinned highlight (sticky until pane click or another click)
+  //   3. focusedId (sticky from selection — auto-dim non-neighbors)
+  // Resolves to a single node OR edge id; the same set-builder below handles
+  // both cases.
+  const effectiveEdgeId = hoveredEdgeId ?? highlightedEdgeId
+  const effectiveNodeId = hoveredNodeId ?? highlightedNodeId ?? focusedId
+
   const highlight = useMemo(() => {
-    if (highlightedEdgeId) {
-      const e = built.edges.find((x) => x.id === highlightedEdgeId)
+    if (effectiveEdgeId) {
+      const e = built.edges.find((x) => x.id === effectiveEdgeId)
       if (!e) return null
       return { nodes: new Set<string>([e.source, e.target]), edges: new Set<string>([e.id]) }
     }
-    if (highlightedNodeId) {
-      const ns = new Set<string>([highlightedNodeId])
+    if (effectiveNodeId) {
+      // Node may not exist in the current view (e.g. focused issue filtered
+      // out). Skip dimming in that case — better than fading the entire graph.
+      const exists = built.edges.some((e) => e.source === effectiveNodeId || e.target === effectiveNodeId)
+        || built.nodes.some((n) => n.id === effectiveNodeId)
+      if (!exists) return null
+      const ns = new Set<string>([effectiveNodeId])
       const es = new Set<string>()
       for (const e of built.edges) {
-        if (e.source === highlightedNodeId || e.target === highlightedNodeId) {
+        if (e.source === effectiveNodeId || e.target === effectiveNodeId) {
           es.add(e.id)
           ns.add(e.source)
           ns.add(e.target)
@@ -243,7 +336,7 @@ function CanvasInner() {
       return { nodes: ns, edges: es }
     }
     return null
-  }, [highlightedEdgeId, highlightedNodeId, built.edges])
+  }, [effectiveEdgeId, effectiveNodeId, built.edges, built.nodes])
 
   const displayNodes = useMemo(() => {
     if (!highlight) return nodes
@@ -280,7 +373,16 @@ function CanvasInner() {
     }
   }
 
+  // Edge-click pin (sticky highlight) is only useful on touch devices —
+  // there's no hover, so tap is the only way to highlight an edge. On
+  // desktop with a real pointer, hovering already drives the highlight,
+  // and a click here only creates accidental "I clicked somewhere and the
+  // graph dimmed" surprises. Disable click-pin when hover is supported.
   const onEdgeClick: EdgeMouseHandler = (event, edge) => {
+    if (typeof window !== 'undefined' && window.matchMedia('(hover: hover)').matches) {
+      // Desktop / mouse — hover-driven highlight is enough; ignore the click.
+      return
+    }
     event.stopPropagation()
     if (highlightedNodeId) setHighlightedNodeId(null)
     setHighlightedEdgeId(highlightedEdgeId === edge.id ? null : edge.id)
@@ -290,6 +392,22 @@ function CanvasInner() {
     if (node.type !== 'issue') return
     const issue = (node.data as any)?.issue
     if (issue?.url) window.open(issue.url, '_blank', 'noreferrer')
+  }
+
+  // Hover handlers — drive the dim-others-fade-this effect for fast scanning.
+  // We only set hover state for issue nodes (not bucket containers) since the
+  // dimming logic special-cases container types to stay opaque anyway.
+  const onNodeMouseEnter: NodeMouseHandler = (_e, node) => {
+    if (node.type === 'issue') setHoveredNodeId(node.id)
+  }
+  const onNodeMouseLeave: NodeMouseHandler = () => {
+    setHoveredNodeId(null)
+  }
+  const onEdgeMouseEnter: EdgeMouseHandler = (_e, edge) => {
+    setHoveredEdgeId(edge.id)
+  }
+  const onEdgeMouseLeave: EdgeMouseHandler = () => {
+    setHoveredEdgeId(null)
   }
 
   const onPaneClick = () => {
@@ -308,6 +426,30 @@ function CanvasInner() {
   return (
     <div className="canvas" ref={rfRef} style={{ position: 'relative' }}>
       <InlineSearch />
+      {chainRootId && activeView === 'dependency' && built.nodes.length === 0 && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 5,
+            padding: '14px 18px',
+            background: 'var(--bg-elevated, #fff)',
+            border: '1px solid var(--border, #d0d7de)',
+            borderRadius: 8,
+            fontSize: 'var(--fs-meta)',
+            color: 'var(--fg)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            alignItems: 'center',
+          }}
+        >
+          <div>Chain root <strong>{chainRootId}</strong> not found in current data.</div>
+          <button onClick={() => setChainRootId(null)}>Clear chain</button>
+        </div>
+      )}
       <ReactFlow
         // Force a clean RF instance only on view change (different parentNode
         // tree). Density change doesn't change the tree, so we keep the same
@@ -320,6 +462,10 @@ function CanvasInner() {
         onNodeClick={onNodeClick}
         onNodeDoubleClick={onNodeDoubleClick}
         onEdgeClick={onEdgeClick}
+        onNodeMouseEnter={onNodeMouseEnter}
+        onNodeMouseLeave={onNodeMouseLeave}
+        onEdgeMouseEnter={onEdgeMouseEnter}
+        onEdgeMouseLeave={onEdgeMouseLeave}
         onPaneClick={onPaneClick}
         onNodeContextMenu={onNodeContextMenu}
         fitView
@@ -339,10 +485,14 @@ function CanvasInner() {
           type: 'smoothstep',
           style: { stroke: 'var(--edge)', strokeWidth: 1.8 },
           markerEnd: {
+            // Larger arrowhead so direction is readable at typical zoom
+            // levels — the line itself stays the same weight (strokeWidth
+            // unchanged above). 36×36 is roughly Linear's chip height,
+            // legible without dominating the card visually.
             type: 'arrowclosed' as any,
             color: 'var(--edge)',
-            width: 22,
-            height: 22,
+            width: 36,
+            height: 36,
           },
         }}
       >
@@ -357,6 +507,17 @@ function CanvasInner() {
               ↶
             </ControlButton>
           )}
+          <ControlButton
+            onClick={manualRelayout}
+            disabled={nodes.length === 0}
+            title={
+              nodes.length === 0
+                ? 'Re-layout — no nodes to lay out (waiting for graph data)'
+                : 'Re-layout (shortcut: Shift+R) — re-run dagre from scratch and refit. Discards user-dragged positions.'
+            }
+          >
+            ⤴
+          </ControlButton>
         </Controls>
         <Panel position="bottom-left" style={{ marginLeft: 50, fontSize: 'var(--fs-meta)', color: 'var(--fg-muted)' }}>
           {hasSavedViewport && '↶ revert available'}

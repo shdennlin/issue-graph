@@ -68,7 +68,12 @@ export const ISSUE_DETAIL_QUERY = /* GraphQL */ `
 
 export const VIEWER_QUERY = /* GraphQL */ `
   query Viewer {
-    viewer { id displayName email }
+    viewer {
+      id
+      displayName
+      email
+      organization { name urlKey }
+    }
   }
 `
 

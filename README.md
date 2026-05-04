@@ -44,6 +44,9 @@ Everything else has a sane default. See `.env.example` for the full list.
 
 If your team writes design docs / RFCs / change proposals as markdown files alongside your code — common in **Spec-Driven Development (SDD)** workflows — `issue-graph` can read them and show **per-issue progress bars** on the graph (e.g. `4/9 tasks done`). Currently only the **[Spectra](https://spectra.5xcamp.us/) / [OpenSpec](https://openspec.dev/)** layout is supported — proposals at `openspec/changes/<name>/proposal.md` with a `tasks.md` containing `- [ ]` / `- [x]` checkboxes.
 
+> [!NOTE]
+> **What this tool means by "spec"** — a *change proposal* / *one delivery batch*: the design + tasks + scope of a single shipping unit (typically 1–3 weeks). This is the modern, AI-assisted SDD framing used by [Spectra](https://spectra.5xcamp.us/), [OpenSpec](https://openspec.dev/), and [GitHub Spec Kit](https://github.com/github/spec-kit) — distinct from longer-lived "design as decision record" specs ([ADRs](https://adr.github.io/), Python PEPs, IETF RFCs) that span many iterations. The graph's multi-spec warning ("⚠ N specs" on a card) assumes this batch-oriented framing.
+
 ![Design-doc view — only issues with linked proposals, each showing a per-issue progress bar derived from the proposal's tasks.md](docs/screenshots/designdoc.png)
 
 #### 1. Point at your repo
@@ -171,10 +174,21 @@ Share a link in chat — your teammate sees the same view.
 
 ## Keyboard
 
+Press `?` in the app for the full cheat sheet. Highlights:
+
+- `Cmd/Ctrl + F` — find on canvas; `Enter` jumps to next match and returns keyboard focus to the canvas
+- `Cmd/Ctrl + Shift + F` — focus the toolbar filter search
+- `c` / `Shift + C` — isolate chain on focused issue (preserve / auto-layout)
+- `r` — toggle Related-edges overlay
+- `Shift + R` — re-layout (re-run dagre, recenters on focused issue)
+- `Esc` — peel one layer: Find → context menu → focused issue → chain isolation
 - `Cmd/Ctrl + click` on a node — multi-select
 - `Cmd/Ctrl + Shift + S` — screenshot the current canvas as PNG
 - Right-click on a node — context menu
 - Double-click a node — open in Linear
+
+> [!NOTE]
+> **Desktop-first.** Hover-highlight and the keyboard shortcuts above assume a real keyboard + pointer. On touch devices the basics still work (click to focus / pin, pinch to zoom, drag to pan, the toolbar / detail panel) but the fast hover-to-scan flow doesn't translate.
 
 ## Development
 
