@@ -7,20 +7,31 @@
 
 import type { NormalizedIssue } from '@shared/types.js'
 
-export function computeChain(issues: NormalizedIssue[], rootId: string): Set<string> {
-  const result = new Set<string>()
+export interface ChainResult {
+  /** Identifiers of all issues in the connected component (incl. root). */
+  members: Set<string>
+  /** Identifiers referenced via `blocks` from chain members but NOT present
+   * in the issue set — typically older Done/Canceled issues pruned by the
+   * default `active+recent` backend scope. UI uses this count to offer a
+   * "load older history" prompt. */
+  dangling: Set<string>
+}
+
+export function computeChain(issues: NormalizedIssue[], rootId: string): ChainResult {
+  const members = new Set<string>()
+  const dangling = new Set<string>()
   const byId = new Map<string, NormalizedIssue>()
   for (const i of issues) byId.set(i.identifier, i)
-  if (!byId.has(rootId)) return result
+  if (!byId.has(rootId)) return { members, dangling }
 
   // Forward: i.relations[type=blocks].targetIdentifier (i blocks target).
   // Reverse: build the inverse so we can walk "blocked by" upstream too.
+  // Only links between cached issues go into reverse; dangling refs are
+  // tracked separately so the UI can offer to extend the cache window.
   const reverse = new Map<string, string[]>()
   for (const i of issues) {
     for (const r of i.relations) {
       if (r.type !== 'blocks') continue
-      // Only add to reverse if both endpoints exist in the issue set;
-      // dangling references from cache shouldn't produce ghost neighbors.
       if (!byId.has(r.targetIdentifier)) continue
       const list = reverse.get(r.targetIdentifier) ?? []
       list.push(i.identifier)
@@ -29,27 +40,32 @@ export function computeChain(issues: NormalizedIssue[], rootId: string): Set<str
   }
 
   const queue: string[] = [rootId]
-  result.add(rootId)
+  members.add(rootId)
   while (queue.length > 0) {
     const id = queue.shift()!
     const node = byId.get(id)
     if (node) {
       for (const r of node.relations) {
         if (r.type !== 'blocks') continue
-        if (!byId.has(r.targetIdentifier)) continue
-        if (!result.has(r.targetIdentifier)) {
-          result.add(r.targetIdentifier)
+        if (!byId.has(r.targetIdentifier)) {
+          // Reference points outside cache — typically an older Done blocker
+          // pruned by the default `active+recent` backend scope.
+          dangling.add(r.targetIdentifier)
+          continue
+        }
+        if (!members.has(r.targetIdentifier)) {
+          members.add(r.targetIdentifier)
           queue.push(r.targetIdentifier)
         }
       }
     }
     for (const upstream of reverse.get(id) ?? []) {
-      if (!result.has(upstream)) {
-        result.add(upstream)
+      if (!members.has(upstream)) {
+        members.add(upstream)
         queue.push(upstream)
       }
     }
   }
 
-  return result
+  return { members, dangling }
 }
