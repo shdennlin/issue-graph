@@ -17,6 +17,7 @@ import { snapshotRoutes } from './routes/snapshots.js'
 import { exportRoutes } from './routes/exportRoutes.js'
 import { coverageRoutes } from './routes/coverage.js'
 import { eventsRoutes } from './routes/events.js'
+import { workspaceRoutes } from './routes/workspaces.js'
 import { startDesignDocWatcher } from './designdoc/watcher.js'
 
 function findStaticRoot(): string | null {
@@ -48,6 +49,7 @@ export function createApp(): Hono {
   app.route('/', exportRoutes)
   app.route('/', coverageRoutes)
   app.route('/', eventsRoutes)
+  app.route('/', workspaceRoutes)
 
   // File watcher for design-doc files. Pushes 'designdoc-changed' events to
   // SSE clients on tasks.md / proposal.md edits. Idempotent — calling

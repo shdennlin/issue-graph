@@ -20,6 +20,8 @@ export function getBackend(): BackendAdapter {
   }
 }
 
-export function resetBackendForTests(): void {
+export function resetBackendCache(): void {
   cached = null
 }
+
+export const resetBackendForTests = resetBackendCache

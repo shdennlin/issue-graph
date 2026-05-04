@@ -14,6 +14,7 @@ data/
 .env.*.local
 !.env.example
 .envrc
+docker-compose.override.yml
 
 # Logs
 *.log

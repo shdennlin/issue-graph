@@ -1,0 +1,20 @@
+# Copy this file to docker-compose.override.yml when workspace profiles use
+# different WORKSPACE_<ID>_REPO_PATH values and you want design-doc scanning
+# to work for each one under Docker.
+#
+# Compose automatically merges docker-compose.override.yml with
+# docker-compose.yml. Keep paths absolute so the same REPO_PATH value works
+# inside and outside the container.
+
+services:
+  app:
+    volumes:
+      # Keep the base data volume from docker-compose.yml.
+      - ./data:/app/data
+
+      # Mount each profile repo at the same absolute path used in .env.
+      # Example .env:
+      # WORKSPACE_ONELEGION_REPO_PATH=/Users/you/workspace/onelegion
+      # WORKSPACE_CLIENT_A_REPO_PATH=/Users/you/workspace/client-a
+      - /Users/you/workspace/proj-A:/Users/you/workspace/proj-A:ro
+      - /Users/you/workspace/proj-B:/Users/you/workspace/proj-B:ro

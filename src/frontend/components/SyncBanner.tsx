@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { api } from '../lib/api'
+import type { WorkspaceListResponse } from '../lib/api'
 
 function colorClass(ageMinutes: number): string {
   if (ageMinutes < 5) return 'stale-ok'
@@ -25,7 +26,8 @@ export function SyncBanner() {
   const reloadGraph = useGraphStore((s) => s.load)
   const setSyncHistoryOpen = useViewStore((s) => s.setSyncHistoryOpen)
   const setSettingsOpen = useViewStore((s) => s.setSettingsOpen)
-  const [tick, setTick] = useState(0)
+  const [workspaces, setWorkspaces] = useState<WorkspaceListResponse | null>(null)
+  const [switchingWorkspace, setSwitchingWorkspace] = useState(false)
   const warning = graph?.workspaceWarning ?? null
 
   const dismissWarning = async () => {
@@ -34,15 +36,55 @@ export function SyncBanner() {
   }
 
   useEffect(() => {
-    const id = window.setInterval(() => setTick((t) => t + 1), 30_000)
-    return () => window.clearInterval(id)
+    api.fetchWorkspaces().then(setWorkspaces).catch(() => setWorkspaces(null))
   }, [])
 
   const last = graph?.fetchedAt ?? 0
   const age = last ? Math.floor((Date.now() - last) / 60_000) : Infinity
+  const lastSyncText = `Last sync: ${graph === null ? 'loading…' : isFinite(age) ? format(age) : 'never'}${
+    graph?.stale ? ' (stale)' : ''
+  }`
+
+  const switchWorkspace = async (id: string) => {
+    if (!id || id === workspaces?.active?.id) return
+    setSwitchingWorkspace(true)
+    try {
+      await api.switchWorkspace(id)
+      window.location.reload()
+    } catch (err) {
+      setSwitchingWorkspace(false)
+      alert(err instanceof Error ? err.message : String(err))
+    }
+  }
 
   return (
     <>
+      {switchingWorkspace && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            background: 'rgba(0, 0, 0, 0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--bg-elev, #fff)',
+              color: 'var(--fg)',
+              padding: '20px 24px',
+              borderRadius: 8,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+              fontWeight: 600,
+            }}
+          >
+            Switching workspace…
+          </div>
+        </div>
+      )}
       {warning && (
         <div
           style={{
@@ -84,24 +126,40 @@ export function SyncBanner() {
       )}
     <div className="banner">
       <div className="left">
-        <span className="pill" title="Click for sync history" onClick={() => setSyncHistoryOpen(true)} style={{ cursor: 'pointer' }}>
-          {graph?.instanceLabel ? `🟢 ${graph.instanceLabel}` : '🟢 issue-graph'}
-        </span>
-        <span
-          className={isFinite(age) ? colorClass(age) : 'stale-bad'}
-          onClick={() => setSyncHistoryOpen(true)}
-          style={{ cursor: 'pointer' }}
-          title="Click for sync history"
-        >
-          {`Last sync: ${graph === null ? 'loading…' : isFinite(age) ? format(age) : 'never'}`}
-          {graph?.stale && ' (stale)'}
-        </span>
+        {workspaces && !workspaces.legacyMode && workspaces.profiles.length > 0 ? (
+          <label className="workspace-select" title="Active Linear workspace profile">
+            <span className="status-dot" aria-hidden />
+            <span className="workspace-select-label">{workspaces.active?.name ?? graph?.instanceLabel ?? 'issue-graph'}</span>
+            <select
+              value={workspaces.active?.id ?? ''}
+              onChange={(e) => switchWorkspace(e.target.value)}
+              disabled={switchingWorkspace || syncing || status === 'loading'}
+              aria-label="Active Linear workspace profile"
+            >
+              {workspaces.profiles.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </select>
+            <span className="select-chevron" aria-hidden>▾</span>
+          </label>
+        ) : (
+          <span className="pill">
+            <span className="status-dot" aria-hidden /> {graph?.instanceLabel ?? 'issue-graph'}
+          </span>
+        )}
       </div>
       <div className="right">
+        <span
+          className={`last-sync-link ${isFinite(age) ? colorClass(age) : 'stale-bad'}`}
+          onClick={() => setSyncHistoryOpen(true)}
+          title="Click for sync history"
+        >
+          {lastSyncText}
+        </span>
         <span style={{ color: 'var(--fg-muted)', fontSize: 12 }}>
           {graph?.data.issues.length ?? 0} issues · {graph?.data.designdocs?.length ?? 0} docs
-          <span aria-hidden> · </span>
-          <span title="tick">{tick}</span>
         </span>
         <button
           onClick={forceSync}
