@@ -50,6 +50,11 @@ export interface ViewState {
   syncHistoryOpen: boolean
   coverageOpen: boolean
   shortcutsOpen: boolean
+  // When true, dependency view also draws `related` relations as dashed
+  // edges (in addition to the always-on `blocks` edges). Off by default so
+  // the dependency view stays focused on the dependency signal — turn on
+  // when you want the wider context of "what's related but not blocking".
+  showRelated: boolean
   selection: string[] // multi-select identifiers
   highlightedEdgeId: string | null // when set, the edge + its endpoints stay opaque, others dim
   highlightedNodeId: string | null // when set, the node + its connected edges/neighbors stay opaque
@@ -81,6 +86,7 @@ export interface ViewState {
   setSyncHistoryOpen: (b: boolean) => void
   setCoverageOpen: (b: boolean) => void
   setShortcutsOpen: (b: boolean) => void
+  setShowRelated: (b: boolean) => void
   setSelection: (s: string[]) => void
   toggleSelection: (id: string) => void
   clearSelection: () => void
@@ -137,6 +143,7 @@ export const useViewStore = create<ViewState>((set) => ({
   syncHistoryOpen: false,
   coverageOpen: false,
   shortcutsOpen: false,
+  showRelated: false,
   selection: [],
   highlightedEdgeId: null,
   highlightedNodeId: null,
@@ -196,6 +203,7 @@ export const useViewStore = create<ViewState>((set) => ({
   setSyncHistoryOpen: (b) => set({ syncHistoryOpen: b }),
   setCoverageOpen: (b) => set({ coverageOpen: b }),
   setShortcutsOpen: (b) => set({ shortcutsOpen: b }),
+  setShowRelated: (b) => set({ showRelated: b }),
   setSelection: (s) => set({ selection: s }),
   toggleSelection: (id) => set((s) => ({ selection: toggle(s.selection, id) })),
   clearSelection: () => set({ selection: [] }),

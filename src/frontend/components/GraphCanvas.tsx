@@ -35,6 +35,7 @@ function CanvasInner() {
   const filters = useViewStore((s) => s.filters)
   const focusedId = useViewStore((s) => s.focusedId)
   const chainRootId = useViewStore((s) => s.chainRootId)
+  const showRelated = useViewStore((s) => s.showRelated)
   const setChainRootId = useViewStore((s) => s.setChainRootId)
   const layoutBump = useViewStore((s) => s.layoutBump)
   const bumpLayout = useViewStore((s) => s.bumpLayout)
@@ -76,11 +77,12 @@ function CanvasInner() {
       selection,
       focusedId,
       chainRootId,
+      showRelated,
       density,
       search,
       measuredHeights: measuredHeights ?? undefined,
     })
-  }, [graph, schema, activeView, filters, staleDays, focusedId, chainRootId, selection, myUserId, myUserName, density, search, measuredHeights])
+  }, [graph, schema, activeView, filters, staleDays, focusedId, chainRootId, showRelated, selection, myUserId, myUserName, density, search, measuredHeights])
 
   // Local node state so user drags persist between renders within the same
   // layout-equivalent context. Anything that changes node sizes (density) or
@@ -294,17 +296,38 @@ function CanvasInner() {
   //   - Edge clicked → active edge = that one, active nodes = its endpoints.
   //   - Node clicked → active node = that one + neighbors, active edges = all
   //     edges touching it.
+  // Hover state lives in component memory (ephemeral, no persistence). It
+  // takes priority over the click-pinned highlight and over focusedId so the
+  // user gets instant feedback while moving the mouse without losing the
+  // pinned/focused state when they leave.
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null)
+
+  // Effective highlight target — priority order:
+  //   1. hovered edge / node (instant, ephemeral)
+  //   2. click-pinned highlight (sticky until pane click or another click)
+  //   3. focusedId (sticky from selection — auto-dim non-neighbors)
+  // Resolves to a single node OR edge id; the same set-builder below handles
+  // both cases.
+  const effectiveEdgeId = hoveredEdgeId ?? highlightedEdgeId
+  const effectiveNodeId = hoveredNodeId ?? highlightedNodeId ?? focusedId
+
   const highlight = useMemo(() => {
-    if (highlightedEdgeId) {
-      const e = built.edges.find((x) => x.id === highlightedEdgeId)
+    if (effectiveEdgeId) {
+      const e = built.edges.find((x) => x.id === effectiveEdgeId)
       if (!e) return null
       return { nodes: new Set<string>([e.source, e.target]), edges: new Set<string>([e.id]) }
     }
-    if (highlightedNodeId) {
-      const ns = new Set<string>([highlightedNodeId])
+    if (effectiveNodeId) {
+      // Node may not exist in the current view (e.g. focused issue filtered
+      // out). Skip dimming in that case — better than fading the entire graph.
+      const exists = built.edges.some((e) => e.source === effectiveNodeId || e.target === effectiveNodeId)
+        || built.nodes.some((n) => n.id === effectiveNodeId)
+      if (!exists) return null
+      const ns = new Set<string>([effectiveNodeId])
       const es = new Set<string>()
       for (const e of built.edges) {
-        if (e.source === highlightedNodeId || e.target === highlightedNodeId) {
+        if (e.source === effectiveNodeId || e.target === effectiveNodeId) {
           es.add(e.id)
           ns.add(e.source)
           ns.add(e.target)
@@ -313,7 +336,7 @@ function CanvasInner() {
       return { nodes: ns, edges: es }
     }
     return null
-  }, [highlightedEdgeId, highlightedNodeId, built.edges])
+  }, [effectiveEdgeId, effectiveNodeId, built.edges, built.nodes])
 
   const displayNodes = useMemo(() => {
     if (!highlight) return nodes
@@ -360,6 +383,22 @@ function CanvasInner() {
     if (node.type !== 'issue') return
     const issue = (node.data as any)?.issue
     if (issue?.url) window.open(issue.url, '_blank', 'noreferrer')
+  }
+
+  // Hover handlers — drive the dim-others-fade-this effect for fast scanning.
+  // We only set hover state for issue nodes (not bucket containers) since the
+  // dimming logic special-cases container types to stay opaque anyway.
+  const onNodeMouseEnter: NodeMouseHandler = (_e, node) => {
+    if (node.type === 'issue') setHoveredNodeId(node.id)
+  }
+  const onNodeMouseLeave: NodeMouseHandler = () => {
+    setHoveredNodeId(null)
+  }
+  const onEdgeMouseEnter: EdgeMouseHandler = (_e, edge) => {
+    setHoveredEdgeId(edge.id)
+  }
+  const onEdgeMouseLeave: EdgeMouseHandler = () => {
+    setHoveredEdgeId(null)
   }
 
   const onPaneClick = () => {
@@ -414,6 +453,10 @@ function CanvasInner() {
         onNodeClick={onNodeClick}
         onNodeDoubleClick={onNodeDoubleClick}
         onEdgeClick={onEdgeClick}
+        onNodeMouseEnter={onNodeMouseEnter}
+        onNodeMouseLeave={onNodeMouseLeave}
+        onEdgeMouseEnter={onEdgeMouseEnter}
+        onEdgeMouseLeave={onEdgeMouseLeave}
         onPaneClick={onPaneClick}
         onNodeContextMenu={onNodeContextMenu}
         fitView
@@ -433,10 +476,14 @@ function CanvasInner() {
           type: 'smoothstep',
           style: { stroke: 'var(--edge)', strokeWidth: 1.8 },
           markerEnd: {
+            // Larger arrowhead so direction is readable at typical zoom
+            // levels — the line itself stays the same weight (strokeWidth
+            // unchanged above). 36×36 is roughly Linear's chip height,
+            // legible without dominating the card visually.
             type: 'arrowclosed' as any,
             color: 'var(--edge)',
-            width: 22,
-            height: 22,
+            width: 36,
+            height: 36,
           },
         }}
       >
@@ -453,7 +500,7 @@ function CanvasInner() {
           )}
           <ControlButton
             onClick={manualRelayout}
-            title="Re-layout (shortcut: r) — re-run dagre from scratch and refit. Discards user-dragged positions."
+            title="Re-layout (shortcut: Shift+R) — re-run dagre from scratch and refit. Discards user-dragged positions."
           >
             ⤴
           </ControlButton>

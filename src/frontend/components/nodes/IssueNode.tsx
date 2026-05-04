@@ -21,6 +21,10 @@ interface IssueNodeData {
    * the root the chain was rooted at. Renders a star + accent ring so the
    * user can see at a glance where the chain started from. */
   isChainRoot?: boolean
+  /** Cache-wide connectivity counts for the small "→3 ←2 ⊸1" badge so the
+   * user sees hub-ness at a glance without tracing edges. Optional —
+   * absent for views that haven't computed it. */
+  connectivity?: { out: number; in: number; related: number }
 }
 
 function truncate(s: string, n: number): string {
@@ -29,7 +33,7 @@ function truncate(s: string, n: number): string {
 }
 
 function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
-  const { issue, focused, isChainRoot } = data
+  const { issue, focused, isChainRoot, connectivity } = data
   const { schema, typeIcons } = useSchemaStore()
   const density = useViewStore((s) => s.density)
   const annotations = useGraphStore((s) => s.graph?.data.annotations ?? [])
@@ -49,19 +53,18 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
   return (
     <div
       className={`issue-node${focused ? ' focused' : ''}${isChainRoot ? ' chain-root' : ''}`}
-      style={
-        isChainRoot
-          ? {
-              // position: relative so the absolutely-positioned chain-root
-              // star (below) anchors to this card. Outline rather than
-              // border so it doesn't shift the layout dagre calculated.
-              position: 'relative',
-              outline: '2px solid var(--accent, #2563eb)',
-              outlineOffset: 2,
-              boxShadow: '0 0 0 4px rgba(37, 99, 235, 0.15)',
-            }
-          : undefined
-      }
+      style={{
+        // position: relative so absolutely-positioned children (chain-root
+        // star, connectivity badge) anchor to this card.
+        position: 'relative',
+        ...(isChainRoot && {
+          // Outline rather than border so it doesn't shift the layout
+          // dagre calculated.
+          outline: '2px solid var(--accent, #2563eb)',
+          outlineOffset: 2,
+          boxShadow: '0 0 0 4px rgba(37, 99, 235, 0.15)',
+        }),
+      }}
     >
       {isChainRoot && (
         <span
@@ -82,6 +85,64 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
           }}
         >
           ★
+        </span>
+      )}
+      {connectivity && !isCompact && (connectivity.out > 0 || connectivity.in > 0 || connectivity.related > 0) && (
+        // Connectivity badge — global blocks/blocked-by/related counts so the
+        // user can spot hubs without tracing edges. Hidden in compact density
+        // (cards are too short) and when all counts are zero. Position is
+        // anchored relative to the card so it survives node drag/zoom.
+        <span
+          title={
+            `Blocks ${connectivity.out} • Blocked by ${connectivity.in}` +
+            (connectivity.related > 0 ? ` • Related ${connectivity.related}` : '')
+          }
+          style={{
+            position: 'absolute',
+            bottom: 6,
+            right: 6,
+            display: 'inline-flex',
+            gap: 6,
+            alignItems: 'baseline',
+            background: 'var(--bg-elev, rgba(0,0,0,0.35))',
+            color: 'var(--fg)',
+            fontSize: 12,
+            fontWeight: 600,
+            lineHeight: 1,
+            padding: '3px 7px',
+            borderRadius: 5,
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+            pointerEvents: 'none',
+          }}
+        >
+          {/* Glyphs chosen for stronger fill at small sizes:
+                ⇨ U+21E8 Rightwards White Arrow
+                ⇦ U+21E6 Leftwards White Arrow
+                ╍ U+254D Box Drawings Heavy Double Dash Horizontal
+              ⇨/⇦ are paired (same Arrows block, matched weight). The
+              dashed-bar glyph reads as "non-directional connection" and
+              echoes the dashed `related` edge style on the canvas. */}
+          {/* Symbols rendered larger than the surrounding number for at-a-
+              glance shape recognition. Numbers inherit the badge's 12px so
+              they stay legible without dominating the card. */}
+          {connectivity.out > 0 && (
+            <span>
+              <span style={{ fontSize: 18, fontWeight: 800 }} aria-hidden>⇨</span>
+              {connectivity.out}
+            </span>
+          )}
+          {connectivity.in > 0 && (
+            <span>
+              <span style={{ fontSize: 18, fontWeight: 800 }} aria-hidden>⇦</span>
+              {connectivity.in}
+            </span>
+          )}
+          {connectivity.related > 0 && (
+            <span>
+              <span style={{ fontSize: 18, fontWeight: 800 }} aria-hidden>╍</span>
+              {connectivity.related}
+            </span>
+          )}
         </span>
       )}
       <Handle type="target" position={Position.Left} />

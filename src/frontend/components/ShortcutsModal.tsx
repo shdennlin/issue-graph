@@ -13,7 +13,7 @@ interface Shortcut {
 
 const SHORTCUTS: Shortcut[] = [
   { keys: ['Cmd', 'F'], description: 'Find on canvas (focus required: click into canvas first)', group: 'Navigation' },
-  { keys: ['Esc'], description: 'Peel one layer: Find → context menu → chain isolation', group: 'Navigation' },
+  { keys: ['Esc'], description: 'Peel one layer: Find → context menu → focused issue → chain isolation', group: 'Navigation' },
   { keys: ['?'], description: 'Show this shortcut cheat sheet', group: 'Navigation' },
 
   { keys: ['Click'], description: 'Focus an issue (opens detail panel)', group: 'Selection' },
@@ -24,7 +24,8 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ['c'], description: 'Isolate chain on focused issue (preserve positions) — dependency view only', group: 'Chain isolation' },
   { keys: ['Shift', 'C'], description: 'Isolate chain (auto-layout — re-runs dagre and refits camera)', group: 'Chain isolation' },
 
-  { keys: ['r'], description: 'Re-layout: re-run dagre from scratch; recenters on focused issue if any', group: 'Layout' },
+  { keys: ['r'], description: 'Toggle Related-edges overlay (dependency view) — dashed gray lines for `related` issue links', group: 'Layout' },
+  { keys: ['Shift', 'R'], description: 'Re-layout: re-run dagre from scratch; recenters on focused issue if any', group: 'Layout' },
 
   { keys: ['Cmd', 'Shift', 'S'], description: 'Save canvas screenshot as PNG', group: 'Other' },
 ]

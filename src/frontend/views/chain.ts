@@ -17,7 +17,19 @@ export interface ChainResult {
   dangling: Set<string>
 }
 
-export function computeChain(issues: NormalizedIssue[], rootId: string): ChainResult {
+export interface ChainOptions {
+  /** When true, additionally include the 1-hop `related` neighbors of any
+   * chain member. Doesn't recurse — we want context, not a full transitive
+   * blow-up over `related` (which is bidirectional and densely connected
+   * in many workspaces). */
+  includeRelatedNeighbors?: boolean
+}
+
+export function computeChain(
+  issues: NormalizedIssue[],
+  rootId: string,
+  opts: ChainOptions = {},
+): ChainResult {
   const members = new Set<string>()
   const dangling = new Set<string>()
   const byId = new Map<string, NormalizedIssue>()
@@ -63,6 +75,23 @@ export function computeChain(issues: NormalizedIssue[], rootId: string): ChainRe
       if (!members.has(upstream)) {
         members.add(upstream)
         queue.push(upstream)
+      }
+    }
+  }
+
+  // 1-hop `related` expansion (opt-in). Done after the blocks BFS so the
+  // dangling set above only counts blocks-dangling — that's what the UI's
+  // "Load full history" button uses, and we don't want related-only
+  // references inflating that count.
+  if (opts.includeRelatedNeighbors) {
+    const blocksMembers = Array.from(members)
+    for (const id of blocksMembers) {
+      const node = byId.get(id)
+      if (!node) continue
+      for (const r of node.relations) {
+        if (r.type !== 'related') continue
+        if (!byId.has(r.targetIdentifier)) continue
+        members.add(r.targetIdentifier)
       }
     }
   }

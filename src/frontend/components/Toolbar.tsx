@@ -26,6 +26,8 @@ export function Toolbar() {
   const clearSelection = useViewStore((s) => s.clearSelection)
   const chainRootId = useViewStore((s) => s.chainRootId)
   const setChainRootId = useViewStore((s) => s.setChainRootId)
+  const showRelated = useViewStore((s) => s.showRelated)
+  const setShowRelated = useViewStore((s) => s.setShowRelated)
   const graph = useGraphStore((s) => s.graph)
   const extendScope = useGraphStore((s) => s.extendScope)
   const syncing = useGraphStore((s) => s.syncing)
@@ -36,9 +38,11 @@ export function Toolbar() {
   // extended the sync window, surface a "Load older history" button.
   const chainStats = useMemo(() => {
     if (!chainRootId || !graph) return null
-    const { members, dangling } = computeChain(graph.data.issues, chainRootId)
+    const { members, dangling } = computeChain(graph.data.issues, chainRootId, {
+      includeRelatedNeighbors: showRelated,
+    })
     return { memberCount: members.size, dangling: dangling.size }
-  }, [chainRootId, graph])
+  }, [chainRootId, graph, showRelated])
   const chainDangling = chainStats && chainStats.dangling > 0 ? chainStats.dangling : null
 
   // Backend's current extended-scope window (0 = default 30-day Done window).
@@ -112,6 +116,25 @@ export function Toolbar() {
           <button onClick={() => setSearch('')} title="Clear search">×</button>
         )}
       </div>
+      {activeView === 'dependency' && (
+        <>
+          <div className="sep" />
+          <div className="group">
+            <button
+              onClick={() => setShowRelated(!showRelated)}
+              className={showRelated ? 'active' : ''}
+              title={
+                showRelated
+                  ? 'Hide related-issue edges (shortcut: r). Currently shown as dashed gray lines.'
+                  : 'Show "related" issue links as dashed edges (shortcut: r).'
+              }
+              aria-pressed={showRelated}
+            >
+              {showRelated ? '⊟ Related' : '⊞ Related'}
+            </button>
+          </div>
+        </>
+      )}
       <div className="sep" />
       <div className="group">
         <span style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-meta)' }}>Density</span>
