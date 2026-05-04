@@ -56,6 +56,7 @@ export function App() {
   }, [refetchIfNewer])
 
   const openInlineSearch = useViewStore((s) => s.openInlineSearch)
+  const setChainRootId = useViewStore((s) => s.setChainRootId)
 
   // Hybrid Cmd+F:
   //   - When the canvas is focused (or the user is hovering it after clicking
@@ -65,6 +66,18 @@ export function App() {
   // Cmd+Shift+S still always screenshots.
   useEffect(() => {
     const onKey = async (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        // Chain isolation is the lowest-priority Esc target: only clear it
+        // when nothing else (modal, inline search, context menu) wants Esc.
+        const s = useViewStore.getState()
+        const modalOpen = s.settingsOpen || s.syncHistoryOpen || s.coverageOpen
+        const inlineSearchOpen = s.inlineSearch.open
+        const contextMenuOpen = !!s.contextMenu
+        if (s.chainRootId && !modalOpen && !inlineSearchOpen && !contextMenuOpen) {
+          setChainRootId(null)
+          return
+        }
+      }
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 's') {
         e.preventDefault()
         const el = document.querySelector('.react-flow') as HTMLElement | null
@@ -92,7 +105,7 @@ export function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [openInlineSearch])
+  }, [openInlineSearch, setChainRootId])
 
   // Onboarding when backend unconfigured AND no cached data.
   if (graph?.authError && (graph?.data.issues.length ?? 0) === 0) {

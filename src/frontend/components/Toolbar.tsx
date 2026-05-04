@@ -19,6 +19,8 @@ export function Toolbar() {
   const toggleFilterPanel = useViewStore((s) => s.toggleFilterPanel)
   const selection = useViewStore((s) => s.selection)
   const clearSelection = useViewStore((s) => s.clearSelection)
+  const chainRootId = useViewStore((s) => s.chainRootId)
+  const setChainRootId = useViewStore((s) => s.setChainRootId)
   const graph = useGraphStore((s) => s.graph)
 
   const exportSelection = () => {
@@ -85,6 +87,16 @@ export function Toolbar() {
           <option value="verbose">Verbose</option>
         </select>
       </div>
+      {chainRootId && (
+        <>
+          <div className="sep" />
+          <div className="group" title="Showing only the dependency chain rooted at this issue">
+            <span style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-meta)' }}>Chain:</span>
+            <span style={{ fontSize: 'var(--fs-meta)', fontWeight: 600 }}>{chainRootId}</span>
+            <button onClick={() => setChainRootId(null)} title="Clear chain isolation (Esc)">×</button>
+          </div>
+        </>
+      )}
       <div style={{ marginLeft: 'auto' }} className="group">
         {selection.length > 0 && (
           <>

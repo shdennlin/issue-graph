@@ -30,6 +30,16 @@ export interface ViewState {
   activeView: ViewId
   filters: Filters
   focusedId: string | null
+  // When set, the dependency view filters to the connected component over
+  // `blocks` edges (both directions, transitive) rooted at this identifier.
+  // Other filters are bypassed while this is active so the chain doesn't
+  // fragment. Ignored by mix/designdoc views.
+  chainRootId: string | null
+  // Monotonic counter — bump to force a fresh dagre layout pass even when
+  // the layout signature (view/density) hasn't changed. Used by
+  // "Isolate chain (re-arrange)" so the new chain lays out cleanly instead
+  // of inheriting whatever positions the user had dragged before.
+  layoutBump: number
   expandedBuckets: string[]
   theme: ThemeMode
   density: Density
@@ -56,6 +66,8 @@ export interface ViewState {
   toggleAssignee: (name: string) => void
   togglePrefix: (token: string, id: string) => void
   setFocusedId: (id: string | null) => void
+  setChainRootId: (id: string | null) => void
+  bumpLayout: () => void
   setTheme: (t: ThemeMode) => void
   setDensity: (d: Density) => void
   setFontSize: (f: FontSize) => void
@@ -104,6 +116,8 @@ export const useViewStore = create<ViewState>((set) => ({
   activeView: 'dependency',
   filters: defaultFilters,
   focusedId: null,
+  chainRootId: null,
+  layoutBump: 0,
   expandedBuckets: [],
   theme: 'auto',
   density: 'default',
@@ -158,6 +172,8 @@ export const useViewStore = create<ViewState>((set) => ({
       }
     }),
   setFocusedId: (id) => set({ focusedId: id }),
+  setChainRootId: (id) => set({ chainRootId: id }),
+  bumpLayout: () => set((s) => ({ layoutBump: s.layoutBump + 1 })),
   setTheme: (t) => set({ theme: t }),
   setDensity: (d) => set({ density: d }),
   setFontSize: (f) => {
@@ -197,5 +213,5 @@ export const useViewStore = create<ViewState>((set) => ({
       }
       return { filterPanelOpen: next }
     }),
-  resetFilters: () => set({ filters: defaultFilters }),
+  resetFilters: () => set({ filters: defaultFilters, chainRootId: null }),
 }))
