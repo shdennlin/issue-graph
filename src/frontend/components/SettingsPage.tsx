@@ -271,12 +271,12 @@ export function SettingsPage() {
 
         <h4>Backend</h4>
         <div style={{ color: 'var(--fg-muted)', fontSize: 12 }}>
-          API key: {(env.linear_api_key_set as boolean) ? '●●●●●●●●●● (set in .env)' : 'not set'}
-          <br />
           Workspace:{' '}
           {data?.viewer?.organization
             ? `${data.viewer.organization.name} (${data.viewer.organization.urlKey})`
             : 'unknown — re-sync to populate'}
+          <br />
+          API key: {(env.linear_api_key_set as boolean) ? '●●●●●●●●●● (set in .env)' : 'not set'}
           <br />
           Team filter: {(env.linear_team_id as string | null) ?? 'all'}
           <br />
