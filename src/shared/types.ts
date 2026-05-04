@@ -72,10 +72,20 @@ export interface NormalizedIssue {
   commentsCount?: number
 }
 
+export interface ViewerOrganization {
+  /** Linear organization display name (e.g. "OneLegion"). */
+  name: string
+  /** URL slug used in linear.app/<urlKey>/issue/... — stable workspace identifier. */
+  urlKey: string
+}
+
 export interface Viewer {
   id: string
   displayName: string
   email?: string | null
+  /** Workspace identity. Optional so legacy cached viewers (pre-1.2) still
+   * deserialize cleanly until the next sync repopulates the field. */
+  organization?: ViewerOrganization | null
 }
 
 export type DesignDocStatus = 'active' | 'parked' | 'archived'
