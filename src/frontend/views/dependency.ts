@@ -69,9 +69,13 @@ export const dependencyView: ViewDefinition = {
             id: `rel:${key}`,
             source: a,
             target: b,
-            // Dashed gray, no arrow — visual signal that this is a weaker,
-            // bidirectional connection vs. the directed `blocks` arrows.
+            // Dashed gray, no arrowhead — visual signal that this is a
+            // weaker, bidirectional connection vs. directed `blocks` arrows.
+            // markerEnd: undefined explicitly overrides the arrowhead set in
+            // GraphCanvas's defaultEdgeOptions; without this the default
+            // arrow leaks through and makes related look directional.
             style: { strokeDasharray: '6 4', stroke: 'var(--fg-muted)', strokeWidth: 1.4, opacity: 0.7 },
+            markerEnd: undefined,
             data: { relationType: 'related' },
           })
         }
