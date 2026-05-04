@@ -21,6 +21,7 @@ const SyncHistoryModal = lazy(() =>
 )
 const CoverageModal = lazy(() => import('./components/CoverageModal').then((m) => ({ default: m.CoverageModal })))
 const SettingsPage = lazy(() => import('./components/SettingsPage').then((m) => ({ default: m.SettingsPage })))
+const ShortcutsModal = lazy(() => import('./components/ShortcutsModal').then((m) => ({ default: m.ShortcutsModal })))
 
 export function App() {
   useTheme()
@@ -36,6 +37,7 @@ export function App() {
   const syncHistoryOpen = useViewStore((s) => s.syncHistoryOpen)
   const coverageOpen = useViewStore((s) => s.coverageOpen)
   const settingsOpen = useViewStore((s) => s.settingsOpen)
+  const shortcutsOpen = useViewStore((s) => s.shortcutsOpen)
 
   useEffect(() => {
     loadGraph().then(() => loadSchema())
@@ -80,7 +82,7 @@ export function App() {
         // chain-clear bail too. Result: Esc did nothing. Now the window
         // handler closes Find directly when its input no longer has focus.
         const s = useViewStore.getState()
-        const modalOpen = s.settingsOpen || s.syncHistoryOpen || s.coverageOpen
+        const modalOpen = s.settingsOpen || s.syncHistoryOpen || s.coverageOpen || s.shortcutsOpen
         if (modalOpen) return
         if (s.inlineSearch.open) {
           s.closeInlineSearch()
@@ -110,6 +112,17 @@ export function App() {
         e.preventDefault()
         setChainRootId(s.focusedId)
         if (e.key === 'C') bumpLayout()
+        return
+      }
+      // '?' — open the keyboard shortcut cheat sheet. Works anywhere except
+      // inside an input. On most layouts '?' is Shift+/ — we accept the
+      // resolved character regardless of which physical keys produced it.
+      if (e.key === '?') {
+        const target = e.target as HTMLElement | null
+        const tag = target?.tagName?.toLowerCase()
+        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        e.preventDefault()
+        useViewStore.getState().setShortcutsOpen(true)
         return
       }
       // 'r' — re-layout. Bumps layoutBump → dagre re-runs from scratch
@@ -186,6 +199,7 @@ export function App() {
         {syncHistoryOpen && <SyncHistoryModal />}
         {coverageOpen && <CoverageModal />}
         {settingsOpen && <SettingsPage />}
+        {shortcutsOpen && <ShortcutsModal />}
       </Suspense>
       <ContextMenu />
     </div>

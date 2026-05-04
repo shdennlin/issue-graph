@@ -19,6 +19,7 @@ export function Toolbar() {
   const setTheme = useViewStore((s) => s.setTheme)
   const setSettingsOpen = useViewStore((s) => s.setSettingsOpen)
   const setCoverageOpen = useViewStore((s) => s.setCoverageOpen)
+  const setShortcutsOpen = useViewStore((s) => s.setShortcutsOpen)
   const filterPanelOpen = useViewStore((s) => s.filterPanelOpen)
   const toggleFilterPanel = useViewStore((s) => s.toggleFilterPanel)
   const selection = useViewStore((s) => s.selection)
@@ -169,6 +170,7 @@ export function Toolbar() {
         </a>
         <button onClick={screenshot} title="Cmd+Shift+S">📷</button>
         <button onClick={() => setCoverageOpen(true)} title="Design-doc coverage report">📊</button>
+        <button onClick={() => setShortcutsOpen(true)} title="Keyboard shortcuts (?)">⌨</button>
         <button
           onClick={() => setTheme(theme === 'dark' ? 'light' : theme === 'light' ? 'auto' : 'dark')}
           title={`Theme: ${theme} (click to cycle)`}
