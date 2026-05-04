@@ -13,7 +13,7 @@ interface Shortcut {
 
 const SHORTCUTS: Shortcut[] = [
   { keys: ['Cmd', 'F'], description: 'Find on canvas (focus required: click into canvas first)', group: 'Navigation' },
-  { keys: ['Esc'], description: 'Peel one layer: Find → context menu → chain isolation', group: 'Navigation' },
+  { keys: ['Esc'], description: 'Peel one layer: Find → context menu → focused issue → chain isolation', group: 'Navigation' },
   { keys: ['?'], description: 'Show this shortcut cheat sheet', group: 'Navigation' },
 
   { keys: ['Click'], description: 'Focus an issue (opens detail panel)', group: 'Selection' },

@@ -70,17 +70,22 @@ export function App() {
   useEffect(() => {
     const onKey = async (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        // Esc peels one layer at a time, in priority order. Modals (Settings
-        // / SyncHistory / Coverage) own Esc fully — they handle dismissal
-        // and we don't peel under them.
+        // Esc peels one layer at a time, in priority order — top-most
+        // dismissable surface first. Modals (Settings / SyncHistory /
+        // Coverage / Shortcuts) own Esc fully and handle their own
+        // dismissal; we don't peel under them.
         //
-        // Otherwise the priority is: Find → context menu → chain. We need
-        // this *window-level* peel because the prior bug was: open Find,
-        // then right-click → Isolate chain. After right-click, focus left
-        // the Find input — so InlineSearch's input-level onKeyDown stopped
-        // firing, and the old chain-clear guard (`!inlineSearchOpen`) made
-        // chain-clear bail too. Result: Esc did nothing. Now the window
-        // handler closes Find directly when its input no longer has focus.
+        //   1. Find on canvas       — closes Find
+        //   2. Context menu         — closes the menu
+        //   3. focusedId            — closes the DetailPanel (focusedId
+        //                              drives DetailPanel visibility, so
+        //                              clearing it is what the user feels)
+        //   4. Chain isolation      — clears chain
+        //
+        // Inserting focusedId before chain matters because users routinely
+        // have both at once: chain isolated, then click an issue to read
+        // its details. Without this, Esc would jump straight to clearing
+        // the chain — yanking them out of context just to close the panel.
         const s = useViewStore.getState()
         const modalOpen = s.settingsOpen || s.syncHistoryOpen || s.coverageOpen || s.shortcutsOpen
         if (modalOpen) return
@@ -90,6 +95,10 @@ export function App() {
         }
         if (s.contextMenu) {
           s.setContextMenu(null)
+          return
+        }
+        if (s.focusedId) {
+          s.setFocusedId(null)
           return
         }
         if (s.chainRootId) {
