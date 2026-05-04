@@ -57,6 +57,22 @@ export function App() {
     return () => window.clearInterval(id)
   }, [refetchIfNewer])
 
+  // Real-time push from the server. Currently emits 'designdoc-changed'
+  // when the file watcher detects edits under REPO_PATH/openspec/. We
+  // refetch the graph silently (always-replace, not the if-newer poller
+  // path — local file edits don't bump fetchedAt) so progress bars +
+  // designdoc lists update without the user pressing refresh.
+  // EventSource auto-reconnects on network blips; one connection per tab.
+  const refetchSilent = useGraphStore((s) => s.refetchSilent)
+  useEffect(() => {
+    const es = new EventSource('/api/events')
+    es.addEventListener('designdoc-changed', () => {
+      refetchSilent()
+    })
+    // hello/ping events are no-ops; just keep the stream alive.
+    return () => es.close()
+  }, [refetchSilent])
+
   const openInlineSearch = useViewStore((s) => s.openInlineSearch)
   const setChainRootId = useViewStore((s) => s.setChainRootId)
   const bumpLayout = useViewStore((s) => s.bumpLayout)

@@ -16,6 +16,8 @@ import { settingsRoutes } from './routes/settings.js'
 import { snapshotRoutes } from './routes/snapshots.js'
 import { exportRoutes } from './routes/exportRoutes.js'
 import { coverageRoutes } from './routes/coverage.js'
+import { eventsRoutes } from './routes/events.js'
+import { startDesignDocWatcher } from './designdoc/watcher.js'
 
 function findStaticRoot(): string | null {
   const candidates = [
@@ -45,6 +47,13 @@ export function createApp(): Hono {
   app.route('/', snapshotRoutes)
   app.route('/', exportRoutes)
   app.route('/', coverageRoutes)
+  app.route('/', eventsRoutes)
+
+  // File watcher for design-doc files. Pushes 'designdoc-changed' events to
+  // SSE clients on tasks.md / proposal.md edits. Idempotent — calling
+  // multiple times during dev's hot-reload cycles is harmless. Falls back to
+  // sync-time scans if the watcher can't start (missing openspec/, etc.).
+  startDesignDocWatcher(cfg.REPO_PATH, cfg.DESIGNDOC_ADAPTER)
 
   app.get('/robots.txt', (c) => c.text('User-agent: *\nDisallow: /\n'))
 
