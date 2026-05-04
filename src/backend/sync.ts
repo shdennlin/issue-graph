@@ -46,6 +46,10 @@ export async function syncOnce({ force = false }: { force?: boolean } = {}): Pro
   }
 }
 
+export function isSyncInFlight(): boolean {
+  return inflight !== null
+}
+
 async function doSync(): Promise<SyncResult> {
   const log = getLogger()
   const cfg = loadConfig()

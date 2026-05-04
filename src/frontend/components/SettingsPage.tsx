@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useViewStore } from '../store/viewStore'
 import { api, type SettingsResponse } from '../lib/api'
-import { Tooltip } from './Tooltip'
 
 export function SettingsPage() {
   const open = useViewStore((s) => s.settingsOpen)
@@ -45,7 +44,7 @@ export function SettingsPage() {
         'meta entries (design-doc payload, workflow states), then re-syncs ' +
         'from Linear.\n\n' +
         'Annotations, snapshots, and sync history are preserved.\n\n' +
-        'Use this after switching LINEAR_API_KEY to a different workspace.',
+        'This affects only the current workspace profile.',
     )
     if (!ok) return
     setResetting(true)
@@ -272,6 +271,15 @@ export function SettingsPage() {
 
         <h4>Backend</h4>
         <div style={{ color: 'var(--fg-muted)', fontSize: 12 }}>
+          Profile:{' '}
+          {data?.workspace?.active ? (
+            <>
+              {data.workspace.active.name} <code>({data.workspace.active.id})</code>
+            </>
+          ) : (
+            'legacy .env mode'
+          )}
+          <br />
           Workspace:{' '}
           {data?.viewer?.organization ? (
             <>
@@ -293,6 +301,12 @@ export function SettingsPage() {
           API key: {(env.linear_api_key_set as boolean) ? '●●●●●●●●●● (set in .env)' : 'not set'}
           <br />
           Team filter: {(env.linear_team_id as string | null) ?? 'all'}
+          {data?.workspace?.active?.dbPath && (
+            <>
+              <br />
+              DB: <code>{data.workspace.active.dbPath}</code>
+            </>
+          )}
           <br />
           Identified as: {data?.viewer?.displayName ?? 'unknown'}
           <br />
@@ -314,11 +328,11 @@ export function SettingsPage() {
           </span>
         </label>
         <div style={{ marginTop: 10 }}>
-          <button onClick={resetCache} disabled={resetting} title="Wipe issue/label cache and re-sync. Use after switching LINEAR_API_KEY to a different workspace.">
-            {resetting ? 'Resetting…' : 'Reset cache & re-sync'}
+          <button onClick={resetCache} disabled={resetting} title="Wipe issue/label cache and re-sync for the current workspace profile.">
+            {resetting ? 'Resetting…' : 'Reset current workspace data'}
           </button>
           <div style={{ color: 'var(--fg-muted)', fontSize: 11, marginTop: 4 }}>
-            Use after changing <code>LINEAR_API_KEY</code> to a different workspace. Preserves annotations + snapshots.
+            Clears only the active workspace profile. Preserves annotations + snapshots in that profile.
           </div>
         </div>
 
@@ -328,11 +342,6 @@ export function SettingsPage() {
 
         <h4>About</h4>
         <div style={{ color: 'var(--fg-muted)', fontSize: 12 }}>
-          Display label: {env.instance_label as string}{' '}
-          <Tooltip text="Cosmetic UI nickname for this issue-graph instance. Set via INSTANCE_LABEL in .env. Does NOT affect which Linear workspace the data comes from — see Workspace under Backend for that.">
-            <span style={{ opacity: 0.6, cursor: 'help' }}>ⓘ</span>
-          </Tooltip>
-          <br />
           Backend: {env.backend as string}
         </div>
 

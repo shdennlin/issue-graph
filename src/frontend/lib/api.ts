@@ -29,6 +29,25 @@ export interface SettingsResponse {
   env: Record<string, unknown>
   stored: Record<string, string | undefined>
   viewer: Viewer | null
+  workspace?: {
+    active: WorkspaceProfile | null
+    profiles: WorkspaceProfile[]
+  }
+}
+
+export interface WorkspaceProfile {
+  id: string
+  name: string
+  linearApiKeySet: boolean
+  linearTeamId: string | null
+  repoPath: string | null
+  dbPath: string | null
+}
+
+export interface WorkspaceListResponse {
+  active: WorkspaceProfile | null
+  profiles: WorkspaceProfile[]
+  legacyMode: boolean
 }
 
 export interface SnapshotDiff {
@@ -63,6 +82,12 @@ export const api = {
   fetchMe: () => http<{ viewer: Viewer | null; issuesCached: number }>('/api/me'),
   fetchSyncHistory: () => http<{ entries: SyncLogEntry[] }>('/api/sync-history'),
   fetchSettings: () => http<SettingsResponse>('/api/settings'),
+  fetchWorkspaces: () => http<WorkspaceListResponse>('/api/workspaces'),
+  switchWorkspace: (id: string) =>
+    http<{ ok: boolean; active: WorkspaceProfile | null; changed: boolean }>('/api/workspaces/active', {
+      method: 'POST',
+      body: JSON.stringify({ id }),
+    }),
   patchSettings: (patch: Record<string, unknown>) =>
     http<{ ok: boolean }>('/api/settings', { method: 'PATCH', body: JSON.stringify(patch) }),
   fetchAnnotations: () => http<{ entries: AnnotationDTO[] }>('/api/annotations'),

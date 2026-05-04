@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { getDb } from '../db.js'
-import { loadConfig } from '../lib/env.js'
+import { getWorkspaceInfo, loadConfig } from '../lib/env.js'
 import { readViewerCached } from '../sync.js'
 
 const SettingsKeys = [
@@ -44,6 +44,7 @@ settingsRoutes.get('/api/settings', (c) => {
   const cfg = loadConfig()
   const stored = readAllSettings()
   const viewer = readViewerCached()
+  const workspace = getWorkspaceInfo()
   return c.json({
     env: {
       backend: cfg.BACKEND,
@@ -62,6 +63,7 @@ settingsRoutes.get('/api/settings', (c) => {
     },
     stored,
     viewer,
+    workspace,
   })
 })
 

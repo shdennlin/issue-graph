@@ -38,7 +38,45 @@ When the page loads, the backend pulls active+recent issues from Linear, scans t
 |---|---|
 | `LINEAR_API_KEY` | Personal API key — Linear → Settings → API → Create Personal API Key |
 
-Everything else has a sane default. See `.env.example` for the full list.
+Everything else has a sane default. `.env.example` is intentionally minimal;
+advanced workspace profile details live in [Advanced workspace profiles](docs/advanced-workspaces.md).
+
+### Multiple Linear workspaces
+
+For the default single-workspace setup, keep using `LINEAR_API_KEY`. If you
+regularly switch between Linear workspaces, define named profiles in `.env`
+instead:
+
+```env
+WORKSPACE_ACTIVE=personal
+
+WORKSPACE_PERSONAL_NAME=Personal
+WORKSPACE_PERSONAL_LINEAR_API_KEY=lin_api_xxx
+WORKSPACE_PERSONAL_LINEAR_TEAM_ID=
+WORKSPACE_PERSONAL_REPO_PATH=/path/to/personal/repo
+
+WORKSPACE_CLIENT_A_NAME=Client A
+WORKSPACE_CLIENT_A_LINEAR_API_KEY=lin_api_yyy
+WORKSPACE_CLIENT_A_LINEAR_TEAM_ID=
+WORKSPACE_CLIENT_A_REPO_PATH=/path/to/client-a/repo
+```
+
+The top-left workspace label becomes a selector when profiles are configured.
+Switching profiles does not require a backend restart. API keys remain in
+`.env`.
+
+Each profile gets isolated local data:
+
+```text
+data/workspaces/personal/graph.db
+data/workspaces/client_a/graph.db
+```
+
+`Reset current workspace data` only clears the active profile's cache. Other
+workspace databases are left untouched.
+
+For profile naming, Docker mounts, and design-doc scanning with multiple repos,
+see [Advanced workspace profiles](docs/advanced-workspaces.md).
 
 ### Optional design-doc integration
 
@@ -222,6 +260,10 @@ curl -X POST http://localhost:31415/api/sync
 ```
 
 Or, if you'd rather start over from a blank slate (loses snapshots + annotations too), stop the server and `rm data/graph.db data/graph.db-shm data/graph.db-wal`.
+
+For frequent switching, use the `WORKSPACE_<ID>_*` profile variables instead.
+Profiles use separate databases, so switching from the toolbar does not require
+resetting cached data.
 
 ## Roadmap
 
