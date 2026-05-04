@@ -27,6 +27,17 @@ syncRoutes.post('/api/reset-cache', (c) => {
 })
 
 /**
+ * Dismiss the workspace-change warning surfaced in /api/graph after a sync
+ * detected a different urlKey than last time. Idempotent — clears the meta
+ * key whether or not a warning was present.
+ */
+syncRoutes.post('/api/acknowledge-workspace-change', async (c) => {
+  const { writeMeta } = await import('../cache.js')
+  writeMeta('workspace_change_warning', '')
+  return c.json({ ok: true })
+})
+
+/**
  * Lazy-fetch extension. Frontend calls this when the user explicitly checks
  * Canceled or Completed in the state filter — we persist `days` to cache_meta
  * and trigger a fresh sync that pulls those issue types within the window.

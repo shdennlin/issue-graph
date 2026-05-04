@@ -8,7 +8,9 @@ import {
   readDesigndocsCached,
   readLastSyncMs,
   readAnnotations,
+  readMeta,
 } from '../cache.js'
+import type { WorkspaceChangeWarning } from '@shared/types.js'
 import { kickBackgroundSync, syncOnce, readViewerCached } from '../sync.js'
 import { getActiveDesignDocAdapter } from '../designdoc/factory.js'
 
@@ -34,6 +36,16 @@ graphRoutes.get('/api/graph', async (c) => {
   const fetchedAt = readLastSyncMs() ?? 0
   const adapter = getActiveDesignDocAdapter(cfg.REPO_PATH, cfg.DESIGNDOC_ADAPTER)
 
+  let workspaceWarning: WorkspaceChangeWarning | null = null
+  const warnRaw = readMeta('workspace_change_warning')
+  if (warnRaw) {
+    try {
+      workspaceWarning = JSON.parse(warnRaw) as WorkspaceChangeWarning
+    } catch {
+      // Malformed meta — ignore. The next sync will overwrite it.
+    }
+  }
+
   const body: GraphResponse = {
     data: {
       issues,
@@ -48,6 +60,7 @@ graphRoutes.get('/api/graph', async (c) => {
     instanceLabel: cfg.INSTANCE_LABEL,
     hasDesigndoc: adapter !== null,
     cacheEmpty: issues.length === 0 && cacheEmpty,
+    workspaceWarning,
     authError: !isAuthConfigured(cfg),
   }
   return c.json(body)

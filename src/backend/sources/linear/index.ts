@@ -164,10 +164,12 @@ export class LinearBackend implements BackendAdapter {
 
   async fetchViewer(): Promise<Viewer> {
     const data = await this.gql<{ viewer: any }>(VIEWER_QUERY)
+    const org = data.viewer.organization
     return {
       id: String(data.viewer.id),
       displayName: String(data.viewer.displayName ?? ''),
       email: data.viewer.email ?? null,
+      organization: org ? { name: String(org.name ?? ''), urlKey: String(org.urlKey ?? '') } : null,
     }
   }
 

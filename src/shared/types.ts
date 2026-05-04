@@ -72,10 +72,20 @@ export interface NormalizedIssue {
   commentsCount?: number
 }
 
+export interface ViewerOrganization {
+  /** Linear organization display name (e.g. "OneLegion"). */
+  name: string
+  /** URL slug used in linear.app/<urlKey>/issue/... — stable workspace identifier. */
+  urlKey: string
+}
+
 export interface Viewer {
   id: string
   displayName: string
   email?: string | null
+  /** Workspace identity. Optional so legacy cached viewers (pre-1.2) still
+   * deserialize cleanly until the next sync repopulates the field. */
+  organization?: ViewerOrganization | null
 }
 
 export type DesignDocStatus = 'active' | 'parked' | 'archived'
@@ -133,6 +143,15 @@ export interface GraphData {
   fetchedAt: number
 }
 
+export interface WorkspaceChangeWarning {
+  /** Previous workspace urlKey (e.g. "shdennlin-example"). */
+  previous: string
+  /** Current workspace urlKey (e.g. "onelegion"). */
+  current: string
+  /** Unix ms when the change was detected during sync. */
+  detectedAt: number
+}
+
 export interface GraphResponse {
   data: GraphData
   stale: boolean
@@ -141,6 +160,9 @@ export interface GraphResponse {
   hasDesigndoc: boolean
   cacheEmpty: boolean
   authError?: boolean
+  /** Set when sync detected a workspace switch. UI surfaces a banner +
+   *  Reset Cache button. Cleared after acknowledge or successful reset. */
+  workspaceWarning?: WorkspaceChangeWarning | null
 }
 
 export interface SyncLogEntry {

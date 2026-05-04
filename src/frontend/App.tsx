@@ -41,6 +41,20 @@ export function App() {
     loadGraph().then(() => loadSchema())
   }, [loadGraph, loadSchema])
 
+  // Background sync poller. After the first load, periodically check whether
+  // the backend's TTL-driven bg sync produced fresher data, and if so swap
+  // it in silently (no loading-state flash). Cheap call (~12ms cached read);
+  // 30s feels responsive without hammering. Skips polling while the page is
+  // hidden (battery-friendly + avoids racing the user's tab returning).
+  const refetchIfNewer = useGraphStore((s) => s.refetchIfNewer)
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return
+      refetchIfNewer()
+    }, 30_000)
+    return () => window.clearInterval(id)
+  }, [refetchIfNewer])
+
   const openInlineSearch = useViewStore((s) => s.openInlineSearch)
 
   // Hybrid Cmd+F:
