@@ -476,10 +476,14 @@ function CanvasInner() {
           type: 'smoothstep',
           style: { stroke: 'var(--edge)', strokeWidth: 1.8 },
           markerEnd: {
+            // Larger arrowhead so direction is readable at typical zoom
+            // levels — the line itself stays the same weight (strokeWidth
+            // unchanged above). 36×36 is roughly Linear's chip height,
+            // legible without dominating the card visually.
             type: 'arrowclosed' as any,
             color: 'var(--edge)',
-            width: 22,
-            height: 22,
+            width: 36,
+            height: 36,
           },
         }}
       >
