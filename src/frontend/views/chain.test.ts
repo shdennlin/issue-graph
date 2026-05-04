@@ -80,6 +80,46 @@ describe('computeChain', () => {
     expect(r.dangling).toEqual(new Set(['GHOST']))
   })
 
+  it('opt-in: 1-hop related neighbors expand members', () => {
+    // A blocks B (chain). B has 'related' to X (not in chain by default).
+    // With includeRelatedNeighbors, X joins. C (no link to chain) stays out.
+    const issues: NormalizedIssue[] = [
+      mk('A', ['B']),
+      { ...mk('B'), relations: [{ type: 'related', targetIdentifier: 'X' }] },
+      mk('X'),
+      mk('C'),
+    ]
+    expect(computeChain(issues, 'A').members).toEqual(new Set(['A', 'B']))
+    const expanded = computeChain(issues, 'A', { includeRelatedNeighbors: true })
+    expect(expanded.members).toEqual(new Set(['A', 'B', 'X']))
+  })
+
+  it('related expansion is only 1 hop (does not recurse)', () => {
+    // A blocks B. B related X. X related Y. Only X joins, not Y.
+    const issues: NormalizedIssue[] = [
+      mk('A', ['B']),
+      { ...mk('B'), relations: [{ type: 'related', targetIdentifier: 'X' }] },
+      { ...mk('X'), relations: [{ type: 'related', targetIdentifier: 'Y' }] },
+      mk('Y'),
+    ]
+    expect(computeChain(issues, 'A', { includeRelatedNeighbors: true }).members).toEqual(
+      new Set(['A', 'B', 'X']),
+    )
+  })
+
+  it('related expansion does not affect dangling count (blocks-only)', () => {
+    // A blocks B (in cache) + GHOST (not in cache). B related X.
+    // Dangling should be { GHOST } regardless of related expansion.
+    const issues: NormalizedIssue[] = [
+      mk('A', ['B', 'GHOST']),
+      { ...mk('B'), relations: [{ type: 'related', targetIdentifier: 'X' }] },
+      mk('X'),
+    ]
+    const r = computeChain(issues, 'A', { includeRelatedNeighbors: true })
+    expect(r.members).toEqual(new Set(['A', 'B', 'X']))
+    expect(r.dangling).toEqual(new Set(['GHOST']))
+  })
+
   it('ignores non-blocks relation types', () => {
     const issues: NormalizedIssue[] = [
       { ...mk('A'), relations: [{ type: 'related', targetIdentifier: 'B' }] },

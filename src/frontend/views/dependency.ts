@@ -15,7 +15,9 @@ export const dependencyView: ViewDefinition = {
     // so an off-state blocker doesn't fragment the chain.
     let issues
     if (chainRootId) {
-      const { members } = computeChain(data.issues, chainRootId)
+      const { members } = computeChain(data.issues, chainRootId, {
+        includeRelatedNeighbors: showRelated,
+      })
       issues = data.issues.filter((i) => members.has(i.identifier))
     } else {
       issues = applyFilters(data.issues, filters, staleDays, myUserName, search)

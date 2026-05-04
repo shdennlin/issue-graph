@@ -38,9 +38,11 @@ export function Toolbar() {
   // extended the sync window, surface a "Load older history" button.
   const chainStats = useMemo(() => {
     if (!chainRootId || !graph) return null
-    const { members, dangling } = computeChain(graph.data.issues, chainRootId)
+    const { members, dangling } = computeChain(graph.data.issues, chainRootId, {
+      includeRelatedNeighbors: showRelated,
+    })
     return { memberCount: members.size, dangling: dangling.size }
-  }, [chainRootId, graph])
+  }, [chainRootId, graph, showRelated])
   const chainDangling = chainStats && chainStats.dangling > 0 ? chainStats.dangling : null
 
   // Backend's current extended-scope window (0 = default 30-day Done window).
