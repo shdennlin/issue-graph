@@ -50,6 +50,11 @@ const ConfigSchema = z.object({
   LOG_LEVEL: strDefault('info'),
   LOG_TO_FILE: z.string().optional().default('false').transform((v) => truthyBool.parse(v)),
 
+  // Server static-serving toggle. Default true (production / docker behavior:
+  // backend serves built dist/ at the root). Dev script sets this to false so
+  // a stale dist/ doesn't shadow the live Vite dev server.
+  SERVE_STATIC: z.string().optional().default('true').transform((v) => truthyBool.parse(v)),
+
   // Storage
   SQLITE_PATH: strDefault('/app/data/graph.db'),
   REPO_PATH: strDefault('/repo'),

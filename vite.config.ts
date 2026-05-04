@@ -5,7 +5,22 @@ import { fileURLToPath, URL } from 'node:url'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const backendPort = Number(env.PORT) || 31415
-  const vitePort = Number(env.VITE_PORT) || 31414
+  let vitePort = Number(env.VITE_PORT) || 31414
+  // Collision guard: if a user sets PORT=31414 in .env without also setting
+  // VITE_PORT, both default-resolve to 31414. The backend grabs the port
+  // first; Vite silently fails to bind, and the browser then hits the
+  // backend's static-fallback (serving stale dist/) instead of the live Vite
+  // dev server — looking like "old data" with no obvious cause. Auto-shift
+  // and warn loudly instead of failing silently.
+  if (vitePort === backendPort) {
+    const next = backendPort === 31415 ? 31414 : backendPort + 1
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[vite.config] VITE_PORT (${vitePort}) collides with backend PORT (${backendPort}). ` +
+        `Falling back to ${next}. Set VITE_PORT explicitly in .env to silence this.`,
+    )
+    vitePort = next
+  }
   return {
     root: 'src/frontend',
     plugins: [react()],

@@ -48,8 +48,18 @@ export function createApp(): Hono {
 
   app.get('/robots.txt', (c) => c.text('User-agent: *\nDisallow: /\n'))
 
-  // Static frontend (only if dist/ has been built).
-  const staticRoot = findStaticRoot()
+  // Static frontend (only if dist/ has been built AND SERVE_STATIC is on).
+  // Dev sets SERVE_STATIC=false so a stale dist/ doesn't shadow Vite — the
+  // backend then returns a clear "use Vite at <port>" message at root instead
+  // of silently serving an old build that looks like missing changes.
+  const staticRoot = cfg.SERVE_STATIC ? findStaticRoot() : null
+  if (!cfg.SERVE_STATIC) {
+    app.get('/', (c) =>
+      c.text(
+        'API only (SERVE_STATIC=false). Open the Vite dev server (default http://localhost:31414) for the UI.',
+      ),
+    )
+  }
   if (staticRoot) {
     app.use(
       '/*',
