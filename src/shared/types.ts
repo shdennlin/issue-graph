@@ -143,6 +143,15 @@ export interface GraphData {
   fetchedAt: number
 }
 
+export interface WorkspaceChangeWarning {
+  /** Previous workspace urlKey (e.g. "shdennlin-example"). */
+  previous: string
+  /** Current workspace urlKey (e.g. "onelegion"). */
+  current: string
+  /** Unix ms when the change was detected during sync. */
+  detectedAt: number
+}
+
 export interface GraphResponse {
   data: GraphData
   stale: boolean
@@ -151,6 +160,9 @@ export interface GraphResponse {
   hasDesigndoc: boolean
   cacheEmpty: boolean
   authError?: boolean
+  /** Set when sync detected a workspace switch. UI surfaces a banner +
+   *  Reset Cache button. Cleared after acknowledge or successful reset. */
+  workspaceWarning?: WorkspaceChangeWarning | null
 }
 
 export interface SyncLogEntry {

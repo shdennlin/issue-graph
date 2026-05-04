@@ -12,6 +12,13 @@ interface GraphState {
   syncing: boolean
   error: string | null
   load: () => Promise<void>
+  /**
+   * Silent re-fetch used by the background poller. Same network call as
+   * `load()` but doesn't flip status to 'loading' — so the UI doesn't blink
+   * just because we're checking whether the backend's bg sync produced
+   * fresher data. Updates `graph` only when fetchedAt actually moved.
+   */
+  refetchIfNewer: () => Promise<void>
   forceSync: () => Promise<void>
   /**
    * Lazy-fetch extension. Used by the State filter when the user explicitly
@@ -33,6 +40,18 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       set({ graph, status: 'idle' })
     } catch (e) {
       set({ status: 'error', error: e instanceof Error ? e.message : String(e) })
+    }
+  },
+  async refetchIfNewer() {
+    try {
+      const fresh = await api.fetchGraph()
+      const current = get().graph
+      if (!current || fresh.fetchedAt > (current.fetchedAt ?? 0)) {
+        set({ graph: fresh })
+      }
+    } catch {
+      // Silent — this is opportunistic. If polling fails, the next manual
+      // refresh / sync will surface a real error.
     }
   },
   async forceSync() {

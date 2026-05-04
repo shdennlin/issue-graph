@@ -106,7 +106,20 @@ export function isCacheFresh(): boolean {
   const cfg = loadConfig()
   const last = readLastSyncMs()
   if (!last) return false
-  return Date.now() - last < cfg.CACHE_TTL_SECONDS * 1000
+  // User-overridable via Settings → Backend; falls back to env, then default.
+  // Setting precedence: setting table > env > schema default. Bounds [10, 86400]
+  // mirror the API's PatchSchema validation in routes/settings.ts.
+  const ttlSeconds = readCacheTtlSeconds(cfg.CACHE_TTL_SECONDS)
+  return Date.now() - last < ttlSeconds * 1000
+}
+
+function readCacheTtlSeconds(envFallback: number): number {
+  const row = getDb()
+    .prepare('SELECT value FROM setting WHERE key = ?')
+    .get('cache_ttl_seconds') as { value: string } | undefined
+  if (!row) return envFallback
+  const n = Number(row.value)
+  return Number.isFinite(n) && n >= 10 && n <= 86400 ? n : envFallback
 }
 
 export function writeIssueCache(issues: NormalizedIssue[]): void {
@@ -167,6 +180,8 @@ export function resetCache(): { issues: number; labels: number } {
     writeMeta(META_DESIGNDOC_PAYLOAD, '')
     writeMeta(META_WORKFLOW_STATES, '[]')
     writeMeta(META_LAST_SYNC, '0')
+    // Clear the workspace-change banner so it doesn't reappear after reset.
+    writeMeta('workspace_change_warning', '')
   })()
   return { issues, labels }
 }

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { useViewStore } from '../store/viewStore'
-import { useGraphStore } from '../store/graphStore'
 import { api, type SettingsResponse } from '../lib/api'
 
 export function SettingsPage() {
@@ -9,7 +8,6 @@ export function SettingsPage() {
   const setStaleDays = useViewStore((s) => s.setStaleDays)
   const fontSize = useViewStore((s) => s.fontSize)
   const setFontSize = useViewStore((s) => s.setFontSize)
-  const reloadGraph = useGraphStore((s) => s.load)
   const [data, setData] = useState<SettingsResponse | null>(null)
   const [draft, setDraft] = useState<Record<string, unknown>>({})
   const [resetting, setResetting] = useState(false)
@@ -102,6 +100,8 @@ export function SettingsPage() {
 
   const storedStale = stored.stale_days_threshold ? Number(stored.stale_days_threshold) : undefined
   const stale = (draft.stale_days_threshold ?? storedStale ?? env.stale_days) as number
+  const storedTtl = stored.cache_ttl_seconds ? Number(stored.cache_ttl_seconds) : undefined
+  const cacheTtl = (draft.cache_ttl_seconds ?? storedTtl ?? env.cache_ttl_seconds) as number
 
   const overlay = resetPhase !== 'idle' && (
     <div
@@ -272,9 +272,22 @@ export function SettingsPage() {
         <h4>Backend</h4>
         <div style={{ color: 'var(--fg-muted)', fontSize: 12 }}>
           Workspace:{' '}
-          {data?.viewer?.organization
-            ? `${data.viewer.organization.name} (${data.viewer.organization.urlKey})`
-            : 'unknown — re-sync to populate'}
+          {data?.viewer?.organization ? (
+            <>
+              {data.viewer.organization.name} (
+              <a
+                href={`https://linear.app/${data.viewer.organization.urlKey}/`}
+                target="_blank"
+                rel="noreferrer"
+                title="Open this workspace in Linear"
+              >
+                {data.viewer.organization.urlKey}
+              </a>
+              )
+            </>
+          ) : (
+            'unknown — re-sync to populate'
+          )}
           <br />
           API key: {(env.linear_api_key_set as boolean) ? '●●●●●●●●●● (set in .env)' : 'not set'}
           <br />
@@ -284,6 +297,21 @@ export function SettingsPage() {
           <br />
           Issue scope: {env.issue_scope as string}
         </div>
+        <label style={{ display: 'block', marginTop: 10, marginBottom: 8 }}>
+          Cache TTL (seconds){' '}
+          <input
+            type="number"
+            min={10}
+            max={86400}
+            defaultValue={cacheTtl}
+            onChange={(e) => setDraft({ ...draft, cache_ttl_seconds: Number(e.target.value) })}
+            title="How long cached Linear data is considered fresh before a background sync is kicked. 10–86400. Lower = more frequent re-syncs; higher = quieter dev workflow."
+            style={{ width: 100 }}
+          />
+          <span style={{ color: 'var(--fg-muted)', fontSize: 11, marginLeft: 8 }}>
+            ≈ {Math.round(cacheTtl / 60)}min · default 900 (15min)
+          </span>
+        </label>
         <div style={{ marginTop: 10 }}>
           <button onClick={resetCache} disabled={resetting} title="Wipe issue/label cache and re-sync. Use after switching LINEAR_API_KEY to a different workspace.">
             {resetting ? 'Resetting…' : 'Reset cache & re-sync'}
@@ -299,7 +327,10 @@ export function SettingsPage() {
 
         <h4>About</h4>
         <div style={{ color: 'var(--fg-muted)', fontSize: 12 }}>
-          Instance: {env.instance_label as string}<br />
+          <span title="Cosmetic UI nickname for this issue-graph instance. Set via INSTANCE_LABEL in .env. Does NOT affect which Linear workspace the data comes from — see Workspace under Backend for that.">
+            Display label: {env.instance_label as string} <span style={{ opacity: 0.6 }}>ⓘ</span>
+          </span>
+          <br />
           Backend: {env.backend as string}
         </div>
 
