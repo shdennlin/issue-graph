@@ -89,6 +89,27 @@ export function DetailPanel() {
     other.relations.some((r) => r.type === 'blocks' && r.targetIdentifier === issue.identifier),
   )
 
+  // Related links — bidirectional in Linear, so collect from both
+  // directions and dedupe per identifier. Filter to only those present in
+  // cache so we don't show ghost links the user can't click into.
+  const allIssues = graph?.data.issues ?? []
+  const inCache = new Set(allIssues.map((i) => i.identifier))
+  const relatedIds = new Set<string>()
+  for (const r of issue.relations) {
+    if (r.type === 'related' && inCache.has(r.targetIdentifier)) relatedIds.add(r.targetIdentifier)
+  }
+  for (const other of allIssues) {
+    if (other.identifier === issue.identifier) continue
+    for (const r of other.relations) {
+      if (r.type === 'related' && r.targetIdentifier === issue.identifier) {
+        relatedIds.add(other.identifier)
+      }
+    }
+  }
+  const relatedList: NormalizedIssue[] = Array.from(relatedIds)
+    .map((id) => allIssues.find((i) => i.identifier === id))
+    .filter((i): i is NormalizedIssue => i !== undefined)
+
   return (
     <aside
       className={`detail-panel${resizing ? ' is-resizing' : ''}`}
@@ -186,6 +207,28 @@ export function DetailPanel() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {relatedList.length > 0 && (
+        <div className="section">
+          <h3>Related ({relatedList.length})</h3>
+          {/* `related` is bidirectional — no in/out split, just list. The
+              ↔ icon mirrors the dashed-edge style on the canvas + the
+              connectivity-badge ╍ glyph, keeping visual grammar consistent. */}
+          {relatedList.map((r) => (
+            <div key={r.identifier}>
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault()
+                  useViewStore.getState().setFocusedId(r.identifier)
+                }}
+              >
+                ↔ {r.identifier} {r.title}
+              </a>
+            </div>
+          ))}
         </div>
       )}
 
