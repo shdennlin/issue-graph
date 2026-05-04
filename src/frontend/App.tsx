@@ -57,6 +57,7 @@ export function App() {
 
   const openInlineSearch = useViewStore((s) => s.openInlineSearch)
   const setChainRootId = useViewStore((s) => s.setChainRootId)
+  const bumpLayout = useViewStore((s) => s.bumpLayout)
 
   // Hybrid Cmd+F:
   //   - When the canvas is focused (or the user is hovering it after clicking
@@ -77,6 +78,23 @@ export function App() {
           setChainRootId(null)
           return
         }
+      }
+      // 'c' / 'C' — isolate chain on the currently focused issue. 'C' (shift)
+      // additionally bumps layout, matching the "auto-layout" context-menu
+      // entry. Only fires when no modifier is held, no input is focused,
+      // we're in dependency view, and an issue is actually focused.
+      if (e.key === 'c' || e.key === 'C') {
+        if (e.metaKey || e.ctrlKey || e.altKey) return
+        const target = e.target as HTMLElement | null
+        const tag = target?.tagName?.toLowerCase()
+        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        const s = useViewStore.getState()
+        if (s.activeView !== 'dependency') return
+        if (!s.focusedId) return
+        e.preventDefault()
+        setChainRootId(s.focusedId)
+        if (e.key === 'C') bumpLayout()
+        return
       }
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 's') {
         e.preventDefault()
@@ -105,7 +123,7 @@ export function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [openInlineSearch, setChainRootId])
+  }, [openInlineSearch, setChainRootId, bumpLayout])
 
   // Onboarding when backend unconfigured AND no cached data.
   if (graph?.authError && (graph?.data.issues.length ?? 0) === 0) {

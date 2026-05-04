@@ -26,7 +26,14 @@ export const dependencyView: ViewDefinition = {
     const nodes: Node[] = issues.map((i) => ({
       id: i.identifier,
       type: 'issue',
-      data: { issue: i, focused: focusedId === i.identifier },
+      data: {
+        issue: i,
+        focused: focusedId === i.identifier,
+        // Marks the root issue when chain isolation is active so IssueNode
+        // can render a ring/star accent — useful when you've drilled into a
+        // chain and need to see at a glance which issue you started from.
+        isChainRoot: chainRootId === i.identifier,
+      },
       position: { x: 0, y: 0 },
       width: 320,
       // Prefer real measured height if we have it (post-paint re-layout pass),

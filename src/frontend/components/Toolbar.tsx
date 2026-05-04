@@ -33,11 +33,12 @@ export function Toolbar() {
   // recompute the chain (cheap BFS) to find references pointing to issues
   // outside the current cache. If any are found AND the user hasn't already
   // extended the sync window, surface a "Load older history" button.
-  const chainDangling = useMemo(() => {
+  const chainStats = useMemo(() => {
     if (!chainRootId || !graph) return null
-    const { dangling } = computeChain(graph.data.issues, chainRootId)
-    return dangling.size > 0 ? dangling.size : null
+    const { members, dangling } = computeChain(graph.data.issues, chainRootId)
+    return { memberCount: members.size, dangling: dangling.size }
   }, [chainRootId, graph])
+  const chainDangling = chainStats && chainStats.dangling > 0 ? chainStats.dangling : null
 
   // Backend's current extended-scope window (0 = default 30-day Done window).
   // Fetched lazily so we don't pull it for users who never use chain mode.
@@ -125,6 +126,11 @@ export function Toolbar() {
           <div className="group" title="Showing only the dependency chain rooted at this issue">
             <span style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-meta)' }}>Chain:</span>
             <span style={{ fontSize: 'var(--fs-meta)', fontWeight: 600 }}>{chainRootId}</span>
+            {chainStats && (
+              <span style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-meta)' }}>
+                ({chainStats.memberCount} {chainStats.memberCount === 1 ? 'issue' : 'issues'})
+              </span>
+            )}
             <button onClick={() => setChainRootId(null)} title="Clear chain isolation (Esc)">×</button>
             {showLoadFullHistory && (
               <button

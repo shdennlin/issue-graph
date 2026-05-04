@@ -33,8 +33,18 @@ export function ContextMenu() {
       <button onClick={() => { setFocusedId(issue.identifier); close() }}>Focus</button>
       {activeView === 'dependency' && (
         <>
-          <button onClick={() => { setChainRootId(issue.identifier); close() }}>Isolate chain</button>
-          <button onClick={() => { setChainRootId(issue.identifier); bumpLayout(); close() }}>Isolate chain (auto-layout)</button>
+          <button
+            onClick={() => { setChainRootId(issue.identifier); close() }}
+            title="Shortcut: focus an issue, press c"
+          >
+            Isolate chain <span style={{ opacity: 0.5, marginLeft: 6, fontSize: 11 }}>c</span>
+          </button>
+          <button
+            onClick={() => { setChainRootId(issue.identifier); bumpLayout(); close() }}
+            title="Shortcut: focus an issue, press Shift+C"
+          >
+            Isolate chain (auto-layout) <span style={{ opacity: 0.5, marginLeft: 6, fontSize: 11 }}>⇧C</span>
+          </button>
         </>
       )}
     </div>
