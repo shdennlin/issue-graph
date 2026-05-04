@@ -214,11 +214,13 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
               // split, or the docs should be split, or the linkage is wrong.
               // Make it red so the human reviewer notices and decides.
               <span
-                style={{ color: 'var(--danger, #dc2626)', fontWeight: 600 }}
+                style={{ color: 'var(--warn, #f59e0b)', fontWeight: 600 }}
                 title={
-                  `This issue is linked to ${docs.length} design-doc changes:\n` +
+                  `This issue is linked to ${docs.length} design-doc changes (specs):\n` +
                   docs.map((d) => `  • ${d.name}`).join('\n') +
-                  `\n\nUsually each issue should map to one spec. Consider splitting the issue or merging the specs.`
+                  `\n\nA spec is one delivery batch. An issue spanning multiple specs ` +
+                  `usually means the issue is too large to fit in one batch — split it ` +
+                  `into per-spec sub-issues so each batch has contained scope.`
                 }
               >
                 ⚠ {docs.length} specs

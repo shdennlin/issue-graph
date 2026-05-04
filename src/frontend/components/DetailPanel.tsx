@@ -126,18 +126,18 @@ export function DetailPanel() {
           {docs.length > 1 && (
             <div
               style={{
-                color: 'var(--danger, #dc2626)',
+                color: 'var(--warn-fg, #92400e)',
                 fontSize: 12,
                 marginBottom: 8,
                 padding: '6px 8px',
-                border: '1px solid var(--danger, #dc2626)',
+                border: '1px solid var(--warn, #f59e0b)',
                 borderRadius: 4,
-                background: 'rgba(220, 38, 38, 0.08)',
+                background: 'rgba(245, 158, 11, 0.10)',
               }}
             >
-              ⚠ This issue is linked to <strong>{docs.length}</strong> design-doc changes.
-              Usually each issue should map to one spec — consider splitting the issue
-              or merging the specs.
+              ⚠ This issue spans <strong>{docs.length}</strong> design-doc changes (specs).
+              A spec is one delivery batch — an issue covering multiple specs is usually
+              too large for a single batch. Consider splitting it into per-spec sub-issues.
             </div>
           )}
           {docs.map((d) => (
