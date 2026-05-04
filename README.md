@@ -174,10 +174,21 @@ Share a link in chat — your teammate sees the same view.
 
 ## Keyboard
 
+Press `?` in the app for the full cheat sheet. Highlights:
+
+- `Cmd/Ctrl + F` — find on canvas; `Enter` jumps to next match and returns keyboard focus to the canvas
+- `Cmd/Ctrl + Shift + F` — focus the toolbar filter search
+- `c` / `Shift + C` — isolate chain on focused issue (preserve / auto-layout)
+- `r` — toggle Related-edges overlay
+- `Shift + R` — re-layout (re-run dagre, recenters on focused issue)
+- `Esc` — peel one layer: Find → context menu → focused issue → chain isolation
 - `Cmd/Ctrl + click` on a node — multi-select
 - `Cmd/Ctrl + Shift + S` — screenshot the current canvas as PNG
 - Right-click on a node — context menu
 - Double-click a node — open in Linear
+
+> [!NOTE]
+> **Desktop-first.** Hover-highlight and the keyboard shortcuts above assume a real keyboard + pointer. On touch devices the basics still work (click to focus / pin, pinch to zoom, drag to pan, the toolbar / detail panel) but the fast hover-to-scan flow doesn't translate.
 
 ## Development
 

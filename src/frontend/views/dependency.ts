@@ -26,30 +26,14 @@ export const dependencyView: ViewDefinition = {
     const ids = new Set(issues.map((i) => i.identifier))
     const NODE_H = issueNodeHeight(density)
 
-    // Connectivity counts (cache-wide, not view-bound). Reading from the full
-    // data.issues set so the badge says "this is a hub" globally, even when
-    // chain mode hides some of the connections from view.
+    // Connectivity counts (cache-wide). Reading from the full data.issues
+    // set so the badge says "this is a hub" globally, even when chain mode
+    // hides some of the connections from view.
     const conn = computeConnectivity(data.issues)
 
-    const nodes: Node[] = issues.map((i) => ({
-      id: i.identifier,
-      type: 'issue',
-      data: {
-        issue: i,
-        focused: focusedId === i.identifier,
-        // Marks the root issue when chain isolation is active so IssueNode
-        // can render a ring/star accent — useful when you've drilled into a
-        // chain and need to see at a glance which issue you started from.
-        isChainRoot: chainRootId === i.identifier,
-        connectivity: conn.get(i.identifier),
-      },
-      position: { x: 0, y: 0 },
-      width: 320,
-      // Prefer real measured height if we have it (post-paint re-layout pass),
-      // otherwise fall back to the density estimate. Dagre uses this directly.
-      height: measuredHeights?.get(i.identifier) ?? NODE_H,
-    }))
-
+    // Build edges first so we can compute view-bound connectivity counts
+    // (what's actually rendered) before constructing node data. Two passes
+    // is cheap (O(V+E) each) and keeps node-data immutable.
     const edges: Edge[] = []
     // `related` is bidirectional in Linear — emit only one edge per
     // unordered pair to avoid drawing it twice when both endpoints declare
@@ -88,6 +72,43 @@ export const dependencyView: ViewDefinition = {
         }
       }
     }
+
+    // View-bound counts: count edges actually rendered above. When chain
+    // mode hides connections, this differs from `conn` (cache-wide) and
+    // IssueNode tooltip surfaces both numbers so the user understands
+    // why "this card has 5 blockers" but only 2 lines are drawn.
+    const visibleConn = new Map<string, { out: number; in: number; related: number }>()
+    for (const i of issues) visibleConn.set(i.identifier, { out: 0, in: 0, related: 0 })
+    for (const e of edges) {
+      const type = (e.data as { relationType?: 'blocks' | 'related' } | undefined)?.relationType
+      if (type === 'blocks') {
+        visibleConn.get(e.source)!.out += 1
+        visibleConn.get(e.target)!.in += 1
+      } else if (type === 'related') {
+        visibleConn.get(e.source)!.related += 1
+        visibleConn.get(e.target)!.related += 1
+      }
+    }
+
+    const nodes: Node[] = issues.map((i) => ({
+      id: i.identifier,
+      type: 'issue',
+      data: {
+        issue: i,
+        focused: focusedId === i.identifier,
+        // Marks the root issue when chain isolation is active so IssueNode
+        // can render a ring/star accent — useful when you've drilled into a
+        // chain and need to see at a glance which issue you started from.
+        isChainRoot: chainRootId === i.identifier,
+        connectivity: conn.get(i.identifier),
+        visibleConnectivity: visibleConn.get(i.identifier),
+      },
+      position: { x: 0, y: 0 },
+      width: 320,
+      // Prefer real measured height if we have it (post-paint re-layout pass),
+      // otherwise fall back to the density estimate. Dagre uses this directly.
+      height: measuredHeights?.get(i.identifier) ?? NODE_H,
+    }))
 
     const positioned = runDagre(nodes, edges, { direction: 'LR', nodeWidth: 320, nodeHeight: NODE_H })
     return { nodes: positioned, edges }

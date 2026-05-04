@@ -500,7 +500,12 @@ function CanvasInner() {
           )}
           <ControlButton
             onClick={manualRelayout}
-            title="Re-layout (shortcut: Shift+R) — re-run dagre from scratch and refit. Discards user-dragged positions."
+            disabled={nodes.length === 0}
+            title={
+              nodes.length === 0
+                ? 'Re-layout — no nodes to lay out (waiting for graph data)'
+                : 'Re-layout (shortcut: Shift+R) — re-run dagre from scratch and refit. Discards user-dragged positions.'
+            }
           >
             ⤴
           </ControlButton>

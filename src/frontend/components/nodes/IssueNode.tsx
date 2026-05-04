@@ -25,6 +25,11 @@ interface IssueNodeData {
    * user sees hub-ness at a glance without tracing edges. Optional —
    * absent for views that haven't computed it. */
   connectivity?: { out: number; in: number; related: number }
+  /** View-bound counts (only edges actually rendered in the current view).
+   * Differs from `connectivity` when chain mode hides connections. Used
+   * by the badge tooltip to clarify "X visible / Y total" so the user
+   * understands why the badge shows 5 but only 2 edges are drawn. */
+  visibleConnectivity?: { out: number; in: number; related: number }
 }
 
 function truncate(s: string, n: number): string {
@@ -33,7 +38,7 @@ function truncate(s: string, n: number): string {
 }
 
 function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
-  const { issue, focused, isChainRoot, connectivity } = data
+  const { issue, focused, isChainRoot, connectivity, visibleConnectivity } = data
   const { schema, typeIcons } = useSchemaStore()
   const density = useViewStore((s) => s.density)
   const annotations = useGraphStore((s) => s.graph?.data.annotations ?? [])
@@ -93,10 +98,24 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
         // (cards are too short) and when all counts are zero. Position is
         // anchored relative to the card so it survives node drag/zoom.
         <span
-          title={
-            `Blocks ${connectivity.out} • Blocked by ${connectivity.in}` +
-            (connectivity.related > 0 ? ` • Related ${connectivity.related}` : '')
-          }
+          title={(() => {
+            const v = visibleConnectivity
+            const c = connectivity
+            const hidden =
+              v &&
+              (v.out !== c.out || v.in !== c.in || v.related !== c.related)
+            const base =
+              `Blocks ${c.out} • Blocked by ${c.in}` +
+              (c.related > 0 ? ` • Related ${c.related}` : '')
+            if (!hidden) return base
+            return (
+              base +
+              `\n\nVisible in current view: → ${v!.out} • ← ${v!.in}` +
+              (v!.related > 0 || c.related > 0 ? ` • ↔ ${v!.related}` : '') +
+              `\n(Counts above are cache-wide; some connections are hidden ` +
+              `by chain isolation or filters.)`
+            )
+          })()}
           style={{
             position: 'absolute',
             bottom: 6,
