@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig(({ mode }) => {
@@ -23,7 +24,34 @@ export default defineConfig(({ mode }) => {
   }
   return {
     root: 'src/frontend',
-    plugins: [react()],
+    plugins: [
+      react(),
+      VitePWA({
+        registerType: 'autoUpdate',
+        includeAssets: ['icon.svg', 'icon-maskable.svg'],
+        // Don't precache /api responses or the SSE stream — those are live and
+        // workspace-specific. App-shell offline so the dock icon launches
+        // instantly; data still hits the network when online.
+        workbox: {
+          navigateFallbackDenylist: [/^\/api\//, /^\/events/],
+          globPatterns: ['**/*.{js,css,html,svg,woff2}'],
+        },
+        manifest: {
+          name: 'Issue Graph',
+          short_name: 'Issues',
+          description: 'Self-hosted, read-only graph viewer for issue dependencies',
+          theme_color: '#1c1f26',
+          background_color: '#1c1f26',
+          display: 'standalone',
+          start_url: '/',
+          scope: '/',
+          icons: [
+            { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+            { src: 'icon-maskable.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
+          ],
+        },
+      }),
+    ],
     resolve: {
       alias: {
         '@shared': fileURLToPath(new URL('./src/shared', import.meta.url)),
