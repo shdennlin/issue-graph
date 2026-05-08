@@ -97,6 +97,28 @@ export function listWorkspaceProfiles(
   return readProfiles(env, defaultSqlitePath).map(({ linearApiKey: _linearApiKey, ...profile }) => profile)
 }
 
+/**
+ * Resolve a single profile's secrets + paths by id, without going through the
+ * override-file / WORKSPACE_ACTIVE selection logic. Used by per-workspace
+ * config caching (one Cfg per id); returns null if id doesn't match any
+ * defined profile.
+ */
+export function resolveProfileValuesById(
+  env: Record<string, string | undefined>,
+  defaultSqlitePath: string,
+  id: string,
+): WorkspaceConfigResult['values'] | null {
+  const profiles = readProfiles(env, defaultSqlitePath)
+  const match = profiles.find((p) => p.id === normalizeId(id))
+  if (!match) return null
+  return {
+    LINEAR_API_KEY: match.linearApiKey ?? undefined,
+    LINEAR_TEAM_ID: match.linearTeamId ?? undefined,
+    REPO_PATH: match.repoPath ?? env.REPO_PATH,
+    SQLITE_PATH: match.dbPath ?? defaultSqlitePath,
+  }
+}
+
 export function buildWorkspaceConfig(input: WorkspaceConfigInput): WorkspaceConfigResult {
   const profiles = readProfiles(input.env, input.defaultSqlitePath)
   const overrideId = input.activeOverride ? normalizeId(input.activeOverride) : null

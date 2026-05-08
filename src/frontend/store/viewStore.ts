@@ -99,9 +99,9 @@ export interface ViewState {
   resetFilters: () => void
 }
 
-const ACTIVE_STATES: IssueStateType[] = ['started', 'unstarted', 'backlog', 'triage']
+export const ACTIVE_STATES: IssueStateType[] = ['started', 'unstarted', 'backlog', 'triage']
 
-const defaultFilters: Filters = {
+export const defaultFilters: Filters = {
   stateTypes: ACTIVE_STATES,
   stateNames: [],
   activeOnly: true,

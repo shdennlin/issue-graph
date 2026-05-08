@@ -183,6 +183,210 @@ a:hover { text-decoration: underline; }
 .banner .stale-warn { color: var(--warn); }
 .banner .stale-bad { color: var(--danger); }
 
+/* Workspace picker (the click-to-change pill in the banner left). The
+   button reuses the `.pill` look so it visually reads as the same
+   workspace indicator that's been there all along — clicking it now
+   opens a dropdown that repoints the *current tab* at a different
+   workspace (keeping filters/focus). Distinct from the TabBar above,
+   which switches between independent tab sessions. */
+.banner .workspace-picker {
+  position: relative;
+  display: inline-flex;
+}
+.banner .workspace-picker-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  font: inherit;
+  color: inherit;
+}
+.banner .workspace-picker-button:hover {
+  border-color: var(--node-border);
+}
+.banner .workspace-picker-button .select-chevron {
+  font-size: 10px;
+  color: var(--fg-muted);
+  margin-left: 2px;
+}
+.banner .workspace-picker-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 160px;
+  background: var(--bg-elev);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 4px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+}
+.banner .workspace-picker-item {
+  background: transparent;
+  border: none;
+  color: var(--fg);
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--fs-base);
+  white-space: nowrap;
+}
+.banner .workspace-picker-item:hover {
+  background: var(--chip-bg);
+}
+.banner .workspace-picker-item.is-current {
+  color: var(--accent);
+  cursor: default;
+}
+
+/* In-app workspace tab bar — sits above .banner. Each tab represents a
+   workspace defined in `.env`; the ★ marker on a tab indicates the
+   server-default workspace (where the design-doc watcher runs). */
+.tabbar {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 4px 8px 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--node-border);
+  flex-wrap: wrap;
+  /* Position+z-index lifts the whole bar (and its absolutely-positioned
+     dropdown menu descendants) above the SyncBanner sibling that follows
+     in the flex column. Without this, the dropdown opens but renders
+     *under* the banner's opaque background — looking like the click had
+     no effect.
+     Avoid `overflow-x: auto` here — when paired with the default
+     `overflow-y: visible`, browsers promote y to auto/hidden too, which
+     CLIPS the absolutely-positioned dropdown menu (positioned just below
+     the bar) and hides it entirely. With ~handful of profiles, wrapping
+     instead of scrolling is the right tradeoff. */
+  position: relative;
+  z-index: 10;
+}
+
+.tabbar-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-top-left-radius: var(--radius-md);
+  border-top-right-radius: var(--radius-md);
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: var(--fs-base);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease;
+  position: relative;
+  top: 1px; /* overlap the banner border so the active tab fuses with it */
+}
+.tabbar-tab:hover {
+  background: var(--chip-bg);
+  color: var(--fg);
+}
+.tabbar-tab.is-active {
+  background: var(--bg-elev);
+  color: var(--fg);
+  border-color: var(--node-border);
+  cursor: default;
+}
+.tabbar-tab.is-dragging {
+  opacity: 0.4;
+}
+
+.tabbar-shortcut {
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+  background: var(--chip-bg);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  font-variant-numeric: tabular-nums;
+}
+.tabbar-tab.is-active .tabbar-shortcut {
+  background: var(--bg);
+}
+
+.tabbar-label {
+  user-select: none;
+}
+
+.tabbar-close {
+  font-size: 13px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  padding: 0 3px;
+  border-radius: var(--radius-sm);
+  user-select: none;
+  line-height: 1;
+}
+.tabbar-close:hover {
+  background: var(--chip-bg);
+  color: var(--fg);
+}
+
+/* The trailing `+` add-tab affordance and its dropdown menu of workspaces. */
+.tabbar-add {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+}
+.tabbar-add-button {
+  background: transparent;
+  border: 1px dashed transparent;
+  color: var(--fg-muted);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 4px 10px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.tabbar-add-button:hover {
+  background: var(--chip-bg);
+  color: var(--fg);
+  border-color: var(--node-border);
+}
+.tabbar-add-menu {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  min-width: 180px;
+  background: var(--bg-elev);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 4px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+}
+.tabbar-add-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  color: var(--fg);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--fs-base);
+  white-space: nowrap;
+}
+.tabbar-add-item:hover {
+  background: var(--chip-bg);
+}
+
 .toolbar {
   display: flex;
   gap: 6px;

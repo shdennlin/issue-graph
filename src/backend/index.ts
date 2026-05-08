@@ -3,9 +3,10 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
 import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { loadConfig } from './lib/env.js'
+import { getDefaultWorkspaceId, getWorkspaceInfo, loadConfig } from './lib/env.js'
 import { getLogger } from './lib/log.js'
 import { getDb } from './db.js'
+import { LEGACY_WORKSPACE_ID, runWithWorkspace } from './lib/workspaceContext.js'
 import { graphRoutes } from './routes/graph.js'
 import { syncRoutes } from './routes/sync.js'
 import { issueRoutes } from './routes/issue.js'
@@ -35,8 +36,33 @@ export function createApp(): Hono {
   const cfg = loadConfig()
   const log = getLogger()
 
-  // Eagerly init DB so schema migrations run at startup.
+  // Eagerly init the default workspace's DB so schema migrations run at startup.
   getDb()
+
+  // Per-request workspace middleware: resolve `?w=<id>` (or fall back to the
+  // current default) and run the rest of the handler chain under that
+  // workspace's AsyncLocalStorage context. Downstream call sites (loadConfig,
+  // getDb, getBackend, sync, cache) read it via `getCurrentWorkspaceId()`
+  // without any per-route plumbing.
+  app.use('/api/*', async (c, next) => {
+    const info = getWorkspaceInfo()
+    const requested = c.req.query('w')?.toLowerCase() ?? null
+    let wid: string
+    if (info.profiles.length === 0) {
+      // Legacy mode: no profiles defined. Always use the sentinel; ignore ?w.
+      wid = LEGACY_WORKSPACE_ID
+    } else if (requested && info.profiles.some((p) => p.id === requested)) {
+      wid = requested
+    } else {
+      // Either no ?w, or it pointed at an unknown id (the frontend bootstrap
+      // should have caught this). Fall through to the server's default — the
+      // request still gets serviced from a real workspace rather than 4xx-ing
+      // on a transient mismatch (e.g. just-deleted profile while a stale tab
+      // refetches).
+      wid = getDefaultWorkspaceId()
+    }
+    return runWithWorkspace(wid, () => next())
+  })
 
   app.route('/', healthRoutes)
   app.route('/', graphRoutes)
@@ -52,10 +78,12 @@ export function createApp(): Hono {
   app.route('/', workspaceRoutes)
 
   // File watcher for design-doc files. Pushes 'designdoc-changed' events to
-  // SSE clients on tasks.md / proposal.md edits. Idempotent — calling
-  // multiple times during dev's hot-reload cycles is harmless. Falls back to
-  // sync-time scans if the watcher can't start (missing openspec/, etc.).
-  startDesignDocWatcher(cfg.REPO_PATH, cfg.DESIGNDOC_ADAPTER)
+  // SSE clients on tasks.md / proposal.md edits. Watches the *default*
+  // workspace only — non-default tabs fall back to the existing 30s
+  // frontend poll. Idempotent — calling multiple times during dev's
+  // hot-reload cycles is harmless. Falls back to sync-time scans if the
+  // watcher can't start (missing openspec/, etc.).
+  startDesignDocWatcher(cfg.REPO_PATH, cfg.DESIGNDOC_ADAPTER, getDefaultWorkspaceId())
 
   app.get('/robots.txt', (c) => c.text('User-agent: *\nDisallow: /\n'))
 

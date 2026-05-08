@@ -7,20 +7,26 @@
 // Linux (Node 20+). Falls back to a no-op + warning if the platform's
 // fs.watch errors out — the existing sync-time scan still works, so the
 // only loss is real-time. Don't crash the server over this.
+//
+// Per-tab note: the watcher follows the **default** workspace (the one
+// `active-workspace.json` points at), not every open profile. Tabs viewing
+// a non-default workspace fall back to the existing 30s frontend poll.
 
 import { existsSync, watch, type FSWatcher } from 'node:fs'
 import { join } from 'node:path'
 import { writeDesigndocsCached } from '../cache.js'
 import { getLogger } from '../lib/log.js'
-import { publish } from '../lib/eventBus.js'
+import { BUS_EVENT, publish } from '../lib/eventBus.js'
+import { runWithWorkspace } from '../lib/workspaceContext.js'
 import { runDesignDocScan } from './factory.js'
 
 const DEBOUNCE_MS = 500
 
 let activeWatcher: FSWatcher | null = null
 let debounceHandle: ReturnType<typeof setTimeout> | null = null
+let watchedWorkspaceId: string | null = null
 
-export function startDesignDocWatcher(repoPath: string, adapter: string): void {
+export function startDesignDocWatcher(repoPath: string, adapter: string, workspaceId: string): void {
   if (activeWatcher) return // idempotent — only one watcher per process
   if (!repoPath) return
   const target = join(repoPath, 'openspec')
@@ -29,6 +35,8 @@ export function startDesignDocWatcher(repoPath: string, adapter: string): void {
     // Nothing to watch.
     return
   }
+
+  watchedWorkspaceId = workspaceId
 
   const log = getLogger()
   try {
@@ -56,7 +64,7 @@ export function startDesignDocWatcher(repoPath: string, adapter: string): void {
       log.warn({ err: String(err) }, 'designdoc watcher error — closing')
       stopDesignDocWatcher()
     })
-    log.info({ target }, 'designdoc watcher started')
+    log.info({ target, workspace: workspaceId }, 'designdoc watcher started')
   } catch (err) {
     log.warn({ err: String(err) }, 'failed to start designdoc watcher; falling back to sync-time scans only')
   }
@@ -75,6 +83,7 @@ export function stopDesignDocWatcher(): void {
     }
     activeWatcher = null
   }
+  watchedWorkspaceId = null
 }
 
 async function rescanAndPublish(
@@ -84,15 +93,26 @@ async function rescanAndPublish(
   filename: string,
 ): Promise<void> {
   const log = getLogger()
-  try {
-    const designdocs = await runDesignDocScan(repoPath, adapter)
-    writeDesigndocsCached(designdocs)
-    publish({
-      type: 'designdoc-changed',
-      data: { eventType, filename, count: designdocs?.length ?? 0 },
-    })
-    log.debug({ filename, count: designdocs?.length ?? 0 }, 'designdoc rescan published')
-  } catch (err) {
-    log.warn({ err: String(err) }, 'designdoc rescan failed')
-  }
+  const wid = watchedWorkspaceId
+  if (!wid) return // watcher already torn down
+  // Run cache writes under the watched workspace's context so getDb()
+  // resolves to that workspace's DB, not whatever stale singleton.
+  await runWithWorkspace(wid, async () => {
+    try {
+      const designdocs = await runDesignDocScan(repoPath, adapter)
+      writeDesigndocsCached(designdocs)
+      publish({
+        type: BUS_EVENT.DESIGNDOC_CHANGED,
+        data: {
+          eventType,
+          filename,
+          count: designdocs?.length ?? 0,
+          workspaceId: wid,
+        },
+      })
+      log.debug({ filename, workspace: wid, count: designdocs?.length ?? 0 }, 'designdoc rescan published')
+    } catch (err) {
+      log.warn({ err: String(err) }, 'designdoc rescan failed')
+    }
+  })
 }

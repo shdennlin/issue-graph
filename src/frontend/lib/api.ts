@@ -7,9 +7,29 @@ import type {
   Viewer,
   WorkflowState,
 } from '@shared/types.js'
+import { useWorkspaceStore } from '../store/workspaceStore'
+
+/**
+ * Inject the current tab's workspace id as `?w=<id>` into a path. The
+ * backend's per-request middleware (src/backend/index.ts) reads this and
+ * scopes loadConfig / getDb / getBackend / sync to that workspace.
+ *
+ * No-op when:
+ *   - the path already specifies `?w=` (caller is being explicit), or
+ *   - the workspace store hasn't initialised yet (early bootstrap before
+ *     /api/workspaces returns; the backend then falls back to its default).
+ */
+export function withWorkspaceParam(path: string): string {
+  const id = useWorkspaceStore.getState().currentWorkspaceId
+  if (!id) return path
+  if (path.includes('?w=') || path.includes('&w=')) return path
+  const sep = path.includes('?') ? '&' : '?'
+  return `${path}${sep}w=${encodeURIComponent(id)}`
+}
 
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } })
+  const url = withWorkspaceParam(path)
+  const res = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     throw new Error(`${res.status} ${path}: ${text.slice(0, 200)}`)
@@ -82,8 +102,13 @@ export const api = {
   fetchMe: () => http<{ viewer: Viewer | null; issuesCached: number }>('/api/me'),
   fetchSyncHistory: () => http<{ entries: SyncLogEntry[] }>('/api/sync-history'),
   fetchSettings: () => http<SettingsResponse>('/api/settings'),
+  // GET /api/workspaces returns the **server-default** workspace + the full
+  // profile list, regardless of this tab's `?w=`. Used by App bootstrap.
   fetchWorkspaces: () => http<WorkspaceListResponse>('/api/workspaces'),
-  switchWorkspace: (id: string) =>
+  // Sets the server-default workspace (the one new tabs land on, and the one
+  // the file watcher follows). Distinct from changing this tab's view —
+  // that's a URL change handled in the workspace store.
+  setDefaultWorkspace: (id: string) =>
     http<{ ok: boolean; active: WorkspaceProfile | null; changed: boolean }>('/api/workspaces/active', {
       method: 'POST',
       body: JSON.stringify({ id }),
@@ -98,7 +123,7 @@ export const api = {
   deleteAnnotation: (id: number) =>
     http<{ ok: boolean }>(`/api/annotations/${id}`, { method: 'DELETE' }),
   exportAnnotations: () =>
-    fetch('/api/annotations?format=json').then((r) => r.json()),
+    fetch(withWorkspaceParam('/api/annotations?format=json')).then((r) => r.json()),
   importAnnotations: (mode: 'merge' | 'replace', annotations: AnnotationDTO[]) =>
     http<{ ok: boolean; count: number }>('/api/annotations/import', {
       method: 'POST',
@@ -107,6 +132,6 @@ export const api = {
   fetchSnapshots: () => http<{ entries: number[] }>('/api/snapshots'),
   fetchSnapshotDiff: (from: number, to: number) =>
     http<SnapshotDiff>(`/api/snapshot-diff?from=${from}&to=${to}`),
-  exportUrl: (format: 'csv' | 'md') => `/api/export?format=${format}`,
+  exportUrl: (format: 'csv' | 'md') => withWorkspaceParam(`/api/export?format=${format}`),
   fetchCoverage: () => http<DesignDocCoverage>('/api/designdoc/coverage'),
 }

@@ -4,8 +4,10 @@ import {
   clearActiveWorkspaceOverride,
   listWorkspaceProfiles,
   readActiveWorkspaceOverride,
+  resolveProfileValuesById,
   type WorkspaceProfile,
 } from '../workspaces.js'
+import { getCurrentWorkspaceId, LEGACY_WORKSPACE_ID } from './workspaceContext.js'
 
 // Load .env from CWD if present (no-op in production where env comes from Docker).
 // Uses Node's built-in loader (≥20.12) — avoids the dotenv dependency.
@@ -107,17 +109,43 @@ export type ActiveWorkspaceInfo = {
   profiles: WorkspaceProfile[]
 }
 
-let cached: Config | null = null
-let cachedWorkspace: ActiveWorkspaceInfo | null = null
-// Base (pre-profile) SQLITE_PATH. The active-workspace.json override must live
-// next to this path, NOT next to the profile-resolved cfg.SQLITE_PATH (which
-// already includes a workspaces/<id>/ component and would route the override
-// into a per-workspace subdirectory where loadConfig() cannot find it).
+// Per-workspace Config cache. Keyed by workspace id (or LEGACY_WORKSPACE_ID
+// when no profiles are defined). Built lazily on first loadConfig() call for
+// each id. Invariants:
+//   - Same id → same Config object (downstream Map<id, T> caches stay coherent).
+//   - Different ids → independent Configs, no cross-talk.
+const configByWorkspaceId: Map<string, Config> = new Map()
+
+// Cached default workspace id — the one used when no AsyncLocalStorage
+// context is set (background tasks, server bootstrap) or when a request
+// arrives without `?w=`. Re-derived from active-workspace.json + env.
+// `bustDefaultWorkspaceCache()` clears this when the override file changes.
+let cachedDefaultWid: string | null = null
+let cachedWorkspaceInfo: ActiveWorkspaceInfo | null = null
+
+// Base (pre-profile) SQLITE_PATH — needed for active-workspace.json location.
+// The override file lives next to the BASE path, NOT next to a profile-resolved
+// path (which would route the override into a per-workspace subdir).
 let cachedBaseSqlitePath: string | null = null
 
-export function loadConfig(): Config {
-  if (cached) return cached
-  const base = ConfigSchema.parse(process.env)
+// Base (pre-profile) config — env-only, identical across workspace ids.
+// Cached so resolving N workspace configs doesn't re-run Zod parse N times
+// on the same `process.env` snapshot.
+let cachedBase: Config | null = null
+function parseBaseConfig(): Config {
+  if (!cachedBase) cachedBase = ConfigSchema.parse(process.env)
+  return cachedBase
+}
+
+function ensureBaseSqlitePath(): string {
+  if (cachedBaseSqlitePath) return cachedBaseSqlitePath
+  cachedBaseSqlitePath = parseBaseConfig().SQLITE_PATH
+  return cachedBaseSqlitePath
+}
+
+function resolveDefaultWid(): string {
+  if (cachedDefaultWid) return cachedDefaultWid
+  const base = parseBaseConfig()
   cachedBaseSqlitePath = base.SQLITE_PATH
   const workspace = buildWorkspaceConfig({
     env: process.env as Record<string, string | undefined>,
@@ -125,28 +153,49 @@ export function loadConfig(): Config {
     defaultSqlitePath: base.SQLITE_PATH,
   })
   if (workspace.staleOverride) {
-    // Stale runtime override referenced a profile that's no longer in env.
-    // Clear the file so we don't keep warning on every subsequent loadConfig().
     clearActiveWorkspaceOverride(base.SQLITE_PATH)
   }
-  const parsed: Config = {
-    ...base,
-    LINEAR_API_KEY: workspace.values.LINEAR_API_KEY ?? base.LINEAR_API_KEY,
-    LINEAR_TEAM_ID: workspace.values.LINEAR_TEAM_ID ?? base.LINEAR_TEAM_ID,
-    REPO_PATH: workspace.values.REPO_PATH ?? base.REPO_PATH,
-    SQLITE_PATH: workspace.values.SQLITE_PATH,
-  }
-  cachedWorkspace = {
+  cachedWorkspaceInfo = {
     active: workspace.activeProfile,
     profiles: workspace.profiles,
   }
-  if (parsed.BACKEND === 'linear' && !parsed.LINEAR_API_KEY) {
-    // Don't throw — server runs and the onboarding screen tells the user what to do.
-    // (Throwing would mean the container can't even start to render onboarding.)
+  cachedDefaultWid = workspace.activeProfile?.id ?? LEGACY_WORKSPACE_ID
+  return cachedDefaultWid
+}
+
+function buildConfigForWid(wid: string): Config {
+  const base = parseBaseConfig()
+  cachedBaseSqlitePath = base.SQLITE_PATH
+
+  if (wid === LEGACY_WORKSPACE_ID) {
+    if (base.REPO_PATH && !base.REPO_PATH.startsWith('/')) {
+      console.warn(
+        `[issue-graph] REPO_PATH="${base.REPO_PATH}" is not absolute. ` +
+          `This works for local dev but will break under Docker (bind mounts require absolute paths). ` +
+          `Recommended: use an absolute path.`,
+      )
+    }
+    return base
   }
-  // REPO_PATH must be absolute so the same value works in `bun run dev` and in
-  // `docker compose up` (where it's bind-mounted at the same path inside the
-  // container). A relative path silently breaks under Docker.
+
+  const values = resolveProfileValuesById(
+    process.env as Record<string, string | undefined>,
+    base.SQLITE_PATH,
+    wid,
+  )
+  if (!values) {
+    // Unknown wid — fall back to base config rather than throwing. The route
+    // layer should have validated wid before reaching here, but a defensive
+    // fallback keeps the server alive if it slips through.
+    return base
+  }
+  const parsed: Config = {
+    ...base,
+    LINEAR_API_KEY: values.LINEAR_API_KEY ?? base.LINEAR_API_KEY,
+    LINEAR_TEAM_ID: values.LINEAR_TEAM_ID ?? base.LINEAR_TEAM_ID,
+    REPO_PATH: values.REPO_PATH ?? base.REPO_PATH,
+    SQLITE_PATH: values.SQLITE_PATH,
+  }
   if (parsed.REPO_PATH && !parsed.REPO_PATH.startsWith('/')) {
     console.warn(
       `[issue-graph] REPO_PATH="${parsed.REPO_PATH}" is not absolute. ` +
@@ -154,8 +203,21 @@ export function loadConfig(): Config {
         `Recommended: use an absolute path.`,
     )
   }
-  cached = parsed
   return parsed
+}
+
+/**
+ * Returns the Config for the current request's workspace (resolved via
+ * AsyncLocalStorage), or for the default workspace when no context is set.
+ * Cached per workspace id.
+ */
+export function loadConfig(): Config {
+  const wid = getCurrentWorkspaceId() ?? resolveDefaultWid()
+  const cached = configByWorkspaceId.get(wid)
+  if (cached) return cached
+  const built = buildConfigForWid(wid)
+  configByWorkspaceId.set(wid, built)
+  return built
 }
 
 export function isAuthConfigured(cfg: Config): boolean {
@@ -163,23 +225,47 @@ export function isAuthConfigured(cfg: Config): boolean {
   return false
 }
 
+/**
+ * Server's notion of the "default" workspace — what new tabs land on when
+ * they have no `?w=` query, and what the watcher follows. Read from
+ * active-workspace.json (with WORKSPACE_ACTIVE env / first-profile fallback).
+ * Reflects the latest state across the whole process.
+ */
 export function getWorkspaceInfo(): ActiveWorkspaceInfo {
-  if (!cachedWorkspace) loadConfig()
-  return cachedWorkspace ?? {
+  if (!cachedWorkspaceInfo) resolveDefaultWid()
+  return cachedWorkspaceInfo ?? {
     active: null,
     profiles: listWorkspaceProfiles(process.env as Record<string, string | undefined>),
   }
 }
 
+export function getDefaultWorkspaceId(): string {
+  return resolveDefaultWid()
+}
+
+/**
+ * Bust the default-wid cache so the next loadConfig() / getDefaultWorkspaceId()
+ * re-reads active-workspace.json. Called after POST /api/workspaces/active
+ * writes a new default. Per-wid Config caches stay valid (their values are
+ * keyed by wid, which is independent of which one is the default).
+ */
+export function bustDefaultWorkspaceCache(): void {
+  cachedDefaultWid = null
+  cachedWorkspaceInfo = null
+}
+
+/**
+ * Drop ALL per-workspace Config caches. Used by tests; not called from
+ * production paths since per-wid caches are stable across the process.
+ */
 export function resetConfigCache(): void {
-  cached = null
-  cachedWorkspace = null
+  configByWorkspaceId.clear()
+  cachedBase = null
+  cachedDefaultWid = null
+  cachedWorkspaceInfo = null
   cachedBaseSqlitePath = null
 }
 
 export function getBaseSqlitePath(): string {
-  if (cachedBaseSqlitePath) return cachedBaseSqlitePath
-  // Cold path: callers may invoke before loadConfig(). Trigger a load to populate.
-  loadConfig()
-  return cachedBaseSqlitePath ?? '/app/data/graph.db'
+  return ensureBaseSqlitePath()
 }

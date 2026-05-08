@@ -7,6 +7,7 @@ import {
   clearActiveWorkspaceOverride,
   listWorkspaceProfiles,
   readActiveWorkspaceOverride,
+  resolveProfileValuesById,
   writeActiveWorkspaceOverride,
 } from './workspaces.js'
 
@@ -141,6 +142,59 @@ describe('workspace profiles', () => {
     expect(profiles.map((p) => p.id)).toEqual(['personal'])
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('reserved'))
     warn.mockRestore()
+  })
+
+  it('resolveProfileValuesById returns the resolved values for a known id', () => {
+    const values = resolveProfileValuesById(
+      {
+        WORKSPACE_CLIENT_A_LINEAR_API_KEY: 'lin_client',
+        WORKSPACE_CLIENT_A_LINEAR_TEAM_ID: 'team-client',
+        WORKSPACE_CLIENT_A_REPO_PATH: '/repo/client',
+        WORKSPACE_PERSONAL_LINEAR_API_KEY: 'lin_personal',
+      },
+      '/app/data/graph.db',
+      'client_a',
+    )
+
+    expect(values).toEqual({
+      LINEAR_API_KEY: 'lin_client',
+      LINEAR_TEAM_ID: 'team-client',
+      REPO_PATH: '/repo/client',
+      SQLITE_PATH: '/app/data/workspaces/client_a/graph.db',
+    })
+  })
+
+  it('resolveProfileValuesById is case-insensitive on the id', () => {
+    const values = resolveProfileValuesById(
+      { WORKSPACE_CLIENT_A_LINEAR_API_KEY: 'lin_client' },
+      '/data/graph.db',
+      'CLIENT_A',
+    )
+    expect(values?.LINEAR_API_KEY).toBe('lin_client')
+  })
+
+  it('resolveProfileValuesById returns null for an unknown id (no fallback)', () => {
+    const values = resolveProfileValuesById(
+      { WORKSPACE_PERSONAL_LINEAR_API_KEY: 'lin_personal' },
+      '/data/graph.db',
+      'gone',
+    )
+    expect(values).toBeNull()
+  })
+
+  it('resolveProfileValuesById returns isolated values per id (no cross-talk)', () => {
+    const env = {
+      WORKSPACE_A_LINEAR_API_KEY: 'lin_a',
+      WORKSPACE_A_REPO_PATH: '/repo/a',
+      WORKSPACE_B_LINEAR_API_KEY: 'lin_b',
+      WORKSPACE_B_REPO_PATH: '/repo/b',
+    }
+    const a = resolveProfileValuesById(env, '/data/graph.db', 'a')
+    const b = resolveProfileValuesById(env, '/data/graph.db', 'b')
+    expect(a?.LINEAR_API_KEY).toBe('lin_a')
+    expect(a?.REPO_PATH).toBe('/repo/a')
+    expect(b?.LINEAR_API_KEY).toBe('lin_b')
+    expect(b?.REPO_PATH).toBe('/repo/b')
   })
 
   it('lists profiles without exposing api keys', () => {

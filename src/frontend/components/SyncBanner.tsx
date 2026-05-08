@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
+import { useWorkspaceStore } from '../store/workspaceStore'
+import { useClickOutside } from '../hooks/useClickOutside'
 import { api } from '../lib/api'
-import type { WorkspaceListResponse } from '../lib/api'
 
 function colorClass(ageMinutes: number): string {
   if (ageMinutes < 5) return 'stale-ok'
@@ -26,8 +27,13 @@ export function SyncBanner() {
   const reloadGraph = useGraphStore((s) => s.load)
   const setSyncHistoryOpen = useViewStore((s) => s.setSyncHistoryOpen)
   const setSettingsOpen = useViewStore((s) => s.setSettingsOpen)
-  const [workspaces, setWorkspaces] = useState<WorkspaceListResponse | null>(null)
-  const [switchingWorkspace, setSwitchingWorkspace] = useState(false)
+  const profiles = useWorkspaceStore((s) => s.profiles)
+  const legacyMode = useWorkspaceStore((s) => s.legacyMode)
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  const activeTabId = useWorkspaceStore((s) => s.activeTabId)
+  const changeTabWorkspace = useWorkspaceStore((s) => s.changeTabWorkspace)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const pickerRef = useRef<HTMLLabelElement | null>(null)
   const warning = graph?.workspaceWarning ?? null
 
   const dismissWarning = async () => {
@@ -35,9 +41,8 @@ export function SyncBanner() {
     await reloadGraph()
   }
 
-  useEffect(() => {
-    api.fetchWorkspaces().then(setWorkspaces).catch(() => setWorkspaces(null))
-  }, [])
+  const closePicker = useCallback(() => setPickerOpen(false), [])
+  useClickOutside(pickerRef, pickerOpen, closePicker)
 
   const last = graph?.fetchedAt ?? 0
   const age = last ? Math.floor((Date.now() - last) / 60_000) : Infinity
@@ -45,46 +50,25 @@ export function SyncBanner() {
     graph?.stale ? ' (stale)' : ''
   }`
 
-  const switchWorkspace = async (id: string) => {
-    if (!id || id === workspaces?.active?.id) return
-    setSwitchingWorkspace(true)
-    try {
-      await api.switchWorkspace(id)
-      window.location.reload()
-    } catch (err) {
-      setSwitchingWorkspace(false)
-      alert(err instanceof Error ? err.message : String(err))
-    }
+  const showPicker = !legacyMode && profiles.length > 0
+  const activeName = profiles.find((p) => p.id === currentWorkspaceId)?.name
+    ?? graph?.instanceLabel
+    ?? 'issue-graph'
+
+  // Repointing this tab at a different workspace, in place. Different
+  // from clicking another tab in the TabBar — that switches active tab
+  // (which has its own filters/focus). This swap KEEPS the current
+  // tab's filters / focus / chain isolation but applies them to a
+  // different workspace's data.
+  const onPickWorkspace = (workspaceId: string) => {
+    setPickerOpen(false)
+    if (!activeTabId) return
+    if (workspaceId === currentWorkspaceId) return
+    changeTabWorkspace(activeTabId, workspaceId)
   }
 
   return (
     <>
-      {switchingWorkspace && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 9999,
-            background: 'rgba(0, 0, 0, 0.55)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <div
-            style={{
-              background: 'var(--bg-elev, #fff)',
-              color: 'var(--fg)',
-              padding: '20px 24px',
-              borderRadius: 8,
-              boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
-              fontWeight: 600,
-            }}
-          >
-            Switching workspace…
-          </div>
-        </div>
-      )}
       {warning && (
         <div
           style={{
@@ -126,23 +110,38 @@ export function SyncBanner() {
       )}
     <div className="banner">
       <div className="left">
-        {workspaces && !workspaces.legacyMode && workspaces.profiles.length > 0 ? (
-          <label className="workspace-select" title="Active Linear workspace profile">
-            <span className="status-dot" aria-hidden />
-            <span className="workspace-select-label">{workspaces.active?.name ?? graph?.instanceLabel ?? 'issue-graph'}</span>
-            <select
-              value={workspaces.active?.id ?? ''}
-              onChange={(e) => switchWorkspace(e.target.value)}
-              disabled={switchingWorkspace || syncing || status === 'loading'}
-              aria-label="Active Linear workspace profile"
+        {showPicker ? (
+          <label
+            ref={pickerRef}
+            className="workspace-picker"
+            title="Change this tab's workspace (keeps filters/focus)"
+          >
+            <button
+              type="button"
+              className="pill workspace-picker-button"
+              aria-haspopup="menu"
+              aria-expanded={pickerOpen}
+              onClick={() => setPickerOpen(!pickerOpen)}
             >
-              {workspaces.profiles.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name}
-                </option>
-              ))}
-            </select>
-            <span className="select-chevron" aria-hidden>▾</span>
+              <span className="status-dot" aria-hidden /> {activeName}
+              <span className="select-chevron" aria-hidden>▾</span>
+            </button>
+            {pickerOpen && (
+              <div className="workspace-picker-menu" role="menu">
+                {profiles.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    role="menuitem"
+                    className={`workspace-picker-item${p.id === currentWorkspaceId ? ' is-current' : ''}`}
+                    onClick={() => onPickWorkspace(p.id)}
+                    title={p.id === currentWorkspaceId ? 'Already on this workspace' : `Switch this tab to ${p.name}`}
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </label>
         ) : (
           <span className="pill">

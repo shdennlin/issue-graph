@@ -1,5 +1,6 @@
 import { getLogger } from './lib/log.js'
-import { loadConfig, isAuthConfigured } from './lib/env.js'
+import { loadConfig, isAuthConfigured, getDefaultWorkspaceId } from './lib/env.js'
+import { getCurrentWorkspaceId, LEGACY_WORKSPACE_ID } from './lib/workspaceContext.js'
 import { getDb } from './db.js'
 import {
   writeIssueCache,
@@ -24,30 +25,44 @@ interface SyncResult {
   errorMessage?: string
 }
 
-let inflight: Promise<SyncResult> | null = null
+// Per-workspace sync state: one tab on workspace A and another on workspace B
+// can sync simultaneously, but two tabs on the same workspace coalesce to a
+// single in-flight sync (the second caller awaits the first and returns the
+// shared result). Background-sync debouncing is also per-workspace so trigger
+// floods on A don't suppress B.
+const inflightByWid: Map<string, Promise<SyncResult>> = new Map()
+const backgroundLastByWid: Map<string, number> = new Map()
 const VIEWER_KEY = 'viewer_json'
 const SNAPSHOT_DATE_KEY = 'last_snapshot_yyyymmdd'
+
+function currentWid(): string {
+  return getCurrentWorkspaceId() ?? getDefaultWorkspaceId() ?? LEGACY_WORKSPACE_ID
+}
 
 function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 export async function syncOnce({ force = false }: { force?: boolean } = {}): Promise<SyncResult> {
-  if (inflight && !force) return inflight
-  if (inflight && force) {
+  const wid = currentWid()
+  const existing = inflightByWid.get(wid)
+  if (existing && !force) return existing
+  if (existing && force) {
     // Wait for the in-flight one to settle, then run a fresh one.
-    await inflight.catch(() => undefined)
+    await existing.catch(() => undefined)
   }
-  inflight = doSync()
+  const p = doSync()
+  inflightByWid.set(wid, p)
   try {
-    return await inflight
+    return await p
   } finally {
-    inflight = null
+    if (inflightByWid.get(wid) === p) inflightByWid.delete(wid)
   }
 }
 
-export function isSyncInFlight(): boolean {
-  return inflight !== null
+export function isSyncInFlight(workspaceId?: string): boolean {
+  const wid = workspaceId ?? currentWid()
+  return inflightByWid.has(wid)
 }
 
 async function doSync(): Promise<SyncResult> {
@@ -176,12 +191,14 @@ async function doSync(): Promise<SyncResult> {
   }
 }
 
-let backgroundLast = 0
 export function kickBackgroundSync(): void {
-  // PRD §5.7 — debounce repeated triggers within 2s window.
+  // PRD §5.7 — debounce repeated triggers within 2s window. Per-workspace so
+  // a flurry of triggers on A doesn't lock out a legitimate trigger on B.
+  const wid = currentWid()
   const now = Date.now()
-  if (now - backgroundLast < 2000) return
-  backgroundLast = now
+  const last = backgroundLastByWid.get(wid) ?? 0
+  if (now - last < 2000) return
+  backgroundLastByWid.set(wid, now)
   syncOnce({ force: false }).catch(() => undefined)
 }
 
