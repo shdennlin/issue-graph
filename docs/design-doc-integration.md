@@ -5,7 +5,9 @@ If your team writes design docs / RFCs / change proposals as markdown files alon
 > [!IMPORTANT]
 > **What's supported (today):**
 > - **Layout:** [Spectra](https://spectra.5xcamp.us/) / [OpenSpec](https://openspec.dev/) only. Other formats (ADRs, custom layouts, Notion exports, …) are not auto-detected.
-> - **Where the adapter looks:** `<REPO_PATH>/openspec/changes/<name>/` — `REPO_PATH` is the **repo root**, *not* the spec folder. The `openspec/` subpath is hardcoded by the adapter.
+> - **Where the adapter looks:** `<REPO_PATH>/<spec_dir>/changes/<name>/` — `REPO_PATH` is the **repo root**, *not* the spec folder. `<spec_dir>` is resolved per-tool:
+>   - **OpenSpec:** always `openspec/` (hardcoded by OpenSpec itself).
+>   - **Spectra:** reads `.spectra.yaml` for `spec_dir`, falling back to `docs/specs/` (the v2.2.5+ default), then `openspec/` (legacy / mid-migration).
 > - **Required files per change:** `proposal.md` (with optional frontmatter / "Linear" line for issue IDs) and `tasks.md` containing `- [ ]` / `- [x]` checkboxes for the progress bar.
 
 > [!NOTE]
@@ -21,15 +23,15 @@ Set one absolute path in `.env`:
 REPO_PATH=/path/to/your/repo
 ```
 
-`REPO_PATH` is the **repo root**. The adapter then looks for `<REPO_PATH>/openspec/` to discover proposals — the `openspec/` part is a fixed convention, not configurable. So the effective lookup path is:
+`REPO_PATH` is the **repo root**. The adapter then resolves the spec folder underneath it. For pure OpenSpec projects the folder is always `openspec/`. For Spectra projects (presence of `.spectra.yaml` or `.spectra/`) the folder comes from `spec_dir` in `.spectra.yaml`, falling back to `docs/specs/` (Spectra's v2.2.5+ default) and finally `openspec/` (legacy / mid-migration). The effective lookup path is:
 
 ```text
-<REPO_PATH>/openspec/changes/<change-name>/{proposal.md, tasks.md}
+<REPO_PATH>/<spec_dir>/changes/<change-name>/{proposal.md, tasks.md}
 ```
 
 Used identically by `bun run dev` and `docker compose up` — under Docker the path is bind-mounted at the same location inside the container, so the backend reads it the same way in both modes. Path **must** be absolute.
 
-If `<REPO_PATH>/openspec/` doesn't exist, the integration is silently disabled — no errors, the design-doc filter just doesn't appear in the UI.
+If no usable spec folder is found under `<REPO_PATH>`, the integration is silently disabled — no errors, the design-doc filter just doesn't appear in the UI.
 
 > [!TIP]
 > Curious what proposals look like? See [`demo-repo/`](../demo-repo) — a sample `openspec/` directory used by the project's own screenshots. Set `REPO_PATH=/absolute/path/to/issue-graph/demo-repo` to load it.
@@ -91,4 +93,4 @@ The data comes from the last sync — refresh after editing files to see updates
 
 ## 4. Other layouts
 
-If your design docs aren't in `openspec/`, the adapter doesn't auto-detect anything. The architecture supports adding more adapters under `src/backend/designdoc/` (e.g. `rfc-folder`, `notion-export`) — see `spectra.ts` for the contract.
+The auto-detector knows the OpenSpec and Spectra layouts (including Spectra's configurable `spec_dir`). For anything else — ADRs, in-house formats, Notion exports — the architecture supports adding more adapters under `src/backend/designdoc/` (e.g. `rfc-folder`, `notion-export`). Each adapter implements the `DesignDocAdapter` interface in `types.ts`; layouts that share the proposal.md / tasks.md / checkbox conventions can reuse `scanner.ts` for free and only need to define their own `detect()` and spec-dir resolution. See `openspec.ts` and `spectra.ts` for two reference implementations.

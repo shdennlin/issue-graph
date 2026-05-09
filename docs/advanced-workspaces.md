@@ -99,7 +99,9 @@ If editing `tasks.md` or `proposal.md` does not update the graph:
 
 1. Check the top-left workspace selector points at the profile whose repo you
    are editing.
-2. Check that `WORKSPACE_<ID>_REPO_PATH/openspec` exists.
+2. Check that the spec directory exists under `WORKSPACE_<ID>_REPO_PATH` —
+   `openspec/` for OpenSpec projects, or whatever `spec_dir` resolves to for
+   Spectra projects (default `docs/specs/`; see `.spectra.yaml`).
 3. Under Docker, check that the repo path is mounted into the container.
 4. Restart the backend after editing `.env`; UI workspace switching itself does
    not require a restart.
