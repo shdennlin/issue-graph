@@ -5,8 +5,11 @@ node_modules/
 build/
 dist/
 
-# Runtime data (SQLite, snapshots, logs) — never committed
+# Runtime data (SQLite, snapshots, logs) — never committed.
+# data-dev/ is the host-only dev tree, kept disjoint from data/ (used by
+# the docker container) so concurrent SQLite writes don't corrupt the WAL.
 data/
+data-dev/
 
 # Env files (never committed)
 .env
