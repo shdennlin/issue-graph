@@ -89,6 +89,15 @@ See **[Design-doc integration](docs/design-doc-integration.md)** for the full se
 
 ![Design-doc view — only issues with linked proposals, each showing a per-issue progress bar derived from the proposal's tasks.md](docs/screenshots/designdoc.png)
 
+### Install as a desktop app (optional)
+
+`issue-graph` ships a web app manifest and service worker, so once it's running you can install it as a standalone window:
+
+- **Chrome / Edge:** click the **install** icon in the URL bar (or `⋮` → *Install Issue Graph*).
+- **Safari (macOS):** *File* → *Add to Dock*.
+
+The service worker pre-caches only the app shell (HTML / CSS / JS / icons). Linear data and the SSE event stream stay network-only, so workspace data is never served stale. Uninstalling reverses both — no leftover state on disk.
+
 ## Customization
 
 `issue-graph` autodetects common Linear label group names (`service|component|owner|module|team|area|domain` for buckets, `type|kind|category` for icons). For different naming conventions or full control via `label-schema.yaml`, see **[Customizing labels and icons](docs/configuration.md)**.
