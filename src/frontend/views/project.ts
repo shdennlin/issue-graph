@@ -3,13 +3,18 @@ import type { ViewDefinition } from './types'
 import { issueNodeHeight } from './types'
 import { applyFilters } from './filters'
 import { computeConnectivity } from './connectivity'
+import { chooseColumnCount, packIntoColumns } from './containerLayout'
 
 const PADDING = 30
 const HEADER = 32
 const NODE_W = 320
 const GAP_Y = 14
 const GAP_X = 30
-const CONTAINER_W = NODE_W + PADDING * 2
+const INNER_GAP_X = 16
+function computeContainerWidth(cols: number): number {
+  return PADDING * 2 + NODE_W * cols + INNER_GAP_X * Math.max(0, cols - 1)
+}
+const MAX_ROW_WIDTH = computeContainerWidth(1) * 4 + GAP_X * 3
 
 // Neutral color for the project container header. Projects don't have
 // a label-schema color the way buckets do (the label schema is
@@ -44,51 +49,53 @@ export const projectView: ViewDefinition = {
       return b[1].issues.length - a[1].issues.length
     })
 
-    const COLS = Math.max(1, Math.min(4, Math.ceil(Math.sqrt(ordered.length))))
     const ROW_GAP = 30
     const nodes: Node[] = []
     const issueToProject = new Map<string, string>()
     let rowY = 0
     let rowMaxH = 0
-    ordered.forEach(([key, b], idx) => {
-      const col = idx % COLS
-      if (col === 0 && idx > 0) {
+    let rowWidth = 0
+    ordered.forEach(([key, b]) => {
+      const cols = chooseColumnCount(b.issues.length)
+      const containerW = computeContainerWidth(cols)
+      const heights = b.issues.map((iss) => ({ id: iss.identifier, h: heightFor(iss.identifier) }))
+      const { placed, maxColumnHeight } = packIntoColumns(heights, cols, GAP_Y)
+      const containerHeight = HEADER + PADDING / 2 + maxColumnHeight + PADDING / 2
+
+      if (rowWidth > 0 && rowWidth + GAP_X + containerW > MAX_ROW_WIDTH) {
         rowY += rowMaxH + ROW_GAP
         rowMaxH = 0
+        rowWidth = 0
       }
-      const issuePositions: Array<{ id: string; y: number; h: number }> = []
-      let cursorY = HEADER + PADDING / 2
-      b.issues.forEach((iss, i) => {
-        const h = heightFor(iss.identifier)
-        issuePositions.push({ id: iss.identifier, y: cursorY, h })
-        cursorY += h
-        if (i < b.issues.length - 1) cursorY += GAP_Y
-      })
-      const containerHeight = cursorY + PADDING / 2
+      const xOffset = rowWidth === 0 ? 0 : rowWidth + GAP_X
       rowMaxH = Math.max(rowMaxH, containerHeight)
+      rowWidth = xOffset + containerW
+
       const containerId = `project:${key}`
-      const xOffset = col * (CONTAINER_W + GAP_X)
       nodes.push({
         id: containerId,
         type: 'mixedContainer',
         data: { bucket: { id: key, name: b.name, color: b.color, count: b.issues.length } },
         position: { x: xOffset, y: rowY },
-        width: CONTAINER_W,
+        width: containerW,
         height: containerHeight,
-        style: { width: CONTAINER_W, height: containerHeight },
+        style: { width: containerW, height: containerHeight },
       })
       b.issues.forEach((iss, i) => {
         const id = iss.identifier
-        const pos = issuePositions[i]!
+        const p = placed[i]!
         nodes.push({
           id,
           type: 'issue',
           data: { issue: iss, focused: focusedId === id, connectivity: conn.get(id) },
           parentNode: containerId,
           extent: 'parent',
-          position: { x: PADDING, y: pos.y },
+          position: {
+            x: PADDING + p.col * (NODE_W + INNER_GAP_X),
+            y: HEADER + PADDING / 2 + p.y,
+          },
           width: NODE_W,
-          height: pos.h,
+          height: p.h,
         })
         issueToProject.set(id, key)
       })

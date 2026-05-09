@@ -4,6 +4,7 @@ import { issueNodeHeight } from './types'
 import { applyFilters } from './filters'
 import { getPrimaryLabel } from '../lib/labelSchema'
 import { computeConnectivity } from './connectivity'
+import { chooseColumnCount, packIntoColumns } from './containerLayout'
 
 const PADDING = 30
 const HEADER = 32
@@ -12,7 +13,17 @@ const HEADER = 32
 const NODE_W = 320
 const GAP_Y = 14
 const GAP_X = 30
-const CONTAINER_W = NODE_W + PADDING * 2
+// Gap between columns inside a multi-column container. Smaller than GAP_X
+// (which separates whole containers) so the columns read as part of the
+// same group rather than as adjacent containers.
+const INNER_GAP_X = 16
+function computeContainerWidth(cols: number): number {
+  return PADDING * 2 + NODE_W * cols + INNER_GAP_X * Math.max(0, cols - 1)
+}
+// Max row width for outer grid wrapping. Keep close to the old "4 buckets
+// per row" cap so the canvas-wide layout shape doesn't surprise users who
+// got used to the previous behavior.
+const MAX_ROW_WIDTH = computeContainerWidth(1) * 4 + GAP_X * 3
 
 export const mixView: ViewDefinition = {
   id: 'mix',
@@ -40,57 +51,61 @@ export const mixView: ViewDefinition = {
 
     const ordered = [...buckets.entries()].sort((a, b) => b[1].issues.length - a[1].issues.length)
 
-    // Wrap buckets into a grid (auto-pick column count based on bucket count, capped
-    // 1..4). Each row starts below the tallest container of the previous row, so
-    // a giant bucket like central(16) doesn't push the next row down absurdly.
-    const COLS = Math.max(1, Math.min(4, Math.ceil(Math.sqrt(ordered.length))))
+    // Outer grid: pack buckets row-by-row using each one's actual width
+    // (which now varies based on its issue count → column count). Wrap to
+    // a new row when the next bucket would overflow MAX_ROW_WIDTH. Each
+    // row starts below the tallest container of the previous row so a
+    // giant bucket doesn't push the next row down absurdly.
     const ROW_GAP = 30
     const nodes: Node[] = []
     const issueToBucket = new Map<string, string>()
     let rowY = 0
     let rowMaxH = 0
-    ordered.forEach(([key, b], idx) => {
-      const col = idx % COLS
-      if (col === 0 && idx > 0) {
+    let rowWidth = 0
+    ordered.forEach(([key, b]) => {
+      // Pack issues into N columns inside this bucket so a long list
+      // doesn't become an unscannable vertical strip.
+      const cols = chooseColumnCount(b.issues.length)
+      const containerW = computeContainerWidth(cols)
+      const heights = b.issues.map((iss) => ({ id: iss.identifier, h: heightFor(iss.identifier) }))
+      const { placed, maxColumnHeight } = packIntoColumns(heights, cols, GAP_Y)
+      const containerHeight = HEADER + PADDING / 2 + maxColumnHeight + PADDING / 2
+
+      // Wrap to next row if this bucket wouldn't fit in the current row.
+      if (rowWidth > 0 && rowWidth + GAP_X + containerW > MAX_ROW_WIDTH) {
         rowY += rowMaxH + ROW_GAP
         rowMaxH = 0
+        rowWidth = 0
       }
-      // Compute each issue's stacked y-position from its real (measured) or
-      // estimated height. Container height = top padding + sum of card
-      // heights + gaps between cards + bottom padding + header.
-      const issuePositions: Array<{ id: string; y: number; h: number }> = []
-      let cursorY = HEADER + PADDING / 2 // small breathing room below header
-      b.issues.forEach((iss, i) => {
-        const h = heightFor(iss.identifier)
-        issuePositions.push({ id: iss.identifier, y: cursorY, h })
-        cursorY += h
-        if (i < b.issues.length - 1) cursorY += GAP_Y
-      })
-      const containerHeight = cursorY + PADDING / 2
+      const xOffset = rowWidth === 0 ? 0 : rowWidth + GAP_X
       rowMaxH = Math.max(rowMaxH, containerHeight)
+      rowWidth = xOffset + containerW
+
       const containerId = `bucket:${key}`
-      const xOffset = col * (CONTAINER_W + GAP_X)
       nodes.push({
         id: containerId,
         type: 'mixedContainer',
         data: { bucket: { id: key, name: b.name, color: b.color, count: b.issues.length } },
         position: { x: xOffset, y: rowY },
-        width: CONTAINER_W,
+        width: containerW,
         height: containerHeight,
-        style: { width: CONTAINER_W, height: containerHeight },
+        style: { width: containerW, height: containerHeight },
       })
       b.issues.forEach((iss, i) => {
         const id = iss.identifier
-        const pos = issuePositions[i]!
+        const p = placed[i]!
         nodes.push({
           id,
           type: 'issue',
           data: { issue: iss, focused: focusedId === id, connectivity: conn.get(id) },
           parentNode: containerId,
           extent: 'parent',
-          position: { x: PADDING, y: pos.y },
+          position: {
+            x: PADDING + p.col * (NODE_W + INNER_GAP_X),
+            y: HEADER + PADDING / 2 + p.y,
+          },
           width: NODE_W,
-          height: pos.h,
+          height: p.h,
         })
         issueToBucket.set(id, key)
       })
