@@ -13,6 +13,7 @@
 // size, modal-open flags, `filterPanelOpen`, `inlineSearch`) — those are
 // user-level preferences that should not vary by tab.
 
+import type { Viewport } from 'reactflow'
 import type { GraphResponse } from '@shared/types.js'
 import { useGraphStore } from './graphStore'
 import { defaultFilters, useViewStore, type Filters, type ViewId } from './viewStore'
@@ -33,6 +34,10 @@ interface PerTabView {
 
 interface TabSnapshot {
   view: PerTabView
+  /** ReactFlow viewport (pan + zoom) at snapshot time. Lives outside the
+   *  view store because it changes 60×/sec during pan and shouldn't churn
+   *  zustand subscribers; the bridge below reads it on-demand from RF. */
+  viewport: Viewport | null
   graph: GraphResponse | null
 }
 
@@ -52,6 +57,37 @@ const defaultView: PerTabView = {
 
 const snapshots: Map<string, TabSnapshot> = new Map()
 
+// Bridge to GraphCanvas. Three callbacks:
+//   - getter: snapshotTab reads the live RF viewport before storing.
+//   - restoreCallback: loadTab signals a viewport to apply after layout.
+//   - postRestoreCallback: loadTab signals "store has been restored, sync
+//     any per-tab refs so cross-tab effects don't fire spuriously". This
+//     is the fix for refs like lastLayoutBumpRef / prevChainRef in
+//     GraphCanvas that compare a remembered value against the live store
+//     — without re-syncing, a tab switch looks identical to the user
+//     pressing the shortcut that bumps that value.
+//
+// Without a registered bridge (e.g. the user is on the Settings page when
+// snapshotTab fires), capture is null and restore/postRestore are no-ops.
+let viewportGetter: (() => Viewport) | null = null
+let viewportRestoreCallback: ((vp: Viewport) => void) | null = null
+let postRestoreCallback: (() => void) | null = null
+
+export function registerViewportBridge(
+  getter: () => Viewport,
+  restoreCallback: (vp: Viewport) => void,
+  postRestore?: () => void,
+): () => void {
+  viewportGetter = getter
+  viewportRestoreCallback = restoreCallback
+  postRestoreCallback = postRestore ?? null
+  return () => {
+    if (viewportGetter === getter) viewportGetter = null
+    if (viewportRestoreCallback === restoreCallback) viewportRestoreCallback = null
+    if (postRestoreCallback === (postRestore ?? null)) postRestoreCallback = null
+  }
+}
+
 function captureCurrentView(): PerTabView {
   const v = useViewStore.getState()
   return {
@@ -69,10 +105,11 @@ function captureCurrentView(): PerTabView {
   }
 }
 
-/** Save a tab's view + graph for later restoration, keyed by tab id. */
+/** Save a tab's view + viewport + graph for later restoration, keyed by tab id. */
 export function snapshotTab(tabId: string): void {
   snapshots.set(tabId, {
     view: captureCurrentView(),
+    viewport: viewportGetter?.() ?? null,
     graph: useGraphStore.getState().graph,
   })
 }
@@ -95,6 +132,16 @@ export function loadTab(tabId: string): boolean {
       error: null,
       syncing: false,
     })
+    // Restore the user's prior pan/zoom so they land where they left off
+    // — but only when no node is focused. Focused nodes have their own
+    // post-layout positioning (setCenter on the focus) and overriding it
+    // would yank the camera off the focused issue.
+    if (snap.viewport && !snap.view.focusedId && viewportRestoreCallback) {
+      viewportRestoreCallback(snap.viewport)
+    }
+    // Sync GraphCanvas's per-tab refs to the just-restored store values
+    // so tab-switch state deltas don't masquerade as user actions.
+    postRestoreCallback?.()
     return true
   }
   useViewStore.setState(defaultView)
@@ -104,6 +151,8 @@ export function loadTab(tabId: string): boolean {
     error: null,
     syncing: false,
   })
+  // Same as the warm-restore branch — sync refs to defaults.
+  postRestoreCallback?.()
   return false
 }
 

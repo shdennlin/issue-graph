@@ -18,6 +18,7 @@ import ReactFlow, {
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { useSchemaStore } from '../store/schemaStore'
+import { registerViewportBridge } from '../store/tabStateStore'
 import { findView } from '../views'
 import { IssueNode } from './nodes/IssueNode'
 import { MixedContainerNode } from './nodes/MixedContainerNode'
@@ -206,7 +207,60 @@ function CanvasInner() {
   // Density / filter changes deliberately don't set the flag — they reset
   // measuredHeights for re-measurement, but no fitView fires.
   const pendingFitViewRef = useRef<{ padding: number; preserveFocus?: boolean } | null>(null)
+  // Tab-switch viewport restore. Set by tabStateStore.loadTab via the
+  // bridge below when the user returns to a tab they've already visited
+  // and panned around in. Consumed by the same effect that runs fitView,
+  // so timing works the same way: wait for measuredHeights to settle so
+  // RF's mount-time auto-fit can't override our setViewport.
+  const pendingViewportRestoreRef = useRef<Viewport | null>(null)
   useEffect(() => {
+    return registerViewportBridge(
+      () => rf.getViewport(),
+      (vp) => {
+        pendingViewportRestoreRef.current = vp
+        // Restore wins over any auto-fit that other producers queued.
+        pendingFitViewRef.current = null
+      },
+      () => {
+        // Tab switch just restored the view store. Sync per-tab refs so
+        // the change-detecting effects below don't misread a cross-tab
+        // value delta as a user action:
+        //   - hasFitOnceRef: re-arm Producer 1 so the new tab gets its
+        //     own initial fit. Skip if a viewport restore is queued
+        //     (would clobber it) or focus is set (would yank camera off
+        //     the focused issue).
+        //   - lastLayoutBumpRef: align with the restored layoutBump so
+        //     Producer 3 doesn't fire a re-layout in the new tab just
+        //     because the previous tab had a different bump count.
+        //   - prevChainRef: align with the restored chainRootId so the
+        //     auto-bump-on-chain-clear effect doesn't trigger when the
+        //     previous tab had a chain set and the new one doesn't.
+        const s = useViewStore.getState()
+        if (!pendingViewportRestoreRef.current && !s.focusedId) {
+          hasFitOnceRef.current = false
+        }
+        lastLayoutBumpRef.current = s.layoutBump
+        prevChainRef.current = s.chainRootId
+      },
+    )
+  }, [rf])
+  useEffect(() => {
+    // Restore the snapshotted viewport first if loadTab queued one.
+    // setViewport doesn't depend on layout — but we still wait for
+    // measuredHeights so it lands AFTER ReactFlow's initial fitView
+    // (triggered by the `fitView` prop on mount/remount), which would
+    // otherwise overwrite us.
+    const restoreVp = pendingViewportRestoreRef.current
+    if (restoreVp && measuredHeights) {
+      pendingViewportRestoreRef.current = null
+      // Also discard any pending fit queued AFTER the bridge cleared it
+      // — Producer 2 (view switch) re-arms it when the restored tab's
+      // activeView differs, and we don't want it to fire on the next
+      // unrelated consumer trigger.
+      pendingFitViewRef.current = null
+      rf.setViewport(restoreVp, { duration: 0 })
+      return
+    }
     if (!pendingFitViewRef.current) return
     if (!measuredHeights) return  // wait until layout has settled
     const { padding, preserveFocus } = pendingFitViewRef.current
