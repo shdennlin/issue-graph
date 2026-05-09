@@ -6,8 +6,9 @@
 // 2. **In-app tabs** — a list of "view sessions", each pinned to one
 //    workspace. The user can have multiple tabs on the same workspace
 //    (e.g. one filtered to a chain, another with different filters).
-//    Tab list + active tab survive a browser refresh via sessionStorage,
-//    but reset on browser-tab close (each browser tab gets its own list).
+//    Tab list + active tab persist via localStorage so closing and
+//    reopening the browser keeps your tab layout. Per-tab view state
+//    (filters, focus, viewport) is persisted separately by tabStateStore.
 //
 // `currentWorkspaceId` is a maintained derived field — it always equals the
 // active tab's workspace. Code that asks "which workspace does this fetch
@@ -58,9 +59,14 @@ interface WorkspaceState {
   setCurrentWorkspaceId: (id: string | null) => void
 }
 
-const SESSION_KEY = 'issue-graph-tabs'
+const STORAGE_KEY = 'issue-graph-tabs'
+// Bump when PersistedTabs shape changes incompatibly. The hydrate path
+// discards saved data on mismatch instead of trying to migrate — tab
+// layout is cheap to recreate and ad-hoc migrations get brittle fast.
+const STORAGE_VERSION = 1
 
 interface PersistedTabs {
+  version: number
   tabs: Tab[]
   activeTabId: string | null
 }
@@ -93,34 +99,40 @@ function sameProfiles(a: WorkspaceProfile[], b: WorkspaceProfile[]): boolean {
   return true
 }
 
-function loadFromSession(): PersistedTabs | null {
-  if (typeof sessionStorage === 'undefined') return null
+function loadPersisted(): PersistedTabs | null {
+  if (typeof localStorage === 'undefined') return null
   try {
-    const raw = sessionStorage.getItem(SESSION_KEY)
+    const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
-    const parsed = JSON.parse(raw) as PersistedTabs
+    const parsed = JSON.parse(raw) as Partial<PersistedTabs>
+    if (parsed.version !== STORAGE_VERSION) return null
     if (!Array.isArray(parsed.tabs)) return null
     if (parsed.tabs.length === 0) return null
     const valid = parsed.tabs.every(
       (t) => t && typeof t.id === 'string' && typeof t.workspaceId === 'string',
     )
     if (!valid) return null
-    return parsed
+    return {
+      version: parsed.version,
+      tabs: parsed.tabs,
+      activeTabId: parsed.activeTabId ?? null,
+    }
   } catch {
     return null
   }
 }
 
-function saveToSession(tabs: Tab[], activeTabId: string | null): void {
-  if (typeof sessionStorage === 'undefined') return
+function savePersisted(tabs: Tab[], activeTabId: string | null): void {
+  if (typeof localStorage === 'undefined') return
   try {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ tabs, activeTabId }))
+    const payload: PersistedTabs = { version: STORAGE_VERSION, tabs, activeTabId }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
   } catch {
     // Quota / private mode — just skip persistence.
   }
 }
 
-const persisted = loadFromSession()
+const persisted = loadPersisted()
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   profiles: [],
@@ -146,7 +158,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
   setTabs: (tabs, activeTabId) => {
     const active = tabs.find((t) => t.id === activeTabId) ?? null
-    saveToSession(tabs, active?.id ?? null)
+    savePersisted(tabs, active?.id ?? null)
     set({
       tabs,
       activeTabId: active?.id ?? null,
@@ -158,7 +170,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     const id = makeTabId()
     set((s) => {
       const tabs = [...s.tabs, { id, workspaceId }]
-      saveToSession(tabs, id)
+      savePersisted(tabs, id)
       return { tabs, activeTabId: id, currentWorkspaceId: workspaceId }
     })
     return id
@@ -179,7 +191,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         activeTabId = next?.id ?? null
         currentWorkspaceId = next?.workspaceId ?? null
       }
-      saveToSession(tabs, activeTabId)
+      savePersisted(tabs, activeTabId)
       return { tabs, activeTabId, currentWorkspaceId }
     })
   },
@@ -188,7 +200,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     set((s) => {
       const tab = s.tabs.find((t) => t.id === tabId)
       if (!tab || tab.id === s.activeTabId) return s
-      saveToSession(s.tabs, tabId)
+      savePersisted(s.tabs, tabId)
       return { activeTabId: tabId, currentWorkspaceId: tab.workspaceId }
     })
   },
@@ -200,7 +212,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       const cur = s.tabs[idx]
       if (!cur || cur.workspaceId === workspaceId) return s
       const tabs = s.tabs.map((t, i) => (i === idx ? { ...t, workspaceId } : t))
-      saveToSession(tabs, s.activeTabId)
+      savePersisted(tabs, s.activeTabId)
       return {
         tabs,
         currentWorkspaceId:
@@ -218,7 +230,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       const [moved] = next.splice(fromIndex, 1)
       if (!moved) return s
       next.splice(clamped, 0, moved)
-      saveToSession(next, s.activeTabId)
+      savePersisted(next, s.activeTabId)
       // currentWorkspaceId only depends on which tab is active, not order.
       return { tabs: next }
     })
@@ -244,7 +256,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       const tabs = s.tabs.map((t) =>
         t.id === s.activeTabId ? { ...t, workspaceId: id } : t,
       )
-      saveToSession(tabs, s.activeTabId)
+      savePersisted(tabs, s.activeTabId)
       return { tabs, currentWorkspaceId: id }
     })
   },

@@ -3,7 +3,7 @@ import { useGraphStore } from './store/graphStore'
 import { useSchemaStore } from './store/schemaStore'
 import { useViewStore } from './store/viewStore'
 import { makeTabId, useWorkspaceStore } from './store/workspaceStore'
-import { loadTab, snapshotTab } from './store/tabStateStore'
+import { loadTab, restoreViewportOnly, snapshotTab } from './store/tabStateStore'
 import { useUrlSync } from './store/urlSync'
 import { useTheme } from './hooks/useTheme'
 import { useFontSize } from './hooks/useFontSize'
@@ -93,11 +93,11 @@ export function App() {
                 : nextTabs.find((t) => t.workspaceId === ws.active?.id) ?? nextTabs[0]
             nextActive = preferred?.id ?? nextTabs[0]?.id ?? null
           } else if (fromUrl && validIds.has(fromUrl)) {
-            // sessionStorage tabs survived. Only override the active tab
-            // when the *saved* active doesn't already match the URL's
-            // workspace — otherwise we'd jump from the user's actual last
-            // tab to whichever matching tab happens to be first in the
-            // list (a problem when multiple tabs share a workspace).
+            // Persisted tabs survived. Only override the active tab when
+            // the *saved* active doesn't already match the URL's workspace
+            // — otherwise we'd jump from the user's actual last tab to
+            // whichever matching tab happens to be first in the list (a
+            // problem when multiple tabs share a workspace).
             const activeTab = existingTabs.find((t) => t.id === nextActive)
             const activeMatchesUrl = activeTab?.workspaceId === fromUrl
             if (!activeMatchesUrl) {
@@ -182,6 +182,32 @@ export function App() {
     }, 30_000)
     return () => window.clearInterval(id)
   }, [refetchIfNewer])
+
+  // Persist the active tab's view + viewport on page unload. Without this,
+  // a user who pans / zooms / changes a filter and then refreshes (without
+  // first switching tabs) would lose those changes — the regular snapshot
+  // path only fires from TabBar clicks and Cmd+1..9. beforeunload runs
+  // synchronously, so the localStorage write completes before the page
+  // actually goes away.
+  useEffect(() => {
+    const onBeforeUnload = (): void => {
+      const active = useWorkspaceStore.getState().activeTabId
+      if (active) snapshotTab(active)
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [])
+
+  // Restore the active tab's viewport on initial page load. View state
+  // (filters, focus, view, etc.) comes from URL parsing — that's the
+  // share-able source of truth and must win. Viewport isn't in the URL,
+  // so this is the one piece that needs separate restoration. Runs once
+  // after mount; the bridge has already registered by the time this
+  // effect fires (GraphCanvas is a child, its effects run first).
+  useEffect(() => {
+    const active = useWorkspaceStore.getState().activeTabId
+    if (active) restoreViewportOnly(active)
+  }, [])
 
   // Real-time push from the server. Two event types:
   //
