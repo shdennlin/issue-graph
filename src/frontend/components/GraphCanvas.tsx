@@ -397,17 +397,57 @@ function CanvasInner() {
   // Hover handlers — drive the dim-others-fade-this effect for fast scanning.
   // We only set hover state for issue nodes (not bucket containers) since the
   // dimming logic special-cases container types to stay opaque anyway.
+  //
+  // Race-condition handling for fast cursor movement: browsers can drop
+  // mouseleave/mouseenter events when the cursor flicks across many small
+  // elements faster than the event sample rate. Two safeguards:
+  //   1. mouseleave clears only if leaving the *currently* hovered node — a
+  //      stale leave for an older node won't wipe a fresh hover.
+  //   2. mousemove acts as a self-healing fallback — while the cursor is
+  //      inside any node, mousemove fires reliably at ~60-120Hz and corrects
+  //      hoveredNodeId to match the cursor's actual position even if the
+  //      original mouseenter was dropped.
   const onNodeMouseEnter: NodeMouseHandler = (_e, node) => {
     if (node.type === 'issue') setHoveredNodeId(node.id)
   }
-  const onNodeMouseLeave: NodeMouseHandler = () => {
-    setHoveredNodeId(null)
+  const onNodeMouseMove: NodeMouseHandler = (_e, node) => {
+    if (node.type !== 'issue') return
+    setHoveredNodeId((prev) => (prev === node.id ? prev : node.id))
   }
+  const onNodeMouseLeave: NodeMouseHandler = (_e, node) => {
+    setHoveredNodeId((prev) => (prev === node.id ? null : prev))
+  }
+  // Same race-condition handling as nodes (see onNodeMouse* above). Edges
+  // are even thinner targets than node blocks, so dropped mouseleave events
+  // are more likely — and a stuck edge hover beats node hover in the
+  // priority order (effectiveEdgeId ?? highlightedEdgeId), so a wrongly-
+  // pinned edge hijacks the entire highlight even when the user has moved
+  // on to hovering an unrelated node.
   const onEdgeMouseEnter: EdgeMouseHandler = (_e, edge) => {
     setHoveredEdgeId(edge.id)
   }
-  const onEdgeMouseLeave: EdgeMouseHandler = () => {
-    setHoveredEdgeId(null)
+  const onEdgeMouseMove: EdgeMouseHandler = (_e, edge) => {
+    setHoveredEdgeId((prev) => (prev === edge.id ? prev : edge.id))
+  }
+  const onEdgeMouseLeave: EdgeMouseHandler = (_e, edge) => {
+    setHoveredEdgeId((prev) => (prev === edge.id ? null : prev))
+  }
+
+  // Final safety net: when the cursor is in the empty pane between nodes
+  // and edges, neither onNodeMouseMove nor onEdgeMouseMove can self-heal a
+  // stale hover. This handler clears any leftover hover state once the
+  // cursor is provably not over any graph element.
+  //
+  // ReactFlow attaches `onPaneMouseMove` as `onMouseMove` on the pane DIV,
+  // which means it ALSO fires for events bubbling up from nodes and edges
+  // (since they're descendants of the pane). The `closest()` check filters
+  // those bubbled events out so we only clear when the cursor is truly on
+  // empty background. Functional setState makes the no-op case free.
+  const onPaneMouseMove = (e: React.MouseEvent) => {
+    const target = e.target as Element
+    if (target.closest('.react-flow__node, .react-flow__edge')) return
+    setHoveredNodeId((prev) => (prev === null ? prev : null))
+    setHoveredEdgeId((prev) => (prev === null ? prev : null))
   }
 
   const onPaneClick = () => {
@@ -463,9 +503,12 @@ function CanvasInner() {
         onNodeDoubleClick={onNodeDoubleClick}
         onEdgeClick={onEdgeClick}
         onNodeMouseEnter={onNodeMouseEnter}
+        onNodeMouseMove={onNodeMouseMove}
         onNodeMouseLeave={onNodeMouseLeave}
         onEdgeMouseEnter={onEdgeMouseEnter}
+        onEdgeMouseMove={onEdgeMouseMove}
         onEdgeMouseLeave={onEdgeMouseLeave}
+        onPaneMouseMove={onPaneMouseMove}
         onPaneClick={onPaneClick}
         onNodeContextMenu={onNodeContextMenu}
         fitView
