@@ -103,6 +103,13 @@ export interface DesignDocChange {
   // Per-strategy breakdown of which Linear IDs each linkage method found.
   // Used by the diagnostic page to surface why a change is/isn't linked.
   linkSources?: Record<DesignDocLinkStrategy, string[]>
+  // Optional: identifies the git worktree this change came from. Absent on
+  // single-checkout repos. When the same change name appears in multiple
+  // worktrees (rare in practice — Spectra v2.3.0+ relocates rather than
+  // duplicates), the linked-wins-by-mtime rule in factory.ts picks one
+  // and discards the others, so consumers always see at most one record
+  // per name.
+  worktree?: { path: string; ref: string }
 }
 
 export interface DesignDocCoverage {
