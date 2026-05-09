@@ -528,14 +528,12 @@ function CanvasInner() {
           type: 'smoothstep',
           style: { stroke: 'var(--edge)', strokeWidth: 1.8 },
           markerEnd: {
-            // Larger arrowhead so direction is readable at typical zoom
-            // levels — the line itself stays the same weight (strokeWidth
-            // unchanged above). 36×36 is roughly Linear's chip height,
-            // legible without dominating the card visually.
+            // Use ReactFlow's default 12.5×12.5 arrowhead so all views (mix,
+            // dependency, designdoc) read consistently. Larger sizes make
+            // arrowheads dominate the cards in mix/designdoc views, where
+            // edges connect bigger composite blocks.
             type: 'arrowclosed' as any,
             color: 'var(--edge)',
-            width: 36,
-            height: 36,
           },
         }}
       >
