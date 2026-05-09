@@ -226,9 +226,13 @@ function CanvasInner() {
         // the change-detecting effects below don't misread a cross-tab
         // value delta as a user action:
         //   - hasFitOnceRef: re-arm Producer 1 so the new tab gets its
-        //     own initial fit. Skip if a viewport restore is queued
-        //     (would clobber it) or focus is set (would yank camera off
-        //     the focused issue).
+        //     own initial fit. Skip when a viewport restore is queued —
+        //     fit would clobber the restored pan/zoom.
+        //   - pendingFitViewRef: actively schedule a fit for the new
+        //     tab. Producer 1's [nodes.length] dep won't fire if both
+        //     tabs happen to have the same node count — explicitly
+        //     queueing here guarantees the consumer fits once layout
+        //     settles. Skip when a viewport restore is queued.
         //   - lastLayoutBumpRef: align with the restored layoutBump so
         //     Producer 3 doesn't fire a re-layout in the new tab just
         //     because the previous tab had a different bump count.
@@ -236,8 +240,9 @@ function CanvasInner() {
         //     auto-bump-on-chain-clear effect doesn't trigger when the
         //     previous tab had a chain set and the new one doesn't.
         const s = useViewStore.getState()
-        if (!pendingViewportRestoreRef.current && !s.focusedId) {
+        if (!pendingViewportRestoreRef.current) {
           hasFitOnceRef.current = false
+          pendingFitViewRef.current = { padding: 0.1, preserveFocus: true }
         }
         lastLayoutBumpRef.current = s.layoutBump
         prevChainRef.current = s.chainRootId
@@ -565,7 +570,16 @@ function CanvasInner() {
         onPaneMouseMove={onPaneMouseMove}
         onPaneClick={onPaneClick}
         onNodeContextMenu={onNodeContextMenu}
-        fitView
+        // fitView prop intentionally OMITTED. ReactFlow's internal
+        // fitViewOnInit (triggered from updateNodeDimensions when nodes are
+        // first measured after each mount) races with our setViewport on
+        // tab-switch viewport restore — when the new tab's activeView
+        // differs, the `key={activeView}` re-mount resets RF's fitViewOnInitDone
+        // flag, and RF's internal fit fires AFTER our setViewport, clobbering
+        // the restored pan/zoom. We handle initial-fit ourselves via
+        // Producer 1 + the consumer effect below, which is the same pipeline
+        // every other fit (re-layout, view switch) already uses — single
+        // source of truth, no race.
         nodesDraggable
         // Two-finger trackpad / mouse-wheel scroll = pan. Pinch-zoom on trackpad
         // and Ctrl/Cmd+scroll still zoom. Buttons in <Controls /> also zoom.

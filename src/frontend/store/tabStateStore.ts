@@ -132,11 +132,13 @@ export function loadTab(tabId: string): boolean {
       error: null,
       syncing: false,
     })
-    // Restore the user's prior pan/zoom so they land where they left off
-    // — but only when no node is focused. Focused nodes have their own
-    // post-layout positioning (setCenter on the focus) and overriding it
-    // would yank the camera off the focused issue.
-    if (snap.viewport && !snap.view.focusedId && viewportRestoreCallback) {
+    // Restore the user's prior pan + zoom so they land exactly where they
+    // left off. Always — including when focused: the only setCenter path
+    // (Producer 3 in GraphCanvas) is gated on layoutBump and does not run
+    // on tab switch, so there's nothing to conflict with. Without this,
+    // returning to a tab where the user clicked an issue (focusedId set)
+    // would lose the pan/zoom they had carefully framed.
+    if (snap.viewport && viewportRestoreCallback) {
       viewportRestoreCallback(snap.viewport)
     }
     // Sync GraphCanvas's per-tab refs to the just-restored store values
