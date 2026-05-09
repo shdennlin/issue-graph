@@ -1,5 +1,6 @@
 import { dependencyView } from './dependency'
 import { mixView } from './mix'
+import { projectView } from './project'
 import { designdocView } from './designdoc'
 import type { ViewDefinition } from './types'
 
@@ -12,6 +13,7 @@ import type { ViewDefinition } from './types'
 export const views: ViewDefinition[] = [
   dependencyView,
   mixView,
+  projectView,
   designdocView,
 ]
 

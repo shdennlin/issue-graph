@@ -18,6 +18,7 @@ import ReactFlow, {
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { useSchemaStore } from '../store/schemaStore'
+import { registerViewportBridge } from '../store/tabStateStore'
 import { findView } from '../views'
 import { IssueNode } from './nodes/IssueNode'
 import { MixedContainerNode } from './nodes/MixedContainerNode'
@@ -206,7 +207,65 @@ function CanvasInner() {
   // Density / filter changes deliberately don't set the flag — they reset
   // measuredHeights for re-measurement, but no fitView fires.
   const pendingFitViewRef = useRef<{ padding: number; preserveFocus?: boolean } | null>(null)
+  // Tab-switch viewport restore. Set by tabStateStore.loadTab via the
+  // bridge below when the user returns to a tab they've already visited
+  // and panned around in. Consumed by the same effect that runs fitView,
+  // so timing works the same way: wait for measuredHeights to settle so
+  // RF's mount-time auto-fit can't override our setViewport.
+  const pendingViewportRestoreRef = useRef<Viewport | null>(null)
   useEffect(() => {
+    return registerViewportBridge(
+      () => rf.getViewport(),
+      (vp) => {
+        pendingViewportRestoreRef.current = vp
+        // Restore wins over any auto-fit that other producers queued.
+        pendingFitViewRef.current = null
+      },
+      () => {
+        // Tab switch just restored the view store. Sync per-tab refs so
+        // the change-detecting effects below don't misread a cross-tab
+        // value delta as a user action:
+        //   - hasFitOnceRef: re-arm Producer 1 so the new tab gets its
+        //     own initial fit. Skip when a viewport restore is queued —
+        //     fit would clobber the restored pan/zoom.
+        //   - pendingFitViewRef: actively schedule a fit for the new
+        //     tab. Producer 1's [nodes.length] dep won't fire if both
+        //     tabs happen to have the same node count — explicitly
+        //     queueing here guarantees the consumer fits once layout
+        //     settles. Skip when a viewport restore is queued.
+        //   - lastLayoutBumpRef: align with the restored layoutBump so
+        //     Producer 3 doesn't fire a re-layout in the new tab just
+        //     because the previous tab had a different bump count.
+        //   - prevChainRef: align with the restored chainRootId so the
+        //     auto-bump-on-chain-clear effect doesn't trigger when the
+        //     previous tab had a chain set and the new one doesn't.
+        const s = useViewStore.getState()
+        if (!pendingViewportRestoreRef.current) {
+          hasFitOnceRef.current = false
+          pendingFitViewRef.current = { padding: 0.1, preserveFocus: true }
+        }
+        lastLayoutBumpRef.current = s.layoutBump
+        prevChainRef.current = s.chainRootId
+      },
+    )
+  }, [rf])
+  useEffect(() => {
+    // Restore the snapshotted viewport first if loadTab queued one.
+    // setViewport doesn't depend on layout — but we still wait for
+    // measuredHeights so it lands AFTER ReactFlow's initial fitView
+    // (triggered by the `fitView` prop on mount/remount), which would
+    // otherwise overwrite us.
+    const restoreVp = pendingViewportRestoreRef.current
+    if (restoreVp && measuredHeights) {
+      pendingViewportRestoreRef.current = null
+      // Also discard any pending fit queued AFTER the bridge cleared it
+      // — Producer 2 (view switch) re-arms it when the restored tab's
+      // activeView differs, and we don't want it to fire on the next
+      // unrelated consumer trigger.
+      pendingFitViewRef.current = null
+      rf.setViewport(restoreVp, { duration: 0 })
+      return
+    }
     if (!pendingFitViewRef.current) return
     if (!measuredHeights) return  // wait until layout has settled
     const { padding, preserveFocus } = pendingFitViewRef.current
@@ -397,17 +456,57 @@ function CanvasInner() {
   // Hover handlers — drive the dim-others-fade-this effect for fast scanning.
   // We only set hover state for issue nodes (not bucket containers) since the
   // dimming logic special-cases container types to stay opaque anyway.
+  //
+  // Race-condition handling for fast cursor movement: browsers can drop
+  // mouseleave/mouseenter events when the cursor flicks across many small
+  // elements faster than the event sample rate. Two safeguards:
+  //   1. mouseleave clears only if leaving the *currently* hovered node — a
+  //      stale leave for an older node won't wipe a fresh hover.
+  //   2. mousemove acts as a self-healing fallback — while the cursor is
+  //      inside any node, mousemove fires reliably at ~60-120Hz and corrects
+  //      hoveredNodeId to match the cursor's actual position even if the
+  //      original mouseenter was dropped.
   const onNodeMouseEnter: NodeMouseHandler = (_e, node) => {
     if (node.type === 'issue') setHoveredNodeId(node.id)
   }
-  const onNodeMouseLeave: NodeMouseHandler = () => {
-    setHoveredNodeId(null)
+  const onNodeMouseMove: NodeMouseHandler = (_e, node) => {
+    if (node.type !== 'issue') return
+    setHoveredNodeId((prev) => (prev === node.id ? prev : node.id))
   }
+  const onNodeMouseLeave: NodeMouseHandler = (_e, node) => {
+    setHoveredNodeId((prev) => (prev === node.id ? null : prev))
+  }
+  // Same race-condition handling as nodes (see onNodeMouse* above). Edges
+  // are even thinner targets than node blocks, so dropped mouseleave events
+  // are more likely — and a stuck edge hover beats node hover in the
+  // priority order (effectiveEdgeId ?? highlightedEdgeId), so a wrongly-
+  // pinned edge hijacks the entire highlight even when the user has moved
+  // on to hovering an unrelated node.
   const onEdgeMouseEnter: EdgeMouseHandler = (_e, edge) => {
     setHoveredEdgeId(edge.id)
   }
-  const onEdgeMouseLeave: EdgeMouseHandler = () => {
-    setHoveredEdgeId(null)
+  const onEdgeMouseMove: EdgeMouseHandler = (_e, edge) => {
+    setHoveredEdgeId((prev) => (prev === edge.id ? prev : edge.id))
+  }
+  const onEdgeMouseLeave: EdgeMouseHandler = (_e, edge) => {
+    setHoveredEdgeId((prev) => (prev === edge.id ? null : prev))
+  }
+
+  // Final safety net: when the cursor is in the empty pane between nodes
+  // and edges, neither onNodeMouseMove nor onEdgeMouseMove can self-heal a
+  // stale hover. This handler clears any leftover hover state once the
+  // cursor is provably not over any graph element.
+  //
+  // ReactFlow attaches `onPaneMouseMove` as `onMouseMove` on the pane DIV,
+  // which means it ALSO fires for events bubbling up from nodes and edges
+  // (since they're descendants of the pane). The `closest()` check filters
+  // those bubbled events out so we only clear when the cursor is truly on
+  // empty background. Functional setState makes the no-op case free.
+  const onPaneMouseMove = (e: React.MouseEvent) => {
+    const target = e.target as Element
+    if (target.closest('.react-flow__node, .react-flow__edge')) return
+    setHoveredNodeId((prev) => (prev === null ? prev : null))
+    setHoveredEdgeId((prev) => (prev === null ? prev : null))
   }
 
   const onPaneClick = () => {
@@ -463,12 +562,24 @@ function CanvasInner() {
         onNodeDoubleClick={onNodeDoubleClick}
         onEdgeClick={onEdgeClick}
         onNodeMouseEnter={onNodeMouseEnter}
+        onNodeMouseMove={onNodeMouseMove}
         onNodeMouseLeave={onNodeMouseLeave}
         onEdgeMouseEnter={onEdgeMouseEnter}
+        onEdgeMouseMove={onEdgeMouseMove}
         onEdgeMouseLeave={onEdgeMouseLeave}
+        onPaneMouseMove={onPaneMouseMove}
         onPaneClick={onPaneClick}
         onNodeContextMenu={onNodeContextMenu}
-        fitView
+        // fitView prop intentionally OMITTED. ReactFlow's internal
+        // fitViewOnInit (triggered from updateNodeDimensions when nodes are
+        // first measured after each mount) races with our setViewport on
+        // tab-switch viewport restore — when the new tab's activeView
+        // differs, the `key={activeView}` re-mount resets RF's fitViewOnInitDone
+        // flag, and RF's internal fit fires AFTER our setViewport, clobbering
+        // the restored pan/zoom. We handle initial-fit ourselves via
+        // Producer 1 + the consumer effect below, which is the same pipeline
+        // every other fit (re-layout, view switch) already uses — single
+        // source of truth, no race.
         nodesDraggable
         // Two-finger trackpad / mouse-wheel scroll = pan. Pinch-zoom on trackpad
         // and Ctrl/Cmd+scroll still zoom. Buttons in <Controls /> also zoom.
@@ -485,14 +596,12 @@ function CanvasInner() {
           type: 'smoothstep',
           style: { stroke: 'var(--edge)', strokeWidth: 1.8 },
           markerEnd: {
-            // Larger arrowhead so direction is readable at typical zoom
-            // levels — the line itself stays the same weight (strokeWidth
-            // unchanged above). 36×36 is roughly Linear's chip height,
-            // legible without dominating the card visually.
+            // Use ReactFlow's default 12.5×12.5 arrowhead so all views (mix,
+            // dependency, designdoc) read consistently. Larger sizes make
+            // arrowheads dominate the cards in mix/designdoc views, where
+            // edges connect bigger composite blocks.
             type: 'arrowclosed' as any,
             color: 'var(--edge)',
-            width: 36,
-            height: 36,
           },
         }}
       >

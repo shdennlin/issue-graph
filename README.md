@@ -8,6 +8,7 @@ Self-hosted, read-only graph viewer for issue dependencies. Fetches from Linear,
 
 - **Dependency view** — `blocks` edges between issues. Default landing view. Answers "what should I work on next?"
 - **Mix view** — issues grouped into buckets by a configurable Linear label group (`service`, `module`, `team`, `area` — auto-detected); cross-bucket `blocks` edges highlighted in red.
+- **Project view** — issues grouped by their Linear project. Each project becomes a container; cross-project `blocks` edges highlighted.
 - **Design-doc view** — issues with linked design-doc changes only.
 
 ## Five-minute setup
@@ -38,110 +39,72 @@ When the page loads, the backend pulls active+recent issues from Linear, scans t
 |---|---|
 | `LINEAR_API_KEY` | Personal API key — Linear → Settings → API → Create Personal API Key |
 
-Everything else has a sane default. See `.env.example` for the full list.
+Everything else has a sane default. `.env.example` is intentionally minimal;
+advanced workspace profile details live in [Advanced workspace profiles](docs/advanced-workspaces.md).
+
+### Multiple Linear workspaces
+
+For the default single-workspace setup, keep using `LINEAR_API_KEY`. If you
+regularly switch between Linear workspaces, define named profiles in `.env`
+instead:
+
+```env
+WORKSPACE_ACTIVE=personal
+
+WORKSPACE_PERSONAL_NAME=Personal
+WORKSPACE_PERSONAL_LINEAR_API_KEY=lin_api_xxx
+WORKSPACE_PERSONAL_LINEAR_TEAM_ID=
+WORKSPACE_PERSONAL_REPO_PATH=/path/to/personal/repo
+
+WORKSPACE_CLIENT_A_NAME=Client A
+WORKSPACE_CLIENT_A_LINEAR_API_KEY=lin_api_yyy
+WORKSPACE_CLIENT_A_LINEAR_TEAM_ID=
+WORKSPACE_CLIENT_A_REPO_PATH=/path/to/client-a/repo
+```
+
+The top-left becomes a **tab bar** when profiles are configured. Each tab
+holds its own workspace + filters + view + viewport, so you can keep two
+workspaces (or two views of the same workspace) open side-by-side and
+flip between them without losing context. Drag tabs left/right to reorder,
+`Cmd/Ctrl + 1..9` to jump to the Nth tab. Switching tabs (or workspaces)
+does not require a backend restart. API keys remain in `.env`.
+
+Each profile gets isolated local data:
+
+```text
+data/workspaces/personal/graph.db
+data/workspaces/client_a/graph.db
+```
+
+`Reset current workspace data` only clears the active profile's cache. Other
+workspace databases are left untouched.
+
+For profile naming, Docker mounts, and design-doc scanning with multiple repos,
+see [Advanced workspace profiles](docs/advanced-workspaces.md).
 
 ### Optional design-doc integration
 
-If your team writes design docs / RFCs / change proposals as markdown files alongside your code — common in **Spec-Driven Development (SDD)** workflows — `issue-graph` can read them and show **per-issue progress bars** on the graph (e.g. `4/9 tasks done`). Currently only the **[Spectra](https://spectra.5xcamp.us/) / [OpenSpec](https://openspec.dev/)** layout is supported — proposals at `openspec/changes/<name>/proposal.md` with a `tasks.md` containing `- [ ]` / `- [x]` checkboxes.
+If your team writes design docs / RFCs / change proposals as markdown files alongside your code, `issue-graph` can scan them and show **per-issue progress bars** plus a "design-doc only" view filter.
 
-> [!NOTE]
-> **What this tool means by "spec"** — a *change proposal* / *one delivery batch*: the design + tasks + scope of a single shipping unit (typically 1–3 weeks). This is the modern, AI-assisted SDD framing used by [Spectra](https://spectra.5xcamp.us/), [OpenSpec](https://openspec.dev/), and [GitHub Spec Kit](https://github.com/github/spec-kit) — distinct from longer-lived "design as decision record" specs ([ADRs](https://adr.github.io/), Python PEPs, IETF RFCs) that span many iterations. The graph's multi-spec warning ("⚠ N specs" on a card) assumes this batch-oriented framing.
+> [!IMPORTANT]
+> Only the [Spectra](https://spectra.5xcamp.us/) / [OpenSpec](https://openspec.dev/) layout is supported, with proposals at `<REPO_PATH>/<spec_dir>/changes/<name>/proposal.md` and `tasks.md`. `<spec_dir>` is `openspec/` for OpenSpec; for Spectra it comes from `spec_dir` in `.spectra.yaml` (defaulting to `docs/specs/`, falling back to `openspec/` during migration). Other formats (ADRs, custom layouts) are not auto-detected.
+
+See **[Design-doc integration](docs/design-doc-integration.md)** for the full setup, three linkage strategies (frontmatter / folder name / `Linear: PROJ-123` line), and the Coverage report workflow.
 
 ![Design-doc view — only issues with linked proposals, each showing a per-issue progress bar derived from the proposal's tasks.md](docs/screenshots/designdoc.png)
 
-#### 1. Point at your repo
+### Install as a desktop app (optional)
 
-Set one absolute path in `.env`:
+`issue-graph` ships a web app manifest and service worker, so once it's running you can install it as a standalone window:
 
-```bash
-REPO_PATH=/path/to/your/repo
-```
+- **Chrome / Edge:** click the **install** icon in the URL bar (or `⋮` → *Install Issue Graph*).
+- **Safari (macOS):** *File* → *Add to Dock*.
 
-Used identically by `bun run dev` and `docker compose up` — under Docker the path is bind-mounted at the same location inside the container, so the backend reads it the same way in both modes. Path **must** be absolute.
+The service worker pre-caches only the app shell (HTML / CSS / JS / icons). Linear data and the SSE event stream stay network-only, so workspace data is never served stale. Uninstalling reverses both — no leftover state on disk.
 
-If `openspec/` doesn't exist under `REPO_PATH`, the integration is silently disabled — no errors, the design-doc filter just doesn't appear in the UI.
+## Customization
 
-> [!TIP]
-> Curious what proposals look like? See [`demo-repo/`](demo-repo) — a sample `openspec/` directory used by the project's own screenshots. Set `REPO_PATH=/absolute/path/to/issue-graph/demo-repo` to load it.
-
-#### 2. Link issues to design-doc changes
-
-The adapter tries **three strategies** in sequence and unions the results. Pick whichever fits your workflow — you don't need all three:
-
-| Strategy | When to use | Example |
-|---|---|---|
-| **A. Frontmatter** *(recommended for new teams)* | Want a machine-readable, copy-paste convention. Survives folder renames. | `proposal.md` opens with:<br>`---`<br>`linear: [PROJ-123, PROJ-456]`<br>`---` |
-| **B. Folder name** | Want the link visible at filesystem level / `git status`. | Rename change dir to `openspec/changes/PROJ-123-checkpoint-resume/` |
-| **C. Regex line** *(legacy / informal)* | Already have proposals with prose like "Related Linear issues: PROJ-105, PROJ-107". | Any line in `proposal.md` mentioning "linear" — IDs on that line are extracted. |
-
-**Examples — all three produce the same link:**
-
-```markdown
-<!-- A. Frontmatter -->
----
-linear: [PROJ-123]
----
-# Refactor authentication
-```
-
-```text
-<!-- B. Folder name -->
-openspec/changes/PROJ-123-refactor-auth/proposal.md
-```
-
-```markdown
-<!-- C. Regex line -->
-Linear: PROJ-123
-
-# Refactor authentication
-```
-
-```markdown
-<!-- C. Regex line, "Related" form -->
-Related Linear issues: PROJ-105 (resume), PROJ-107, PROJ-70
-```
-
-#### 3. Verify with the Coverage report
-
-Click the **📊 button** in the toolbar to open the Coverage modal. It shows:
-
-- Total changes scanned, how many are linked, how many aren't
-- Breakdown by strategy (`5 frontmatter / 2 folder / 6 regex`)
-- A per-change list — click "Unlinked" filter to see exactly which proposals need a Linear ID
-- Active issues (started / unstarted) without any linked design doc — i.e. work happening without a written plan
-
-Use the report to decide where to add structure. The most common workflow:
-
-1. Open Coverage → switch filter to **Unlinked**
-2. For each unlinked change you care about, add `--- linear: [PROJ-XXX] ---` to its `proposal.md`
-3. Click 🔄 Refresh in the banner
-4. Re-open Coverage to confirm the count moved
-
-The data comes from the last sync — refresh after editing files to see updates.
-
-#### 4. Other layouts
-
-If your design docs aren't in `openspec/`, the adapter doesn't auto-detect anything. The architecture supports adding more adapters under `src/backend/designdoc/` (e.g. `rfc-folder`, `notion-export`) — see `spectra.ts` for the contract.
-
-## Fifteen-minute customization
-
-### Quick override (env vars)
-
-Out of the box, `issue-graph` autodetects label groups whose names match `service|component|owner|module|team|area|domain` (used to group issues into buckets) and `type|kind|category` (used to pick a leading icon).
-
-If your team uses different names — e.g. you call your buckets "squads" — set:
-
-```bash
-PRIMARY_GROUP=squad
-TYPE_GROUP=Type
-TYPE_ICONS={"Bug":"🐛","Feature":"✨","Spike":"🔬"}
-```
-
-Restart, and the Mix view buckets, filter sidebar, and node icons all pick up the override.
-
-### Full control (`label-schema.yaml`)
-
-For full control over how every label group and prefix renders, drop a YAML file at `LABEL_SCHEMA_PATH` (default `/app/data/label-schema.yaml`). See `label-schema.example.yaml` for a complete reference. The file is hot-reloaded — edit it, then click "Refresh" in the banner to pick up changes without restarting the container.
+`issue-graph` autodetects common Linear label group names (`service|component|owner|module|team|area|domain` for buckets, `type|kind|category` for icons). For different naming conventions or full control via `label-schema.yaml`, see **[Customizing labels and icons](docs/configuration.md)**.
 
 ## Backup posture
 
@@ -164,13 +127,15 @@ For full design rationale, see [`docs/PRD.md`](docs/PRD.md).
 
 ## URL deep linking
 
-Every filter, the active view, the focused node, and the theme are encoded in the URL:
+The active workspace, view, every filter, the focused node, and the theme are encoded in the URL:
 
 ```
-http://localhost:31415/?view=mix&bucket=svc1,svc2&priority=1,2&focus=PROJ-123&theme=dark
+http://localhost:31415/?w=team_a&view=project&bucket=svc1,svc2&priority=1,2&focus=PROJ-123&theme=dark
 ```
 
-Share a link in chat — your teammate sees the same view.
+Share a link in chat — your teammate sees the same view. Valid `view=`
+values are `dependency`, `mix`, `project`, `designdoc`. The `w=`
+parameter selects a workspace profile by id.
 
 ## Keyboard
 
@@ -178,6 +143,7 @@ Press `?` in the app for the full cheat sheet. Highlights:
 
 - `Cmd/Ctrl + F` — find on canvas; `Enter` jumps to next match and returns keyboard focus to the canvas
 - `Cmd/Ctrl + Shift + F` — focus the toolbar filter search
+- `Cmd/Ctrl + 1..9` — switch to the Nth tab in the tab bar (each tab keeps its own filters / view / viewport)
 - `c` / `Shift + C` — isolate chain on focused issue (preserve / auto-layout)
 - `r` — toggle Related-edges overlay
 - `Shift + R` — re-layout (re-run dagre, recenters on focused issue)
@@ -203,25 +169,7 @@ bun run build      # production build → dist/ + build/
 
 ## Troubleshooting
 
-### I changed my `LINEAR_API_KEY` and the graph still shows the old workspace's issues
-
-Issue-graph caches issues by identifier in `data/graph.db`. If you switch `LINEAR_API_KEY` to a different workspace, the old issues stay in the cache (their identifiers don't collide with the new ones), polluting the graph.
-The next sync will log a warning when it notices this:
-
-```
-WARN: Cache holds far more issues than this sync returned. If you switched
-LINEAR_API_KEY to a different workspace, POST /api/reset-cache to clear
-stale data.
-```
-
-Fix it with a single request — clears `issue_cache`, `label_cache`, and the workspace-tied meta entries (design-doc payload, workflow states).  Snapshots, annotations, and sync history are preserved:
-
-```bash
-curl -X POST http://localhost:31415/api/reset-cache
-curl -X POST http://localhost:31415/api/sync
-```
-
-Or, if you'd rather start over from a blank slate (loses snapshots + annotations too), stop the server and `rm data/graph.db data/graph.db-shm data/graph.db-wal`.
+For common issues — stale cache after switching `LINEAR_API_KEY`, blank-slate reset, etc. — see **[Troubleshooting](docs/troubleshooting.md)**.
 
 ## Roadmap
 

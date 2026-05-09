@@ -18,7 +18,7 @@ RUN bun install --production --frozen-lockfile || bun install --production
 # Runtime stage
 FROM oven/bun:1-slim
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends curl git && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/build ./build
 COPY --from=prod-deps /app/node_modules ./node_modules

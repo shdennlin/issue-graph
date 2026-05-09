@@ -6,9 +6,15 @@
 
 type Listener = (event: BusEvent) => void
 
+export const BUS_EVENT = {
+  DESIGNDOC_CHANGED: 'designdoc-changed',
+  DEFAULT_WORKSPACE_CHANGED: 'default-workspace-changed',
+} as const
+export type BusEventType = (typeof BUS_EVENT)[keyof typeof BUS_EVENT]
+
 export interface BusEvent {
   /** Event type — clients can filter by this. */
-  type: 'designdoc-changed'
+  type: BusEventType
   /** Optional payload (kept small; clients typically refetch). */
   data?: Record<string, unknown>
 }

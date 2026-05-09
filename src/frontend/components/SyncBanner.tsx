@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
+import { useWorkspaceStore } from '../store/workspaceStore'
+import { useClickOutside } from '../hooks/useClickOutside'
 import { api } from '../lib/api'
 
 function colorClass(ageMinutes: number): string {
@@ -25,7 +27,13 @@ export function SyncBanner() {
   const reloadGraph = useGraphStore((s) => s.load)
   const setSyncHistoryOpen = useViewStore((s) => s.setSyncHistoryOpen)
   const setSettingsOpen = useViewStore((s) => s.setSettingsOpen)
-  const [tick, setTick] = useState(0)
+  const profiles = useWorkspaceStore((s) => s.profiles)
+  const legacyMode = useWorkspaceStore((s) => s.legacyMode)
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  const activeTabId = useWorkspaceStore((s) => s.activeTabId)
+  const changeTabWorkspace = useWorkspaceStore((s) => s.changeTabWorkspace)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const pickerRef = useRef<HTMLLabelElement | null>(null)
   const warning = graph?.workspaceWarning ?? null
 
   const dismissWarning = async () => {
@@ -33,13 +41,31 @@ export function SyncBanner() {
     await reloadGraph()
   }
 
-  useEffect(() => {
-    const id = window.setInterval(() => setTick((t) => t + 1), 30_000)
-    return () => window.clearInterval(id)
-  }, [])
+  const closePicker = useCallback(() => setPickerOpen(false), [])
+  useClickOutside(pickerRef, pickerOpen, closePicker)
 
   const last = graph?.fetchedAt ?? 0
   const age = last ? Math.floor((Date.now() - last) / 60_000) : Infinity
+  const lastSyncText = `Last sync: ${graph === null ? 'loading…' : isFinite(age) ? format(age) : 'never'}${
+    graph?.stale ? ' (stale)' : ''
+  }`
+
+  const showPicker = !legacyMode && profiles.length > 0
+  const activeName = profiles.find((p) => p.id === currentWorkspaceId)?.name
+    ?? graph?.instanceLabel
+    ?? 'issue-graph'
+
+  // Repointing this tab at a different workspace, in place. Different
+  // from clicking another tab in the TabBar — that switches active tab
+  // (which has its own filters/focus). This swap KEEPS the current
+  // tab's filters / focus / chain isolation but applies them to a
+  // different workspace's data.
+  const onPickWorkspace = (workspaceId: string) => {
+    setPickerOpen(false)
+    if (!activeTabId) return
+    if (workspaceId === currentWorkspaceId) return
+    changeTabWorkspace(activeTabId, workspaceId)
+  }
 
   return (
     <>
@@ -84,24 +110,55 @@ export function SyncBanner() {
       )}
     <div className="banner">
       <div className="left">
-        <span className="pill" title="Click for sync history" onClick={() => setSyncHistoryOpen(true)} style={{ cursor: 'pointer' }}>
-          {graph?.instanceLabel ? `🟢 ${graph.instanceLabel}` : '🟢 issue-graph'}
-        </span>
-        <span
-          className={isFinite(age) ? colorClass(age) : 'stale-bad'}
-          onClick={() => setSyncHistoryOpen(true)}
-          style={{ cursor: 'pointer' }}
-          title="Click for sync history"
-        >
-          {`Last sync: ${graph === null ? 'loading…' : isFinite(age) ? format(age) : 'never'}`}
-          {graph?.stale && ' (stale)'}
-        </span>
+        {showPicker ? (
+          <label
+            ref={pickerRef}
+            className="workspace-picker"
+            title="Change this tab's workspace (keeps filters/focus)"
+          >
+            <button
+              type="button"
+              className="pill workspace-picker-button"
+              aria-haspopup="menu"
+              aria-expanded={pickerOpen}
+              onClick={() => setPickerOpen(!pickerOpen)}
+            >
+              <span className="status-dot" aria-hidden /> {activeName}
+              <span className="select-chevron" aria-hidden>▾</span>
+            </button>
+            {pickerOpen && (
+              <div className="workspace-picker-menu" role="menu">
+                {profiles.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    role="menuitem"
+                    className={`workspace-picker-item${p.id === currentWorkspaceId ? ' is-current' : ''}`}
+                    onClick={() => onPickWorkspace(p.id)}
+                    title={p.id === currentWorkspaceId ? 'Already on this workspace' : `Switch this tab to ${p.name}`}
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </label>
+        ) : (
+          <span className="pill">
+            <span className="status-dot" aria-hidden /> {graph?.instanceLabel ?? 'issue-graph'}
+          </span>
+        )}
       </div>
       <div className="right">
+        <span
+          className={`last-sync-link ${isFinite(age) ? colorClass(age) : 'stale-bad'}`}
+          onClick={() => setSyncHistoryOpen(true)}
+          title="Click for sync history"
+        >
+          {lastSyncText}
+        </span>
         <span style={{ color: 'var(--fg-muted)', fontSize: 12 }}>
           {graph?.data.issues.length ?? 0} issues · {graph?.data.designdocs?.length ?? 0} docs
-          <span aria-hidden> · </span>
-          <span title="tick">{tick}</span>
         </span>
         <button
           onClick={forceSync}

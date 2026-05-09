@@ -1,119 +1,125 @@
+// Adapter-level tests for Spectra: focus on detect() gating and spec_dir
+// resolution from .spectra.yaml. Scan-content correctness is covered by
+// scanner.test.ts since both adapters share the same parser.
+
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { spectraAdapter } from './spectra.js'
+import { resolveSpectraSpecDir, spectraAdapter } from './spectra.js'
 
 let root: string
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'spectra-test-'))
+  root = mkdtempSync(join(tmpdir(), 'spectra-adapter-test-'))
 })
 afterEach(() => {
   rmSync(root, { recursive: true, force: true })
 })
 
-function mkChange(name: string, proposal: string, tasks: string, sub = 'changes'): void {
-  const dir = join(root, 'openspec', sub, name)
-  mkdirSync(dir, { recursive: true })
-  writeFileSync(join(dir, 'proposal.md'), proposal)
-  writeFileSync(join(dir, 'tasks.md'), tasks)
+function writeYaml(content: string): void {
+  writeFileSync(join(root, '.spectra.yaml'), content)
 }
 
-describe('spectraAdapter', () => {
-  it('detects when openspec/ exists', () => {
+describe('spectraAdapter.detect', () => {
+  it('false when neither .spectra.yaml nor .spectra/ present', () => {
+    mkdirSync(join(root, 'openspec'), { recursive: true })
     expect(spectraAdapter.detect(root)).toBe(false)
+  })
+
+  it('false when .spectra.yaml exists but no spec dir resolves', () => {
+    writeYaml('locale: en\n')
+    expect(spectraAdapter.detect(root)).toBe(false)
+  })
+
+  it('true when .spectra.yaml + docs/specs/ both present', () => {
+    writeYaml('locale: en\n')
+    mkdirSync(join(root, 'docs', 'specs'), { recursive: true })
+    expect(spectraAdapter.detect(root)).toBe(true)
+  })
+
+  it('true when .spectra.yaml + legacy openspec/ (mid-migration)', () => {
+    writeYaml('locale: en\n')
     mkdirSync(join(root, 'openspec'), { recursive: true })
     expect(spectraAdapter.detect(root)).toBe(true)
   })
 
-  it('extracts Linear identifiers and counts checkboxes', () => {
-    mkChange(
-      'auth-rewrite',
-      'Linear: PROJ-123\n\n# Some change\n',
-      `# tasks
-- [x] foo
-- [x] bar
-- [ ] baz
-`,
-    )
+  it('true when only .spectra/ metadata dir present + spec dir', () => {
+    mkdirSync(join(root, '.spectra'), { recursive: true })
+    mkdirSync(join(root, 'docs', 'specs'), { recursive: true })
+    expect(spectraAdapter.detect(root)).toBe(true)
+  })
+})
+
+describe('resolveSpectraSpecDir', () => {
+  it('honors explicit spec_dir from .spectra.yaml', () => {
+    writeYaml('spec_dir: my/custom/path\n')
+    mkdirSync(join(root, 'my', 'custom', 'path'), { recursive: true })
+    expect(resolveSpectraSpecDir(root)).toBe('my/custom/path')
+  })
+
+  it('returns the configured spec_dir even if the directory does not exist (lets watcher wait for it)', () => {
+    writeYaml('spec_dir: not/yet/created\n')
+    expect(resolveSpectraSpecDir(root)).toBe('not/yet/created')
+  })
+
+  it('strips leading/trailing slashes from configured spec_dir', () => {
+    writeYaml('spec_dir: "/custom/dir/"\n')
+    mkdirSync(join(root, 'custom', 'dir'), { recursive: true })
+    expect(resolveSpectraSpecDir(root)).toBe('custom/dir')
+  })
+
+  it('falls back to docs/specs/ as the new default when spec_dir is unset', () => {
+    writeYaml('locale: en\n')
+    mkdirSync(join(root, 'docs', 'specs'), { recursive: true })
+    expect(resolveSpectraSpecDir(root)).toBe('docs/specs')
+  })
+
+  it('falls back to legacy openspec/ when neither configured nor docs/specs/ exists', () => {
+    writeYaml('locale: en\n')
+    mkdirSync(join(root, 'openspec'), { recursive: true })
+    expect(resolveSpectraSpecDir(root)).toBe('openspec')
+  })
+
+  it('prefers docs/specs/ over openspec/ when both exist (matches Spectra default)', () => {
+    writeYaml('locale: en\n')
+    mkdirSync(join(root, 'docs', 'specs'), { recursive: true })
+    mkdirSync(join(root, 'openspec'), { recursive: true })
+    expect(resolveSpectraSpecDir(root)).toBe('docs/specs')
+  })
+
+  it('returns null when no config and no recognizable dir exists', () => {
+    writeYaml('locale: en\n')
+    expect(resolveSpectraSpecDir(root)).toBe(null)
+  })
+
+  it('returns null when .spectra.yaml is malformed YAML', () => {
+    writeYaml('not: valid: yaml: [unclosed')
+    // Without a parseable config, detect will fall through to defaults,
+    // but those don't exist either → null.
+    expect(resolveSpectraSpecDir(root)).toBe(null)
+  })
+})
+
+describe('spectraAdapter.scan + getWatchTarget', () => {
+  it('scan returns content from the resolved spec dir', () => {
+    writeYaml('spec_dir: docs/specs\n')
+    const change = join(root, 'docs', 'specs', 'changes', 'foo')
+    mkdirSync(change, { recursive: true })
+    writeFileSync(join(change, 'proposal.md'), 'Linear: PROJ-7\n')
+    writeFileSync(join(change, 'tasks.md'), '- [ ] one')
     const out = spectraAdapter.scan(root)
     expect(out).toHaveLength(1)
-    expect(out[0]!.issueIdentifiers).toEqual(['PROJ-123'])
-    expect(out[0]!.totalTasks).toBe(3)
-    expect(out[0]!.doneTasks).toBe(2)
-    expect(out[0]!.progress).toBeCloseTo(2 / 3, 5)
+    expect(out[0]!.issueIdentifiers).toEqual(['PROJ-7'])
   })
 
-  it('handles 1-to-N (multiple Linear: lines)', () => {
-    mkChange('multi', 'Linear: PROJ-1\nLinear: PROJ-2\n', '- [ ] one')
-    const out = spectraAdapter.scan(root)
-    expect(out[0]!.issueIdentifiers.sort()).toEqual(['PROJ-1', 'PROJ-2'])
+  it('getWatchTarget returns the absolute spec dir', () => {
+    writeYaml('locale: en\n')
+    mkdirSync(join(root, 'docs', 'specs'), { recursive: true })
+    expect(spectraAdapter.getWatchTarget(root)).toBe(join(root, 'docs', 'specs'))
   })
 
-  it('marks parked changes', () => {
-    mkChange('parked-thing', 'Linear: PROJ-9\n', '', 'changes/_parked')
-    const out = spectraAdapter.scan(root)
-    const parked = out.find((c: { name: string }) => c.name === 'parked-thing')
-    expect(parked?.status).toBe('parked')
-  })
-
-  it('marks archived changes', () => {
-    mkChange('done-thing', 'Linear: PROJ-10\n', '- [x] all', 'archive')
-    const out = spectraAdapter.scan(root)
-    const archived = out.find((c: { name: string }) => c.name === 'done-thing')
-    expect(archived?.status).toBe('archived')
-  })
-
-  it('returns empty when no openspec/changes', () => {
-    expect(spectraAdapter.scan(root)).toEqual([])
-  })
-
-  it('extracts ids from frontmatter (linear: [...])', () => {
-    mkChange(
-      'fm-array',
-      `---\nlinear: [PROJ-100, PROJ-101]\n---\n\n# Change\n`,
-      '- [ ] task',
-    )
-    const out = spectraAdapter.scan(root)
-    expect(out[0]!.issueIdentifiers.sort()).toEqual(['PROJ-100', 'PROJ-101'])
-    expect(out[0]!.linkSources?.frontmatter.sort()).toEqual(['PROJ-100', 'PROJ-101'])
-    expect(out[0]!.linkSources?.regexLine).toEqual([])
-  })
-
-  it('extracts ids from frontmatter (linear: PROJ-1 single)', () => {
-    mkChange('fm-single', `---\nlinear: PROJ-1\n---\n`, '')
-    const out = spectraAdapter.scan(root)
-    expect(out[0]!.issueIdentifiers).toEqual(['PROJ-1'])
-    expect(out[0]!.linkSources?.frontmatter).toEqual(['PROJ-1'])
-  })
-
-  it('extracts ids from folder name', () => {
-    mkChange('PROJ-42-some-feature', '# No linear mention here\n', '')
-    const out = spectraAdapter.scan(root)
-    expect(out[0]!.issueIdentifiers).toEqual(['PROJ-42'])
-    expect(out[0]!.linkSources?.folderName).toEqual(['PROJ-42'])
-  })
-
-  it('unions ids from all three strategies', () => {
-    mkChange(
-      'PROJ-1-feature',
-      `---\nlinear: PROJ-2\n---\n\nLinear: PROJ-3\n`,
-      '',
-    )
-    const out = spectraAdapter.scan(root)
-    expect(out[0]!.issueIdentifiers.sort()).toEqual(['PROJ-1', 'PROJ-2', 'PROJ-3'])
-    expect(out[0]!.linkSources?.folderName).toEqual(['PROJ-1'])
-    expect(out[0]!.linkSources?.frontmatter).toEqual(['PROJ-2'])
-    expect(out[0]!.linkSources?.regexLine).toEqual(['PROJ-3'])
-  })
-
-  it('handles "Related Linear issues:" line', () => {
-    mkChange(
-      'related-format',
-      'Related Linear issues: PROJ-105 (resume), PROJ-107, PROJ-70.\n',
-      '',
-    )
-    const out = spectraAdapter.scan(root)
-    expect(out[0]!.issueIdentifiers.sort()).toEqual(['PROJ-105', 'PROJ-107', 'PROJ-70'])
+  it('getWatchTarget returns null when the project is not Spectra', () => {
+    mkdirSync(join(root, 'openspec'), { recursive: true })
+    expect(spectraAdapter.getWatchTarget(root)).toBe(null)
   })
 })

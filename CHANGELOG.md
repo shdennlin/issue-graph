@@ -6,6 +6,56 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [v1.3.0] - 2026-05-09
+
+### What's New
+
+**Tabs — open multiple workspaces side by side**
+The app now has a full tab bar at the top of the window. Each tab holds its own workspace, its own view, and its own graph position. You can open as many tabs as you need, drag them into any order, and switch between them with `Cmd+1` through `Cmd+9`. Everything about the current session — which tabs are open, which workspace each one points to, the graph's zoom level and scroll position — is saved automatically and restored exactly as you left it when you reload or reopen the app.
+
+**Project view**
+A new "Project" grouping mode organises your issues by Linear project rather than by status or assignee. Switch to it from the view selector in the toolbar to get a clear per-project breakdown of what is blocked, blocking, or in flight.
+
+**Filter by project**
+The filter panel now includes a Project dimension alongside the existing Team, Assignee, and Label filters. You can combine it with any other filter to narrow the graph to just the issues that belong to a particular initiative.
+
+**Multi-column container layout**
+Wide buckets — such as "In Progress" columns with many issues — are now packed into two or three columns automatically. Tall single-column stacks are gone; the layout breathes horizontally and is much easier to scan.
+
+**Design doc support for git worktrees**
+If you work with `git worktree` to check out multiple branches simultaneously, the design doc panel now scans every worktree rooted at your repository and surfaces the right spec file for each issue, deduplicating entries so nothing appears twice.
+
+**OpenSpec and Spectra adapters separated**
+The two design-doc backends (OpenSpec and Spectra) are now fully independent modules. Spectra picks up the new default `spec_dir` introduced in Spectra v2.2.5+, and the `spec_dir` path is configurable for teams that keep specs in a non-standard location.
+
+**Install as a desktop app (PWA)**
+The app ships a web app manifest and service worker, so browsers that support Progressive Web Apps can install it to the dock or taskbar. Once installed it opens in its own window, without browser chrome, and works as a first-class desktop app.
+
+### Improved
+
+**Graph position survives tab switches**
+Switching tabs no longer resets your zoom level or scroll position. When you come back to a tab the graph is exactly where you left it. Viewport state is also saved to local storage, so a page reload or browser restart brings you back to the same position.
+
+**Viewport restore is reliable**
+A timing conflict between the app's saved viewport and ReactFlow's own startup animation has been resolved. The saved position now reliably wins, so the graph no longer snaps to a different location a fraction of a second after loading.
+
+**Hover highlighting works at full cursor speed**
+Rapidly moving the cursor across the graph no longer leaves nodes or edges stuck in a half-highlighted state. The highlight now self-heals instantly as the cursor moves, even on dense graphs with many overlapping edges.
+
+**Consistent arrowhead sizes**
+Dependency arrowheads are now the same size in every view mode. Previously, switching views could cause arrowheads to render at different scales.
+
+**Data isolation between development and production**
+When running locally, the app now keeps developer data in a separate `data-dev/` directory that is never committed to the repository. The Docker container always writes to `/app/data/graph.db`, eliminating the risk of a host path leaking into the container or corrupting a production database.
+
+### Fixed
+
+- SQLite corruption that could occur when the container was started without an explicit `SQLITE_PATH` has been resolved. The path is now pinned inside the container so it is always consistent.
+- Switching tabs no longer briefly applies the outgoing tab's filters or view settings to the incoming tab before that tab's own state loads.
+- The graph no longer flickers or jumps when switching workspaces via the tab bar.
+
+---
+
 ## [v1.2.0] - 2026-05-04
 
 ### What's New

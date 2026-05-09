@@ -1,11 +1,15 @@
-import { lazy, Suspense, useEffect } from 'react'
+import { lazy, Suspense, useEffect, useRef } from 'react'
 import { useGraphStore } from './store/graphStore'
 import { useSchemaStore } from './store/schemaStore'
 import { useViewStore } from './store/viewStore'
+import { makeTabId, useWorkspaceStore } from './store/workspaceStore'
+import { loadTab, restoreViewportOnly, snapshotTab } from './store/tabStateStore'
 import { useUrlSync } from './store/urlSync'
 import { useTheme } from './hooks/useTheme'
 import { useFontSize } from './hooks/useFontSize'
+import { api } from './lib/api'
 import { GraphCanvas } from './components/GraphCanvas'
+import { TabBar } from './components/TabBar'
 import { Toolbar } from './components/Toolbar'
 import { FilterPanel } from './components/FilterPanel'
 import { SyncBanner } from './components/SyncBanner'
@@ -39,9 +43,131 @@ export function App() {
   const settingsOpen = useViewStore((s) => s.settingsOpen)
   const shortcutsOpen = useViewStore((s) => s.shortcutsOpen)
 
+  // Bootstrap step 1 — resolve this tab's workspace + tab list BEFORE any
+  // graph/schema calls. The fetch helpers in lib/api.ts inject `?w=` from
+  // the workspace store, so we have to settle which workspace this tab is
+  // on first.
+  //
+  // Tab list reconciliation:
+  //   - If sessionStorage already has tabs (mid-session refresh), keep
+  //     them — but prune any whose workspaceId no longer matches a defined
+  //     profile (someone edited `.env` and removed one).
+  //   - If no tabs yet (cold start) and the URL has `?w=X`, create a single
+  //     tab on X.
+  //   - Otherwise create one tab per profile (matches the screenshot
+  //     reference; users can close extras with × or add more with +).
   useEffect(() => {
-    loadGraph().then(() => loadSchema())
-  }, [loadGraph, loadSchema])
+    let cancelled = false
+    ;(async () => {
+      try {
+        const ws = await api.fetchWorkspaces()
+        if (cancelled) return
+        const store = useWorkspaceStore.getState()
+        store.setProfiles(ws.profiles)
+        store.setLegacyMode(ws.legacyMode)
+        store.setDefaultWorkspaceId(ws.active?.id ?? null)
+
+        if (ws.legacyMode || ws.profiles.length === 0) {
+          store.setTabs([], null)
+        } else {
+          const fromUrl = store.currentWorkspaceId
+          const validIds = new Set(ws.profiles.map((p) => p.id))
+          const existingTabs = store.tabs.filter((t) => validIds.has(t.workspaceId))
+          let nextTabs = existingTabs
+          let nextActive = existingTabs.some((t) => t.id === store.activeTabId)
+            ? store.activeTabId
+            : (existingTabs[0]?.id ?? null)
+
+          if (existingTabs.length === 0) {
+            // Cold start. Either the URL pinned a workspace, or we
+            // pre-populate one tab per profile so the user can ⌘N straight
+            // away without having to + each one.
+            const seedIds =
+              fromUrl && validIds.has(fromUrl)
+                ? [fromUrl]
+                : ws.profiles.map((p) => p.id)
+            nextTabs = seedIds.map((id) => ({ id: makeTabId(), workspaceId: id }))
+            const preferred =
+              fromUrl && validIds.has(fromUrl)
+                ? nextTabs.find((t) => t.workspaceId === fromUrl)
+                : nextTabs.find((t) => t.workspaceId === ws.active?.id) ?? nextTabs[0]
+            nextActive = preferred?.id ?? nextTabs[0]?.id ?? null
+          } else if (fromUrl && validIds.has(fromUrl)) {
+            // Persisted tabs survived. Only override the active tab when
+            // the *saved* active doesn't already match the URL's workspace
+            // — otherwise we'd jump from the user's actual last tab to
+            // whichever matching tab happens to be first in the list (a
+            // problem when multiple tabs share a workspace).
+            const activeTab = existingTabs.find((t) => t.id === nextActive)
+            const activeMatchesUrl = activeTab?.workspaceId === fromUrl
+            if (!activeMatchesUrl) {
+              const match = existingTabs.find((t) => t.workspaceId === fromUrl)
+              if (match) {
+                nextActive = match.id
+              } else {
+                const id = makeTabId()
+                nextTabs = [...existingTabs, { id, workspaceId: fromUrl }]
+                nextActive = id
+              }
+            }
+          }
+
+          store.setTabs(nextTabs, nextActive)
+        }
+      } catch {
+        // Backend unreachable — proceed unscoped. Step 2 will surface the
+        // real error via loadGraph's normal error path.
+      } finally {
+        if (!cancelled) useWorkspaceStore.getState().setInitialized(true)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Bootstrap step 2 — once the active tab is settled, load (or re-load)
+  // graph + schema. Re-runs whenever the user switches tabs (activeTabId
+  // changes) — including when a close-tab action shifts focus to a sibling.
+  //
+  // Tab snapshot lifecycle:
+  //   - The action that switches tabs (TabBar click, Cmd+N, etc.) is
+  //     responsible for `snapshotTab(prevTabId)` so this effect doesn't
+  //     have to. Snapshot before switch keeps the current viewStore +
+  //     graphStore as-is.
+  //   - This effect calls `loadTab(activeTabId)` to either restore the
+  //     target's snapshot (filters, focus, chain return) or reset to
+  //     defaults (first visit to that tab).
+  //   - Restored snapshots already have a graph in store, so we do a
+  //     silent background refresh; cold starts run a normal `loadGraph()`.
+  //
+  // The previous-tab ref is critical: on initial mount, prev is null and
+  // we intentionally skip restore so URL-encoded view state (filters,
+  // focus from the URL bar) survives the first render.
+  const initialized = useWorkspaceStore((s) => s.initialized)
+  const activeTabId = useWorkspaceStore((s) => s.activeTabId)
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  const refetchSilent = useGraphStore((s) => s.refetchSilent)
+  const prevTabIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!initialized) return
+    const prev = prevTabIdRef.current
+    let restored = false
+    if (prev !== null && prev !== activeTabId && activeTabId) {
+      // Tab switched: snapshot/restore the new tab's view state.
+      restored = loadTab(activeTabId)
+    }
+    prevTabIdRef.current = activeTabId
+    // Re-fetch on tab switch OR same-tab workspace change (the SyncBanner
+    // picker repoints the active tab at a different workspace without
+    // switching tabs — `currentWorkspaceId` is the dep that catches that).
+    if (restored) {
+      refetchSilent()
+      loadSchema()
+    } else {
+      loadGraph().then(() => loadSchema())
+    }
+  }, [initialized, activeTabId, currentWorkspaceId, loadGraph, loadSchema, refetchSilent])
 
   // Background sync poller. After the first load, periodically check whether
   // the backend's TTL-driven bg sync produced fresher data, and if so swap
@@ -57,17 +183,65 @@ export function App() {
     return () => window.clearInterval(id)
   }, [refetchIfNewer])
 
-  // Real-time push from the server. Currently emits 'designdoc-changed'
-  // when the file watcher detects edits under REPO_PATH/openspec/. We
-  // refetch the graph silently (always-replace, not the if-newer poller
-  // path — local file edits don't bump fetchedAt) so progress bars +
-  // designdoc lists update without the user pressing refresh.
+  // Persist the active tab's view + viewport on page unload. Without this,
+  // a user who pans / zooms / changes a filter and then refreshes (without
+  // first switching tabs) would lose those changes — the regular snapshot
+  // path only fires from TabBar clicks and Cmd+1..9. beforeunload runs
+  // synchronously, so the localStorage write completes before the page
+  // actually goes away.
+  useEffect(() => {
+    const onBeforeUnload = (): void => {
+      const active = useWorkspaceStore.getState().activeTabId
+      if (active) snapshotTab(active)
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [])
+
+  // Restore the active tab's viewport on initial page load. View state
+  // (filters, focus, view, etc.) comes from URL parsing — that's the
+  // share-able source of truth and must win. Viewport isn't in the URL,
+  // so this is the one piece that needs separate restoration. Runs once
+  // after mount; the bridge has already registered by the time this
+  // effect fires (GraphCanvas is a child, its effects run first).
+  useEffect(() => {
+    const active = useWorkspaceStore.getState().activeTabId
+    if (active) restoreViewportOnly(active)
+  }, [])
+
+  // Real-time push from the server. Two event types:
+  //
+  //   - 'designdoc-changed' — the file watcher detected edits in the
+  //     **default** workspace's REPO_PATH/openspec/. The watcher only ever
+  //     follows the default workspace, so events are tagged with their
+  //     `workspaceId` and tabs viewing a different workspace ignore them.
+  //   - 'default-workspace-changed' — another tab (or this one) used the
+  //     ⭐ "set as default" affordance. Update our local copy of the
+  //     server-default so the selector ⭐ glyph stays consistent.
+  //
   // EventSource auto-reconnects on network blips; one connection per tab.
-  const refetchSilent = useGraphStore((s) => s.refetchSilent)
   useEffect(() => {
     const es = new EventSource('/api/events')
-    es.addEventListener('designdoc-changed', () => {
+    es.addEventListener('designdoc-changed', (e) => {
+      try {
+        const data = JSON.parse((e as MessageEvent).data) as { workspaceId?: string }
+        const cur = useWorkspaceStore.getState().currentWorkspaceId
+        if (data.workspaceId && cur && data.workspaceId !== cur) return
+      } catch {
+        // Malformed payload — fall through and refetch anyway. Better to
+        // do an extra silent fetch than miss a real update.
+      }
       refetchSilent()
+    })
+    es.addEventListener('default-workspace-changed', (e) => {
+      try {
+        const data = JSON.parse((e as MessageEvent).data) as { activeId?: string }
+        if (typeof data.activeId === 'string') {
+          useWorkspaceStore.getState().setDefaultWorkspaceId(data.activeId)
+        }
+      } catch {
+        // Ignore — the next /api/workspaces fetch will resync.
+      }
     })
     // hello/ping events are no-ops; just keep the stream alive.
     return () => es.close()
@@ -121,6 +295,26 @@ export function App() {
           setChainRootId(null)
           return
         }
+      }
+      // Cmd/Ctrl+1..9 — switch to the Nth in-app tab (1-based, by position
+      // in the tab bar). Only fires outside text inputs; doesn't intercept
+      // when the user is typing into a filter, annotation textarea, etc.
+      // Snapshots the previous tab's state before the switch so coming back
+      // via Cmd+N feels instant.
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && /^[1-9]$/.test(e.key)) {
+        const target = e.target as HTMLElement | null
+        const tag = target?.tagName?.toLowerCase()
+        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        const ws = useWorkspaceStore.getState()
+        if (ws.legacyMode || ws.tabs.length === 0) return
+        const idx = parseInt(e.key, 10) - 1
+        const targetTab = ws.tabs[idx]
+        if (!targetTab) return
+        e.preventDefault()
+        if (targetTab.id === ws.activeTabId) return
+        if (ws.activeTabId) snapshotTab(ws.activeTabId)
+        ws.setActiveTab(targetTab.id)
+        return
       }
       // 'c' / 'C' — isolate chain on the currently focused issue. 'C' (shift)
       // additionally bumps layout, matching the "auto-layout" context-menu
@@ -241,6 +435,7 @@ export function App() {
   if (graph?.authError && (graph?.data.issues.length ?? 0) === 0) {
     return (
       <div className="app-shell">
+        <TabBar />
         <SyncBanner />
         <Onboarding />
       </div>
@@ -249,6 +444,7 @@ export function App() {
 
   return (
     <div className="app-shell">
+      <TabBar />
       <SyncBanner />
       <Toolbar />
       <div className="app-main">

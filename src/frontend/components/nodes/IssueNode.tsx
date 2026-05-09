@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
-import type { NormalizedIssue } from '@shared/types.js'
+import type { AnnotationDTO, NormalizedIssue } from '@shared/types.js'
 import { useSchemaStore } from '../../store/schemaStore'
 import { useViewStore } from '../../store/viewStore'
 import { useGraphStore } from '../../store/graphStore'
@@ -37,11 +37,19 @@ function truncate(s: string, n: number): string {
   return s.slice(0, n - 1) + '…'
 }
 
+// Module-scope stable empty fallback for the annotations selector. Returning
+// `?? []` *inside* the selector creates a new array reference per render,
+// which Zustand sees as a state change and re-subscribes — fine while
+// `s.graph` is non-null, but as soon as anything sets it to null (e.g. the
+// tab snapshot/restore layer), the selector spirals into "Maximum update
+// depth exceeded" because every forced re-render re-allocates the fallback.
+const EMPTY_ANNOTATIONS: AnnotationDTO[] = []
+
 function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
   const { issue, focused, isChainRoot, connectivity, visibleConnectivity } = data
   const { schema, typeIcons } = useSchemaStore()
   const density = useViewStore((s) => s.density)
-  const annotations = useGraphStore((s) => s.graph?.data.annotations ?? [])
+  const annotations = useGraphStore((s) => s.graph?.data.annotations ?? EMPTY_ANNOTATIONS)
   const designdocs = useGraphStore((s) => s.graph?.data.designdocs)
 
   const primary = getPrimaryLabel(issue, schema)

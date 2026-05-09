@@ -8,6 +8,8 @@ import { Database } from 'bun:sqlite'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { loadConfig } from './lib/env.js'
+import { getCurrentWorkspaceId, LEGACY_WORKSPACE_ID } from './lib/workspaceContext.js'
+import { getDefaultWorkspaceId } from './lib/env.js'
 import { getLogger } from './lib/log.js'
 
 const MIGRATIONS: string[] = [
@@ -59,10 +61,20 @@ const MIGRATIONS: string[] = [
    );`,
 ]
 
-let dbInstance: Database | null = null
+// One Database instance per workspace id. Each profile has its own SQLITE_PATH
+// (default: data/workspaces/<id>/graph.db), so different ids → different files
+// → no contention. Same id called from multiple tabs reuses the same instance.
+const dbByWorkspaceId: Map<string, Database> = new Map()
+
+function currentWid(): string {
+  return getCurrentWorkspaceId() ?? getDefaultWorkspaceId() ?? LEGACY_WORKSPACE_ID
+}
 
 export function getDb(): Database {
-  if (dbInstance) return dbInstance
+  const wid = currentWid()
+  const cached = dbByWorkspaceId.get(wid)
+  if (cached) return cached
+
   const cfg = loadConfig()
   const log = getLogger()
 
@@ -89,16 +101,33 @@ export function getDb(): Database {
     // PRAGMA doesn't support `?` binding, so we string-concat. `version` is a
     // bounded integer derived from MIGRATIONS.length so injection is N/A.
     db.run('PRAGMA user_version = ' + String(version))
-    log.info({ migration: i }, 'applied migration')
+    log.info({ migration: i, workspace: wid }, 'applied migration')
   }
 
-  dbInstance = db
+  dbByWorkspaceId.set(wid, db)
   return db
 }
 
-export function closeDb(): void {
-  if (dbInstance) {
-    dbInstance.close()
-    dbInstance = null
+/**
+ * Close one workspace's DB (no-op if not open) or all of them (for shutdown
+ * / tests). Per-tab workspace switching does NOT call this — each id keeps
+ * its handle so other tabs viewing the same workspace continue working.
+ */
+export function closeDb(workspaceId?: string): void {
+  if (workspaceId) {
+    const db = dbByWorkspaceId.get(workspaceId)
+    if (db) {
+      db.close()
+      dbByWorkspaceId.delete(workspaceId)
+    }
+    return
   }
+  for (const db of dbByWorkspaceId.values()) {
+    try {
+      db.close()
+    } catch {
+      // Already closed — fine.
+    }
+  }
+  dbByWorkspaceId.clear()
 }

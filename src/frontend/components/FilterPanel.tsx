@@ -24,6 +24,7 @@ export function FilterPanel() {
   const toggleAssignee = useViewStore((s) => s.toggleAssignee)
   const togglePrefix = useViewStore((s) => s.togglePrefix)
   const toggleStateName = useViewStore((s) => s.toggleStateName)
+  const toggleProject = useViewStore((s) => s.toggleProject)
   const resetFilters = useViewStore((s) => s.resetFilters)
 
   // Stable reference for the issues array so the leave-one-out useMemos
@@ -73,7 +74,18 @@ export function FilterPanel() {
     for (const i of labelSet) {
       for (const l of i.labels) byLabel.set(l.id, (byLabel.get(l.id) ?? 0) + 1)
     }
-    return { byState, byStateName, byPrio, byAssignee, byLabel }
+    // Project counts (excluding project filter). '__noproject' covers
+    // issues without a Linear project — mirrors the Project view's
+    // grouping key so the filter and view stay in sync.
+    const byProject = new Map<string, { name: string; count: number }>()
+    for (const i of applyFiltersExcluding(issues, filters, staleDays, myUserName, search, 'project')) {
+      const id = i.project?.id ?? '__noproject'
+      const name = i.project?.name ?? '(No project)'
+      const cur = byProject.get(id)
+      if (cur) cur.count += 1
+      else byProject.set(id, { name, count: 1 })
+    }
+    return { byState, byStateName, byPrio, byAssignee, byLabel, byProject }
   }, [issues, filters, staleDays, myUserName, search])
 
   // Group state names by canonical type. Source = union of:
@@ -126,6 +138,17 @@ export function FilterPanel() {
   const assignees = useMemo(() => {
     return [...counts.byAssignee.entries()].sort((a, b) => b[1] - a[1])
   }, [counts.byAssignee])
+
+  // Sort projects: largest first, '(No project)' pinned to end so orphan
+  // issues don't dominate the visual landing position. Mirrors the
+  // Project view's ordering for consistency.
+  const projects = useMemo(() => {
+    return [...counts.byProject.entries()].sort((a, b) => {
+      if (a[0] === '__noproject') return 1
+      if (b[0] === '__noproject') return -1
+      return b[1].count - a[1].count
+    })
+  }, [counts.byProject])
 
   const showDesigndocFilter = (graph?.hasDesigndoc ?? false) && (graph?.data.designdocs?.length ?? 0) > 0
 
@@ -314,6 +337,23 @@ export function FilterPanel() {
           </label>
         ))}
       </section>
+
+      {projects.length > 0 && (
+        <section>
+          <h4>Project</h4>
+          {projects.map(([id, { name, count }]) => (
+            <label key={id}>
+              <input
+                type="checkbox"
+                checked={filters.projectIds.includes(id)}
+                onChange={() => toggleProject(id)}
+              />
+              {name}
+              <span className="count">{count}</span>
+            </label>
+          ))}
+        </section>
+      )}
 
       {schema.prefixes.map((g) => (
         <section key={g.token}>

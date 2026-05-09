@@ -2,76 +2,66 @@ import type { Edge, Node } from 'reactflow'
 import type { ViewDefinition } from './types'
 import { issueNodeHeight } from './types'
 import { applyFilters } from './filters'
-import { getPrimaryLabel } from '../lib/labelSchema'
 import { computeConnectivity } from './connectivity'
 import { chooseColumnCount, packIntoColumns } from './containerLayout'
 
 const PADDING = 30
 const HEADER = 32
-// Card CSS width is 320 — keep this in sync so issues fit cleanly inside the
-// container without spilling past its right edge.
 const NODE_W = 320
 const GAP_Y = 14
 const GAP_X = 30
-// Gap between columns inside a multi-column container. Smaller than GAP_X
-// (which separates whole containers) so the columns read as part of the
-// same group rather than as adjacent containers.
 const INNER_GAP_X = 16
 function computeContainerWidth(cols: number): number {
   return PADDING * 2 + NODE_W * cols + INNER_GAP_X * Math.max(0, cols - 1)
 }
-// Max row width for outer grid wrapping. Keep close to the old "4 buckets
-// per row" cap so the canvas-wide layout shape doesn't surprise users who
-// got used to the previous behavior.
 const MAX_ROW_WIDTH = computeContainerWidth(1) * 4 + GAP_X * 3
 
-export const mixView: ViewDefinition = {
-  id: 'mix',
-  label: 'Mix',
-  description: 'Buckets as containers + issues inside. Cross-bucket edges highlighted.',
-  build({ data, schema, filters, staleDays, myUserName, focusedId, density, search, measuredHeights }) {
+// Neutral color for the project container header. Projects don't have
+// a label-schema color the way buckets do (the label schema is
+// label-based, not project-based), so we render them in a uniform
+// muted gray to signal "this is a structural grouping, not a category".
+const PROJECT_COLOR = 'var(--fg-muted)'
+const NO_PROJECT_KEY = '__noproject'
+
+export const projectView: ViewDefinition = {
+  id: 'project',
+  label: 'Project',
+  description: 'Linear projects as containers + issues inside. Cross-project edges highlighted.',
+  build({ data, filters, staleDays, myUserName, focusedId, density, search, measuredHeights }) {
     const NODE_H = issueNodeHeight(density)
     const issues = applyFilters(data.issues, filters, staleDays, myUserName, search)
     const conn = computeConnectivity(data.issues)
-    // Per-issue height resolver — measured value when available (post-paint
-    // re-layout pass), density estimate otherwise. Same mechanism as the
-    // dependency view; without this, tall cards (long titles + many chips)
-    // overlap within their bucket because we stack them at NODE_H steps.
     const heightFor = (id: string): number => measuredHeights?.get(id) ?? NODE_H
 
     const buckets = new Map<string, { name: string; color: string; issues: typeof issues }>()
     for (const i of issues) {
-      const lab = getPrimaryLabel(i, schema)
-      const key = lab?.id ?? '__unclassified'
-      const name = lab?.name ?? 'Unclassified'
-      const color = lab?.color ?? '#888'
-      if (!buckets.has(key)) buckets.set(key, { name, color, issues: [] })
+      const key = i.project?.id ?? NO_PROJECT_KEY
+      const name = i.project?.name ?? '(No project)'
+      if (!buckets.has(key)) buckets.set(key, { name, color: PROJECT_COLOR, issues: [] })
       buckets.get(key)!.issues.push(i)
     }
 
-    const ordered = [...buckets.entries()].sort((a, b) => b[1].issues.length - a[1].issues.length)
+    // Sort: largest projects first, "(No project)" pinned last regardless of size
+    // — orphan issues are noise relative to actual project work.
+    const ordered = [...buckets.entries()].sort((a, b) => {
+      if (a[0] === NO_PROJECT_KEY) return 1
+      if (b[0] === NO_PROJECT_KEY) return -1
+      return b[1].issues.length - a[1].issues.length
+    })
 
-    // Outer grid: pack buckets row-by-row using each one's actual width
-    // (which now varies based on its issue count → column count). Wrap to
-    // a new row when the next bucket would overflow MAX_ROW_WIDTH. Each
-    // row starts below the tallest container of the previous row so a
-    // giant bucket doesn't push the next row down absurdly.
     const ROW_GAP = 30
     const nodes: Node[] = []
-    const issueToBucket = new Map<string, string>()
+    const issueToProject = new Map<string, string>()
     let rowY = 0
     let rowMaxH = 0
     let rowWidth = 0
     ordered.forEach(([key, b]) => {
-      // Pack issues into N columns inside this bucket so a long list
-      // doesn't become an unscannable vertical strip.
       const cols = chooseColumnCount(b.issues.length)
       const containerW = computeContainerWidth(cols)
       const heights = b.issues.map((iss) => ({ id: iss.identifier, h: heightFor(iss.identifier) }))
       const { placed, maxColumnHeight } = packIntoColumns(heights, cols, GAP_Y)
       const containerHeight = HEADER + PADDING / 2 + maxColumnHeight + PADDING / 2
 
-      // Wrap to next row if this bucket wouldn't fit in the current row.
       if (rowWidth > 0 && rowWidth + GAP_X + containerW > MAX_ROW_WIDTH) {
         rowY += rowMaxH + ROW_GAP
         rowMaxH = 0
@@ -81,7 +71,7 @@ export const mixView: ViewDefinition = {
       rowMaxH = Math.max(rowMaxH, containerHeight)
       rowWidth = xOffset + containerW
 
-      const containerId = `bucket:${key}`
+      const containerId = `project:${key}`
       nodes.push({
         id: containerId,
         type: 'mixedContainer',
@@ -107,7 +97,7 @@ export const mixView: ViewDefinition = {
           width: NODE_W,
           height: p.h,
         })
-        issueToBucket.set(id, key)
+        issueToProject.set(id, key)
       })
     })
 
@@ -117,7 +107,7 @@ export const mixView: ViewDefinition = {
       for (const r of i.relations) {
         if (r.type !== 'blocks') continue
         if (!issueIds.has(r.targetIdentifier)) continue
-        const cross = issueToBucket.get(i.identifier) !== issueToBucket.get(r.targetIdentifier)
+        const cross = issueToProject.get(i.identifier) !== issueToProject.get(r.targetIdentifier)
         edges.push({
           id: `${i.identifier}->${r.targetIdentifier}`,
           source: i.identifier,

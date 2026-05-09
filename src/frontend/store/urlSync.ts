@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { useViewStore, type ViewId, type ThemeMode, type Density } from './viewStore'
+import { useWorkspaceStore } from './workspaceStore'
 import type { IssueStateType } from '@shared/types.js'
 
 const STATE_TYPES: IssueStateType[] = ['backlog', 'unstarted', 'started', 'completed', 'canceled', 'triage']
@@ -13,7 +14,11 @@ function csv(arr: string[] | number[]): string | null {
 
 function buildUrl(): string {
   const s = useViewStore.getState()
+  const ws = useWorkspaceStore.getState()
   const params = new URLSearchParams()
+  // `?w=<id>` is *first* so the most operationally-relevant context (which
+  // workspace this tab is viewing) is visible at the front of the URL bar.
+  if (ws.currentWorkspaceId) params.set('w', ws.currentWorkspaceId)
   if (s.activeView !== 'dependency') params.set('view', s.activeView)
   if (s.focusedId) params.set('focus', s.focusedId)
   if (s.chainRootId) params.set('chain', s.chainRootId)
@@ -46,10 +51,17 @@ function buildUrl(): string {
 }
 
 let pending: number | undefined
+let lastPushedUrl: string | null = null
 function schedulePush(): void {
   if (pending) window.clearTimeout(pending)
   pending = window.setTimeout(() => {
     const url = buildUrl()
+    // Most subscriber notifications come from view-store fields that
+    // don't affect the URL (hover, context menu, modal flags). Compare
+    // against the last-pushed string so we don't spam replaceState with
+    // identical values.
+    if (url === lastPushedUrl) return
+    lastPushedUrl = url
     window.history.replaceState({}, '', url)
   }, 200)
 }
@@ -58,6 +70,11 @@ function parseUrl(): void {
   const params = new URLSearchParams(window.location.search)
   const set = useViewStore.setState
   const get = useViewStore.getState
+
+  // Workspace from URL — the rest of the bootstrap (App.tsx) validates it
+  // against the server's profile list and corrects it if it's unknown.
+  const w = params.get('w')
+  if (w) useWorkspaceStore.getState().setCurrentWorkspaceId(w.toLowerCase())
 
   const view = params.get('view') as ViewId | null
   if (view) set({ activeView: view })
@@ -118,7 +135,11 @@ function parseUrl(): void {
 export function useUrlSync(): void {
   useEffect(() => {
     parseUrl()
-    const unsub = useViewStore.subscribe(() => schedulePush())
-    return () => unsub()
+    const unsubView = useViewStore.subscribe(() => schedulePush())
+    const unsubWorkspace = useWorkspaceStore.subscribe(() => schedulePush())
+    return () => {
+      unsubView()
+      unsubWorkspace()
+    }
   }, [])
 }
