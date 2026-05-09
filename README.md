@@ -8,6 +8,7 @@ Self-hosted, read-only graph viewer for issue dependencies. Fetches from Linear,
 
 - **Dependency view** — `blocks` edges between issues. Default landing view. Answers "what should I work on next?"
 - **Mix view** — issues grouped into buckets by a configurable Linear label group (`service`, `module`, `team`, `area` — auto-detected); cross-bucket `blocks` edges highlighted in red.
+- **Project view** — issues grouped by their Linear project. Each project becomes a container; cross-project `blocks` edges highlighted.
 - **Design-doc view** — issues with linked design-doc changes only.
 
 ## Five-minute setup
@@ -61,9 +62,12 @@ WORKSPACE_CLIENT_A_LINEAR_TEAM_ID=
 WORKSPACE_CLIENT_A_REPO_PATH=/path/to/client-a/repo
 ```
 
-The top-left workspace label becomes a selector when profiles are configured.
-Switching profiles does not require a backend restart. API keys remain in
-`.env`.
+The top-left becomes a **tab bar** when profiles are configured. Each tab
+holds its own workspace + filters + view + viewport, so you can keep two
+workspaces (or two views of the same workspace) open side-by-side and
+flip between them without losing context. Drag tabs left/right to reorder,
+`Cmd/Ctrl + 1..9` to jump to the Nth tab. Switching tabs (or workspaces)
+does not require a backend restart. API keys remain in `.env`.
 
 Each profile gets isolated local data:
 
@@ -123,13 +127,15 @@ For full design rationale, see [`docs/PRD.md`](docs/PRD.md).
 
 ## URL deep linking
 
-Every filter, the active view, the focused node, and the theme are encoded in the URL:
+The active workspace, view, every filter, the focused node, and the theme are encoded in the URL:
 
 ```
-http://localhost:31415/?view=mix&bucket=svc1,svc2&priority=1,2&focus=PROJ-123&theme=dark
+http://localhost:31415/?w=team_a&view=project&bucket=svc1,svc2&priority=1,2&focus=PROJ-123&theme=dark
 ```
 
-Share a link in chat — your teammate sees the same view.
+Share a link in chat — your teammate sees the same view. Valid `view=`
+values are `dependency`, `mix`, `project`, `designdoc`. The `w=`
+parameter selects a workspace profile by id.
 
 ## Keyboard
 
@@ -137,6 +143,7 @@ Press `?` in the app for the full cheat sheet. Highlights:
 
 - `Cmd/Ctrl + F` — find on canvas; `Enter` jumps to next match and returns keyboard focus to the canvas
 - `Cmd/Ctrl + Shift + F` — focus the toolbar filter search
+- `Cmd/Ctrl + 1..9` — switch to the Nth tab in the tab bar (each tab keeps its own filters / view / viewport)
 - `c` / `Shift + C` — isolate chain on focused issue (preserve / auto-layout)
 - `r` — toggle Related-edges overlay
 - `Shift + R` — re-layout (re-run dagre, recenters on focused issue)
