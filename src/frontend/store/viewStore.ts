@@ -24,6 +24,11 @@ export interface Filters {
   prefixSelections: Record<string, string[]>  // token → label ids
   tagIds: string[]
   designdocFilter: 'all' | 'has' | 'missing'
+  // Linear project ids to filter by. Empty = no project filter (show all).
+  // The literal string '__noproject' matches issues without a project,
+  // mirroring the Project view's grouping convention so the two features
+  // stay in sync visually and behaviorally.
+  projectIds: string[]
 }
 
 export interface ViewState {
@@ -71,6 +76,7 @@ export interface ViewState {
   togglePriority: (p: number) => void
   toggleAssignee: (name: string) => void
   togglePrefix: (token: string, id: string) => void
+  toggleProject: (id: string) => void
   setFocusedId: (id: string | null) => void
   setChainRootId: (id: string | null) => void
   bumpLayout: () => void
@@ -114,6 +120,7 @@ export const defaultFilters: Filters = {
   prefixSelections: {},
   tagIds: [],
   designdocFilter: 'all',
+  projectIds: [],
 }
 
 function toggle<T>(arr: T[], v: T): T[] {
@@ -181,6 +188,7 @@ export const useViewStore = create<ViewState>((set) => ({
         },
       }
     }),
+  toggleProject: (id) => set((s) => ({ filters: { ...s.filters, projectIds: toggle(s.filters.projectIds, id) } })),
   setFocusedId: (id) => set({ focusedId: id }),
   setChainRootId: (id) => set({ chainRootId: id }),
   bumpLayout: () => set((s) => ({ layoutBump: s.layoutBump + 1 })),

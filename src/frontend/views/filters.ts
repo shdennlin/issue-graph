@@ -17,6 +17,7 @@ export type FilterDimension =
   | 'primary'
   | 'type'
   | 'prefix'
+  | 'project'
 
 export function applyFiltersExcluding(
   issues: NormalizedIssue[],
@@ -52,6 +53,9 @@ export function applyFiltersExcluding(
       break
     case 'prefix':
       f.prefixSelections = {}
+      break
+    case 'project':
+      f.projectIds = []
       break
   }
   return applyFilters(issues, f, staleDays, myUserName, search)
@@ -106,6 +110,13 @@ export function applyFilters(
       if (ids.length === 0) continue
       const hit = i.labels.some((l) => ids.includes(l.id))
       if (!hit) return false
+    }
+    if (filters.projectIds.length > 0) {
+      // '__noproject' is the sentinel for "issues without a Linear project".
+      // Mirrors the Project view's grouping key so the filter UI and view
+      // stay aligned.
+      const key = i.project?.id ?? '__noproject'
+      if (!filters.projectIds.includes(key)) return false
     }
     return true
   })
