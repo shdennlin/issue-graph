@@ -1,10 +1,15 @@
 import { existsSync } from 'node:fs'
 import type { DesignDocChange } from '@shared/types.js'
 import type { DesignDocAdapter } from './types.js'
+import { openspecAdapter } from './openspec.js'
 import { spectraAdapter } from './spectra.js'
 
-const ADAPTERS: DesignDocAdapter[] = [spectraAdapter]
-const ALIASES: Record<string, string> = { openspec: 'spectra' }
+// Order matters for `auto` detection: try the more-specific (Spectra,
+// gated on .spectra.yaml) before the more-permissive (OpenSpec, gated
+// on raw openspec/ presence). spectraAdapter.detect() is false unless
+// .spectra.yaml or .spectra/ exists, so OpenSpec still wins for pure
+// OpenSpec projects.
+const ADAPTERS: DesignDocAdapter[] = [spectraAdapter, openspecAdapter]
 
 function pickAdapter(repoRoot: string, configured: string): DesignDocAdapter | null {
   if (!repoRoot || !existsSync(repoRoot)) return null
@@ -12,8 +17,7 @@ function pickAdapter(repoRoot: string, configured: string): DesignDocAdapter | n
   if (configured === 'auto') {
     return ADAPTERS.find((a) => a.detect(repoRoot)) ?? null
   }
-  const resolved = ALIASES[configured] ?? configured
-  return ADAPTERS.find((a) => a.name === resolved) ?? null
+  return ADAPTERS.find((a) => a.name === configured) ?? null
 }
 
 export async function runDesignDocScan(

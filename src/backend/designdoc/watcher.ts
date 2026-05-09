@@ -1,7 +1,11 @@
-// Watch REPO_PATH/openspec/ for changes and re-run the design-doc scan
-// whenever proposal.md / tasks.md / frontmatter changes. On settle, write
-// the new payload to cache_meta and publish a 'designdoc-changed' event so
-// connected SSE clients refetch immediately.
+// Watch the active adapter's spec dir for changes and re-run the design-doc
+// scan whenever proposal.md / tasks.md / frontmatter changes. On settle,
+// write the new payload to cache_meta and publish a 'designdoc-changed'
+// event so connected SSE clients refetch immediately.
+//
+// The watch path comes from the adapter's getWatchTarget() rather than
+// being hardcoded to openspec/ — Spectra projects may use docs/specs/ or
+// any custom spec_dir from .spectra.yaml.
 //
 // fs.watch with { recursive: true } works on macOS (FSEvents) and modern
 // Linux (Node 20+). Falls back to a no-op + warning if the platform's
@@ -13,12 +17,11 @@
 // a non-default workspace fall back to the existing 30s frontend poll.
 
 import { existsSync, watch, type FSWatcher } from 'node:fs'
-import { join } from 'node:path'
 import { writeDesigndocsCached } from '../cache.js'
 import { getLogger } from '../lib/log.js'
 import { BUS_EVENT, publish } from '../lib/eventBus.js'
 import { runWithWorkspace } from '../lib/workspaceContext.js'
-import { runDesignDocScan } from './factory.js'
+import { getActiveDesignDocAdapter, runDesignDocScan } from './factory.js'
 
 const DEBOUNCE_MS = 500
 
@@ -29,10 +32,14 @@ let watchedWorkspaceId: string | null = null
 export function startDesignDocWatcher(repoPath: string, adapter: string, workspaceId: string): void {
   if (activeWatcher) return // idempotent — only one watcher per process
   if (!repoPath) return
-  const target = join(repoPath, 'openspec')
-  if (!existsSync(target)) {
-    // No openspec/ directory — design-doc integration silently disabled.
-    // Nothing to watch.
+  // Ask the active adapter where to watch — it knows whether the project
+  // uses openspec/, docs/specs/, or a custom spec_dir from config.
+  const active = getActiveDesignDocAdapter(repoPath, adapter)
+  const target = active?.getWatchTarget(repoPath) ?? null
+  if (!target || !existsSync(target)) {
+    // No spec dir present yet — design-doc integration silently disabled.
+    // Nothing to watch. (Late-arrival of the dir is handled by the next
+    // sync-time scan picking it up.)
     return
   }
 
