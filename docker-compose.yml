@@ -7,6 +7,12 @@ services:
     env_file: .env
     environment:
       PORT: 31415  # pinned; overrides any PORT in .env
+      # Pin SQLite path inside the container so docker keeps using the
+      # bind-mounted ./data/ tree even if .env points host dev at a
+      # separate ./data-dev/. Sharing one DB between host bun and the
+      # container caused WAL corruption (SQLite locks are unreliable
+      # across the FUSE/virtiofs bind-mount boundary on macOS Docker).
+      SQLITE_PATH: /app/data/graph.db
     ports:
       - "31415:31415"
     volumes:
