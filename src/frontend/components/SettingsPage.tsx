@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useViewStore } from '../store/viewStore'
+import { useSchemaStore } from '../store/schemaStore'
 import { api, type SettingsResponse } from '../lib/api'
 import { ModalHeader } from './ModalHeader'
 import { LOCALES, useLocale, useSetLocale, useT, type Locale } from '../i18n'
@@ -13,6 +14,7 @@ export function SettingsPage() {
   const locale = useLocale()
   const setLocale = useSetLocale()
   const t = useT()
+  const schema = useSchemaStore((s) => s.schema)
   const [data, setData] = useState<SettingsResponse | null>(null)
   const [draft, setDraft] = useState<Record<string, unknown>>({})
   const [resetting, setResetting] = useState(false)
@@ -322,6 +324,44 @@ export function SettingsPage() {
           {t('settings.identifiedAs')} {data?.viewer?.displayName ?? t('settings.unknownUser')}
           <br />
           {t('settings.issueScope')} {env.issue_scope as string}
+          <br />
+          {t('settings.bucketGroup')}{' '}
+          {schema.primaryGroup ? (
+            <>
+              <code>{schema.primaryGroup}</code>{' '}
+              {(env.label_schema_loaded as boolean | undefined)
+                ? t('settings.schemaSourceYaml')
+                : env.primary_group_override
+                  ? t('settings.schemaSourceEnv', { var: 'PRIMARY_GROUP' })
+                  : t('settings.schemaSourceAuto')}
+            </>
+          ) : (
+            t('settings.schemaSourceNone')
+          )}
+          <br />
+          {t('settings.typeGroup')}{' '}
+          {schema.typeGroup ? (
+            <>
+              <code>{schema.typeGroup}</code>{' '}
+              {(env.label_schema_loaded as boolean | undefined)
+                ? t('settings.schemaSourceYaml')
+                : env.type_group_override
+                  ? t('settings.schemaSourceEnv', { var: 'TYPE_GROUP' })
+                  : t('settings.schemaSourceAuto')}
+            </>
+          ) : (
+            t('common.none')
+          )}
+          {(env.label_schema_path as string | undefined) && (
+            <>
+              <br />
+              {t('settings.labelSchemaPath')}{' '}
+              <code>{env.label_schema_path as string}</code>{' '}
+              {(env.label_schema_loaded as boolean | undefined)
+                ? t('settings.labelSchemaLoaded')
+                : t('settings.labelSchemaAbsent')}
+            </>
+          )}
         </div>
         <label style={{ display: 'block', marginTop: 10, marginBottom: 8 }}>
           {t('settings.cacheTtl')}{' '}

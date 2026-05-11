@@ -18,6 +18,10 @@ TYPE_ICONS={"Bug":"🐛","Feature":"✨","Spike":"🔬"}
 
 Restart, and the Mix view buckets, filter sidebar, and node icons all pick up the override.
 
+### Where to confirm what's active
+
+You don't have to guess which group ended up selected. **Settings → Backend** lists the active **bucket label group** and **type label group**, plus how each was decided (auto-detected / `PRIMARY_GROUP` env / `label-schema.yaml`). Hovering the Mix view button in the toolbar also names the bucketing group inline.
+
 ## Full control (`label-schema.yaml`)
 
 For full control over how every label group and prefix renders, drop a YAML file at `LABEL_SCHEMA_PATH` (default `/app/data/label-schema.yaml`). See `label-schema.example.yaml` for a complete reference. The file is hot-reloaded — edit it, then click "Refresh" in the banner to pick up changes without restarting the container.

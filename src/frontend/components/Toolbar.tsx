@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { useClickOutside } from '../hooks/useClickOutside'
 import { useGraphStore } from '../store/graphStore'
+import { useSchemaStore } from '../store/schemaStore'
 import { useViewStore } from '../store/viewStore'
 import { views } from '../views'
 import { api } from '../lib/api'
@@ -57,6 +58,7 @@ export function Toolbar() {
   const graph = useGraphStore((s) => s.graph)
   const extendScope = useGraphStore((s) => s.extendScope)
   const syncing = useGraphStore((s) => s.syncing)
+  const primaryGroup = useSchemaStore((s) => s.schema.primaryGroup)
   const t = useT()
 
   // Chain-mode dangling-ref check: when chain isolation is active, we
@@ -119,6 +121,18 @@ export function Toolbar() {
   // optionalized). The dict path is `views.<id>.label` / `.description`.
   const viewLabelKey = (id: string): DictKey => `views.${id}.label` as DictKey
   const viewDescKey = (id: string): DictKey => `views.${id}.description` as DictKey
+  // Mix view tooltip is augmented at runtime with the active label group so
+  // the user can tell what the buckets are based on without opening the
+  // filter panel. Source ("auto-detected" / "PRIMARY_GROUP" / yaml) lives
+  // in Settings → Backend; we just name the group here to stay terse.
+  const viewTooltip = (id: string): string => {
+    const base = t(viewDescKey(id))
+    if (id !== 'mix') return base
+    const suffix = primaryGroup
+      ? t('views.mix.groupedBy', { group: primaryGroup })
+      : t('views.mix.groupedByUnknown')
+    return `${base}\n\n${suffix}`
+  }
   const themeName = theme === 'dark' ? t('toolbar.themeDark') : theme === 'light' ? t('toolbar.themeLight') : t('toolbar.themeAuto')
 
   return (
@@ -141,7 +155,7 @@ export function Toolbar() {
             key={v.id}
             className={activeView === v.id ? 'active' : ''}
             onClick={() => setActiveView(v.id as any)}
-            title={t(viewDescKey(v.id))}
+            title={viewTooltip(v.id)}
           >
             {t(viewLabelKey(v.id))}
           </button>
