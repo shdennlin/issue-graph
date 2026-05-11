@@ -29,6 +29,7 @@ type TextSize = 'sm' | 'md' | 'lg'
 export function DetailPanel() {
   const focusedId = useViewStore((s) => s.focusedId)
   const setDetailPanelOpen = useViewStore((s) => s.setDetailPanelOpen)
+  const setFilter = useViewStore((s) => s.setFilter)
   const graph = useGraphStore((s) => s.graph)
   const reload = useGraphStore((s) => s.load)
   const { schema } = useSchemaStore()
@@ -197,17 +198,76 @@ export function DetailPanel() {
       </a>
 
       <div className="section">
-        <div className="row"><span className="k">State</span><span>{stateLabel(issue.state.type)}</span></div>
-        <div className="row"><span className="k">Priority</span><span>{priorityLabel(issue.priority)}</span></div>
-        <div className="row"><span className="k">Assignee</span><span>{issue.assignee?.displayName ?? 'unassigned'}</span></div>
+        <div className="row">
+          <span className="k">State</span>
+          <button
+            type="button"
+            className="detail-filter-link"
+            onClick={() => { setFilter('stateTypes', [issue.state.type]); setDetailPanelOpen(false) }}
+            title={`Filter by state: ${stateLabel(issue.state.type)}`}
+          >
+            {stateLabel(issue.state.type)}
+          </button>
+        </div>
+        <div className="row">
+          <span className="k">Priority</span>
+          <button
+            type="button"
+            className="detail-filter-link"
+            onClick={() => { setFilter('priorities', [issue.priority]); setDetailPanelOpen(false) }}
+            title={`Filter by priority: ${priorityLabel(issue.priority)}`}
+          >
+            {priorityLabel(issue.priority)}
+          </button>
+        </div>
+        <div className="row">
+          <span className="k">Assignee</span>
+          <button
+            type="button"
+            className="detail-filter-link"
+            onClick={() => { setFilter('assignees', [issue.assignee?.displayName ?? '(unassigned)']); setDetailPanelOpen(false) }}
+            title={`Filter by assignee: ${issue.assignee?.displayName ?? 'unassigned'}`}
+          >
+            {issue.assignee?.displayName ?? 'unassigned'}
+          </button>
+        </div>
+        <div className="row">
+          <span className="k">Project</span>
+          {issue.project ? (
+            <button
+              type="button"
+              className="detail-filter-link"
+              onClick={() => { setFilter('projectIds', [issue.project!.id]); setDetailPanelOpen(false) }}
+              title={`Filter by project: ${issue.project.name}`}
+            >
+              {issue.project.name}
+            </button>
+          ) : (
+            <span style={{ color: 'var(--fg-muted)' }}>—</span>
+          )}
+        </div>
         <div className="row"><span className="k">Created</span><span>{timeAgo(issue.createdAt)}</span></div>
         <div className="row"><span className="k">Updated</span><span>{timeAgo(issue.updatedAt)}</span></div>
-        {schema.primaryGroup && (
-          <div className="row">
-            <span className="k">{schema.primaryGroup}</span>
-            <span>{issue.labels.find((l) => l.group?.name === schema.primaryGroup)?.name ?? '—'}</span>
-          </div>
-        )}
+        {schema.primaryGroup && (() => {
+          const primary = issue.labels.find((l) => l.group?.name === schema.primaryGroup)
+          return (
+            <div className="row">
+              <span className="k">{schema.primaryGroup}</span>
+              {primary ? (
+                <button
+                  type="button"
+                  className="detail-filter-link"
+                  onClick={() => { setFilter('primaryValues', [primary.id]); setDetailPanelOpen(false) }}
+                  title={`Filter by ${schema.primaryGroup}: ${primary.name}`}
+                >
+                  {primary.name}
+                </button>
+              ) : (
+                <span style={{ color: 'var(--fg-muted)' }}>—</span>
+              )}
+            </div>
+          )
+        })()}
       </div>
 
       {docs.length > 0 && (

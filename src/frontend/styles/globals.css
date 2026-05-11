@@ -779,6 +779,37 @@ a:hover { text-decoration: underline; }
   margin-top: 2px;
 }
 
+/* Click-to-filter values in DetailPanel's metadata rows. Rendered as
+   chip-style pills so the click affordance is visible at rest (was
+   previously a plain-text-with-hover-underline that read as
+   non-interactive). Hover/focus deepen the tint and add an accent
+   border. Click sets the corresponding filter dimension to *just*
+   that value and closes the DetailPanel so the canvas is unobstructed. */
+.detail-filter-link {
+  display: inline-flex;
+  align-items: center;
+  background: color-mix(in srgb, var(--fg-muted) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fg-muted) 18%, transparent);
+  padding: 1px 8px;
+  border-radius: 999px;
+  font: inherit;
+  color: var(--fg);
+  cursor: pointer;
+  text-align: left;
+  line-height: 1.4;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.detail-filter-link:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.detail-filter-link:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
 .issue-node {
   background: var(--node-bg);
   border: 1px solid var(--node-border);
