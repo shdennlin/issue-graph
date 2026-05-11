@@ -1,46 +1,59 @@
 import { useEffect } from 'react'
 import { useViewStore } from '../store/viewStore'
+import { localizeKey } from '../lib/platform'
 import { ModalHeader } from './ModalHeader'
+import { useT, type DictKey } from '../i18n'
 
 // Single source of truth for the keyboard shortcuts list. Add entries here as
 // new shortcuts ship — the modal renders directly from this array, grouped
-// by `group`. Keeping it co-located with the rendering avoids the doc going
-// stale relative to the actual handlers in App.tsx.
+// by `group`. Descriptions are i18n keys under `shortcuts.items.*` so locales
+// can translate the prose without touching `keys` (the visible key glyphs
+// stay identical across languages).
+type Group = 'Navigation' | 'Selection' | 'Chain isolation' | 'Layout' | 'Notes' | 'Other'
 interface Shortcut {
   keys: string[]
-  description: string
-  group: 'Navigation' | 'Selection' | 'Chain isolation' | 'Layout' | 'Notes' | 'Other'
+  descriptionKey: DictKey
+  group: Group
 }
 
 const SHORTCUTS: Shortcut[] = [
-  { keys: ['Cmd', '['], description: 'Back — undo last view / filter / focus / chain change (also restores viewport)', group: 'Navigation' },
-  { keys: ['Cmd', ']'], description: 'Forward — redo a step previously undone', group: 'Navigation' },
-  { keys: ['Cmd', 'F'], description: 'Find on canvas (click into canvas first)', group: 'Navigation' },
-  { keys: ['Cmd', 'Shift', 'F'], description: 'Focus the toolbar filter search', group: 'Navigation' },
-  { keys: ['Enter'], description: 'In Find: next match + return keyboard to canvas', group: 'Navigation' },
-  { keys: ['Esc'], description: 'Peel: Find → context menu → detail panel → focus → chain', group: 'Navigation' },
-  { keys: ['?'], description: 'Show this cheat sheet', group: 'Navigation' },
-  { keys: ['n'], description: 'Toggle workspace notes — reopens to the last view (grid or last note). Esc closes the modal entirely; use ← Back inside the editor to return to grid', group: 'Notes' },
-  { keys: ['Cmd', 'E'], description: 'Toggle Edit / Preview inside an open note', group: 'Notes' },
-  { keys: ['Delete'], description: '← Back to grid from the editor (Backspace on non-Mac keyboards). Ignored while typing in the textarea', group: 'Notes' },
+  { keys: ['Cmd', '['], descriptionKey: 'shortcuts.items.back', group: 'Navigation' },
+  { keys: ['Cmd', ']'], descriptionKey: 'shortcuts.items.forward', group: 'Navigation' },
+  { keys: ['Cmd', 'F'], descriptionKey: 'shortcuts.items.find', group: 'Navigation' },
+  { keys: ['Cmd', 'Shift', 'F'], descriptionKey: 'shortcuts.items.focusToolbarSearch', group: 'Navigation' },
+  { keys: ['Enter'], descriptionKey: 'shortcuts.items.findNext', group: 'Navigation' },
+  { keys: ['Esc'], descriptionKey: 'shortcuts.items.esc', group: 'Navigation' },
+  { keys: ['?'], descriptionKey: 'shortcuts.items.cheatsheet', group: 'Navigation' },
+  { keys: ['n'], descriptionKey: 'shortcuts.items.notesToggle', group: 'Notes' },
+  { keys: ['Cmd', 'E'], descriptionKey: 'shortcuts.items.noteEditPreview', group: 'Notes' },
+  { keys: ['Delete'], descriptionKey: 'shortcuts.items.notesBack', group: 'Notes' },
 
-  { keys: ['Click'], description: 'Focus an issue (auto-opens detail when toolbar Detail toggle is on)', group: 'Selection' },
-  { keys: ['Space'], description: 'Open detail panel for focused issue (ad-hoc, works when auto-open is off)', group: 'Selection' },
-  { keys: ['Enter'], description: 'Same as Space — open detail panel', group: 'Selection' },
-  { keys: ['Cmd', 'Click'], description: 'Toggle multi-select', group: 'Selection' },
-  { keys: ['Right-click'], description: 'Open context menu', group: 'Selection' },
-  { keys: ['Double-click'], description: 'Open issue in source (Linear)', group: 'Selection' },
+  { keys: ['Click'], descriptionKey: 'shortcuts.items.click', group: 'Selection' },
+  { keys: ['Space'], descriptionKey: 'shortcuts.items.space', group: 'Selection' },
+  { keys: ['Enter'], descriptionKey: 'shortcuts.items.enter', group: 'Selection' },
+  { keys: ['Cmd', 'Click'], descriptionKey: 'shortcuts.items.cmdClick', group: 'Selection' },
+  { keys: ['Right-click'], descriptionKey: 'shortcuts.items.rightClick', group: 'Selection' },
+  { keys: ['Double-click'], descriptionKey: 'shortcuts.items.doubleClick', group: 'Selection' },
 
-  { keys: ['c'], description: 'Isolate chain on focused issue (preserve positions)', group: 'Chain isolation' },
-  { keys: ['Shift', 'C'], description: 'Isolate chain (auto-layout)', group: 'Chain isolation' },
+  { keys: ['c'], descriptionKey: 'shortcuts.items.chainPreserve', group: 'Chain isolation' },
+  { keys: ['Shift', 'C'], descriptionKey: 'shortcuts.items.chainAuto', group: 'Chain isolation' },
 
-  { keys: ['r'], description: 'Toggle Related-edges overlay (dashed gray, dependency view)', group: 'Layout' },
-  { keys: ['Shift', 'R'], description: 'Re-layout from scratch; recenters on focused issue if any', group: 'Layout' },
+  { keys: ['r'], descriptionKey: 'shortcuts.items.relatedToggle', group: 'Layout' },
+  { keys: ['Shift', 'R'], descriptionKey: 'shortcuts.items.relayout', group: 'Layout' },
 
-  { keys: ['Cmd', 'Shift', 'S'], description: 'Save canvas screenshot as PNG', group: 'Other' },
+  { keys: ['Cmd', 'Shift', 'S'], descriptionKey: 'shortcuts.items.screenshot', group: 'Other' },
 ]
 
-const GROUP_ORDER: Shortcut['group'][] = ['Navigation', 'Selection', 'Chain isolation', 'Layout', 'Notes', 'Other']
+const GROUP_ORDER: Group[] = ['Navigation', 'Selection', 'Chain isolation', 'Layout', 'Notes', 'Other']
+
+const GROUP_KEY: Record<Group, DictKey> = {
+  Navigation: 'shortcuts.groups.Navigation',
+  Selection: 'shortcuts.groups.Selection',
+  'Chain isolation': 'shortcuts.groups.Chain isolation',
+  Layout: 'shortcuts.groups.Layout',
+  Notes: 'shortcuts.groups.Notes',
+  Other: 'shortcuts.groups.Other',
+}
 
 function Key({ children }: { children: string }) {
   return (
@@ -68,6 +81,7 @@ function Key({ children }: { children: string }) {
 export function ShortcutsModal() {
   const open = useViewStore((s) => s.shortcutsOpen)
   const close = () => useViewStore.getState().setShortcutsOpen(false)
+  const t = useT()
 
   // Esc closes the modal. App.tsx's window-level Esc handler already exits
   // early when a modal is open, so this is the only Esc handler in play.
@@ -97,21 +111,21 @@ export function ShortcutsModal() {
         onClick={(e) => e.stopPropagation()}
         style={{ maxWidth: 900, width: '90vw', maxHeight: '92vh' }}
       >
-        <ModalHeader title="Keyboard shortcuts" onClose={close} />
+        <ModalHeader title={t('shortcuts.title')} onClose={close} />
         <div className="shortcuts-columns">
           {grouped.map(({ group, items }) => (
             <section key={group} className="shortcuts-section">
-              <h4 className="shortcuts-section-title">{group}</h4>
+              <h4 className="shortcuts-section-title">{t(GROUP_KEY[group])}</h4>
               <div className="shortcuts-grid">
                 {items.map((s, idx) => (
-                  <ShortcutRow key={`${group}-${idx}`} keys={s.keys} description={s.description} />
+                  <ShortcutRow key={`${group}-${idx}`} keys={s.keys} description={t(s.descriptionKey)} />
                 ))}
               </div>
             </section>
           ))}
         </div>
         <div style={{ marginTop: 16, color: 'var(--fg-muted)', fontSize: 'var(--fs-meta)' }}>
-          Shortcuts are ignored while typing in inputs / textareas / a focused search box.
+          {t('shortcuts.note')}
         </div>
       </div>
     </div>
@@ -125,7 +139,7 @@ function ShortcutRow({ keys, description }: { keys: string[]; description: strin
         {keys.map((k, i) => (
           <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             {i > 0 && <span style={{ color: 'var(--fg-muted)' }}>+</span>}
-            <Key>{k}</Key>
+            <Key>{localizeKey(k)}</Key>
           </span>
         ))}
       </div>

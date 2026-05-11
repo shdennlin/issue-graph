@@ -7,6 +7,7 @@ import { NotesGridView } from './NotesGridView'
 import { NotesListView } from './NotesListView'
 import { NoteEditor } from './NoteEditor'
 import { UndoToast } from './UndoToast'
+import { useT } from '../../i18n'
 
 type ViewMode = 'grid' | 'list'
 
@@ -35,6 +36,7 @@ export function NotesModal() {
   )
   const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode)
   const [showArchived, setShowArchived] = useState(false)
+  const t = useT()
 
   function updateViewMode(m: ViewMode) {
     setViewMode(m)
@@ -82,10 +84,14 @@ export function NotesModal() {
 
   const visibleCount = showArchived ? archivedCount : noteCount
   const headerTitle = focusedNoteId !== null
-    ? 'Note'
+    ? t('notes.note')
     : showArchived
-      ? `Archived notes${archivedCount > 0 ? ` (${archivedCount})` : ''}`
-      : `Workspace notes${noteCount > 0 ? ` (${noteCount})` : ''}`
+      ? archivedCount > 0
+        ? t('notes.archivedWithCount', { count: archivedCount })
+        : t('notes.archived')
+      : noteCount > 0
+        ? t('notes.workspaceNotesWithCount', { count: noteCount })
+        : t('notes.workspaceNotes')
   void visibleCount
 
   return (
@@ -94,7 +100,7 @@ export function NotesModal() {
         className="modal notes-modal"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
-        aria-label="Workspace notes"
+        aria-label={t('notes.workspaceNotesAria')}
       >
         <div className="notes-modal-header-row">
           <ModalHeader title={headerTitle} onClose={close} />
@@ -104,20 +110,20 @@ export function NotesModal() {
                 type="button"
                 className={`icon-text${showArchived ? ' active' : ''}`}
                 onClick={() => setShowArchived((v) => !v)}
-                title={showArchived ? 'Back to active notes' : 'Show archived notes'}
+                title={showArchived ? t('notes.backToActive') : t('notes.showArchived')}
                 aria-pressed={showArchived}
               >
                 <Archive size={14} />
-                {showArchived ? 'Active' : 'Archived'}
+                {showArchived ? t('notes.activeShort') : t('notes.archivedShort')}
               </button>
-              <div className="notes-view-toggle" role="tablist" aria-label="View mode">
+              <div className="notes-view-toggle" role="tablist" aria-label={t('notes.viewModeAria')}>
                 <button
                   type="button"
                   role="tab"
                   aria-selected={viewMode === 'grid'}
                   className={`icon-only${viewMode === 'grid' ? ' active' : ''}`}
                   onClick={() => updateViewMode('grid')}
-                  title="Grid view"
+                  title={t('notes.gridView')}
                 >
                   <LayoutGrid size={16} />
                 </button>
@@ -127,7 +133,7 @@ export function NotesModal() {
                   aria-selected={viewMode === 'list'}
                   className={`icon-only${viewMode === 'list' ? ' active' : ''}`}
                   onClick={() => updateViewMode('list')}
-                  title="List view"
+                  title={t('notes.listView')}
                 >
                   <List size={16} />
                 </button>
@@ -144,7 +150,7 @@ export function NotesModal() {
                 onCloseModal={close}
               />
             ) : (
-              <div className="notes-grid-empty" aria-live="polite">Loading note…</div>
+              <div className="notes-grid-empty" aria-live="polite">{t('notes.loadingNote')}</div>
             )
           ) : viewMode === 'grid' ? (
             <NotesGridView

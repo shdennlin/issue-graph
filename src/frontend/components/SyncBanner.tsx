@@ -9,11 +9,13 @@
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { api } from '../lib/api'
+import { useT } from '../i18n'
 
 export function SyncBanner() {
   const graph = useGraphStore((s) => s.graph)
   const reloadGraph = useGraphStore((s) => s.load)
   const setSettingsOpen = useViewStore((s) => s.setSettingsOpen)
+  const t = useT()
   const warning = graph?.workspaceWarning ?? null
 
   if (!warning) return null
@@ -35,7 +37,7 @@ export function SyncBanner() {
         fontSize: 13,
       }}
     >
-      <span style={{ fontWeight: 600 }}>⚠ Workspace changed:</span>
+      <span style={{ fontWeight: 600 }}>{t('syncBanner.workspaceChanged')}</span>
       <span>
         <code style={{ background: 'rgba(255,255,255,0.18)', padding: '1px 5px', borderRadius: 3 }}>
           {warning.previous}
@@ -46,18 +48,18 @@ export function SyncBanner() {
         </code>
       </span>
       <span style={{ opacity: 0.9 }}>
-        Cache may contain stale issues from the previous workspace.
+        {t('syncBanner.cacheStale')}
       </span>
       <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
         <button
           onClick={() => setSettingsOpen(true)}
           style={{ background: '#fff', color: 'var(--danger, #b91c1c)', fontWeight: 600 }}
-          title="Open Settings → Reset cache & re-sync"
+          title={t('syncBanner.openSettingsTitle')}
         >
-          Open Settings
+          {t('syncBanner.openSettings')}
         </button>
-        <button onClick={dismiss} title="Dismiss this warning without resetting">
-          Dismiss
+        <button onClick={dismiss} title={t('syncBanner.dismissTitle')}>
+          {t('syncBanner.dismiss')}
         </button>
       </span>
     </div>

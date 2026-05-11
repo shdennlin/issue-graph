@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Edit3, Eye } from 'lucide-react'
 import { useNotesStore } from '../../store/notesStore'
 import { notesApi } from '../../lib/notesApi'
+import { formatShortcut } from '../../lib/platform'
 import { formatAbsolute, formatRelative } from '../../lib/relativeTime'
 import { NotePreview } from './NotePreview'
 
@@ -172,7 +173,7 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
             className={`icon-text${mode === 'edit' ? ' active' : ''}`}
             aria-selected={mode === 'edit'}
             onClick={() => setMode('edit')}
-            title="Edit (⌘E)"
+            title={`Edit (${formatShortcut(['Cmd', 'E'])})`}
           >
             <Edit3 size={14} /> Edit
           </button>
@@ -182,7 +183,7 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
             className={`icon-text${mode === 'preview' ? ' active' : ''}`}
             aria-selected={mode === 'preview'}
             onClick={() => setMode('preview')}
-            title="Preview (⌘E)"
+            title={`Preview (${formatShortcut(['Cmd', 'E'])})`}
           >
             <Eye size={14} /> Preview
           </button>

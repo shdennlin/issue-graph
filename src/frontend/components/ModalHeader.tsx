@@ -5,6 +5,7 @@
 
 import { X } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { useT } from '../i18n'
 
 interface Props {
   title: ReactNode
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export function ModalHeader({ title, onClose }: Props) {
+  const t = useT()
   return (
     <div className="modal-header">
       <h3 className="modal-title">{title}</h3>
@@ -19,8 +21,8 @@ export function ModalHeader({ title, onClose }: Props) {
         type="button"
         className="icon-only"
         onClick={onClose}
-        title="Close (Esc)"
-        aria-label="Close"
+        title={t('common.closeEsc')}
+        aria-label={t('common.close')}
       >
         <X size={16} />
       </button>

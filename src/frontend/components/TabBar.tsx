@@ -30,9 +30,7 @@ import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { useHistoryAvailability } from '../store/urlSync'
 import { forgetTab, snapshotTab } from '../store/tabStateStore'
-
-const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
-const MOD_GLYPH = isMac ? '⌘' : 'Ctrl+'
+import { MOD_GLYPH, formatShortcut } from '../lib/platform'
 
 function colorClass(ageMinutes: number): string {
   if (ageMinutes < 5) return 'stale-ok'
@@ -307,7 +305,7 @@ export function TabBar() {
           className="icon-only"
           onClick={() => window.history.back()}
           disabled={!canBack}
-          title="Back (⌘[ / browser back)"
+          title={`Back (${formatShortcut(['Cmd', '['])} / browser back)`}
           aria-label="Back"
         >
           <ChevronLeft size={16} />
@@ -317,7 +315,7 @@ export function TabBar() {
           className="icon-only"
           onClick={() => window.history.forward()}
           disabled={!canForward}
-          title="Forward (⌘] / browser forward)"
+          title={`Forward (${formatShortcut(['Cmd', ']'])} / browser forward)`}
           aria-label="Forward"
         >
           <ChevronRight size={16} />
