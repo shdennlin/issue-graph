@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
+import { Search } from 'lucide-react'
 import { useReactFlow } from 'reactflow'
 import type { NormalizedIssue } from '@shared/types.js'
 import { useGraphStore } from '../store/graphStore'
@@ -116,7 +117,7 @@ export function InlineSearch() {
         title="Find on canvas"
         aria-label="Find on canvas"
       >
-        🔍
+        <Search size={16} />
       </button>
     )
   }

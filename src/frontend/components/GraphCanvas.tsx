@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { LayoutGrid } from 'lucide-react'
 import ReactFlow, {
   applyNodeChanges,
   Background,
@@ -625,7 +626,7 @@ function CanvasInner() {
                 : 'Re-layout (shortcut: Shift+R) — re-run dagre from scratch and refit. Discards user-dragged positions.'
             }
           >
-            ⤴
+            <LayoutGrid size={14} />
           </ControlButton>
         </Controls>
         <Panel position="bottom-left" style={{ marginLeft: 50, fontSize: 'var(--fs-meta)', color: 'var(--fg-muted)' }}>

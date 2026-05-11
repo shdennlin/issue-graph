@@ -1,10 +1,26 @@
 import { useEffect, useMemo, useState } from 'react'
+import {
+  BarChart3,
+  Camera,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  EyeOff,
+  Keyboard,
+  Loader2,
+  Monitor,
+  Moon,
+  Settings,
+  Sun,
+} from 'lucide-react'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { views } from '../views'
 import { api } from '../lib/api'
 import { computeChain } from '../views/chain'
 // Density + theme + search live here; Size moved to Settings → Display.
+
+const ICON_SIZE = 16
 
 const FULL_HISTORY_DAYS = 365
 
@@ -86,8 +102,10 @@ export function Toolbar() {
           onClick={toggleFilterPanel}
           title={filterPanelOpen ? 'Hide filters' : 'Show filters'}
           aria-pressed={filterPanelOpen}
+          className="icon-text"
         >
-          {filterPanelOpen ? '◀' : '▶'} Filters
+          {filterPanelOpen ? <ChevronLeft size={ICON_SIZE} /> : <ChevronRight size={ICON_SIZE} />}
+          Filters
         </button>
       </div>
       <div className="sep" />
@@ -108,7 +126,7 @@ export function Toolbar() {
         <input
           id="toolbar-search"
           type="search"
-          placeholder="🔍 Search id / title / assignee…"
+          placeholder="Search id / title / assignee…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={{ width: 220 }}
@@ -123,7 +141,7 @@ export function Toolbar() {
           <div className="group">
             <button
               onClick={() => setShowRelated(!showRelated)}
-              className={showRelated ? 'active' : ''}
+              className={`icon-text ${showRelated ? 'active' : ''}`}
               title={
                 showRelated
                   ? 'Hide related-issue edges (shortcut: r). Currently shown as dashed gray lines.'
@@ -131,7 +149,8 @@ export function Toolbar() {
               }
               aria-pressed={showRelated}
             >
-              {showRelated ? '⊟ Related' : '⊞ Related'}
+              {showRelated ? <Eye size={ICON_SIZE} /> : <EyeOff size={ICON_SIZE} />}
+              Related
             </button>
           </div>
         </>
@@ -170,7 +189,7 @@ export function Toolbar() {
                 }}
               >
                 {syncing
-                  ? '⏳ Loading…'
+                  ? <span className="icon-text"><Loader2 size={ICON_SIZE} className="lucide-spin" /> Loading…</span>
                   : `+ Load full history (${chainDangling} missing)`}
               </button>
             )}
@@ -192,16 +211,26 @@ export function Toolbar() {
         <a href={api.exportUrl('md')} download>
           <button>Export MD</button>
         </a>
-        <button onClick={screenshot} title="Cmd+Shift+S">📷</button>
-        <button onClick={() => setCoverageOpen(true)} title="Design-doc coverage report">📊</button>
-        <button onClick={() => setShortcutsOpen(true)} title="Keyboard shortcuts (?)">⌨</button>
+        <button className="icon-only" onClick={screenshot} title="Screenshot (Cmd+Shift+S)" aria-label="Screenshot">
+          <Camera size={ICON_SIZE} />
+        </button>
+        <button className="icon-only" onClick={() => setCoverageOpen(true)} title="Design-doc coverage report" aria-label="Design-doc coverage report">
+          <BarChart3 size={ICON_SIZE} />
+        </button>
+        <button className="icon-only" onClick={() => setShortcutsOpen(true)} title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">
+          <Keyboard size={ICON_SIZE} />
+        </button>
         <button
+          className="icon-only"
           onClick={() => setTheme(theme === 'dark' ? 'light' : theme === 'light' ? 'auto' : 'dark')}
           title={`Theme: ${theme} (click to cycle)`}
+          aria-label={`Theme: ${theme}`}
         >
-          {theme === 'dark' ? '🌙' : theme === 'light' ? '☀️' : '🖥️'}
+          {theme === 'dark' ? <Moon size={ICON_SIZE} /> : theme === 'light' ? <Sun size={ICON_SIZE} /> : <Monitor size={ICON_SIZE} />}
         </button>
-        <button onClick={() => setSettingsOpen(true)}>⚙️</button>
+        <button className="icon-only" onClick={() => setSettingsOpen(true)} title="Settings" aria-label="Settings">
+          <Settings size={ICON_SIZE} />
+        </button>
       </div>
     </div>
   )

@@ -22,6 +22,7 @@
 // available workspaces; `×` on a tab closes it (last tab can't be closed).
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Loader2, RefreshCw } from 'lucide-react'
 import { api } from '../lib/api'
 import { useClickOutside } from '../hooks/useClickOutside'
 import { useWorkspaceStore, type Tab } from '../store/workspaceStore'
@@ -418,12 +419,18 @@ export function TabBar() {
           {graph?.data.issues.length ?? 0} issues · {graph?.data.designdocs?.length ?? 0} docs
         </span>
         <button
-          className="tabbar-refresh"
+          className="tabbar-refresh icon-text"
           onClick={forceSync}
           disabled={status === 'loading'}
           title="Shift-click to force a fresh fetch"
         >
-          {syncing ? '⏳ Syncing…' : status === 'loading' ? '⏳ Loading…' : '↻ Refresh'}
+          {syncing ? (
+            <><Loader2 size={14} className="lucide-spin" /> Syncing…</>
+          ) : status === 'loading' ? (
+            <><Loader2 size={14} className="lucide-spin" /> Loading…</>
+          ) : (
+            <><RefreshCw size={14} /> Refresh</>
+          )}
         </button>
       </div>
     </div>

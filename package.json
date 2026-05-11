@@ -23,6 +23,7 @@
     "@hono/node-server": "^1.13.7",
     "hono": "^4.6.12",
     "html-to-image": "^1.11.13",
+    "lucide-react": "^1.14.0",
     "marked": "^15.0.0",
     "pino": "^9.5.0",
     "pino-pretty": "^13.0.0",

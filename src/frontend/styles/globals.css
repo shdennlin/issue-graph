@@ -11,17 +11,46 @@ html, body, #root {
 
 button {
   font-family: inherit;
-  background: var(--bg-elev);
-  border: 1px solid var(--node-border);
+  background: transparent;
+  border: 1px solid transparent;
   color: var(--fg);
   padding: 4px 10px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: var(--fs-base);
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
-button:hover { background: var(--chip-bg); }
+button:hover { background: var(--chip-bg); border-color: var(--node-border); }
 button:disabled { opacity: 0.6; cursor: not-allowed; }
 button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+
+/* Inline icon + label buttons (lucide-react SVG + text). Keeps the icon
+   visually centered against the label baseline. */
+.icon-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* Pure icon buttons — square-ish padding so they read as icon affordances
+   rather than empty-looking text buttons. */
+.icon-only {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 6px;
+  color: var(--fg-muted);
+}
+.icon-only:hover { color: var(--fg); }
+
+/* Spinning loader (lucide-react Loader2). */
+@keyframes lucide-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.lucide-spin {
+  animation: lucide-spin 0.9s linear infinite;
+  transform-origin: center;
+}
 
 input, select, textarea {
   font-family: inherit;
@@ -112,6 +141,27 @@ a:hover { text-decoration: underline; }
 /* `.banner` base rule is retained for the global error banner in
    App.tsx; the workspace-picker, sync-link, and pill child selectors
    that used to live here moved to `.tabbar-sync` in the unified header. */
+
+/* Top-level glassy pill — used by the workspace-picker-button (and any
+   future status pills). Semi-transparent over the surrounding bg + thin
+   subtle border, matching the legacy-mode pill. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fg) 8%, transparent);
+}
+.pill .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--ok);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ok) 16%, transparent);
+  flex: 0 0 auto;
+}
 
 /* Unified app header — tab strip on the left, sync metadata on the
    right, in a single row. Replaces the old TabBar + SyncBanner pair.
@@ -219,14 +269,16 @@ a:hover { text-decoration: underline; }
 }
 
 /* Legacy-mode (no WORKSPACE_* env profiles) identity pill — sits where
-   tabs would otherwise sit, on the left of the header. */
+   tabs would otherwise sit, on the left of the header. Glassy pill:
+   semi-transparent background + thin border. */
 .tabbar-legacy-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
   border-radius: var(--radius-sm);
-  background: var(--chip-bg);
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fg) 8%, transparent);
   font-size: var(--fs-base);
   color: var(--fg);
 }
