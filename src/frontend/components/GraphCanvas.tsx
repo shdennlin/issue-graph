@@ -192,11 +192,119 @@ function CanvasInner() {
   // Stored in a ref (not store) — purely UI ephemeral, doesn't affect rendering.
   const lastViewportRef = useRef<Viewport | null>(null)
   const [hasSavedViewport, setHasSavedViewport] = useState(false)
+
+  // Fit-view helper that computes bounding box from our local `built.nodes`
+  // instead of calling rf.fitView(). RF's internal node store can lag the
+  // nodes prop we just passed by one render frame; calling rf.fitView()
+  // then uses stale/empty bounds and lands the camera far off-screen
+  // (reproduced after a view switch: tx=-209, ty=-1529.7 with zoom
+  // clamped at minZoom). Computing bounds from `built.nodes` is
+  // deterministic and synced with the current render.
+  //
+  // densityFit: when true (used for explicit fit-all triggers — Fit-view
+  // button, cold-load, view-switch with no focus), fits the densest
+  // N-issue neighborhood rather than every visible node. Dep view's
+  // dagre LR layout stacks orphans (no blocks/blocked-by) into a tall
+  // rank-0 column on the left, AND the connected chain itself can be
+  // taller than the canvas at readable zoom — either case makes
+  // "fit everything" land the camera on empty space. The density fit
+  // strategy:
+  //   1. Compute spatial centroid of connected issues (or all issues if
+  //      no connections).
+  //   2. Pick the N closest top-level issues to that centroid (N = 20).
+  //   3. Fit the bounding box of those N — keeps zoom comfortable
+  //      (cap [0.8, 1.5]) and frames a meaningful cluster, leaving
+  //      orphans and outliers reachable by scrolling.
+  // When false (small-view path), fits all top-level nodes — Design-docs
+  // view and similar contexts where the user wants to see everything.
+  const fitToBuiltBounds = useCallback((options: { duration?: number; padding?: number; densityFit?: boolean } = {}) => {
+    const padding = options.padding ?? 0.1
+    const duration = options.duration ?? 600
+    const densityFit = options.densityFit ?? false
+
+    interface NodeBox { x: number; y: number; w: number; h: number; cx: number; cy: number; id: string }
+    const topLevel: NodeBox[] = []
+    const issueBoxes: NodeBox[] = []
+    for (const n of built.nodes) {
+      if (n.parentNode) continue
+      if (!n.position) continue
+      const w = (n.width ?? 320) as number
+      const h = (n.height ?? 110) as number
+      const box: NodeBox = {
+        x: n.position.x,
+        y: n.position.y,
+        w,
+        h,
+        cx: n.position.x + w / 2,
+        cy: n.position.y + h / 2,
+        id: n.id,
+      }
+      topLevel.push(box)
+      if (n.type === 'issue') issueBoxes.push(box)
+    }
+
+    let boxes = topLevel
+    if (densityFit && issueBoxes.length > 0) {
+      // Density anchor: centroid of connected issues if any, else all
+      // issues. Pulls the focal point toward the topological cluster.
+      const connectedIds = new Set<string>()
+      for (const e of built.edges) {
+        connectedIds.add(e.source)
+        connectedIds.add(e.target)
+      }
+      const anchorPool = issueBoxes.filter((b) => connectedIds.has(b.id))
+      const pool = anchorPool.length >= 2 ? anchorPool : issueBoxes
+      const ax = pool.reduce((s, b) => s + b.cx, 0) / pool.length
+      const ay = pool.reduce((s, b) => s + b.cy, 0) / pool.length
+      // Take the N closest issues to the anchor. Containers (Mix/Project)
+      // pass through untouched — they group issues and shouldn't be
+      // distance-ranked the same way.
+      const N = 20
+      const ranked = issueBoxes
+        .map((b) => ({ b, d: (b.cx - ax) ** 2 + (b.cy - ay) ** 2 }))
+        .sort((p, q) => p.d - q.d)
+        .slice(0, N)
+        .map((r) => r.b)
+      // Include all non-issue top-level nodes (Mix/Project containers)
+      // since they're structural; otherwise pick our ranked subset.
+      const containers = topLevel.filter((b) => issueBoxes.indexOf(b) === -1)
+      boxes = [...ranked, ...containers]
+    }
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const b of boxes) {
+      if (b.x < minX) minX = b.x
+      if (b.y < minY) minY = b.y
+      if (b.x + b.w > maxX) maxX = b.x + b.w
+      if (b.y + b.h > maxY) maxY = b.y + b.h
+    }
+    if (!isFinite(minX)) {
+      // No top-level nodes — defer to RF's fitView as a last resort.
+      rf.fitView({ duration, padding, minZoom: 0.8 })
+      return
+    }
+    const canvasEl = document.querySelector('.react-flow') as HTMLElement | null
+    const canvasRect = canvasEl?.getBoundingClientRect()
+    const canvasW = canvasRect?.width ?? 1500
+    const canvasH = canvasRect?.height ?? 800
+    const boundsW = Math.max(1, maxX - minX)
+    const boundsH = Math.max(1, maxY - minY)
+    const zoomX = (canvasW * (1 - padding * 2)) / boundsW
+    const zoomY = (canvasH * (1 - padding * 2)) / boundsH
+    // Zoom range: floor at 0.8 (cards stay readable), cap at 1.5
+    // (single-cluster views don't zoom in absurdly).
+    const zoom = Math.max(0.8, Math.min(zoomX, zoomY, 1.5))
+    rf.setCenter((minX + maxX) / 2, (minY + maxY) / 2, { zoom, duration })
+  }, [rf, built])
+
   const fitViewWithSnapshot = useCallback(() => {
     lastViewportRef.current = rf.getViewport()
     setHasSavedViewport(true)
-    rf.fitView({ duration: 600, padding: 0.1, minZoom: 0.8 })
-  }, [rf])
+    // Density-fit: frame the densest ~20-issue neighborhood instead of
+    // every node — Dep view's orphan column and deep dependency chains
+    // would otherwise push the camera into empty space.
+    fitToBuiltBounds({ padding: 0.1, duration: 600, densityFit: true })
+  }, [rf, fitToBuiltBounds])
   const revertViewport = useCallback(() => {
     if (!lastViewportRef.current) return
     rf.setViewport(lastViewportRef.current, { duration: 400 })
@@ -261,7 +369,6 @@ function CanvasInner() {
     const fitReq = pendingFitViewRef.current
     const restoreVp = pendingViewportRestoreRef.current
     if (!fitReq && !restoreVp) return
-
     // Priority: focused-issue setCenter > viewport-restore > fitView.
     //
     // Why focus wins over viewport-restore: when the user has explicitly
@@ -291,12 +398,35 @@ function CanvasInner() {
     // position to the child's. Top-level nodes (Dependency / Design-doc
     // views) have no parentNode, so position is already absolute.
     if (fitReq?.preserveFocus && focusedId) {
-      const node = nodes.find((n) => n.id === focusedId)
+      // CRITICAL: read positions from `built.nodes` (useMemo), NOT the
+      // local `nodes` state. The local state is updated via setNodes in
+      // an earlier effect — that setState is queued and only visible on
+      // the NEXT render. Within the same effect tick, `nodes` still has
+      // the previous view's content while `built.nodes` is already the
+      // new view (because useMemo recomputes synchronously during the
+      // current render). Using `nodes` here makes setCenter land at the
+      // PREVIOUS view's coordinates after a view switch.
+      const sourceNodes = built.nodes
+      const node = sourceNodes.find((n) => n.id === focusedId)
+      const issueCount = sourceNodes.filter((n) => n.type === 'issue').length
+      // Small-view heuristic: when the visible issue count is low
+      // (typical of Design-docs view, or a narrow chain isolation),
+      // centering on a single focused issue leaves big "empty" gaps
+      // around it because the dagre layout spreads the remaining nodes
+      // across the canvas. Fit to the whole cluster instead — focused
+      // issue stays onscreen, in context with its peers.
+      const isSmallView = issueCount > 0 && issueCount <= 15
+      if (isSmallView) {
+        pendingFitViewRef.current = null
+        pendingViewportRestoreRef.current = null
+        fitToBuiltBounds({ padding: fitReq.padding, duration: 600 })
+        return
+      }
       if (node?.position) {
         let absX = node.position.x
         let absY = node.position.y
         if (node.parentNode) {
-          const parent = nodes.find((n) => n.id === node.parentNode)
+          const parent = sourceNodes.find((p) => p.id === node.parentNode)
           if (parent?.position) {
             absX += parent.position.x
             absY += parent.position.y
@@ -325,12 +455,16 @@ function CanvasInner() {
     }
 
     // Plain fitView — cold start with no focus, view switch with no
-    // focus, etc.
+    // focus, etc. Uses the same fitToBuiltBounds helper as
+    // fitViewWithSnapshot so behavior is consistent regardless of trigger
+    // (Producer 1/2/3 vs the Fit-view ControlButton). densityFit picks
+    // a meaningful neighborhood (~20 issues) so the camera frames real
+    // content even when the graph is sparse / has a tall orphan column.
     if (fitReq) {
       pendingFitViewRef.current = null
-      rf.fitView({ duration: 600, padding: fitReq.padding, minZoom: 0.8 })
+      fitToBuiltBounds({ padding: fitReq.padding, duration: 600, densityFit: true })
     }
-  }, [measuredHeights, rf, focusedId, nodes])
+  }, [measuredHeights, rf, focusedId, built, fitToBuiltBounds])
 
   // Producer 1: first non-empty load. preserveFocus so that F5 / cold
   // start with a focusedId in the URL (or restored from tabStateStore)
