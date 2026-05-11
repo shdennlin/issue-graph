@@ -991,22 +991,42 @@ a:hover { text-decoration: underline; }
   position: absolute;
   background: var(--bg-elev);
   border: 1px solid var(--node-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
-  padding: 4px 0;
+  padding: 4px;
   z-index: 100;
+  min-width: 200px;
   font-size: var(--fs-base);
+  display: flex;
+  flex-direction: column;
 }
 .context-menu button {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   text-align: left;
-  border: none;
-  padding: 6px 12px;
+  border: 0;
+  padding: 6px 10px;
   background: transparent;
-  border-radius: 0;
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  font-size: var(--fs-base);
+  cursor: pointer;
 }
-.context-menu button:hover { background: var(--chip-bg); }
+.context-menu button:hover { background: var(--chip-bg); border: 0; }
+.context-menu button svg { color: var(--fg-muted); flex-shrink: 0; }
+.context-menu-sep {
+  height: 1px;
+  background: color-mix(in srgb, var(--fg-muted) 14%, transparent);
+  margin: 4px 0;
+}
+.context-menu-hint {
+  margin-left: auto;
+  color: var(--fg-muted);
+  font-size: var(--fs-meta);
+  font-family: var(--font-mono);
+}
 
 /* Lightweight CSS-only tooltip — instant show on hover (no native ~500ms
    delay), themed, no JS state. Wrap the trigger element with `.tip` and

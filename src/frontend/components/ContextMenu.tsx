@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { Copy, ExternalLink, Focus, GitBranch, Workflow } from 'lucide-react'
 import { useViewStore } from '../store/viewStore'
 import { useGraphStore } from '../store/graphStore'
 
@@ -27,23 +28,43 @@ export function ContextMenu() {
   if (!issue) return null
 
   return (
-    <div className="context-menu" style={{ left: menu.x, top: menu.y }}>
-      <button onClick={() => { window.open(issue.url, '_blank', 'noreferrer'); close() }}>Open in source ↗</button>
-      <button onClick={() => { navigator.clipboard.writeText(issue.identifier); close() }}>Copy ID</button>
-      <button onClick={() => { setFocusedId(issue.identifier); close() }}>Focus</button>
+    <div className="context-menu" role="menu" style={{ left: menu.x, top: menu.y }}>
+      <button
+        role="menuitem"
+        onClick={() => { window.open(issue.url, '_blank', 'noreferrer'); close() }}
+      >
+        <ExternalLink size={14} /> Open in source
+      </button>
+      <button
+        role="menuitem"
+        onClick={() => { navigator.clipboard.writeText(issue.identifier); close() }}
+      >
+        <Copy size={14} /> Copy ID
+      </button>
+      <button
+        role="menuitem"
+        onClick={() => { setFocusedId(issue.identifier); close() }}
+      >
+        <Focus size={14} /> Focus
+      </button>
       {activeView === 'dependency' && (
         <>
+          <div className="context-menu-sep" role="separator" />
           <button
+            role="menuitem"
             onClick={() => { setChainRootId(issue.identifier); close() }}
             title="Shortcut: focus an issue, press c"
           >
-            Isolate chain <span style={{ opacity: 0.5, marginLeft: 6, fontSize: 11 }}>c</span>
+            <GitBranch size={14} /> Isolate chain
+            <span className="context-menu-hint">c</span>
           </button>
           <button
+            role="menuitem"
             onClick={() => { setChainRootId(issue.identifier); bumpLayout(); close() }}
             title="Shortcut: focus an issue, press Shift+C"
           >
-            Isolate chain (auto-layout) <span style={{ opacity: 0.5, marginLeft: 6, fontSize: 11 }}>⇧C</span>
+            <Workflow size={14} /> Isolate chain (auto-layout)
+            <span className="context-menu-hint">⇧C</span>
           </button>
         </>
       )}
