@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { Search } from 'lucide-react'
+import { ChevronDown, ChevronUp, Search, X } from 'lucide-react'
 import { useReactFlow } from 'reactflow'
 import type { NormalizedIssue } from '@shared/types.js'
 import { useGraphStore } from '../store/graphStore'
@@ -162,9 +162,15 @@ export function InlineSearch() {
       <span className="counter">
         {total === 0 && query ? '0 / 0' : total > 0 ? `${activeIdx + 1} / ${total}` : ''}
       </span>
-      <button onClick={() => goto(-1)} disabled={total === 0} title="Previous match">↑</button>
-      <button onClick={() => goto(1)} disabled={total === 0} title="Next match">↓</button>
-      <button onClick={close} title="Close (Esc)">×</button>
+      <button className="icon-only" onClick={() => goto(-1)} disabled={total === 0} title="Previous match (Shift+Enter)" aria-label="Previous match">
+        <ChevronUp size={14} />
+      </button>
+      <button className="icon-only" onClick={() => goto(1)} disabled={total === 0} title="Next match (Enter)" aria-label="Next match">
+        <ChevronDown size={14} />
+      </button>
+      <button className="icon-only" onClick={close} title="Close (Esc)" aria-label="Close">
+        <X size={14} />
+      </button>
     </div>
   )
 }
