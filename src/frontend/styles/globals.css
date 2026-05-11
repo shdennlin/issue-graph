@@ -443,6 +443,59 @@ a:hover { text-decoration: underline; }
   padding-bottom: 0;
 }
 
+/* Sticky section header — stays pinned to the top of the .filter-panel
+   scroll container as you scroll. The negative-then-positive `top` math
+   accounts for the panel's 10px padding: at top: 0, the header would sit
+   10px below the visible top edge; using `top: 0` plus padding-top on the
+   heading itself keeps the visual offset minimal while letting the
+   sticky behavior register against the scroll edge. */
+.filter-section-heading {
+  margin: 0 0 var(--sp-2);
+  position: sticky;
+  top: 0;
+  background: var(--bg-elev);
+  z-index: 1;
+  /* match .filter-panel's padding so the heading bg covers the gap */
+  padding: 4px 0;
+}
+.filter-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+.filter-section-toggle:hover { background: transparent; border-color: transparent; }
+.filter-section-toggle:hover .filter-section-title { color: var(--accent); }
+.filter-section-toggle:hover svg { color: var(--accent); }
+.filter-section-toggle svg { color: var(--fg-muted); flex-shrink: 0; }
+
+.filter-section-title { flex: 1; }
+
+/* Active-filter count badge next to the section title — subtle accent
+   pill so you can see at a glance which sections have active filters
+   even when the section body is collapsed. */
+.filter-section-count {
+  font-size: var(--fs-meta);
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  padding: 0 6px;
+  border-radius: 999px;
+  font-weight: 500;
+  min-width: 18px;
+  text-align: center;
+  line-height: 1.5;
+}
+
 /* Help affordance next to "Active only" — lucide HelpCircle replaces the
    hand-rolled ?-in-a-circle that read as a heavy badge. */
 .filter-help-icon {
