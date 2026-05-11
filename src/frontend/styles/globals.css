@@ -157,20 +157,21 @@ a:hover { text-decoration: underline; }
 }
 .react-flow__arrowhead { fill: var(--edge); }
 
-.banner {
+/* Global error banner — appears at the bottom of the app shell when a
+   non-recoverable graph load error occurs. Same visual grammar as the
+   workspace-change warning (in SyncBanner): tinted bg, accented border,
+   readable body text. Replaces a hand-rolled `.banner` rule that used
+   to be a shared layout class but only had this one consumer left. */
+.error-banner {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 6px 12px;
-  background: var(--bg-elev);
-  border-bottom: 1px solid var(--node-border);
-  font-size: var(--fs-base);
   gap: 12px;
+  padding: 8px 14px;
+  font-size: var(--fs-base);
+  color: var(--fg);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  border-top: 1px solid var(--danger);
 }
-
-/* `.banner` base rule is retained for the global error banner in
-   App.tsx; the workspace-picker, sync-link, and pill child selectors
-   that used to live here moved to `.tabbar-sync` in the unified header. */
 
 /* Top-level glassy pill — used by the workspace-picker-button (and any
    future status pills). Semi-transparent over the surrounding bg + thin

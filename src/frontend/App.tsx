@@ -457,7 +457,7 @@ export function App() {
         )}
       </div>
       {status === 'error' && error && (
-        <div className="banner" style={{ background: 'var(--danger)', color: '#fff' }}>
+        <div className="error-banner" role="alert">
           {error}
         </div>
       )}
