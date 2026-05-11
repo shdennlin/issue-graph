@@ -20,6 +20,7 @@ import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { useSchemaStore } from '../store/schemaStore'
 import { registerViewportBridge } from '../store/tabStateStore'
+import { registerHistoryViewportSink, storeViewportInHistory } from '../store/urlSync'
 import { findView } from '../views'
 import { IssueNode } from './nodes/IssueNode'
 import { MixedContainerNode } from './nodes/MixedContainerNode'
@@ -363,6 +364,18 @@ function CanvasInner() {
       },
     )
   }, [rf])
+
+  // history.state ↔ viewport bridge. On popstate, urlSync pulls the
+  // viewport that was stashed when this history entry was first created
+  // and feeds it through the same pendingViewportRestoreRef pipeline
+  // the tab-switch bridge uses — so back/forward navigation restores
+  // pan/zoom in addition to URL state.
+  useEffect(() => {
+    return registerHistoryViewportSink((vp) => {
+      pendingViewportRestoreRef.current = vp
+      pendingFitViewRef.current = null
+    })
+  }, [])
   useEffect(() => {
     if (!measuredHeights) return  // wait until layout has settled
 
@@ -784,6 +797,11 @@ function CanvasInner() {
         onPaneMouseMove={onPaneMouseMove}
         onPaneClick={onPaneClick}
         onNodeContextMenu={onNodeContextMenu}
+        // Stash viewport in history.state on every pan/zoom settle so
+        // Cmd+] (forward) restores not just the URL state of a step but
+        // the camera position too. RF fires onMoveEnd at the end of pan
+        // and zoom gestures.
+        onMoveEnd={(_e, vp) => storeViewportInHistory(vp)}
         // fitView prop intentionally OMITTED. ReactFlow's internal
         // fitViewOnInit (triggered from updateNodeDimensions when nodes are
         // first measured after each mount) races with our setViewport on

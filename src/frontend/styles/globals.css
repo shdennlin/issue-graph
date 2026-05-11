@@ -219,6 +219,23 @@ a:hover { text-decoration: underline; }
 
 .tabbar-spacer { flex: 1 1 auto; min-width: 8px; }
 
+/* Browser-style back/forward arrows at the very left of the tabbar.
+   Mirrors Linear's app-shell back/forward — quick visual escape from a
+   filter / view / focus change. Buttons disable when there's no
+   navigation available in that direction (tracked via history.state's
+   seq counter). */
+.tabbar-history-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 4px;
+  align-self: center;
+}
+.tabbar-history-nav button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 /* Right-side sync metadata: workspace picker (when N≥2), last-sync,
    issue/doc counts, refresh. */
 .tabbar-sync {

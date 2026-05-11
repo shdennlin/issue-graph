@@ -1,11 +1,78 @@
 // Bidirectional URL ↔ store sync. PRD §6.7 codec.
+//
+// Two-mode history strategy:
+// - Significant state changes (view, filter, focus, chain, search,
+//   workspace) push a new history entry so Cmd+[ / Cmd+] navigate
+//   them like a regular browser back/forward.
+// - Preference changes (theme, density, expanded buckets) only
+//   replace the current entry — they aren't a user "step" worth
+//   stacking up.
+//
+// Each entry carries a monotonic seq in history.state plus an optional
+// viewport so back/forward also restores pan/zoom. seq lets the UI
+// figure out whether a popstate went back or forward (and how far
+// to/from the freshest entry) for enabling/disabling the
+// back/forward buttons.
 
-import { useEffect } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
+import type { Viewport } from 'reactflow'
 import { useViewStore, type ViewId, type ThemeMode, type Density } from './viewStore'
 import { useWorkspaceStore } from './workspaceStore'
 import type { IssueStateType } from '@shared/types.js'
 
 const STATE_TYPES: IssueStateType[] = ['backlog', 'unstarted', 'started', 'completed', 'canceled', 'triage']
+
+interface HistoryEntryState {
+  seq: number
+  viewport?: Viewport
+}
+
+let nextSeq = 1
+let currentSeq = 0
+let maxSeq = 0
+const pendingRedirectListeners = new Set<() => void>()
+
+function notifyListeners() {
+  for (const fn of pendingRedirectListeners) fn()
+}
+
+export function canGoBack(): boolean {
+  return currentSeq > 0
+}
+export function canGoForward(): boolean {
+  return currentSeq < maxSeq
+}
+
+export function subscribeHistoryAvailability(fn: () => void): () => void {
+  pendingRedirectListeners.add(fn)
+  return () => pendingRedirectListeners.delete(fn)
+}
+
+/** React-friendly hook surfacing {canBack, canForward} for nav buttons. */
+export function useHistoryAvailability(): { canBack: boolean; canForward: boolean } {
+  const stamp = useSyncExternalStore(
+    (fn) => subscribeHistoryAvailability(fn),
+    () => `${currentSeq}/${maxSeq}`,
+    () => `${currentSeq}/${maxSeq}`,
+  )
+  // stamp triggers re-render; compute fresh values.
+  void stamp
+  return { canBack: canGoBack(), canForward: canGoForward() }
+}
+
+/** Read the viewport stashed in the current history entry, if any. */
+export function getHistoryViewport(): Viewport | null {
+  const st = window.history.state as HistoryEntryState | null
+  return st?.viewport ?? null
+}
+
+/** Write the current viewport into the current history entry (debounced
+ *  by the caller). Uses replaceState so it doesn't create a new entry. */
+export function storeViewportInHistory(vp: Viewport): void {
+  const prev = (window.history.state as HistoryEntryState | null) ?? { seq: currentSeq }
+  const next: HistoryEntryState = { ...prev, viewport: vp }
+  window.history.replaceState(next, '', window.location.href)
+}
 
 function csv(arr: string[] | number[]): string | null {
   if (!arr || arr.length === 0) return null
@@ -52,94 +119,181 @@ function buildUrl(): string {
 
 let pending: number | undefined
 let lastPushedUrl: string | null = null
+let lastSnapshot: { url: string; signature: string } | null = null
+
+// "Significant" parts of the URL — when these change, push a new history
+// entry so Cmd+[ navigates back to the prior step. Preferences (theme,
+// density, expanded) only replace the current entry. Workspace `w` is
+// treated as significant because switching workspaces is a major step.
+function significantSignature(): string {
+  const s = useViewStore.getState()
+  const ws = useWorkspaceStore.getState()
+  const f = s.filters
+  return [
+    ws.currentWorkspaceId ?? '',
+    s.activeView,
+    s.focusedId ?? '',
+    s.chainRootId ?? '',
+    s.showRelated ? '1' : '0',
+    s.search,
+    f.activeOnly ? '1' : '0',
+    f.myIssuesOnly ? '1' : '0',
+    f.staleOnly ? '1' : '0',
+    f.stateTypes.slice().sort().join(','),
+    f.stateNames.slice().sort().join(','),
+    f.primaryValues.slice().sort().join(','),
+    f.typeValues.slice().sort().join(','),
+    f.priorities.slice().sort().join(','),
+    f.assignees.slice().sort().join(','),
+    f.projectIds.slice().sort().join(','),
+    f.designdocFilter,
+    Object.entries(f.prefixSelections).map(([k, v]) => `${k}:${v.slice().sort().join(',')}`).sort().join('|'),
+  ].join('|')
+}
+
 function schedulePush(): void {
   if (pending) window.clearTimeout(pending)
   pending = window.setTimeout(() => {
     const url = buildUrl()
-    // Most subscriber notifications come from view-store fields that
-    // don't affect the URL (hover, context menu, modal flags). Compare
-    // against the last-pushed string so we don't spam replaceState with
-    // identical values.
     if (url === lastPushedUrl) return
+    const sig = significantSignature()
+    const significantChanged = lastSnapshot?.signature !== sig
     lastPushedUrl = url
-    window.history.replaceState({}, '', url)
+    if (significantChanged) {
+      // New "step" — push a fresh entry. Wipes any forward stack.
+      nextSeq++
+      currentSeq = nextSeq
+      maxSeq = nextSeq
+      window.history.pushState({ seq: nextSeq }, '', url)
+      lastSnapshot = { url, signature: sig }
+      notifyListeners()
+    } else {
+      // Same step, preferences-only change — patch the URL in place.
+      const prev = (window.history.state as HistoryEntryState | null) ?? { seq: currentSeq }
+      window.history.replaceState({ ...prev, seq: prev.seq }, '', url)
+      lastSnapshot = { url, signature: sig }
+    }
   }, 200)
 }
 
 function parseUrl(): void {
   const params = new URLSearchParams(window.location.search)
   const set = useViewStore.setState
-  const get = useViewStore.getState
 
-  // Workspace from URL — the rest of the bootstrap (App.tsx) validates it
-  // against the server's profile list and corrects it if it's unknown.
+  // Apply the URL fully — including resetting fields back to defaults
+  // when their param is absent. Without this, popstate-driven back/
+  // forward navigation only ever ADDS state, never clears it
+  // (e.g. switching Dep → Project then Back leaves activeView=Project
+  // because the prior URL had no `?view=` param).
   const w = params.get('w')
   if (w) useWorkspaceStore.getState().setCurrentWorkspaceId(w.toLowerCase())
 
   const view = params.get('view') as ViewId | null
-  if (view) set({ activeView: view })
+  set({ activeView: view ?? 'dependency' })
 
-  const focus = params.get('focus')
-  if (focus) set({ focusedId: focus })
-
-  const chain = params.get('chain')
-  if (chain) set({ chainRootId: chain })
-
-  if (params.get('related') === '1') set({ showRelated: true })
+  set({ focusedId: params.get('focus') })
+  set({ chainRootId: params.get('chain') })
+  set({ showRelated: params.get('related') === '1' })
 
   const theme = params.get('theme') as ThemeMode | null
-  if (theme) set({ theme })
+  if (theme === 'light' || theme === 'dark' || theme === 'auto') set({ theme })
 
   const density = params.get('density') as Density | null
-  if (density) set({ density })
+  if (density === 'compact' || density === 'default' || density === 'verbose') {
+    set({ density })
+  }
 
-  const filters = { ...get().filters }
-  if (params.get('active') === '0') filters.activeOnly = false
-  if (params.get('mine') === '1') filters.myIssuesOnly = true
-  if (params.get('stale') === '1') filters.staleOnly = true
-
-  const state = params.get('state')
-  if (state) filters.stateTypes = state.split(',').filter((s): s is IssueStateType => STATE_TYPES.includes(s as IssueStateType))
-
-  const bucket = params.get('bucket')
-  if (bucket) filters.primaryValues = bucket.split(',')
-
-  const type = params.get('type')
-  if (type) filters.typeValues = type.split(',')
-
-  const priority = params.get('priority')
-  if (priority) filters.priorities = priority.split(',').map(Number).filter((n) => !isNaN(n))
-
-  const assignee = params.get('assignee')
-  if (assignee) filters.assignees = assignee.split(',')
-
-  const tag = params.get('tag')
-  if (tag) filters.tagIds = tag.split(',')
-
-  const dd = params.get('designdoc') as 'all' | 'has' | 'missing' | null
-  if (dd) filters.designdocFilter = dd
-
+  // Filters: build a fresh object from URL — fall back to defaults
+  // for any field whose param is absent.
+  const filters = {
+    activeOnly: params.get('active') !== '0',
+    myIssuesOnly: params.get('mine') === '1',
+    staleOnly: params.get('stale') === '1',
+    stateTypes: (() => {
+      const s = params.get('state')
+      if (!s) return ['backlog', 'unstarted', 'started', 'triage'] as IssueStateType[]
+      return s.split(',').filter((x): x is IssueStateType => STATE_TYPES.includes(x as IssueStateType))
+    })(),
+    stateNames: [] as string[],
+    primaryValues: (params.get('bucket')?.split(',') ?? []),
+    typeValues: (params.get('type')?.split(',') ?? []),
+    priorities: (params.get('priority')?.split(',').map(Number).filter((n) => !isNaN(n)) ?? []),
+    assignees: (params.get('assignee')?.split(',') ?? []),
+    projectIds: [] as string[],
+    prefixSelections: {} as Record<string, string[]>,
+    tagIds: (params.get('tag')?.split(',') ?? []),
+    designdocFilter: ((): 'all' | 'has' | 'missing' => {
+      const dd = params.get('designdoc')
+      return dd === 'has' || dd === 'missing' ? dd : 'all'
+    })(),
+  }
   for (const [k, v] of params.entries()) {
     if (k.startsWith('pfx_')) {
       const token = k.slice(4)
-      filters.prefixSelections = { ...filters.prefixSelections, [token]: v.split(',') }
+      filters.prefixSelections[token] = v.split(',')
     }
   }
-
-  const expand = params.get('expand')
-  if (expand) set({ expandedBuckets: expand.split(',') })
-
   set({ filters })
+
+  set({ expandedBuckets: (params.get('expand')?.split(',') ?? []) })
+}
+
+// Module-scope callback bridge for popstate → viewport restore. Set by
+// the GraphCanvas bridge so urlSync can hand the viewport stashed in
+// history.state to the same restore-after-layout-settles pipeline that
+// tab-switch viewport restore uses.
+let viewportRestoreSink: ((vp: Viewport) => void) | null = null
+export function registerHistoryViewportSink(sink: (vp: Viewport) => void): () => void {
+  viewportRestoreSink = sink
+  return () => {
+    if (viewportRestoreSink === sink) viewportRestoreSink = null
+  }
 }
 
 export function useUrlSync(): void {
   useEffect(() => {
     parseUrl()
+    // Seed the first history entry with seq=0 so we have a sentinel for
+    // "no app step yet" — Cmd+[ from here goes to whatever was loaded
+    // before our SPA (or no-op at the start of session history).
+    if (window.history.state == null || (window.history.state as HistoryEntryState).seq == null) {
+      window.history.replaceState({ seq: 0 }, '', window.location.href)
+    }
+    currentSeq = (window.history.state as HistoryEntryState).seq
+    maxSeq = currentSeq
+    lastPushedUrl = window.location.search + window.location.pathname
+    lastSnapshot = { url: lastPushedUrl, signature: significantSignature() }
+    notifyListeners()
+
     const unsubView = useViewStore.subscribe(() => schedulePush())
     const unsubWorkspace = useWorkspaceStore.subscribe(() => schedulePush())
+
+    const onPopState = (e: PopStateEvent) => {
+      // Replay URL into the stores. parseUrl mutates view/workspace
+      // stores, which would normally call schedulePush via the
+      // subscribers above — guard against that pushing yet another
+      // history entry by snapshotting the resulting signature first.
+      const incomingState = (e.state as HistoryEntryState | null) ?? { seq: 0 }
+      currentSeq = incomingState.seq
+      if (currentSeq > maxSeq) maxSeq = currentSeq
+      parseUrl()
+      // Mark this as the "last seen" so the upcoming subscriber-driven
+      // schedulePush doesn't think this is a new step.
+      lastPushedUrl = buildUrl()
+      lastSnapshot = { url: lastPushedUrl, signature: significantSignature() }
+      notifyListeners()
+      // Restore viewport (pan/zoom) from history.state if one was
+      // stashed when this entry was first pushed/replaced.
+      if (incomingState.viewport && viewportRestoreSink) {
+        viewportRestoreSink(incomingState.viewport)
+      }
+    }
+    window.addEventListener('popstate', onPopState)
+
     return () => {
       unsubView()
       unsubWorkspace()
+      window.removeEventListener('popstate', onPopState)
     }
   }, [])
 }

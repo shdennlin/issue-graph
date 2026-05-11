@@ -22,12 +22,13 @@
 // available workspaces; `×` on a tab closes it (last tab can't be closed).
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Loader2, RefreshCw } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Loader2, RefreshCw } from 'lucide-react'
 import { api } from '../lib/api'
 import { useClickOutside } from '../hooks/useClickOutside'
 import { useWorkspaceStore, type Tab } from '../store/workspaceStore'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
+import { useHistoryAvailability } from '../store/urlSync'
 import { forgetTab, snapshotTab } from '../store/tabStateStore'
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
@@ -86,6 +87,8 @@ export function TabBar() {
     const id = window.setInterval(() => setNow(Date.now()), 30_000)
     return () => window.clearInterval(id)
   }, [])
+
+  const { canBack, canForward } = useHistoryAvailability()
   const pickerRef = useRef<HTMLLabelElement | null>(null)
 
   // FLIP animation: capture each tab's offsetLeft just before a reorder
@@ -298,6 +301,28 @@ export function TabBar() {
 
   return (
     <div className="tabbar" role="tablist" aria-label="Workspace header">
+      <div className="tabbar-history-nav" aria-label="History navigation">
+        <button
+          type="button"
+          className="icon-only"
+          onClick={() => window.history.back()}
+          disabled={!canBack}
+          title="Back (⌘[ / browser back)"
+          aria-label="Back"
+        >
+          <ChevronLeft size={16} />
+        </button>
+        <button
+          type="button"
+          className="icon-only"
+          onClick={() => window.history.forward()}
+          disabled={!canForward}
+          title="Forward (⌘] / browser forward)"
+          aria-label="Forward"
+        >
+          <ChevronRight size={16} />
+        </button>
+      </div>
       {showTabs ? (
         <>
           {tabs.map((tab, idx) => {

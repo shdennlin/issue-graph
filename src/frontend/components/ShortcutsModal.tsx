@@ -13,6 +13,8 @@ interface Shortcut {
 }
 
 const SHORTCUTS: Shortcut[] = [
+  { keys: ['Cmd', '['], description: 'Back — undo the last view / filter / focus / chain change (browser native; also restores the previous canvas viewport). Use the ← button at the left of the tab bar if your browser remaps the shortcut.', group: 'Navigation' },
+  { keys: ['Cmd', ']'], description: 'Forward — redo a step previously undone with Cmd+[. → button at the left of the tab bar does the same.', group: 'Navigation' },
   { keys: ['Cmd', 'F'], description: 'Open Find on canvas (focus required: click into canvas first)', group: 'Navigation' },
   { keys: ['Cmd', 'Shift', 'F'], description: 'Focus the toolbar filter search (top of page) and select any existing query', group: 'Navigation' },
   { keys: ['Enter'], description: 'In Find: jump to next match, focus it, then return keyboard to the canvas (so c / r / ⇧C / ⇧R target the match)', group: 'Navigation' },
