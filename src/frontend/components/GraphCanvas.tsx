@@ -181,6 +181,11 @@ function CanvasInner() {
   // unified fitView consumer below to fire (when a fit was requested).
   useEffect(() => {
     measuredSigRef.current = null
+    // react-hooks/set-state-in-effect: clearing measuredHeights *is* the
+    // signal that drives the re-measure cycle in the effect above. The
+    // setState here is the cache-invalidation, not derived state — there
+    // isn't a "derive from deps" alternative.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMeasuredHeights(null)
   }, [activeView, density, layoutBump])
   // Save viewport snapshot whenever user clicks fit-view, so they can revert.
@@ -297,6 +302,11 @@ function CanvasInner() {
   useEffect(() => {
     if (nodes.length === 0) return
     if (hasFitOnceRef.current) return
+    // react-hooks/immutability: the rule flags refs used as effect-local
+    // guards as "modifying a value used in the effect". For this once-
+    // only-fit guard, mutating the ref *is* the intent — refs are React's
+    // canonical mutable-effect-state escape hatch.
+    // eslint-disable-next-line react-hooks/immutability
     hasFitOnceRef.current = true
     pendingFitViewRef.current = { padding: 0.1 }
   }, [nodes.length])
@@ -316,6 +326,9 @@ function CanvasInner() {
   const lastLayoutBumpRef = useRef(layoutBump)
   useEffect(() => {
     if (lastLayoutBumpRef.current === layoutBump) return
+    // react-hooks/immutability: same guard-ref pattern as hasFitOnceRef
+    // above — tracking "did we already process this bump value" via a ref.
+    // eslint-disable-next-line react-hooks/immutability
     lastLayoutBumpRef.current = layoutBump
     if (nodes.length === 0) return
     pendingFitViewRef.current = { padding: 0.15, preserveFocus: true }
@@ -333,6 +346,10 @@ function CanvasInner() {
   useEffect(() => {
     const wasSet = prevChainRef.current !== null
     const isCleared = chainRootId === null
+    // react-hooks/immutability: tracking the previous chainRootId via a
+    // ref so we can detect the "non-null → null" transition. Canonical
+    // "useEffect with previous value" pattern.
+    // eslint-disable-next-line react-hooks/immutability
     prevChainRef.current = chainRootId
     if (wasSet && isCleared) {
       bumpLayout()

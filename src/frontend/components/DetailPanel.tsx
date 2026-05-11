@@ -73,6 +73,11 @@ export function DetailPanel() {
   // about deriving the dep from `issue?.identifier` inside the deps array.
   const issueId = issue?.identifier
   useEffect(() => {
+    // react-hooks/set-state-in-effect: standard async-fetch pattern — clear
+    // stale description, mark loading, then write the resolved value (or
+    // null on error). Refactoring to avoid setState here would require a
+    // fetching library that's out of scope.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDescription(null)
     if (!issueId) return
     setDescLoading(true)

@@ -75,6 +75,17 @@ export function TabBar() {
   const addMenuRef = useRef<HTMLDivElement | null>(null)
 
   const [pickerOpen, setPickerOpen] = useState(false)
+
+  // Tick `now` every 30s so the "Last sync: 5m ago" label refreshes on its
+  // own as time passes. Read inside the render via state, not Date.now()
+  // directly — react-hooks/purity forbids impure reads during render, and
+  // ticking state is the canonical fix: stable across re-renders, refreshes
+  // on a predictable cadence.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 30_000)
+    return () => window.clearInterval(id)
+  }, [])
   const pickerRef = useRef<HTMLLabelElement | null>(null)
 
   // FLIP animation: capture each tab's offsetLeft just before a reorder
@@ -277,7 +288,7 @@ export function TabBar() {
   const showPicker = !legacyMode && profiles.length >= 2
 
   const last = graph?.fetchedAt ?? 0
-  const ageMinutes = last ? Math.floor((Date.now() - last) / 60_000) : Infinity
+  const ageMinutes = last ? Math.floor((now - last) / 60_000) : Infinity
   const ageText = `${graph === null ? 'loading…' : isFinite(ageMinutes) ? formatAge(ageMinutes) : 'never'}${
     graph?.stale ? ' (stale)' : ''
   }`

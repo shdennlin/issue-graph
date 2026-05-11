@@ -14,6 +14,11 @@ export function CoverageModal() {
 
   useEffect(() => {
     if (!open) return
+    // react-hooks/set-state-in-effect: this is the standard async-fetch
+    // pattern — reset to "loading" then write the result/error on resolve.
+    // Refactoring to remove setState here would require a fetching library
+    // (React Query etc.) that's out of scope.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setData(null)
     api.fetchCoverage().then(setData).catch(() => setData(null))
   }, [open])
