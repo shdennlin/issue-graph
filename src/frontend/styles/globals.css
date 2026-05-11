@@ -52,6 +52,36 @@ button.primary { background: var(--accent); color: var(--accent-fg); border-colo
   transform-origin: center;
 }
 
+/* Skeleton placeholder — used in lieu of "Loading…" text while async
+   content streams in. The shimmer moves a translucent highlight band
+   across a muted-fg base, giving a sense of progress without needing a
+   spinner. Each skeleton-line varies in width so the stacked effect
+   suggests prose content rather than uniform blocks. */
+@keyframes skeleton-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+.skeleton {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--fg-muted) 18%, transparent) 0%,
+      color-mix(in srgb, var(--fg-muted) 28%, transparent) 50%,
+      color-mix(in srgb, var(--fg-muted) 18%, transparent) 100%
+    );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+.skeleton-line {
+  height: 12px;
+}
+.skeleton-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 input, select, textarea {
   font-family: inherit;
   background: var(--bg);

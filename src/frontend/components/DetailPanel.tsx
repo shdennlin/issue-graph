@@ -320,7 +320,14 @@ export function DetailPanel() {
 
       <div className="section">
         <h3>Description</h3>
-        {descLoading && <div style={{ color: 'var(--fg-muted)' }}>Loading…</div>}
+        {descLoading && (
+          <div className="skeleton-stack" aria-busy="true" aria-label="Loading description">
+            <div className="skeleton skeleton-line" style={{ width: '92%' }} />
+            <div className="skeleton skeleton-line" style={{ width: '78%' }} />
+            <div className="skeleton skeleton-line" style={{ width: '85%' }} />
+            <div className="skeleton skeleton-line" style={{ width: '40%' }} />
+          </div>
+        )}
         {!descLoading && description !== null && (
           <div dangerouslySetInnerHTML={{ __html: marked.parse(description || '*No description*') as string }} />
         )}
