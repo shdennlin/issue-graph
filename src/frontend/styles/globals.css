@@ -928,14 +928,41 @@ a:hover { text-decoration: underline; }
   border-color: color-mix(in srgb, currentColor 55%, transparent);
 }
 
+/* Mix / Project view bucket container — wraps the issues that share a
+   bucket (service / module / team / project). Each bucket has its own
+   `b.color`, exposed via the inline `--bucket-tint` variable so the
+   background tint and dashed border accent automatically pick up that
+   color. Modest 1px dashed border (was a chunky 2px) reads as
+   "grouping affordance" without competing with the issue cards inside. */
 .mixed-container {
-  background: rgba(0, 0, 0, 0.04);
-  border: 2px dashed color-mix(in srgb, var(--fg-muted) 50%, transparent);
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  position: relative;
+  background: color-mix(in srgb, var(--bucket-tint) 6%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--bucket-tint) 38%, transparent);
   border-radius: var(--radius-lg);
 }
-[data-theme='dark'] .mixed-container {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: color-mix(in srgb, var(--fg-muted) 60%, transparent);
+.mixed-container-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.mixed-container-name {
+  font-weight: 600;
+  font-size: var(--fs-base);
+}
+.mixed-container-count {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+  background: color-mix(in srgb, var(--bucket-tint) 14%, transparent);
+  padding: 0 6px;
+  border-radius: 999px;
+  font-weight: 500;
+  min-width: 18px;
+  text-align: center;
 }
 
 .cross-bucket-edge { stroke: var(--edge-cross-bucket) !important; stroke-width: 2 !important; }
