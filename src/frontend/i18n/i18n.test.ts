@@ -44,55 +44,9 @@ describe('translate', () => {
   })
 })
 
-describe('locale auto-detect', () => {
-  it('zh-TW navigator.language → zh-TW locale', async () => {
-    // Re-import the detection helper in isolation. We avoid touching the
-    // live store (which already initialized at module-load) by using the
-    // exposed __testing__ surface.
-    const orig = globalThis.navigator
-    try {
-      Object.defineProperty(globalThis, 'navigator', {
-        value: { language: 'zh-TW', languages: ['zh-TW', 'en'] },
-        configurable: true,
-      })
-      const mod = await import('./store')
-      expect(mod.__testing__.detectFromNavigator()).toBe('zh-TW')
-    } finally {
-      if (orig) {
-        Object.defineProperty(globalThis, 'navigator', { value: orig, configurable: true })
-      }
-    }
-  })
-
-  it('zh-Hant navigator.language → zh-TW locale', async () => {
-    const orig = globalThis.navigator
-    try {
-      Object.defineProperty(globalThis, 'navigator', {
-        value: { language: 'zh-Hant', languages: ['zh-Hant'] },
-        configurable: true,
-      })
-      const mod = await import('./store')
-      expect(mod.__testing__.detectFromNavigator()).toBe('zh-TW')
-    } finally {
-      if (orig) {
-        Object.defineProperty(globalThis, 'navigator', { value: orig, configurable: true })
-      }
-    }
-  })
-
-  it('non-Chinese navigator.language → en locale', async () => {
-    const orig = globalThis.navigator
-    try {
-      Object.defineProperty(globalThis, 'navigator', {
-        value: { language: 'fr-FR', languages: ['fr-FR', 'en-US'] },
-        configurable: true,
-      })
-      const mod = await import('./store')
-      expect(mod.__testing__.detectFromNavigator()).toBe('en')
-    } finally {
-      if (orig) {
-        Object.defineProperty(globalThis, 'navigator', { value: orig, configurable: true })
-      }
-    }
+describe('locale store default', () => {
+  it('defaults to English when no localStorage value is set', async () => {
+    const mod = await import('./store')
+    expect(mod.__testing__.DEFAULT_LOCALE).toBe('en')
   })
 })
