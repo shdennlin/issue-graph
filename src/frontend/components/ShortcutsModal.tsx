@@ -9,7 +9,7 @@ import { ModalHeader } from './ModalHeader'
 interface Shortcut {
   keys: string[]
   description: string
-  group: 'Navigation' | 'Selection' | 'Chain isolation' | 'Layout' | 'Other'
+  group: 'Navigation' | 'Selection' | 'Chain isolation' | 'Layout' | 'Notes' | 'Other'
 }
 
 const SHORTCUTS: Shortcut[] = [
@@ -20,6 +20,9 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ['Enter'], description: 'In Find: next match + return keyboard to canvas', group: 'Navigation' },
   { keys: ['Esc'], description: 'Peel: Find → context menu → detail panel → focus → chain', group: 'Navigation' },
   { keys: ['?'], description: 'Show this cheat sheet', group: 'Navigation' },
+  { keys: ['n'], description: 'Toggle workspace notes — reopens to the last view (grid or last note). Esc closes the modal entirely; use ← Back inside the editor to return to grid', group: 'Notes' },
+  { keys: ['Cmd', 'E'], description: 'Toggle Edit / Preview inside an open note', group: 'Notes' },
+  { keys: ['Delete'], description: '← Back to grid from the editor (Backspace on non-Mac keyboards). Ignored while typing in the textarea', group: 'Notes' },
 
   { keys: ['Click'], description: 'Focus an issue (auto-opens detail when toolbar Detail toggle is on)', group: 'Selection' },
   { keys: ['Space'], description: 'Open detail panel for focused issue (ad-hoc, works when auto-open is off)', group: 'Selection' },
@@ -37,7 +40,7 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ['Cmd', 'Shift', 'S'], description: 'Save canvas screenshot as PNG', group: 'Other' },
 ]
 
-const GROUP_ORDER: Shortcut['group'][] = ['Navigation', 'Selection', 'Chain isolation', 'Layout', 'Other']
+const GROUP_ORDER: Shortcut['group'][] = ['Navigation', 'Selection', 'Chain isolation', 'Layout', 'Notes', 'Other']
 
 function Key({ children }: { children: string }) {
   return (

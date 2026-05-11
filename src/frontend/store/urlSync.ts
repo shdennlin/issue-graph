@@ -112,6 +112,8 @@ function buildUrl(): string {
   if (s.filters.tagIds.length) params.set('tag', s.filters.tagIds.join(','))
   if (s.filters.designdocFilter !== 'all') params.set('designdoc', s.filters.designdocFilter)
   if (s.expandedBuckets.length) params.set('expand', s.expandedBuckets.join(','))
+  if (s.notesOpen) params.set('notes', '1')
+  if (s.focusedNoteId !== null) params.set('note', String(s.focusedNoteId))
 
   const qs = params.toString()
   return qs ? `?${qs}` : window.location.pathname
@@ -148,6 +150,8 @@ function significantSignature(): string {
     f.projectIds.slice().sort().join(','),
     f.designdocFilter,
     Object.entries(f.prefixSelections).map(([k, v]) => `${k}:${v.slice().sort().join(',')}`).sort().join('|'),
+    s.notesOpen ? '1' : '0',
+    s.focusedNoteId === null ? '' : String(s.focusedNoteId),
   ].join('|')
 }
 
@@ -236,6 +240,11 @@ function parseUrl(): void {
   set({ filters })
 
   set({ expandedBuckets: (params.get('expand')?.split(',') ?? []) })
+
+  const notesOpen = params.get('notes') === '1'
+  const noteParam = params.get('note')
+  const focusedNoteId = noteParam && /^\d+$/.test(noteParam) ? Number(noteParam) : null
+  set({ notesOpen, focusedNoteId })
 }
 
 // Module-scope callback bridge for popstate → viewport restore. Set by

@@ -1211,3 +1211,525 @@ a:hover { text-decoration: underline; }
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+
+/* Workspace notes modal — bigger than the other modals because it needs to
+   fit a card grid + an editor. */
+.modal.notes-modal {
+  max-width: 1280px;
+  width: 92vw;
+  height: 90vh;
+  max-height: 90vh;
+  padding: 12px 16px 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.notes-modal-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.notes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+  padding: 4px 2px 12px;
+  overflow-y: auto;
+  align-content: start;
+  flex: 1;
+}
+.note-card {
+  position: relative;
+  background: var(--bg-elev);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px 0;
+  height: 300px;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--fg);
+  font: inherit;
+}
+.note-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--node-border));
+}
+.note-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.note-card-title {
+  margin: 0;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.note-card-title.empty {
+  color: var(--fg-muted);
+  font-style: italic;
+  font-weight: 500;
+}
+.note-card-thumbnail {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  color: var(--fg-muted);
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+  position: relative;
+  /* Children render markdown — make sure none of it intercepts clicks
+     destined for the card itself. */
+  pointer-events: none;
+  /* Fade the bottom so clipped content reads as "more below" instead of
+     an abrupt cut. */
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+          mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+}
+.note-card-thumbnail > :first-child { margin-top: 0; }
+.note-card-thumbnail h1,
+.note-card-thumbnail h2,
+.note-card-thumbnail h3,
+.note-card-thumbnail h4,
+.note-card-thumbnail h5,
+.note-card-thumbnail h6 {
+  margin: 0.4em 0 0.25em;
+  font-size: var(--fs-base);
+  color: var(--fg);
+  font-weight: 600;
+}
+.note-card-thumbnail p {
+  margin: 0.3em 0;
+}
+.note-card-thumbnail ul,
+.note-card-thumbnail ol {
+  margin: 0.3em 0;
+  padding-left: 1.2em;
+}
+.note-card-thumbnail li {
+  margin: 0.1em 0;
+}
+.note-card-thumbnail code {
+  background: var(--chip-bg);
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  font-size: 0.9em;
+  color: var(--fg);
+}
+.note-card-thumbnail pre {
+  background: var(--chip-bg);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  font-size: 0.8em;
+  max-height: 60px;
+}
+.note-card-thumbnail pre code { padding: 0; background: transparent; }
+.note-card-thumbnail blockquote {
+  margin: 0.3em 0;
+  padding-left: 8px;
+  border-left: 2px solid color-mix(in srgb, var(--fg-muted) 40%, transparent);
+}
+.note-card-thumbnail a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.note-card-thumbnail a.issue-link {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  font-weight: 500;
+}
+.note-card-thumbnail img {
+  max-width: 100%;
+  max-height: 110px;
+  height: auto;
+  border-radius: var(--radius-sm);
+  margin: 0.3em 0;
+}
+.note-card-thumbnail hr {
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--fg-muted) 20%, transparent);
+  margin: 0.4em 0;
+}
+.note-card-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  z-index: 1;
+}
+.note-card:hover .note-card-actions,
+.note-card:focus-within .note-card-actions {
+  opacity: 1;
+}
+.note-card-action {
+  background: transparent;
+  border: 0;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 120ms ease, color 120ms ease;
+}
+.note-card-action:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg-muted) 14%, transparent);
+}
+.note-card-action.note-card-delete:hover {
+  color: #d9534f;
+  background: color-mix(in srgb, #d9534f 12%, transparent);
+}
+.note-card.archived {
+  opacity: 0.85;
+}
+.notes-list-row-action {
+  background: transparent;
+  border: 0;
+  color: var(--fg-muted);
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.notes-list-row:hover .notes-list-row-action,
+.notes-list-row-action.pending {
+  opacity: 1;
+}
+.notes-list-row-action:hover {
+  color: var(--fg);
+}
+
+/* Shared 2-step confirm button. Default state is invisible until the host
+   surface hovers/focuses; the .pending state stays visible until confirmed
+   or dismissed so the user knows action is "armed". */
+.confirm-icon-button {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-muted);
+  transition: background 120ms ease, color 120ms ease, transform 120ms ease;
+}
+.confirm-icon-button:hover {
+  color: var(--fg);
+}
+.confirm-icon-button.pending {
+  /* Pulse subtly so it's clear the button is awaiting a confirm tap. */
+  animation: confirm-pulse 900ms ease-in-out infinite;
+}
+.confirm-icon-button.pending.tone-danger {
+  color: #d9534f;
+  background: color-mix(in srgb, #d9534f 16%, transparent);
+}
+.confirm-icon-button.pending.tone-warning {
+  color: #d28e1f;
+  background: color-mix(in srgb, #d28e1f 18%, transparent);
+}
+.confirm-icon-button.pending.tone-neutral {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg-muted) 20%, transparent);
+}
+@keyframes confirm-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+.note-card.note-card-new {
+  border-style: dashed;
+  background: transparent;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-muted);
+  font-weight: 500;
+  gap: 8px;
+}
+.note-card.note-card-new:hover {
+  color: var(--fg);
+  border-color: var(--accent);
+}
+.notes-grid-empty {
+  grid-column: 1 / -1;
+  color: var(--fg-muted);
+  padding: 24px 8px;
+}
+
+/* Editor view inside the notes modal. Fills the remaining vertical space. */
+.note-editor {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 10px;
+}
+.note-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.note-editor-mode-toggle {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 8px;
+  background: var(--chip-bg);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+}
+.note-editor-mode-toggle .icon-text.active {
+  background: var(--bg);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+}
+.note-editor-meta {
+  margin-left: auto;
+  color: var(--fg-muted);
+  font-size: var(--fs-meta);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.note-editor-meta-status {
+  color: var(--fg);
+}
+.note-editor-meta-sep {
+  opacity: 0.4;
+}
+.note-editor-textarea {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  resize: none;
+  padding: 12px 14px;
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--fs-base);
+  line-height: 1.55;
+}
+.note-editor-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.note-preview {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 14px;
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  line-height: 1.55;
+}
+.note-preview h1, .note-preview h2, .note-preview h3,
+.note-preview h4, .note-preview h5, .note-preview h6 { margin: 0.8em 0 0.4em; }
+.note-preview h1:first-child { margin-top: 0.2em; }
+.note-preview p { margin: 0.5em 0; }
+.note-preview ul, .note-preview ol { margin: 0.5em 0; padding-left: 1.6em; }
+.note-preview code {
+  background: var(--chip-bg);
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  font-size: 0.9em;
+}
+.note-preview pre {
+  background: var(--chip-bg);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+}
+.note-preview pre code { padding: 0; background: transparent; }
+.note-preview a { color: var(--accent); text-decoration: underline; }
+.note-preview a.issue-link {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  font-weight: 500;
+}
+.note-preview a.issue-link:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.note-preview img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+}
+.note-preview blockquote {
+  margin: 0.6em 0;
+  padding-left: 12px;
+  border-left: 3px solid color-mix(in srgb, var(--fg-muted) 40%, transparent);
+  color: var(--fg-muted);
+}
+
+/* Undo toast pinned bottom-right inside the notes modal. */
+.undo-toast {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  background: var(--fg);
+  color: var(--bg);
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-base);
+  z-index: 10;
+}
+.undo-toast-action {
+  background: transparent;
+  border: 0;
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.undo-toast-action:hover {
+  text-decoration: underline;
+}
+
+.notes-modal-header-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.notes-modal-header-row .modal-header {
+  flex: 1;
+  margin-bottom: 0;
+}
+.notes-view-toggle {
+  display: inline-flex;
+  gap: 2px;
+  background: var(--chip-bg);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+}
+.notes-view-toggle .icon-only.active {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  padding: 4px 2px 12px;
+  flex: 1;
+}
+.notes-list-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  color: var(--fg-muted);
+  border: 1px dashed var(--node-border);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  cursor: pointer;
+  margin-bottom: 6px;
+  font: inherit;
+}
+.notes-list-new:hover {
+  border-color: var(--accent);
+  color: var(--fg);
+}
+.notes-list-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  background: var(--bg-elev);
+  transition: border-color 80ms ease, background 80ms ease;
+}
+.notes-list-row:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--node-border));
+}
+.notes-list-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.notes-list-row-text {
+  flex: 1;
+  min-width: 0;
+}
+.notes-list-row-title {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.notes-list-row-title.empty {
+  color: var(--fg-muted);
+  font-style: italic;
+  font-weight: 500;
+}
+.notes-list-row-snippet {
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.notes-list-row-delete {
+  background: transparent;
+  border: 0;
+  color: var(--fg-muted);
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+.notes-list-row:hover .notes-list-row-delete {
+  opacity: 1;
+}
+.notes-list-row-delete:hover {
+  color: #d9534f;
+}
+
+/* dnd-kit: while a card is being dragged, dim it and lift the others. */
+.note-card.dragging {
+  z-index: 2;
+}
+
+.note-editor-error {
+  background: color-mix(in srgb, #d9534f 14%, transparent);
+  color: #d9534f;
+  border: 1px solid color-mix(in srgb, #d9534f 35%, transparent);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-meta);
+}

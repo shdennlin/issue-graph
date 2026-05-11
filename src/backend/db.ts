@@ -59,6 +59,23 @@ const MIGRATIONS: string[] = [
      key TEXT PRIMARY KEY,
      value TEXT NOT NULL
    );`,
+
+  // 3. Workspace notes — markdown notes scoped to a workspace profile.
+  // Title is derived from body's first line at read time (not stored).
+  // Lower sort_order sorts first (allows newest-on-top via negative values).
+  `CREATE TABLE IF NOT EXISTS note (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     body TEXT NOT NULL DEFAULT '',
+     sort_order INTEGER NOT NULL,
+     created_at INTEGER NOT NULL,
+     updated_at INTEGER NOT NULL
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_note_sort ON note(sort_order ASC);`,
+
+  // 4. Notes: archived flag. Soft-archive support so users can hide notes
+  // without deleting them. Existing rows default to 0 (active).
+  `ALTER TABLE note ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;`,
+  `CREATE INDEX IF NOT EXISTS idx_note_archived ON note(archived ASC, sort_order ASC);`,
 ]
 
 // One Database instance per workspace id. Each profile has its own SQLITE_PATH

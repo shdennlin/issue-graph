@@ -526,6 +526,40 @@ function CanvasInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layoutBump])
 
+  // Producer 4: explicit pan-to-focused request. Bumped from external surfaces
+  // (e.g. an issue-id link clicked inside a workspace note) so the camera
+  // follows the focus change without forcing a full layout redo. We pan with
+  // current zoom (snapped up to a sensible minimum so the node is visible).
+  const panToFocusedSeq = useViewStore((s) => s.panToFocusedSeq)
+  const lastPanSeqRef = useRef(panToFocusedSeq)
+  useEffect(() => {
+    if (lastPanSeqRef.current === panToFocusedSeq) return
+    lastPanSeqRef.current = panToFocusedSeq
+    if (!focusedId) return
+    const node = rf.getNode(focusedId)
+    if (!node) return
+    // Resolve absolute coords: in Mix / Project views issues live inside
+    // bucket containers, so `node.position` is relative to the parent. The
+    // existing preserveFocus path (see Producer 1/2/3 consumer) does this
+    // same walk; without it, setCenter lands the camera somewhere far from
+    // the actual rendered position.
+    let absX = node.position.x
+    let absY = node.position.y
+    if (node.parentNode) {
+      const parent = rf.getNode(node.parentNode)
+      if (parent?.position) {
+        absX += parent.position.x
+        absY += parent.position.y
+      }
+    }
+    const w = node.width ?? 320
+    const h = node.height ?? 110
+    rf.setCenter(absX + w / 2, absY + h / 2, {
+      duration: 500,
+      zoom: Math.max(rf.getZoom(), 0.9),
+    })
+  }, [panToFocusedSeq, focusedId, rf])
+
   // Auto-bump layout when chain isolation is *cleared* (chainRootId goes
   // non-null → null). Without this, exiting chain mode keeps the chain
   // members' tightly-packed positions and the previously-hidden nodes get

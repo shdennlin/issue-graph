@@ -70,6 +70,14 @@ export default defineConfig(({ mode }) => {
         '@shared': fileURLToPath(new URL('./src/shared', import.meta.url)),
         '@frontend': fileURLToPath(new URL('./src/frontend', import.meta.url)),
       },
+      // Force a single React instance. Without dedupe, Vite's optimizer can
+      // pre-bundle a dependency (e.g. @dnd-kit/core) against a different React
+      // copy than the app's, producing "Invalid hook call" errors at runtime.
+      dedupe: ['react', 'react-dom'],
+    },
+    // Pre-bundle @dnd-kit so it shares the same React instance as the app.
+    optimizeDeps: {
+      include: ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
     },
     server: {
       port: vitePort,

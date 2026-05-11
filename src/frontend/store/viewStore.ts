@@ -55,6 +55,14 @@ export interface ViewState {
   syncHistoryOpen: boolean
   coverageOpen: boolean
   shortcutsOpen: boolean
+  // Workspace notes modal. `notesOpen` controls the modal; `focusedNoteId`
+  // null → grid view, number → editor view for that note.
+  notesOpen: boolean
+  focusedNoteId: number | null
+  // Monotonic counter — bump to ask GraphCanvas to pan/zoom onto the currently
+  // focused issue. Useful when an external producer (e.g. a click on an issue
+  // link inside a note) wants the camera to follow the focus change.
+  panToFocusedSeq: number
   // When true, dependency view also draws `related` relations as dashed
   // edges (in addition to the always-on `blocks` edges). Off by default so
   // the dependency view stays focused on the dependency signal — turn on
@@ -98,6 +106,9 @@ export interface ViewState {
   setSyncHistoryOpen: (b: boolean) => void
   setCoverageOpen: (b: boolean) => void
   setShortcutsOpen: (b: boolean) => void
+  setNotesOpen: (b: boolean) => void
+  setFocusedNoteId: (id: number | null) => void
+  requestPanToFocused: () => void
   setShowRelated: (b: boolean) => void
   setSelection: (s: string[]) => void
   toggleSelection: (id: string) => void
@@ -160,6 +171,9 @@ export const useViewStore = create<ViewState>((set) => ({
   syncHistoryOpen: false,
   coverageOpen: false,
   shortcutsOpen: false,
+  notesOpen: false,
+  focusedNoteId: null,
+  panToFocusedSeq: 0,
   showRelated: false,
   selection: [],
   highlightedEdgeId: null,
@@ -241,6 +255,12 @@ export const useViewStore = create<ViewState>((set) => ({
   setSyncHistoryOpen: (b) => set({ syncHistoryOpen: b }),
   setCoverageOpen: (b) => set({ coverageOpen: b }),
   setShortcutsOpen: (b) => set({ shortcutsOpen: b }),
+  // Preserve focusedNoteId across open/close cycles so the n shortcut acts as
+  // a true toggle that restores the user's last view. Use the in-modal Back
+  // button (or Esc-peel) to drop back to the grid explicitly.
+  setNotesOpen: (b) => set({ notesOpen: b }),
+  setFocusedNoteId: (id) => set({ focusedNoteId: id }),
+  requestPanToFocused: () => set((s) => ({ panToFocusedSeq: s.panToFocusedSeq + 1 })),
   setShowRelated: (b) => set({ showRelated: b }),
   setSelection: (s) => set({ selection: s }),
   toggleSelection: (id) => set((s) => ({ selection: toggle(s.selection, id) })),
