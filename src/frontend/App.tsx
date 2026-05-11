@@ -38,6 +38,7 @@ export function App() {
   const loadSchema = useSchemaStore((s) => s.load)
   const focusedId = useViewStore((s) => s.focusedId)
   const filterPanelOpen = useViewStore((s) => s.filterPanelOpen)
+  const detailPanelOpen = useViewStore((s) => s.detailPanelOpen)
   const syncHistoryOpen = useViewStore((s) => s.syncHistoryOpen)
   const coverageOpen = useViewStore((s) => s.coverageOpen)
   const settingsOpen = useViewStore((s) => s.settingsOpen)
@@ -265,17 +266,18 @@ export function App() {
         // Coverage / Shortcuts) own Esc fully and handle their own
         // dismissal; we don't peel under them.
         //
-        //   1. Find on canvas       — closes Find
-        //   2. Context menu         — closes the menu
-        //   3. focusedId            — closes the DetailPanel (focusedId
-        //                              drives DetailPanel visibility, so
-        //                              clearing it is what the user feels)
-        //   4. Chain isolation      — clears chain
+        //   1. Find on canvas        — closes Find
+        //   2. Context menu          — closes the menu
+        //   3. DetailPanel open      — closes the panel (focus retained,
+        //                               chain mode / find / connectivity
+        //                               highlights still work on the
+        //                               focused issue)
+        //   4. focusedId             — clears the focus
+        //   5. Chain isolation       — clears chain
         //
-        // Inserting focusedId before chain matters because users routinely
-        // have both at once: chain isolated, then click an issue to read
-        // its details. Without this, Esc would jump straight to clearing
-        // the chain — yanking them out of context just to close the panel.
+        // Two-step Esc for DetailPanel: first Esc closes the panel
+        // without losing the focused issue (graph-first workflow), second
+        // Esc unfocuses. Most apps with a side detail panel work this way.
         const s = useViewStore.getState()
         const modalOpen = s.settingsOpen || s.syncHistoryOpen || s.coverageOpen || s.shortcutsOpen
         if (modalOpen) return
@@ -285,6 +287,10 @@ export function App() {
         }
         if (s.contextMenu) {
           s.setContextMenu(null)
+          return
+        }
+        if (s.detailPanelOpen) {
+          s.setDetailPanelOpen(false)
           return
         }
         if (s.focusedId) {
@@ -314,6 +320,22 @@ export function App() {
         if (targetTab.id === ws.activeTabId) return
         if (ws.activeTabId) snapshotTab(ws.activeTabId)
         ws.setActiveTab(targetTab.id)
+        return
+      }
+      // Space / Enter — open the DetailPanel for the currently-focused
+      // issue. Ad-hoc one-shot: doesn't change the auto-open preference.
+      // Useful when auto-open is OFF (graph-first workflow) and the user
+      // occasionally wants to peek at an issue's details. No-op if panel
+      // is already open, or if no issue is focused.
+      if ((e.key === ' ' || e.key === 'Enter') && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        const target = e.target as HTMLElement | null
+        const tag = target?.tagName?.toLowerCase()
+        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        const s = useViewStore.getState()
+        if (!s.focusedId) return
+        if (s.detailPanelOpen) return
+        e.preventDefault()
+        s.setDetailPanelOpen(true)
         return
       }
       // 'c' / 'C' — isolate chain on the currently focused issue. 'C' (shift)
@@ -451,7 +473,7 @@ export function App() {
       <div className="app-main">
         {filterPanelOpen && <FilterPanel />}
         <GraphCanvas />
-        {focusedId && (
+        {focusedId && detailPanelOpen && (
           <Suspense fallback={null}>
             <DetailPanel />
           </Suspense>

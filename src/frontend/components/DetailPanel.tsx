@@ -28,7 +28,7 @@ type TextSize = 'sm' | 'md' | 'lg'
 
 export function DetailPanel() {
   const focusedId = useViewStore((s) => s.focusedId)
-  const setFocusedId = useViewStore((s) => s.setFocusedId)
+  const setDetailPanelOpen = useViewStore((s) => s.setDetailPanelOpen)
   const graph = useGraphStore((s) => s.graph)
   const reload = useGraphStore((s) => s.load)
   const { schema } = useSchemaStore()
@@ -185,8 +185,8 @@ export function DetailPanel() {
         </button>
         <button
           className="icon-only detail-close"
-          onClick={() => setFocusedId(null)}
-          title="Close (Esc)"
+          onClick={() => setDetailPanelOpen(false)}
+          title="Close panel (Esc) — focus retained, press Esc again to unfocus"
           aria-label="Close detail panel"
         >
           <X size={16} />

@@ -66,6 +66,12 @@ export interface ViewState {
   contextMenu: { x: number; y: number; targetIdentifier: string } | null
   staleDays: number
   filterPanelOpen: boolean
+  // Transient panel visibility (resets when focusedId changes). The
+  // persistent preference is `detailPanelAutoOpen` below; that flag
+  // decides whether selecting a new issue auto-opens the panel.
+  // detailPanelOpen lets Esc peel the panel without losing focus, and
+  // lets Space/Enter open the panel ad-hoc when auto-open is off.
+  detailPanelOpen: boolean
 
   setActiveView: (v: ViewId) => void
   setFilter: <K extends keyof Filters>(k: K, v: Filters[K]) => void
@@ -102,6 +108,10 @@ export interface ViewState {
   setStaleDays: (n: number) => void
   setFilterPanelOpen: (b: boolean) => void
   toggleFilterPanel: () => void
+  detailPanelAutoOpen: boolean
+  setDetailPanelAutoOpen: (b: boolean) => void
+  toggleDetailPanelAutoOpen: () => void
+  setDetailPanelOpen: (b: boolean) => void
   resetFilters: () => void
 }
 
@@ -158,6 +168,15 @@ export const useViewStore = create<ViewState>((set) => ({
   staleDays: 14,
   filterPanelOpen:
     typeof window !== 'undefined' && window.localStorage?.getItem('ig-filter-panel') === '0' ? false : true,
+  // Decouples "I want to focus this issue" (for chain mode, find, etc.)
+  // from "I want to read its details". When OFF, clicking an issue still
+  // sets focusedId but DetailPanel doesn't render — the canvas stays
+  // full-width. Persists per-browser via localStorage. Default: OFF so
+  // the graph-first workflow is the default; users who want the panel
+  // can flip the toolbar toggle once and it sticks.
+  detailPanelAutoOpen:
+    typeof window !== 'undefined' && window.localStorage?.getItem('ig-detail-panel-auto') === '1' ? true : false,
+  detailPanelOpen: false,
 
   setActiveView: (v) => set({ activeView: v }),
   setFilter: (k, v) => set((s) => ({ filters: { ...s.filters, [k]: v } })),
@@ -189,7 +208,14 @@ export const useViewStore = create<ViewState>((set) => ({
       }
     }),
   toggleProject: (id) => set((s) => ({ filters: { ...s.filters, projectIds: toggle(s.filters.projectIds, id) } })),
-  setFocusedId: (id) => set({ focusedId: id }),
+  setFocusedId: (id) =>
+    set((s) => ({
+      focusedId: id,
+      // Auto-apply the detail-panel preference whenever a new issue is
+      // focused: ON → open the panel for the new focus; OFF → leave it
+      // closed. Clearing focus (id === null) always closes the panel.
+      detailPanelOpen: id !== null && s.detailPanelAutoOpen,
+    })),
   setChainRootId: (id) => set({ chainRootId: id }),
   bumpLayout: () => set((s) => ({ layoutBump: s.layoutBump + 1 })),
   setTheme: (t) => set({ theme: t }),
@@ -237,5 +263,27 @@ export const useViewStore = create<ViewState>((set) => ({
       }
       return { filterPanelOpen: next }
     }),
+  setDetailPanelAutoOpen: (b) => {
+    if (typeof window !== 'undefined') {
+      window.localStorage?.setItem('ig-detail-panel-auto', b ? '1' : '0')
+    }
+    set({ detailPanelAutoOpen: b })
+  },
+  toggleDetailPanelAutoOpen: () =>
+    set((s) => {
+      const next = !s.detailPanelAutoOpen
+      if (typeof window !== 'undefined') {
+        window.localStorage?.setItem('ig-detail-panel-auto', next ? '1' : '0')
+      }
+      return {
+        detailPanelAutoOpen: next,
+        // Toggling the preference also flips the current panel visibility,
+        // gated on having a focused issue (no point opening a panel with
+        // no content). User experience: flipping the toolbar toggle has
+        // an immediate, visible effect.
+        detailPanelOpen: next && s.focusedId !== null,
+      }
+    }),
+  setDetailPanelOpen: (b) => set({ detailPanelOpen: b }),
   resetFilters: () => set({ filters: defaultFilters, chainRootId: null }),
 }))

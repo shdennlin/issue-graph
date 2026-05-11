@@ -11,6 +11,8 @@ import {
   MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   Settings,
   Sun,
 } from 'lucide-react'
@@ -40,6 +42,8 @@ export function Toolbar() {
   const setShortcutsOpen = useViewStore((s) => s.setShortcutsOpen)
   const filterPanelOpen = useViewStore((s) => s.filterPanelOpen)
   const toggleFilterPanel = useViewStore((s) => s.toggleFilterPanel)
+  const detailPanelAutoOpen = useViewStore((s) => s.detailPanelAutoOpen)
+  const toggleDetailPanelAutoOpen = useViewStore((s) => s.toggleDetailPanelAutoOpen)
   const selection = useViewStore((s) => s.selection)
   const clearSelection = useViewStore((s) => s.clearSelection)
   const chainRootId = useViewStore((s) => s.chainRootId)
@@ -273,6 +277,19 @@ export function Toolbar() {
             </div>
           )}
         </div>
+        <button
+          className={`icon-text${detailPanelAutoOpen ? ' active' : ''}`}
+          onClick={toggleDetailPanelAutoOpen}
+          title={
+            detailPanelAutoOpen
+              ? 'Auto-open detail panel on click: ON (Space / Enter still opens ad-hoc when off)'
+              : 'Auto-open detail panel on click: OFF — click an issue to focus only, Space / Enter to open detail'
+          }
+          aria-pressed={detailPanelAutoOpen}
+        >
+          {detailPanelAutoOpen ? <PanelRightClose size={ICON_SIZE} /> : <PanelRightOpen size={ICON_SIZE} />}
+          Detail
+        </button>
         <button className="icon-only" onClick={() => setSettingsOpen(true)} title="Settings" aria-label="Settings">
           <Settings size={ICON_SIZE} />
         </button>

@@ -16,15 +16,17 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ['Cmd', 'F'], description: 'Open Find on canvas (focus required: click into canvas first)', group: 'Navigation' },
   { keys: ['Cmd', 'Shift', 'F'], description: 'Focus the toolbar filter search (top of page) and select any existing query', group: 'Navigation' },
   { keys: ['Enter'], description: 'In Find: jump to next match, focus it, then return keyboard to the canvas (so c / r / ⇧C / ⇧R target the match)', group: 'Navigation' },
-  { keys: ['Esc'], description: 'Peel one layer: Find → context menu → focused issue → chain isolation', group: 'Navigation' },
+  { keys: ['Esc'], description: 'Peel one layer: Find → context menu → detail panel → focused issue → chain isolation', group: 'Navigation' },
   { keys: ['?'], description: 'Show this shortcut cheat sheet', group: 'Navigation' },
 
-  { keys: ['Click'], description: 'Focus an issue (opens detail panel)', group: 'Selection' },
+  { keys: ['Click'], description: 'Focus an issue. Detail panel auto-opens when the toolbar Detail toggle is on.', group: 'Selection' },
+  { keys: ['Space'], description: 'Open detail panel for the focused issue (ad-hoc — works even when auto-open is off)', group: 'Selection' },
+  { keys: ['Enter'], description: 'Same as Space — open detail panel for the focused issue', group: 'Selection' },
   { keys: ['Cmd', 'Click'], description: 'Toggle multi-select', group: 'Selection' },
   { keys: ['Right-click'], description: 'Open context menu on an issue', group: 'Selection' },
   { keys: ['Double-click'], description: 'Open issue in source (Linear)', group: 'Selection' },
 
-  { keys: ['c'], description: 'Isolate chain on focused issue (preserve positions) — dependency view only', group: 'Chain isolation' },
+  { keys: ['c'], description: 'Isolate chain on focused issue (preserve positions) — works in all views', group: 'Chain isolation' },
   { keys: ['Shift', 'C'], description: 'Isolate chain (auto-layout — re-runs dagre and refits camera)', group: 'Chain isolation' },
 
   { keys: ['r'], description: 'Toggle Related-edges overlay (dependency view) — dashed gray lines for `related` issue links', group: 'Layout' },
