@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
-import { ChevronDown, ChevronRight, HelpCircle } from 'lucide-react'
+import { ChevronDown, ChevronRight, HelpCircle, X } from 'lucide-react'
 import type { IssueStateType } from '@shared/types.js'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
@@ -51,14 +51,17 @@ function CollapsibleSection({
   id,
   title,
   activeCount,
+  onClear,
   children,
 }: {
   id: string
   title: ReactNode
   activeCount: number
+  onClear?: () => void
   children: ReactNode
 }) {
   const [collapsed, toggle] = useCollapsedState(id)
+  const hasActive = activeCount > 0
   return (
     <section>
       <h4 className="filter-section-heading">
@@ -70,12 +73,23 @@ function CollapsibleSection({
         >
           {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
           <span className="filter-section-title">{title}</span>
-          {activeCount > 0 && (
+          {hasActive && (
             <span className="filter-section-count" aria-label={`${activeCount} active`}>
               {activeCount}
             </span>
           )}
         </button>
+        {hasActive && onClear && (
+          <button
+            type="button"
+            className="filter-section-clear"
+            onClick={onClear}
+            aria-label="Clear filters in this section"
+            title="Clear filters in this section"
+          >
+            <X size={12} />
+          </button>
+        )}
       </h4>
       {!collapsed && children}
     </section>
@@ -244,6 +258,11 @@ export function FilterPanel() {
           (filters.myIssuesOnly ? 1 : 0) +
           (filters.staleOnly ? 1 : 0)
         }
+        onClear={() => {
+          setFilter('activeOnly', false)
+          setFilter('myIssuesOnly', false)
+          setFilter('staleOnly', false)
+        }}
       >
         <label>
           <input
@@ -284,6 +303,10 @@ export function FilterPanel() {
         id="state"
         title="State"
         activeCount={filters.stateTypes.length + filters.stateNames.length}
+        onClear={() => {
+          setFilter('stateTypes', [])
+          setFilter('stateNames', [])
+        }}
       >
         {/* Hierarchical: each canonical type is a row; if multiple actual state
             names roll up to it, they appear as indented children. Empty types
@@ -354,6 +377,7 @@ export function FilterPanel() {
           id="primary"
           title={primaryGroupSingular ? `${primaryGroupSingular}s` : (schema.primaryGroup ?? 'Group')}
           activeCount={filters.primaryValues.length}
+          onClear={() => setFilter('primaryValues', [])}
         >
           {primaryLabels.map((l) => (
             <label key={l.id}>
@@ -374,6 +398,7 @@ export function FilterPanel() {
           id="type"
           title={schema.typeGroup ?? 'Type'}
           activeCount={filters.typeValues.length}
+          onClear={() => setFilter('typeValues', [])}
         >
           {typeLabels.map((l) => (
             <label key={l.id}>
@@ -393,6 +418,7 @@ export function FilterPanel() {
         id="priority"
         title="Priority"
         activeCount={filters.priorities.length}
+        onClear={() => setFilter('priorities', [])}
       >
         {PRIORITIES.map((p) => (
           <label key={p}>
@@ -407,6 +433,7 @@ export function FilterPanel() {
         id="assignee"
         title="Assignee"
         activeCount={filters.assignees.length}
+        onClear={() => setFilter('assignees', [])}
       >
         {assignees.slice(0, 30).map(([name, count]) => (
           <label key={name}>
@@ -422,6 +449,7 @@ export function FilterPanel() {
           id="project"
           title="Project"
           activeCount={filters.projectIds.length}
+          onClear={() => setFilter('projectIds', [])}
         >
           {projects.map(([id, { name, count }]) => (
             <label key={id}>
@@ -443,6 +471,7 @@ export function FilterPanel() {
           id={`prefix:${g.token}`}
           title={`${g.token}:`}
           activeCount={(filters.prefixSelections[g.token] ?? []).length}
+          onClear={() => setFilter('prefixSelections', { ...filters.prefixSelections, [g.token]: [] })}
         >
           {g.labels.map((l) => (
             <label key={l.id}>
@@ -463,6 +492,7 @@ export function FilterPanel() {
           id="designdoc"
           title="Design doc"
           activeCount={filters.designdocFilter !== 'all' ? 1 : 0}
+          onClear={() => setFilter('designdocFilter', 'all')}
         >
           {(['all', 'has', 'missing'] as const).map((v) => (
             <label key={v}>

@@ -434,8 +434,8 @@ a:hover { text-decoration: underline; }
   font-size: var(--fs-base);
 }
 .filter-panel section {
-  margin-bottom: var(--sp-4);
-  padding-bottom: var(--sp-3);
+  margin-bottom: var(--sp-2);
+  padding-bottom: var(--sp-2);
   border-bottom: 1px solid color-mix(in srgb, var(--fg-muted) 14%, transparent);
 }
 .filter-panel section:last-of-type {
@@ -450,13 +450,16 @@ a:hover { text-decoration: underline; }
    heading itself keeps the visual offset minimal while letting the
    sticky behavior register against the scroll edge. */
 .filter-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   margin: 0 0 var(--sp-2);
   position: sticky;
   top: 0;
   background: var(--bg-elev);
   z-index: 1;
   /* match .filter-panel's padding so the heading bg covers the gap */
-  padding: 4px 0;
+  padding: 0px 0;
 }
 .filter-section-toggle {
   display: flex;
@@ -494,6 +497,26 @@ a:hover { text-decoration: underline; }
   min-width: 18px;
   text-align: center;
   line-height: 1.5;
+}
+
+/* Per-section clear button (× icon). Lives as a sibling of the toggle
+   button inside the same h4 — HTML doesn't allow nested <button>s. */
+.filter-section-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 2px 4px;
+  background: transparent;
+  border: 0;
+  color: var(--fg-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.filter-section-clear:hover {
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  color: var(--fg);
+  border: 0;
 }
 
 /* Help affordance next to "Active only" — lucide HelpCircle replaces the
