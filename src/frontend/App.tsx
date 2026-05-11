@@ -319,14 +319,15 @@ export function App() {
       // 'c' / 'C' — isolate chain on the currently focused issue. 'C' (shift)
       // additionally bumps layout, matching the "auto-layout" context-menu
       // entry. Only fires when no modifier is held, no input is focused,
-      // we're in dependency view, and an issue is actually focused.
+      // and an issue is actually focused. Works in all views: chain
+      // isolation re-filters the visible set to the connected blocks
+      // component regardless of view.
       if (e.key === 'c' || e.key === 'C') {
         if (e.metaKey || e.ctrlKey || e.altKey) return
         const target = e.target as HTMLElement | null
         const tag = target?.tagName?.toLowerCase()
         if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
         const s = useViewStore.getState()
-        if (s.activeView !== 'dependency') return
         if (!s.focusedId) return
         e.preventDefault()
         setChainRootId(s.focusedId)

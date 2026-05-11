@@ -9,7 +9,6 @@ export function ContextMenu() {
   const setFocusedId = useViewStore((s) => s.setFocusedId)
   const setChainRootId = useViewStore((s) => s.setChainRootId)
   const bumpLayout = useViewStore((s) => s.bumpLayout)
-  const activeView = useViewStore((s) => s.activeView)
   const graph = useGraphStore((s) => s.graph)
 
   useEffect(() => {
@@ -47,27 +46,23 @@ export function ContextMenu() {
       >
         <Focus size={14} /> Focus
       </button>
-      {activeView === 'dependency' && (
-        <>
-          <div className="context-menu-sep" role="separator" />
-          <button
-            role="menuitem"
-            onClick={() => { setChainRootId(issue.identifier); close() }}
-            title="Shortcut: focus an issue, press c"
-          >
-            <GitBranch size={14} /> Isolate chain
-            <span className="context-menu-hint">c</span>
-          </button>
-          <button
-            role="menuitem"
-            onClick={() => { setChainRootId(issue.identifier); bumpLayout(); close() }}
-            title="Shortcut: focus an issue, press Shift+C"
-          >
-            <Workflow size={14} /> Isolate chain (auto-layout)
-            <span className="context-menu-hint">⇧C</span>
-          </button>
-        </>
-      )}
+      <div className="context-menu-sep" role="separator" />
+      <button
+        role="menuitem"
+        onClick={() => { setChainRootId(issue.identifier); close() }}
+        title="Shortcut: focus an issue, press c"
+      >
+        <GitBranch size={14} /> Isolate chain
+        <span className="context-menu-hint">c</span>
+      </button>
+      <button
+        role="menuitem"
+        onClick={() => { setChainRootId(issue.identifier); bumpLayout(); close() }}
+        title="Shortcut: focus an issue, press Shift+C"
+      >
+        <Workflow size={14} /> Isolate chain (auto-layout)
+        <span className="context-menu-hint">⇧C</span>
+      </button>
     </div>
   )
 }

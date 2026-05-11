@@ -342,19 +342,37 @@ function CanvasInner() {
   // when entering chain mode: plain "Isolate chain" deliberately preserves
   // positions ("Isolate chain (auto-layout)" is the entry path that wants
   // a fresh layout, and it bumps explicitly in the context-menu handler).
+  //
+  // Viewport preservation: bumpLayout queues a fitView (Producer 3), which
+  // would yank the camera to frame the full graph and lose the user's
+  // pan/zoom. To avoid that we snapshot the viewport on chain *entry*
+  // (null → non-null) and queue a restore on exit. The consumer at
+  // `pendingViewportRestoreRef` runs *before* fitView, so the saved
+  // viewport wins.
   const prevChainRef = useRef<string | null>(chainRootId)
+  const chainEntryViewportRef = useRef<Viewport | null>(null)
   useEffect(() => {
     const wasSet = prevChainRef.current !== null
+    const isSet = chainRootId !== null
     const isCleared = chainRootId === null
     // react-hooks/immutability: tracking the previous chainRootId via a
-    // ref so we can detect the "non-null → null" transition. Canonical
+    // ref so we can detect non-null ↔ null transitions. Canonical
     // "useEffect with previous value" pattern.
     // eslint-disable-next-line react-hooks/immutability
     prevChainRef.current = chainRootId
+    if (!wasSet && isSet) {
+      // Entering chain mode — snapshot viewport so we can restore on exit.
+      chainEntryViewportRef.current = rf.getViewport()
+    }
     if (wasSet && isCleared) {
       bumpLayout()
+      const saved = chainEntryViewportRef.current
+      if (saved) {
+        pendingViewportRestoreRef.current = saved
+        chainEntryViewportRef.current = null
+      }
     }
-  }, [chainRootId, bumpLayout])
+  }, [chainRootId, bumpLayout, rf])
 
   // Manual re-layout button handler. Bumps layoutBump → measured cache
   // clears → dagre re-runs from scratch (ignores user-dragged positions) →
