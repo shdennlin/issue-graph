@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   BarChart3,
   Camera,
@@ -8,11 +8,13 @@ import {
   Loader2,
   Monitor,
   Moon,
+  MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
   Sun,
 } from 'lucide-react'
+import { useClickOutside } from '../hooks/useClickOutside'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { views } from '../views'
@@ -64,6 +66,13 @@ export function Toolbar() {
   // Backend's current extended-scope window (0 = default 30-day Done window).
   // Fetched lazily so we don't pull it for users who never use chain mode.
   const [scopeDays, setScopeDays] = useState<number | null>(null)
+  // Low-frequency icons (screenshot / coverage / shortcuts / theme) live in
+  // an overflow menu so the top toolbar stays scannable. Settings stays
+  // visible because it's a hub the user reaches for more often.
+  const [overflowOpen, setOverflowOpen] = useState(false)
+  const overflowRef = useRef<HTMLDivElement | null>(null)
+  const closeOverflow = useCallback(() => setOverflowOpen(false), [])
+  useClickOutside(overflowRef, overflowOpen, closeOverflow)
   useEffect(() => {
     if (!chainRootId) return
     if (scopeDays !== null) return
@@ -211,23 +220,59 @@ export function Toolbar() {
         <a href={api.exportUrl('md')} download>
           <button>Export MD</button>
         </a>
-        <button className="icon-only" onClick={screenshot} title="Screenshot (Cmd+Shift+S)" aria-label="Screenshot">
-          <Camera size={ICON_SIZE} />
-        </button>
-        <button className="icon-only" onClick={() => setCoverageOpen(true)} title="Design-doc coverage report" aria-label="Design-doc coverage report">
-          <BarChart3 size={ICON_SIZE} />
-        </button>
-        <button className="icon-only" onClick={() => setShortcutsOpen(true)} title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">
-          <Keyboard size={ICON_SIZE} />
-        </button>
-        <button
-          className="icon-only"
-          onClick={() => setTheme(theme === 'dark' ? 'light' : theme === 'light' ? 'auto' : 'dark')}
-          title={`Theme: ${theme} (click to cycle)`}
-          aria-label={`Theme: ${theme}`}
-        >
-          {theme === 'dark' ? <Moon size={ICON_SIZE} /> : theme === 'light' ? <Sun size={ICON_SIZE} /> : <Monitor size={ICON_SIZE} />}
-        </button>
+        <div className="toolbar-overflow" ref={overflowRef}>
+          <button
+            type="button"
+            className="icon-only"
+            onClick={() => setOverflowOpen(!overflowOpen)}
+            title="More actions"
+            aria-haspopup="menu"
+            aria-expanded={overflowOpen}
+            aria-label="More actions"
+          >
+            <MoreHorizontal size={ICON_SIZE} />
+          </button>
+          {overflowOpen && (
+            <div className="toolbar-overflow-menu" role="menu">
+              <button
+                type="button"
+                role="menuitem"
+                className="toolbar-overflow-item"
+                onClick={() => { setOverflowOpen(false); screenshot() }}
+              >
+                <Camera size={14} /> Screenshot
+                <span className="toolbar-overflow-hint">⌘⇧S</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="toolbar-overflow-item"
+                onClick={() => { setOverflowOpen(false); setCoverageOpen(true) }}
+              >
+                <BarChart3 size={14} /> Design-doc coverage
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="toolbar-overflow-item"
+                onClick={() => { setOverflowOpen(false); setShortcutsOpen(true) }}
+              >
+                <Keyboard size={14} /> Keyboard shortcuts
+                <span className="toolbar-overflow-hint">?</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="toolbar-overflow-item"
+                onClick={() => setTheme(theme === 'dark' ? 'light' : theme === 'light' ? 'auto' : 'dark')}
+                title="Click to cycle dark / light / auto"
+              >
+                {theme === 'dark' ? <Moon size={14} /> : theme === 'light' ? <Sun size={14} /> : <Monitor size={14} />}
+                Theme: {theme}
+              </button>
+            </div>
+          )}
+        </div>
         <button className="icon-only" onClick={() => setSettingsOpen(true)} title="Settings" aria-label="Settings">
           <Settings size={ICON_SIZE} />
         </button>

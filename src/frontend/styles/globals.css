@@ -453,6 +453,53 @@ a:hover { text-decoration: underline; }
 .toolbar .group button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 .toolbar .sep { width: 1px; height: 20px; background: var(--node-border); margin: 0 6px; }
 
+/* Toolbar overflow menu — collapses low-frequency actions (screenshot,
+   coverage, shortcuts, theme cycle) behind a single MoreHorizontal
+   trigger so the top bar stays scannable. */
+.toolbar-overflow {
+  position: relative;
+  display: inline-flex;
+}
+.toolbar-overflow-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 220px;
+  background: var(--bg-elev);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 4px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+}
+.toolbar-overflow-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  font-size: var(--fs-base);
+  cursor: pointer;
+}
+.toolbar-overflow-item:hover {
+  background: var(--chip-bg);
+  border: 0;
+}
+.toolbar-overflow-item svg { color: var(--fg-muted); flex-shrink: 0; }
+.toolbar-overflow-hint {
+  margin-left: auto;
+  color: var(--fg-muted);
+  font-size: var(--fs-meta);
+  font-family: var(--font-mono);
+}
+
 .filter-panel {
   /* width comes from inline style (useResizable). Keep position relative so the
      absolute-positioned resize-handle anchors here. */
