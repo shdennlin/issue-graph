@@ -433,7 +433,38 @@ a:hover { text-decoration: underline; }
   padding: 10px;
   font-size: var(--fs-base);
 }
-.filter-panel section { margin-bottom: var(--sp-4); }
+.filter-panel section {
+  margin-bottom: var(--sp-4);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid color-mix(in srgb, var(--fg-muted) 14%, transparent);
+}
+.filter-panel section:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+/* Help affordance next to "Active only" — lucide HelpCircle replaces the
+   hand-rolled ?-in-a-circle that read as a heavy badge. */
+.filter-help-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--fg-muted);
+  margin-left: 4px;
+  cursor: help;
+  transition: color 0.12s ease;
+}
+.filter-help-icon:hover,
+.filter-help-icon:focus { color: var(--fg); outline: none; }
+
+/* Reset filters button — secondary/ghost. Lives at the bottom of the
+   sidebar so it shouldn't compete with the active filter controls. */
+.filter-reset {
+  margin-top: var(--sp-3);
+  width: 100%;
+  color: var(--fg-muted);
+  font-size: var(--fs-meta);
+}
+.filter-reset:hover { color: var(--fg); }
 /* Section headers: dropped tiny-uppercase-letterspaced look (cramped, hard to
    scan). Sentence-case bold at fs-base reads cleaner and matches Linear's
    own filter sidebar treatment. */

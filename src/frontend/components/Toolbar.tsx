@@ -2,14 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   BarChart3,
   Camera,
-  ChevronLeft,
-  ChevronRight,
   Eye,
   EyeOff,
   Keyboard,
   Loader2,
   Monitor,
   Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
   Settings,
   Sun,
 } from 'lucide-react'
@@ -104,7 +104,7 @@ export function Toolbar() {
           aria-pressed={filterPanelOpen}
           className="icon-text"
         >
-          {filterPanelOpen ? <ChevronLeft size={ICON_SIZE} /> : <ChevronRight size={ICON_SIZE} />}
+          {filterPanelOpen ? <PanelLeftClose size={ICON_SIZE} /> : <PanelLeftOpen size={ICON_SIZE} />}
           Filters
         </button>
       </div>

@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { HelpCircle } from 'lucide-react'
 import type { IssueStateType } from '@shared/types.js'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
@@ -179,22 +180,9 @@ export function FilterPanel() {
             <span
               tabIndex={0}
               aria-label="Active only filter help"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 14,
-                height: 14,
-                borderRadius: '50%',
-                border: '1px solid var(--fg-muted)',
-                color: 'var(--fg-muted)',
-                fontSize: 9,
-                fontWeight: 600,
-                marginLeft: 4,
-                cursor: 'help',
-              }}
+              className="filter-help-icon"
             >
-              ?
+              <HelpCircle size={14} />
             </span>
           </Tooltip>
         </label>
@@ -389,7 +377,7 @@ export function FilterPanel() {
         </section>
       )}
 
-      <button onClick={resetFilters} style={{ marginTop: 8 }}>Reset filters</button>
+      <button onClick={resetFilters} className="filter-reset">Reset filters</button>
     </aside>
   )
 }
