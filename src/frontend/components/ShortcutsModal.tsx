@@ -13,26 +13,26 @@ interface Shortcut {
 }
 
 const SHORTCUTS: Shortcut[] = [
-  { keys: ['Cmd', '['], description: 'Back — undo the last view / filter / focus / chain change (browser native; also restores the previous canvas viewport). Use the ← button at the left of the tab bar if your browser remaps the shortcut.', group: 'Navigation' },
-  { keys: ['Cmd', ']'], description: 'Forward — redo a step previously undone with Cmd+[. → button at the left of the tab bar does the same.', group: 'Navigation' },
-  { keys: ['Cmd', 'F'], description: 'Open Find on canvas (focus required: click into canvas first)', group: 'Navigation' },
-  { keys: ['Cmd', 'Shift', 'F'], description: 'Focus the toolbar filter search (top of page) and select any existing query', group: 'Navigation' },
-  { keys: ['Enter'], description: 'In Find: jump to next match, focus it, then return keyboard to the canvas (so c / r / ⇧C / ⇧R target the match)', group: 'Navigation' },
-  { keys: ['Esc'], description: 'Peel one layer: Find → context menu → detail panel → focused issue → chain isolation', group: 'Navigation' },
-  { keys: ['?'], description: 'Show this shortcut cheat sheet', group: 'Navigation' },
+  { keys: ['Cmd', '['], description: 'Back — undo last view / filter / focus / chain change (also restores viewport)', group: 'Navigation' },
+  { keys: ['Cmd', ']'], description: 'Forward — redo a step previously undone', group: 'Navigation' },
+  { keys: ['Cmd', 'F'], description: 'Find on canvas (click into canvas first)', group: 'Navigation' },
+  { keys: ['Cmd', 'Shift', 'F'], description: 'Focus the toolbar filter search', group: 'Navigation' },
+  { keys: ['Enter'], description: 'In Find: next match + return keyboard to canvas', group: 'Navigation' },
+  { keys: ['Esc'], description: 'Peel: Find → context menu → detail panel → focus → chain', group: 'Navigation' },
+  { keys: ['?'], description: 'Show this cheat sheet', group: 'Navigation' },
 
-  { keys: ['Click'], description: 'Focus an issue. Detail panel auto-opens when the toolbar Detail toggle is on.', group: 'Selection' },
-  { keys: ['Space'], description: 'Open detail panel for the focused issue (ad-hoc — works even when auto-open is off)', group: 'Selection' },
-  { keys: ['Enter'], description: 'Same as Space — open detail panel for the focused issue', group: 'Selection' },
+  { keys: ['Click'], description: 'Focus an issue (auto-opens detail when toolbar Detail toggle is on)', group: 'Selection' },
+  { keys: ['Space'], description: 'Open detail panel for focused issue (ad-hoc, works when auto-open is off)', group: 'Selection' },
+  { keys: ['Enter'], description: 'Same as Space — open detail panel', group: 'Selection' },
   { keys: ['Cmd', 'Click'], description: 'Toggle multi-select', group: 'Selection' },
-  { keys: ['Right-click'], description: 'Open context menu on an issue', group: 'Selection' },
+  { keys: ['Right-click'], description: 'Open context menu', group: 'Selection' },
   { keys: ['Double-click'], description: 'Open issue in source (Linear)', group: 'Selection' },
 
-  { keys: ['c'], description: 'Isolate chain on focused issue (preserve positions) — works in all views', group: 'Chain isolation' },
-  { keys: ['Shift', 'C'], description: 'Isolate chain (auto-layout — re-runs dagre and refits camera)', group: 'Chain isolation' },
+  { keys: ['c'], description: 'Isolate chain on focused issue (preserve positions)', group: 'Chain isolation' },
+  { keys: ['Shift', 'C'], description: 'Isolate chain (auto-layout)', group: 'Chain isolation' },
 
-  { keys: ['r'], description: 'Toggle Related-edges overlay (dependency view) — dashed gray lines for `related` issue links', group: 'Layout' },
-  { keys: ['Shift', 'R'], description: 'Re-layout: re-run dagre from scratch; recenters on focused issue if any', group: 'Layout' },
+  { keys: ['r'], description: 'Toggle Related-edges overlay (dashed gray, dependency view)', group: 'Layout' },
+  { keys: ['Shift', 'R'], description: 'Re-layout from scratch; recenters on focused issue if any', group: 'Layout' },
 
   { keys: ['Cmd', 'Shift', 'S'], description: 'Save canvas screenshot as PNG', group: 'Other' },
 ]
@@ -89,15 +89,17 @@ export function ShortcutsModal() {
 
   return (
     <div className="modal-backdrop" onClick={close}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+      <div
+        className="modal"
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: 900, width: '90vw', maxHeight: '92vh' }}
+      >
         <ModalHeader title="Keyboard shortcuts" onClose={close} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="shortcuts-columns">
           {grouped.map(({ group, items }) => (
-            <section key={group}>
-              <h4 style={{ margin: '0 0 8px 0', color: 'var(--fg-muted)', fontSize: 'var(--fs-meta)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                {group}
-              </h4>
-              <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 14px', alignItems: 'center' }}>
+            <section key={group} className="shortcuts-section">
+              <h4 className="shortcuts-section-title">{group}</h4>
+              <div className="shortcuts-grid">
                 {items.map((s, idx) => (
                   <ShortcutRow key={`${group}-${idx}`} keys={s.keys} description={s.description} />
                 ))}

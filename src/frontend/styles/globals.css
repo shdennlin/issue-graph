@@ -1036,6 +1036,40 @@ a:hover { text-decoration: underline; }
   box-shadow: var(--shadow-md);
 }
 
+/* 2-column layout for the Keyboard Shortcuts modal. 3 columns looked
+   right on paper but in practice break-inside: avoid + uneven section
+   sizes (Navigation has many items, Other has one) makes the balancer
+   leave the third column blank. 2 columns distributes the 5 sections
+   ~3+2 reliably and uses the modal width without scrolling. Falls
+   back to 1 column on narrow viewports. */
+.shortcuts-columns {
+  column-count: 2;
+  column-gap: 32px;
+  column-fill: balance;
+}
+@media (max-width: 700px) {
+  .shortcuts-columns { column-count: 1; }
+}
+.shortcuts-section {
+  break-inside: avoid;
+  margin-bottom: 18px;
+  display: inline-block; /* needed for break-inside to behave on some engines */
+  width: 100%;
+}
+.shortcuts-section-title {
+  margin: 0 0 8px 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-meta);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.shortcuts-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  align-items: center;
+}
+
 /* Shared modal header — used by all 4 modals via the <ModalHeader> helper.
    Title takes the available space; close button sits flush right. */
 .modal-header {
