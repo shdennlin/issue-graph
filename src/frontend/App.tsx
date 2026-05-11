@@ -435,8 +435,8 @@ export function App() {
   if (graph?.authError && (graph?.data.issues.length ?? 0) === 0) {
     return (
       <div className="app-shell">
-        <TabBar />
         <SyncBanner />
+        <TabBar />
         <Onboarding />
       </div>
     )
@@ -444,8 +444,8 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <TabBar />
       <SyncBanner />
+      <TabBar />
       <Toolbar />
       <div className="app-main">
         {filterPanelOpen && <FilterPanel />}

@@ -109,91 +109,70 @@ a:hover { text-decoration: underline; }
   gap: 12px;
 }
 
-.banner .left, .banner .right { display: flex; gap: 8px; align-items: center; }
-.banner .pill {
-  display: inline-flex;
+/* `.banner` base rule is retained for the global error banner in
+   App.tsx; the workspace-picker, sync-link, and pill child selectors
+   that used to live here moved to `.tabbar-sync` in the unified header. */
+
+/* Unified app header — tab strip on the left, sync metadata on the
+   right, in a single row. Replaces the old TabBar + SyncBanner pair.
+   The active tab visually fuses into the toolbar below (both share
+   `--bg-elev`) via the `top: 1px` overlap on `.tabbar-tab.is-active`. */
+.tabbar {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--chip-bg);
-}
-.banner .status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--ok);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ok) 16%, transparent);
-  flex: 0 0 auto;
-}
-.banner .workspace-select {
+  gap: 2px;
+  padding: 4px 8px 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--node-border);
+  flex-wrap: wrap;
+  /* Position+z-index lifts dropdown menus (add-tab, workspace-picker)
+     above the toolbar that follows in the flex column. Without this,
+     dropdowns render *under* the toolbar's opaque background.
+     Avoid `overflow-x: auto` — when paired with the default
+     `overflow-y: visible`, browsers promote y to auto/hidden, which
+     CLIPS the absolutely-positioned dropdowns. With ~handful of
+     profiles, wrapping instead of scrolling is the right tradeoff. */
   position: relative;
-  display: inline-flex;
+  z-index: 10;
+}
+
+.tabbar-spacer { flex: 1 1 auto; min-width: 8px; }
+
+/* Right-side sync metadata: workspace picker (when N≥2), last-sync,
+   issue/doc counts, refresh. */
+.tabbar-sync {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  min-height: 24px;
-  padding: 2px 28px 2px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--chip-bg);
-  border: 1px solid transparent;
-  cursor: pointer;
+  gap: 8px;
+  padding-bottom: 4px; /* match the tabbar's top padding for symmetry */
 }
-.banner .workspace-select:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent);
-}
-.banner .workspace-select select {
-  appearance: none;
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  cursor: pointer;
-}
-.banner .workspace-select .workspace-select-label {
-  color: var(--fg);
-  font-size: var(--fs-base);
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.banner .workspace-select select:disabled { cursor: not-allowed; }
-.banner .workspace-select .select-chevron {
-  position: absolute;
-  right: 8px;
-  color: var(--fg-muted);
-  pointer-events: none;
-  font-size: var(--fs-meta);
-}
-.banner .last-sync-link {
+
+.tabbar-sync .last-sync-link {
   font-size: var(--fs-meta);
   cursor: pointer;
   padding: 2px 6px;
   border-radius: var(--radius-sm);
 }
-.banner .last-sync-link:hover {
-  background: var(--chip-bg);
-}
-.banner .stale-ok { color: var(--ok); }
-.banner .stale-warn { color: var(--warn); }
-.banner .stale-bad { color: var(--danger); }
+.tabbar-sync .last-sync-link:hover { background: var(--chip-bg); }
+.tabbar-sync .stale-ok { color: var(--ok); }
+.tabbar-sync .stale-warn { color: var(--warn); }
+.tabbar-sync .stale-bad { color: var(--danger); }
 
-/* Workspace picker (the click-to-change pill in the banner left). The
-   button reuses the `.pill` look so it visually reads as the same
-   workspace indicator that's been there all along — clicking it now
-   opens a dropdown that repoints the *current tab* at a different
-   workspace (keeping filters/focus). Distinct from the TabBar above,
-   which switches between independent tab sessions. */
-.banner .workspace-picker {
+.tabbar-counts {
+  color: var(--fg-muted);
+  font-size: var(--fs-meta);
+}
+
+.tabbar-refresh {
+  /* Inherits global button styling — no extra rules needed. */
+}
+
+/* Workspace picker (repoint current tab) inside the unified header. */
+.tabbar-sync .workspace-picker {
   position: relative;
   display: inline-flex;
 }
-.banner .workspace-picker-button {
+.tabbar-sync .workspace-picker-button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -202,18 +181,16 @@ a:hover { text-decoration: underline; }
   font: inherit;
   color: inherit;
 }
-.banner .workspace-picker-button:hover {
-  border-color: var(--node-border);
-}
-.banner .workspace-picker-button .select-chevron {
+.tabbar-sync .workspace-picker-button:hover { border-color: var(--node-border); }
+.tabbar-sync .workspace-picker-button .select-chevron {
   font-size: 10px;
   color: var(--fg-muted);
   margin-left: 2px;
 }
-.banner .workspace-picker-menu {
+.tabbar-sync .workspace-picker-menu {
   position: absolute;
   top: calc(100% + 4px);
-  left: 0;
+  right: 0;
   min-width: 160px;
   background: var(--bg-elev);
   border: 1px solid var(--node-border);
@@ -224,7 +201,7 @@ a:hover { text-decoration: underline; }
   display: flex;
   flex-direction: column;
 }
-.banner .workspace-picker-item {
+.tabbar-sync .workspace-picker-item {
   background: transparent;
   border: none;
   color: var(--fg);
@@ -235,37 +212,31 @@ a:hover { text-decoration: underline; }
   font-size: var(--fs-base);
   white-space: nowrap;
 }
-.banner .workspace-picker-item:hover {
-  background: var(--chip-bg);
-}
-.banner .workspace-picker-item.is-current {
+.tabbar-sync .workspace-picker-item:hover { background: var(--chip-bg); }
+.tabbar-sync .workspace-picker-item.is-current {
   color: var(--accent);
   cursor: default;
 }
 
-/* In-app workspace tab bar — sits above .banner. Each tab represents a
-   workspace defined in `.env`; the ★ marker on a tab indicates the
-   server-default workspace (where the design-doc watcher runs). */
-.tabbar {
-  display: flex;
-  align-items: stretch;
-  gap: 2px;
-  padding: 4px 8px 0;
-  background: var(--bg);
-  border-bottom: 1px solid var(--node-border);
-  flex-wrap: wrap;
-  /* Position+z-index lifts the whole bar (and its absolutely-positioned
-     dropdown menu descendants) above the SyncBanner sibling that follows
-     in the flex column. Without this, the dropdown opens but renders
-     *under* the banner's opaque background — looking like the click had
-     no effect.
-     Avoid `overflow-x: auto` here — when paired with the default
-     `overflow-y: visible`, browsers promote y to auto/hidden too, which
-     CLIPS the absolutely-positioned dropdown menu (positioned just below
-     the bar) and hides it entirely. With ~handful of profiles, wrapping
-     instead of scrolling is the right tradeoff. */
-  position: relative;
-  z-index: 10;
+/* Legacy-mode (no WORKSPACE_* env profiles) identity pill — sits where
+   tabs would otherwise sit, on the left of the header. */
+.tabbar-legacy-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--chip-bg);
+  font-size: var(--fs-base);
+  color: var(--fg);
+}
+.tabbar-legacy-pill .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--ok);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ok) 16%, transparent);
+  flex: 0 0 auto;
 }
 
 .tabbar-tab {

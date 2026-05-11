@@ -1,7 +1,18 @@
-// In-app tab bar — a list of "view sessions" along the top of the app.
-// Each tab is pinned to a workspace; multiple tabs may share a workspace
-// so the user can keep different filters / focused issues / chain
-// isolations open side-by-side.
+// Unified app header — tab strip on the left, sync metadata on the right,
+// in a single row. Replaces the old two-row TabBar + SyncBanner layout.
+// `SyncBanner` is now scoped to just the workspace-change warning banner
+// (shown above this header when active).
+//
+// Layout:
+//   [tabs … ] [+]   …spacer…   [picker?] [last sync] [N issues · M docs] [↻]
+//
+// Modes:
+//   - Multi-workspace (profiles.length >= 1, !legacyMode):
+//       Tabs render on the left. The workspace-picker (repoint-this-tab)
+//       only appears when profiles.length >= 2 — with a single profile it
+//       would be a no-op duplicate of the tab label.
+//   - Legacy (no `WORKSPACE_*` env profiles):
+//       A single instance-label pill sits on the left in place of tabs.
 //
 // Layout mirrors Slack's workspace switcher (the screenshot reference): a
 // strip of pills along the top, each showing `⌘N name ×`. Cmd/Ctrl+1..9
@@ -14,26 +25,57 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { api } from '../lib/api'
 import { useClickOutside } from '../hooks/useClickOutside'
 import { useWorkspaceStore, type Tab } from '../store/workspaceStore'
+import { useGraphStore } from '../store/graphStore'
+import { useViewStore } from '../store/viewStore'
 import { forgetTab, snapshotTab } from '../store/tabStateStore'
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 const MOD_GLYPH = isMac ? '⌘' : 'Ctrl+'
 
+function colorClass(ageMinutes: number): string {
+  if (ageMinutes < 5) return 'stale-ok'
+  if (ageMinutes < 30) return 'stale-warn'
+  return 'stale-bad'
+}
+
+function formatAge(age: number): string {
+  if (age < 1) return 'just now'
+  if (age < 60) return `${age}m ago`
+  const h = Math.floor(age / 60)
+  if (h < 24) return `${h}h ago`
+  return `${Math.floor(h / 24)}d ago`
+}
+
 export function TabBar() {
+  // workspace store
   const profiles = useWorkspaceStore((s) => s.profiles)
   const legacyMode = useWorkspaceStore((s) => s.legacyMode)
   const tabs = useWorkspaceStore((s) => s.tabs)
   const activeTabId = useWorkspaceStore((s) => s.activeTabId)
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
   const defaultWorkspaceId = useWorkspaceStore((s) => s.defaultWorkspaceId)
   const setActiveTab = useWorkspaceStore((s) => s.setActiveTab)
   const addTab = useWorkspaceStore((s) => s.addTab)
   const closeTab = useWorkspaceStore((s) => s.closeTab)
   const reorderTabs = useWorkspaceStore((s) => s.reorderTabs)
+  const changeTabWorkspace = useWorkspaceStore((s) => s.changeTabWorkspace)
   const setDefaultWorkspaceIdInStore = useWorkspaceStore((s) => s.setDefaultWorkspaceId)
   const initialized = useWorkspaceStore((s) => s.initialized)
+
+  // graph / view stores for the right-side sync metadata
+  const graph = useGraphStore((s) => s.graph)
+  const status = useGraphStore((s) => s.status)
+  const syncing = useGraphStore((s) => s.syncing)
+  const forceSync = useGraphStore((s) => s.forceSync)
+  const setSyncHistoryOpen = useViewStore((s) => s.setSyncHistoryOpen)
+
   const [addMenuOpen, setAddMenuOpen] = useState(false)
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const addMenuRef = useRef<HTMLDivElement | null>(null)
+
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const pickerRef = useRef<HTMLLabelElement | null>(null)
+
   // FLIP animation: capture each tab's offsetLeft just before a reorder
   // (in onDrop), then in useLayoutEffect calculate the delta from old to
   // new position, apply the inverse transform to make tabs *appear*
@@ -94,6 +136,9 @@ export function TabBar() {
   const closeAddMenu = useCallback(() => setAddMenuOpen(false), [])
   useClickOutside(addMenuRef, addMenuOpen, closeAddMenu)
 
+  const closePicker = useCallback(() => setPickerOpen(false), [])
+  useClickOutside(pickerRef, pickerOpen, closePicker)
+
   useEffect(() => {
     const handlers = flipEndHandlers.current
     const els = tabRefs.current
@@ -135,7 +180,7 @@ export function TabBar() {
     }
   }, [firstTabWorkspaceId, defaultWorkspaceId, initialized, legacyMode, setDefaultWorkspaceIdInStore])
 
-  if (!initialized || legacyMode || profiles.length === 0) return null
+  if (!initialized) return null
 
   const switchTo = (tabId: string) => {
     if (tabId === activeTabId) return
@@ -213,85 +258,173 @@ export function TabBar() {
     oldOffsets.current.clear()
   }
 
+  // Repointing this tab at a different workspace, in place. Different
+  // from clicking another tab — that switches active tab (which has its
+  // own filters/focus). This swap KEEPS the current tab's filters /
+  // focus / chain isolation but applies them to a different workspace's
+  // data.
+  const onPickWorkspace = (workspaceId: string) => {
+    setPickerOpen(false)
+    if (!activeTabId) return
+    if (workspaceId === currentWorkspaceId) return
+    changeTabWorkspace(activeTabId, workspaceId)
+  }
+
   const profileById = new Map(profiles.map((p) => [p.id, p]))
   const canClose = tabs.length > 1
+  const showTabs = !legacyMode && profiles.length > 0
+  const showPicker = !legacyMode && profiles.length >= 2
+
+  const last = graph?.fetchedAt ?? 0
+  const ageMinutes = last ? Math.floor((Date.now() - last) / 60_000) : Infinity
+  const ageText = `${graph === null ? 'loading…' : isFinite(ageMinutes) ? formatAge(ageMinutes) : 'never'}${
+    graph?.stale ? ' (stale)' : ''
+  }`
+  const activeName = profiles.find((p) => p.id === currentWorkspaceId)?.name
+    ?? graph?.instanceLabel
+    ?? 'issue-graph'
 
   return (
-    <div className="tabbar" role="tablist" aria-label="Workspace tabs">
-      {tabs.map((tab, idx) => {
-        const profile = profileById.get(tab.workspaceId)
-        const name = profile?.name ?? tab.workspaceId
-        const isActive = tab.id === activeTabId
-        const shortcut = idx < 9 ? `${MOD_GLYPH}${idx + 1}` : null
-        const isDragging = draggingId === tab.id
-        return (
-          <button
-            key={tab.id}
-            ref={(el) => {
-              if (el) tabRefs.current.set(tab.id, el)
-              else tabRefs.current.delete(tab.id)
-            }}
-            role="tab"
-            aria-selected={isActive}
-            className={[
-              'tabbar-tab',
-              isActive ? 'is-active' : '',
-              isDragging ? 'is-dragging' : '',
-            ].filter(Boolean).join(' ')}
-            onClick={() => switchTo(tab.id)}
-            title={`Switch to ${name}${shortcut ? ` (${shortcut})` : ''} — drag to reorder`}
-            type="button"
-            draggable
-            onDragStart={(e) => onDragStart(tab, e)}
-            onDragOver={(e) => onDragOver(tab, e)}
-            onDragLeave={() => onDragLeave(tab)}
-            onDrop={(e) => onDrop(tab, e)}
-            onDragEnd={onDragEnd}
-          >
-            {shortcut && <span className="tabbar-shortcut">{shortcut}</span>}
-            <span className="tabbar-label">{name}</span>
-            {canClose && (
-              <span
-                role="button"
-                tabIndex={-1}
-                aria-label="Close tab"
-                className="tabbar-close"
-                onClick={(e) => handleClose(tab.id, e)}
-                title="Close tab"
-              >
-                ×
-              </span>
-            )}
-          </button>
-        )
-      })}
-      <div className="tabbar-add" ref={addMenuRef}>
-        <button
-          type="button"
-          className="tabbar-add-button"
-          onClick={() => setAddMenuOpen(!addMenuOpen)}
-          title="Open a new tab on a workspace"
-          aria-haspopup="menu"
-          aria-expanded={addMenuOpen}
-        >
-          +
-        </button>
-        {addMenuOpen && (
-          <div className="tabbar-add-menu" role="menu">
-            {profiles.map((p) => (
+    <div className="tabbar" role="tablist" aria-label="Workspace header">
+      {showTabs ? (
+        <>
+          {tabs.map((tab, idx) => {
+            const profile = profileById.get(tab.workspaceId)
+            const name = profile?.name ?? tab.workspaceId
+            const isActive = tab.id === activeTabId
+            const shortcut = idx < 9 ? `${MOD_GLYPH}${idx + 1}` : null
+            const isDragging = draggingId === tab.id
+            return (
               <button
-                key={p.id}
-                role="menuitem"
+                key={tab.id}
+                ref={(el) => {
+                  if (el) tabRefs.current.set(tab.id, el)
+                  else tabRefs.current.delete(tab.id)
+                }}
+                role="tab"
+                aria-selected={isActive}
+                className={[
+                  'tabbar-tab',
+                  isActive ? 'is-active' : '',
+                  isDragging ? 'is-dragging' : '',
+                ].filter(Boolean).join(' ')}
+                onClick={() => switchTo(tab.id)}
+                title={`Switch to ${name}${shortcut ? ` (${shortcut})` : ''} — drag to reorder`}
                 type="button"
-                className="tabbar-add-item"
-                onClick={() => handleAdd(p.id)}
-                title={`New tab on ${p.name}`}
+                draggable
+                onDragStart={(e) => onDragStart(tab, e)}
+                onDragOver={(e) => onDragOver(tab, e)}
+                onDragLeave={() => onDragLeave(tab)}
+                onDrop={(e) => onDrop(tab, e)}
+                onDragEnd={onDragEnd}
               >
-                {p.name}
+                {shortcut && <span className="tabbar-shortcut">{shortcut}</span>}
+                <span className="tabbar-label">{name}</span>
+                {canClose && (
+                  <span
+                    role="button"
+                    tabIndex={-1}
+                    aria-label="Close tab"
+                    className="tabbar-close"
+                    onClick={(e) => handleClose(tab.id, e)}
+                    title="Close tab"
+                  >
+                    ×
+                  </span>
+                )}
               </button>
-            ))}
+            )
+          })}
+          <div className="tabbar-add" ref={addMenuRef}>
+            <button
+              type="button"
+              className="tabbar-add-button"
+              onClick={() => setAddMenuOpen(!addMenuOpen)}
+              title="Open a new tab on a workspace"
+              aria-haspopup="menu"
+              aria-expanded={addMenuOpen}
+            >
+              +
+            </button>
+            {addMenuOpen && (
+              <div className="tabbar-add-menu" role="menu">
+                {profiles.map((p) => (
+                  <button
+                    key={p.id}
+                    role="menuitem"
+                    type="button"
+                    className="tabbar-add-item"
+                    onClick={() => handleAdd(p.id)}
+                    title={`New tab on ${p.name}`}
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
+        </>
+      ) : (
+        <span className="tabbar-legacy-pill" title="Workspace identity (set via INSTANCE_LABEL)">
+          <span className="status-dot" aria-hidden /> {activeName}
+        </span>
+      )}
+
+      <div className="tabbar-spacer" />
+
+      <div className="tabbar-sync">
+        {showPicker && (
+          <label
+            ref={pickerRef}
+            className="workspace-picker"
+            title="Change this tab's workspace (keeps filters/focus)"
+          >
+            <button
+              type="button"
+              className="pill workspace-picker-button"
+              aria-haspopup="menu"
+              aria-expanded={pickerOpen}
+              onClick={() => setPickerOpen(!pickerOpen)}
+            >
+              <span className="status-dot" aria-hidden /> {activeName}
+              <span className="select-chevron" aria-hidden>▾</span>
+            </button>
+            {pickerOpen && (
+              <div className="workspace-picker-menu" role="menu">
+                {profiles.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    role="menuitem"
+                    className={`workspace-picker-item${p.id === currentWorkspaceId ? ' is-current' : ''}`}
+                    onClick={() => onPickWorkspace(p.id)}
+                    title={p.id === currentWorkspaceId ? 'Already on this workspace' : `Switch this tab to ${p.name}`}
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </label>
         )}
+        <span
+          className={`last-sync-link ${isFinite(ageMinutes) ? colorClass(ageMinutes) : 'stale-bad'}`}
+          onClick={() => setSyncHistoryOpen(true)}
+          title="Click for sync history"
+        >
+          Last sync: {ageText}
+        </span>
+        <span className="tabbar-counts">
+          {graph?.data.issues.length ?? 0} issues · {graph?.data.designdocs?.length ?? 0} docs
+        </span>
+        <button
+          className="tabbar-refresh"
+          onClick={forceSync}
+          disabled={status === 'loading'}
+          title="Shift-click to force a fresh fetch"
+        >
+          {syncing ? '⏳ Syncing…' : status === 'loading' ? '⏳ Loading…' : '↻ Refresh'}
+        </button>
       </div>
     </div>
   )
