@@ -80,16 +80,88 @@
 **Lint / 衛生**
 - 5 個既存 react-hooks / 未使用 disable 的警告全部清除（解決「Resolve the 4 known `react-hooks/exhaustive-deps` warnings」v1.2 項目）
 
-## v1.3 — 接下來
+## v1.3 — 已釋出
+
+**工作區 — 多分頁 UI**
+- 分頁列取代原本單一工作區的 header。每個分頁有自己的工作區 + 檢視 +
+  篩選 + 對焦 + viewport，存在 sessionStorage 並能跨重新整理 / 瀏覽器
+  重啟還原
+- `Cmd/Ctrl + 1..9` 跳到第 N 個分頁；可拖曳重排；每個工作區可 ⭐ 設為
+  預設
+- `WORKSPACE_<ID>_*` 環境變數結構，並保留單一 `LINEAR_API_KEY` 設定的
+  legacy 模式
+- 完成先前「UI 上的多工作區 / 多 team 切換」的 Likely 項目
+
+**Project view**
+- 新的最上層檢視，依 Linear project 把議題分組；跨 project 的 `blocks`
+  edge 高亮；「(No project)」永遠釘在最後
+- 側邊欄新增 Project 篩選維度（可與其他篩選組合）
+
+**Layout — 多欄 bucket**
+- Mix 與 Project 的 container 會依議題數量自動分成 2–3 欄；不再有過長
+  的單欄堆疊
+
+**Design-doc / git worktrees**
+- 轉接器會掃描 `REPO_PATH` 下的所有 git worktree，去重避免同一議題出
+  現兩次
+- OpenSpec 與 Spectra 轉接器拆成獨立模組；Spectra 採用 v2.2.5+ 的新
+  預設 `spec_dir`，並支援自訂的 `spec_dir`
+
+**PWA**
+- 加入 web app manifest 與 service worker；可從 Chrome / Edge URL 列
+  或 Safari → File → Add to Dock 安裝。App shell 會預先快取；Linear
+  資料與 SSE 串流維持純網路取得
+
+**穩定性**
+- Viewport 還原會贏過 ReactFlow 啟動時的 `fitView` 競賽
+- Docker 容器內 SQLite 路徑釘在 `/app/data/graph.db`，避免 host 路徑
+  外漏
+- `data-dev/` host-only 開發目錄加進 gitignore，與 `data/` 完全分離，
+  避免並行 SQLite WAL 寫入互相破壞
+
+## v1.4 — 進行中（尚未釋出）
+
+**工作區筆記**
+- 以工作區為範圍的 markdown 筆記；網格 + 列表檢視、封存 + 復原、
+  `n` 鍵切換 modal、開啟筆記後 `Cmd+E` 切換 Edit / Preview
+
+**導覽歷史**
+- `Cmd/Ctrl + [ / ]` 在 view / filter / focus / chain 變動之間前後跳；
+  undo 時連 viewport 也會還原
+
+**詳情面板的篩選點擊**
+- 點詳情面板裡的任一 metadata 值（state、priority、assignee、project、
+  primary label）就能用它篩選畫布
+
+**跨平台鍵盤標籤**
+- `Cmd/⌘` 在 Windows/Linux 顯示為 `Ctrl`；`Delete` 顯示為 `Backspace`。
+  集中在 `src/frontend/lib/platform.ts`，可用 `?platform=windows` 或
+  `localStorage.ig-platform` 在 QA 階段強制覆寫
+
+**i18n — 英文 + 繁體中文**
+- 自家寫的小型字典 + Zustand 撐起的語系 store；預設英文，zh-TW 從
+  Settings → Language 啟用；存 localStorage
+- 翻譯涵蓋 Toolbar、Settings、快速鍵備忘卡、Onboarding、Sync banner、
+  modal header、FilterPanel、DetailPanel、NotesModal、檢視標籤
+- 加上 `README.zh-TW.md` 與 `docs/`、`ROADMAP.md` 中對應的繁中版本。
+  `docs/PRD.md` 刻意只保留英文
+
+**打磨**
+- Settings：區段加分隔線、footer 動作改成 sticky
+- Shortcuts modal：拉寬，採用響應式 2 欄排版
+- Toolbar：低頻動作收進 overflow 選單
+- Mix container 依 bucket 各自上強調色
+- ContextMenu / 行內查找 / IssueNode 的 glyph 換成 `lucide` icon
+
+## v1.5 — 接下來
 
 - [ ] 非 localhost 部署的選用驗證（basic-auth 或 token gate）
-- [ ] 把剩下的 v7 hook-rule 違規（`set-state-in-effect`、`purity`）遷移完
+- [ ] 把剩下的 v7 hook-rule 違規（`set-state-in-effect`、`purity`）遷移完，目前是逐個呼叫點壓抑警告
 - [ ] 把 `/api/export` 的 JSON 結構文件化，讓使用者能在上面建自己的工具
 
-## v1.4+ — 大概會做
+## v1.6+ — 大概會做
 
 - [ ] **GitHub Issues 後端** — 跟 Linear 同樣的 `Source` 介面；對 OSS 團隊價值高
-- [ ] UI 上的多工作區 / 多 team 切換（目前綁在 env）
 - [ ] Saved views（具名的篩選組合，不只是 URL params）
 - [ ] **Mix view 排版改進** — bucket-as-container 的排版超過約 15 個節點就太擠：
   - 可摺疊的 bucket（點 header 摺成 `▶ docs (3)` chip）
@@ -114,5 +186,5 @@
 
 ---
 
-如果你想做 **v1.2** 或 **v1.3+** 的東西，請先開 issue 對齊範圍。
+如果你想做 **v1.5** 或 **v1.6+** 的東西，請先開 issue 對齊範圍。
 **Maybe** 項目請在開工前先開 issue 看看意願。

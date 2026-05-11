@@ -80,16 +80,92 @@ Direction, not commitment. Issues and PRs welcome on anything below.
 **Lint / hygiene**
 - All 5 pre-existing react-hooks / unused-disable warnings cleared (resolves "Resolve the 4 known `react-hooks/exhaustive-deps` warnings" v1.2 item)
 
-## v1.3 — next
+## v1.3 — shipped
+
+**Workspaces — multi-tab UI**
+- Tab bar replaces the single-workspace header. Each tab holds its own
+  workspace + view + filters + focus + viewport, persisted to
+  sessionStorage and restored across reload / browser restart
+- `Cmd/Ctrl + 1..9` jump-to-Nth-tab, drag to reorder, ⭐ "set as default"
+  per workspace
+- `WORKSPACE_<ID>_*` env-var schema with a fallback legacy mode for the
+  single-key `LINEAR_API_KEY` setup
+- Resolves the prior "Multi-workspace / multi-team toggle" Likely item
+
+**Project view**
+- New top-level view grouping issues by Linear project; cross-project
+  `blocks` edges highlighted; "(No project)" pinned last
+- Project filter dimension in the sidebar (combinable with all other
+  filters)
+
+**Layout — multi-column buckets**
+- Mix and Project containers pack into 2–3 columns based on issue count;
+  tall single-column stacks gone
+
+**Design-doc / git worktrees**
+- Adapter scans every git worktree rooted at `REPO_PATH` and dedupes
+  linked issues across worktrees so nothing renders twice
+- OpenSpec / Spectra adapters split into separate modules; Spectra picks
+  up the new default `spec_dir` introduced in v2.2.5+ and supports
+  configurable `spec_dir` for non-standard layouts
+
+**PWA**
+- Web app manifest + service worker; installable from Chrome / Edge URL
+  bar or Safari → File → Add to Dock. App shell pre-cached; Linear data
+  + SSE stream remain network-only
+
+**Stability**
+- Viewport restore wins over ReactFlow's startup `fitView` race
+- SQLite path pinned to `/app/data/graph.db` inside the Docker container
+  to prevent host-path leakage
+- `data-dev/` host-only dev tree gitignored, kept disjoint from `data/`
+  so concurrent SQLite WAL writes can't corrupt either
+
+## v1.4 — in progress (unreleased)
+
+**Workspace notes**
+- Markdown notes scoped per workspace; grid + list views, archive +
+  undo, `n` shortcut to toggle the modal, `Cmd+E` to flip Edit / Preview
+  inside an open note
+
+**Navigation history**
+- `Cmd/Ctrl + [ / ]` back-forward through view / filter / focus / chain
+  changes — restores viewport on undo too
+
+**Detail-panel filter clicks**
+- Click any metadata value in the detail panel (state, priority,
+  assignee, project, primary label) to filter the canvas by it
+
+**Cross-platform keyboard labels**
+- `Cmd/⌘` renders as `Ctrl` on Windows/Linux; `Delete` renders as
+  `Backspace`. Centralised in `src/frontend/lib/platform.ts`. QA override
+  via `?platform=windows` or `localStorage.ig-platform`
+
+**i18n — English + Traditional Chinese**
+- Tiny custom dict + Zustand-backed locale store; English is the default,
+  zh-TW opt-in via Settings → Language; persisted to localStorage
+- Translations cover Toolbar, Settings, Shortcuts cheat sheet,
+  Onboarding, Sync banner, modal headers, FilterPanel, DetailPanel,
+  NotesModal, view labels
+- `README.zh-TW.md` plus zh-TW companions for the user-facing docs in
+  `docs/` and `ROADMAP.md`. `docs/PRD.md` intentionally English-only
+
+**Polish**
+- Settings: visually delimited sections, sticky footer actions
+- Shortcuts modal: wider, responsive 2-column layout
+- Toolbar: low-frequency actions collapse into an overflow menu
+- Mix containers tinted with per-bucket accent colour
+- ContextMenu / inline find / IssueNode glyphs swapped for `lucide` icons
+
+## v1.5 — next
 
 - [ ] Optional auth (basic-auth or token gate) for non-localhost deployments
-- [ ] Migrate the remaining v7 hook-rule violations (`set-state-in-effect`, `purity`)
+- [ ] Migrate the remaining v7 hook-rule violations (`set-state-in-effect`, `purity`) — currently suppressed per-call-site
 - [ ] Document the JSON shape of `/api/export` so users can build their own tools on top
 
-## v1.4+ — likely
+## v1.6+ — likely
 
 - [ ] **GitHub Issues backend** — same `Source` interface as Linear; high-value for OSS teams
-- [ ] Multi-workspace / multi-team toggle in the UI (currently env-pinned)
 - [ ] Saved views (named filter sets, not just URL params)
 - [ ] **Mix view layout improvements** — the bucket-as-container layout gets cramped past ~15 nodes:
   - Collapsible buckets (click header to collapse to a `▶ docs (3)` chip)
@@ -114,5 +190,5 @@ Direction, not commitment. Issues and PRs welcome on anything below.
 
 ---
 
-If you want to work on something in **v1.2** or **v1.3+**, open an issue first so we can align on scope.
+If you want to work on something in **v1.5** or **v1.6+**, open an issue first so we can align on scope.
 For **Maybe** items, open an issue to gauge interest before writing code.
