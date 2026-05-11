@@ -7,16 +7,17 @@ import { useViewStore } from '../store/viewStore'
 import { useSchemaStore } from '../store/schemaStore'
 import { useResizable } from '../hooks/useResizable'
 import { api } from '../lib/api'
-import { stateLabel, priorityLabel } from '../lib/colors'
+import { priorityLabelFor, stateLabelFor } from '../lib/colors'
 import { getDesignDocsForIssue } from '../lib/labelSchema'
+import { translate, useLocale, useT } from '../i18n'
 
-function timeAgo(iso: string): string {
+function timeAgo(iso: string, locale: ReturnType<typeof useLocale>): string {
   const ms = Date.now() - new Date(iso).getTime()
   const m = Math.floor(ms / 60000)
-  if (m < 60) return `${m}m ago`
+  if (m < 60) return translate(locale, 'detailPanel.minutesAgo', { count: m })
   const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h ago`
-  return `${Math.floor(h / 24)}d ago`
+  if (h < 24) return translate(locale, 'detailPanel.hoursAgo', { count: h })
+  return translate(locale, 'detailPanel.daysAgo', { count: Math.floor(h / 24) })
 }
 
 // Per-panel preferences — independent from the global theme/font-size settings
@@ -33,6 +34,8 @@ export function DetailPanel() {
   const graph = useGraphStore((s) => s.graph)
   const reload = useGraphStore((s) => s.load)
   const { schema } = useSchemaStore()
+  const t = useT()
+  const locale = useLocale()
   const [description, setDescription] = useState<string | null>(null)
   const [descLoading, setDescLoading] = useState(false)
   const [annotationDraft, setAnnotationDraft] = useState('')
@@ -121,7 +124,7 @@ export function DetailPanel() {
   }
 
   const remove = async (id: number) => {
-    if (!confirm('Delete this annotation?')) return
+    if (!confirm(t('detailPanel.confirmDeleteAnnotation'))) return
     await api.deleteAnnotation(id)
     reload()
   }
@@ -171,74 +174,74 @@ export function DetailPanel() {
         <button
           className="icon-only"
           onClick={cycleTextSize}
-          title={`Text size: ${textSize} (click to cycle sm/md/lg)`}
-          aria-label="Cycle text size"
+          title={t('detailPanel.cycleTextSize', { size: textSize })}
+          aria-label={t('detailPanel.cycleTextSizeAria')}
         >
           <Type size={14} />
         </button>
         <button
           className="icon-only"
           onClick={toggleWide}
-          title={wideMode ? 'Collapse to side panel' : 'Expand to wide view'}
-          aria-label={wideMode ? 'Collapse to side panel' : 'Expand to wide view'}
+          title={wideMode ? t('detailPanel.collapse') : t('detailPanel.expand')}
+          aria-label={wideMode ? t('detailPanel.collapse') : t('detailPanel.expand')}
         >
           {wideMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
         </button>
         <button
           className="icon-only detail-close"
           onClick={() => setDetailPanelOpen(false)}
-          title="Close panel (Esc) — focus retained, press Esc again to unfocus"
-          aria-label="Close detail panel"
+          title={t('detailPanel.closeTitle')}
+          aria-label={t('detailPanel.closeAria')}
         >
           <X size={16} />
         </button>
       </div>
       <a className="detail-source-link" href={issue.url} target="_blank" rel="noreferrer">
-        Open in source <ExternalLink size={12} />
+        {t('detailPanel.openInSource')} <ExternalLink size={12} />
       </a>
 
       <div className="section">
         <div className="row">
-          <span className="k">State</span>
+          <span className="k">{t('detailPanel.state')}</span>
           <button
             type="button"
             className="detail-filter-link"
             onClick={() => { setFilter('stateTypes', [issue.state.type]); setDetailPanelOpen(false) }}
-            title={`Filter by state: ${stateLabel(issue.state.type)}`}
+            title={t('detailPanel.filterByState', { value: stateLabelFor(issue.state.type, locale) })}
           >
-            {stateLabel(issue.state.type)}
+            {stateLabelFor(issue.state.type, locale)}
           </button>
         </div>
         <div className="row">
-          <span className="k">Priority</span>
+          <span className="k">{t('detailPanel.priority')}</span>
           <button
             type="button"
             className="detail-filter-link"
             onClick={() => { setFilter('priorities', [issue.priority]); setDetailPanelOpen(false) }}
-            title={`Filter by priority: ${priorityLabel(issue.priority)}`}
+            title={t('detailPanel.filterByPriority', { value: priorityLabelFor(issue.priority, locale) })}
           >
-            {priorityLabel(issue.priority)}
+            {priorityLabelFor(issue.priority, locale)}
           </button>
         </div>
         <div className="row">
-          <span className="k">Assignee</span>
+          <span className="k">{t('detailPanel.assignee')}</span>
           <button
             type="button"
             className="detail-filter-link"
             onClick={() => { setFilter('assignees', [issue.assignee?.displayName ?? '(unassigned)']); setDetailPanelOpen(false) }}
-            title={`Filter by assignee: ${issue.assignee?.displayName ?? 'unassigned'}`}
+            title={t('detailPanel.filterByAssignee', { value: issue.assignee?.displayName ?? t('detailPanel.unassignedShort') })}
           >
-            {issue.assignee?.displayName ?? 'unassigned'}
+            {issue.assignee?.displayName ?? t('detailPanel.unassignedShort')}
           </button>
         </div>
         <div className="row">
-          <span className="k">Project</span>
+          <span className="k">{t('detailPanel.project')}</span>
           {issue.project ? (
             <button
               type="button"
               className="detail-filter-link"
               onClick={() => { setFilter('projectIds', [issue.project!.id]); setDetailPanelOpen(false) }}
-              title={`Filter by project: ${issue.project.name}`}
+              title={t('detailPanel.filterByProject', { value: issue.project.name })}
             >
               {issue.project.name}
             </button>
@@ -246,8 +249,8 @@ export function DetailPanel() {
             <span style={{ color: 'var(--fg-muted)' }}>—</span>
           )}
         </div>
-        <div className="row"><span className="k">Created</span><span>{timeAgo(issue.createdAt)}</span></div>
-        <div className="row"><span className="k">Updated</span><span>{timeAgo(issue.updatedAt)}</span></div>
+        <div className="row"><span className="k">{t('detailPanel.created')}</span><span>{timeAgo(issue.createdAt, locale)}</span></div>
+        <div className="row"><span className="k">{t('detailPanel.updated')}</span><span>{timeAgo(issue.updatedAt, locale)}</span></div>
         {schema.primaryGroup && (() => {
           const primary = issue.labels.find((l) => l.group?.name === schema.primaryGroup)
           return (
@@ -258,7 +261,7 @@ export function DetailPanel() {
                   type="button"
                   className="detail-filter-link"
                   onClick={() => { setFilter('primaryValues', [primary.id]); setDetailPanelOpen(false) }}
-                  title={`Filter by ${schema.primaryGroup}: ${primary.name}`}
+                  title={t('detailPanel.filterByGroup', { group: schema.primaryGroup, value: primary.name })}
                 >
                   {primary.name}
                 </button>
@@ -272,21 +275,19 @@ export function DetailPanel() {
 
       {docs.length > 0 && (
         <div className="section">
-          <h3>Design docs ({docs.length})</h3>
+          <h3>{t('detailPanel.designDocs', { count: docs.length })}</h3>
           {docs.length > 1 && (
             <div className="detail-spec-warn">
               <AlertTriangle size={14} className="detail-spec-warn-icon" />
               <span>
-                This issue spans <strong>{docs.length}</strong> design-doc changes (specs).
-                A spec is one delivery batch — an issue covering multiple specs is usually
-                too large for a single batch. Consider splitting it into per-spec sub-issues.
+                {t('detailPanel.designSpansWarn', { count: docs.length })}
               </span>
             </div>
           )}
           {docs.map((d) => (
             <details key={d.name} open={docs.length === 1}>
               <summary>
-                {d.name} {d.status === 'parked' && '(parked)'} — {d.doneTasks}/{d.totalTasks}
+                {d.name} {d.status === 'parked' && t('detailPanel.parked')} — {d.doneTasks}/{d.totalTasks}
               </summary>
               <div className="progress" style={{ height: 6, background: 'var(--chip-bg)', borderRadius: 3, margin: '4px 0' }}>
                 <div style={{ width: `${(d.progress * 100).toFixed(0)}%`, height: '100%', background: 'var(--accent)' }} />
@@ -299,10 +300,10 @@ export function DetailPanel() {
 
       {(blocksOut.length > 0 || blocksIn.length > 0) && (
         <div className="section">
-          <h3>Blocks</h3>
+          <h3>{t('detailPanel.blocks')}</h3>
           {blocksIn.length > 0 && (
             <div>
-              <div style={{ color: 'var(--fg-muted)', fontSize: 11 }}>Blocked by</div>
+              <div style={{ color: 'var(--fg-muted)', fontSize: 11 }}>{t('detailPanel.blockedBy')}</div>
               {blocksIn.map((b) => (
                 <div key={b.identifier}>
                   <a href="#" onClick={(e) => { e.preventDefault(); useViewStore.getState().setFocusedId(b.identifier) }}>
@@ -314,7 +315,7 @@ export function DetailPanel() {
           )}
           {blocksOut.length > 0 && (
             <div style={{ marginTop: 6 }}>
-              <div style={{ color: 'var(--fg-muted)', fontSize: 11 }}>Blocks</div>
+              <div style={{ color: 'var(--fg-muted)', fontSize: 11 }}>{t('detailPanel.blocksOut')}</div>
               {blocksOut.map((id) => (
                 <div key={id}>
                   <a href="#" onClick={(e) => { e.preventDefault(); useViewStore.getState().setFocusedId(id) }}>→ {id}</a>
@@ -327,7 +328,7 @@ export function DetailPanel() {
 
       {relatedList.length > 0 && (
         <div className="section">
-          <h3>Related ({relatedList.length})</h3>
+          <h3>{t('detailPanel.related', { count: relatedList.length })}</h3>
           {/* `related` is bidirectional — no in/out split, just list. The
               ↔ icon mirrors the dashed-edge style on the canvas + the
               connectivity-badge ╍ glyph, keeping visual grammar consistent. */}
@@ -348,25 +349,25 @@ export function DetailPanel() {
       )}
 
       <div className="section">
-        <h3>Annotations ({annotations.length})</h3>
+        <h3>{t('detailPanel.annotations', { count: annotations.length })}</h3>
         {annotations.map((a) => (
           <div key={a.id} style={{ borderTop: '1px solid var(--node-border)', paddingTop: 6, marginTop: 6 }}>
             {editingId === a.id ? (
               <>
                 <textarea value={editingBody} onChange={(e) => setEditingBody(e.target.value)} rows={3} style={{ width: '100%' }} />
                 <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-                  <button className="primary" onClick={saveEdit}>Save</button>
-                  <button onClick={() => setEditingId(null)}>Cancel</button>
+                  <button className="primary" onClick={saveEdit}>{t('common.save')}</button>
+                  <button onClick={() => setEditingId(null)}>{t('common.cancel')}</button>
                 </div>
               </>
             ) : (
               <>
                 <div dangerouslySetInnerHTML={{ __html: marked.parse(a.body) as string }} />
                 <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-                  <button onClick={() => { setEditingId(a.id); setEditingBody(a.body) }}>Edit</button>
-                  <button onClick={() => remove(a.id)}>Delete</button>
+                  <button onClick={() => { setEditingId(a.id); setEditingBody(a.body) }}>{t('common.edit')}</button>
+                  <button onClick={() => remove(a.id)}>{t('common.delete')}</button>
                   <span style={{ color: 'var(--fg-muted)', fontSize: 11, marginLeft: 'auto' }}>
-                    {timeAgo(new Date(a.updatedAt).toISOString())}
+                    {timeAgo(new Date(a.updatedAt).toISOString(), locale)}
                   </span>
                 </div>
               </>
@@ -375,18 +376,18 @@ export function DetailPanel() {
         ))}
         <textarea
           rows={3}
-          placeholder="Add annotation (markdown)…"
+          placeholder={t('detailPanel.addAnnotationPlaceholder')}
           value={annotationDraft}
           onChange={(e) => setAnnotationDraft(e.target.value)}
           style={{ width: '100%', marginTop: 6 }}
         />
-        <button className="primary" onClick={submitAnnotation} style={{ marginTop: 4 }}>Add annotation</button>
+        <button className="primary" onClick={submitAnnotation} style={{ marginTop: 4 }}>{t('detailPanel.addAnnotation')}</button>
       </div>
 
       <div className="section">
-        <h3>Description</h3>
+        <h3>{t('detailPanel.description')}</h3>
         {descLoading && (
-          <div className="skeleton-stack" aria-busy="true" aria-label="Loading description">
+          <div className="skeleton-stack" aria-busy="true" aria-label={t('detailPanel.descriptionLoadingAria')}>
             <div className="skeleton skeleton-line" style={{ width: '92%' }} />
             <div className="skeleton skeleton-line" style={{ width: '78%' }} />
             <div className="skeleton skeleton-line" style={{ width: '85%' }} />
@@ -394,9 +395,9 @@ export function DetailPanel() {
           </div>
         )}
         {!descLoading && description !== null && (
-          <div dangerouslySetInnerHTML={{ __html: marked.parse(description || '*No description*') as string }} />
+          <div dangerouslySetInnerHTML={{ __html: marked.parse(description || t('detailPanel.noDescription')) as string }} />
         )}
-        {!descLoading && description === null && <div style={{ color: 'var(--fg-muted)' }}>Could not load description.</div>}
+        {!descLoading && description === null && <div style={{ color: 'var(--fg-muted)' }}>{t('detailPanel.descriptionLoadFail')}</div>}
       </div>
     </aside>
   )
