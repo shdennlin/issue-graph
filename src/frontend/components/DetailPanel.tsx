@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { AlertTriangle, ExternalLink, X } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { AlertTriangle, ExternalLink, Maximize2, Minimize2, Type, X } from 'lucide-react'
 import { marked } from 'marked'
 import type { AnnotationDTO, NormalizedIssue } from '@shared/types.js'
 import { useGraphStore } from '../store/graphStore'
@@ -19,6 +19,13 @@ function timeAgo(iso: string): string {
   return `${Math.floor(h / 24)}d ago`
 }
 
+// Per-panel preferences — independent from the global theme/font-size settings
+// so users who want a roomier read of a single issue without inflating the rest
+// of the UI can opt in here.
+const WIDE_MODE_KEY = 'ig-detail-wide-v1'
+const TEXT_SIZE_KEY = 'ig-detail-text-size-v1'
+type TextSize = 'sm' | 'md' | 'lg'
+
 export function DetailPanel() {
   const focusedId = useViewStore((s) => s.focusedId)
   const setFocusedId = useViewStore((s) => s.setFocusedId)
@@ -30,6 +37,34 @@ export function DetailPanel() {
   const [annotationDraft, setAnnotationDraft] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editingBody, setEditingBody] = useState('')
+
+  const [wideMode, setWideMode] = useState<boolean>(() => {
+    if (typeof localStorage === 'undefined') return false
+    try { return localStorage.getItem(WIDE_MODE_KEY) === '1' } catch { return false }
+  })
+  const [textSize, setTextSize] = useState<TextSize>(() => {
+    if (typeof localStorage === 'undefined') return 'md'
+    try {
+      const v = localStorage.getItem(TEXT_SIZE_KEY)
+      return v === 'sm' || v === 'lg' ? v : 'md'
+    } catch { return 'md' }
+  })
+
+  const toggleWide = useCallback(() => {
+    setWideMode((prev) => {
+      const next = !prev
+      try { localStorage.setItem(WIDE_MODE_KEY, next ? '1' : '0') } catch { /* silent */ }
+      return next
+    })
+  }, [])
+
+  const cycleTextSize = useCallback(() => {
+    setTextSize((prev) => {
+      const next: TextSize = prev === 'sm' ? 'md' : prev === 'md' ? 'lg' : 'sm'
+      try { localStorage.setItem(TEXT_SIZE_KEY, next) } catch { /* silent */ }
+      return next
+    })
+  }, [])
 
   const issue = focusedId ? graph?.data.issues.find((i) => i.identifier === focusedId) : null
 
@@ -113,8 +148,13 @@ export function DetailPanel() {
 
   return (
     <aside
-      className={`detail-panel${resizing ? ' is-resizing' : ''}`}
-      style={{ width, flexShrink: 0 }}
+      className={[
+        'detail-panel',
+        `detail-text-${textSize}`,
+        wideMode ? 'is-wide' : '',
+        resizing ? 'is-resizing' : '',
+      ].filter(Boolean).join(' ')}
+      style={wideMode ? undefined : { width, flexShrink: 0 }}
     >
       <div className="resize-handle resize-handle-left" onMouseDown={startResize} title="Drag to resize" />
       <div className="detail-header">
@@ -122,6 +162,22 @@ export function DetailPanel() {
           <span className="detail-identifier">{issue.identifier}</span>{' '}
           {issue.title}
         </h2>
+        <button
+          className="icon-only"
+          onClick={cycleTextSize}
+          title={`Text size: ${textSize} (click to cycle sm/md/lg)`}
+          aria-label="Cycle text size"
+        >
+          <Type size={14} />
+        </button>
+        <button
+          className="icon-only"
+          onClick={toggleWide}
+          title={wideMode ? 'Collapse to side panel' : 'Expand to wide view'}
+          aria-label={wideMode ? 'Collapse to side panel' : 'Expand to wide view'}
+        >
+          {wideMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+        </button>
         <button
           className="icon-only detail-close"
           onClick={() => setFocusedId(null)}

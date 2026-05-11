@@ -651,6 +651,35 @@ a:hover { text-decoration: underline; }
 }
 .detail-source-link svg { opacity: 0.7; }
 
+/* Wide mode — pops the panel out of the flex flow into a fixed overlay
+   on the right. The canvas behind it stays interactive (no backdrop) so
+   you can still pan/click underneath. Drag-to-resize handle hidden
+   because width is fixed in this mode. */
+.detail-panel.is-wide {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: min(900px, 70vw) !important;
+  z-index: 50;
+  box-shadow: -8px 0 24px color-mix(in srgb, var(--fg) 30%, transparent);
+}
+.detail-panel.is-wide .resize-handle { display: none; }
+
+/* Text size — independent from the global font-size setting. Redefines
+   the --fs-* tokens within .detail-panel scope so every child rule that
+   reads them (h2, h3, .row, .detail-identifier, ...) scales together. */
+.detail-panel.detail-text-sm {
+  --fs-base: 12px;
+  --fs-meta: 10px;
+  --fs-title: 14px;
+}
+.detail-panel.detail-text-lg {
+  --fs-base: 15px;
+  --fs-meta: 13px;
+  --fs-title: 19px;
+}
+
 /* Multi-spec warning callout — bordered, soft amber background, body
    text uses --fg so it remains readable in both themes. The accent
    lives on the border + leading icon, not on the prose. */
