@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useViewStore } from '../store/viewStore'
+import { localizeKey } from '../lib/platform'
 import { ModalHeader } from './ModalHeader'
 
 // Single source of truth for the keyboard shortcuts list. Add entries here as
@@ -22,7 +23,7 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ['?'], description: 'Show this cheat sheet', group: 'Navigation' },
   { keys: ['n'], description: 'Toggle workspace notes — reopens to the last view (grid or last note). Esc closes the modal entirely; use ← Back inside the editor to return to grid', group: 'Notes' },
   { keys: ['Cmd', 'E'], description: 'Toggle Edit / Preview inside an open note', group: 'Notes' },
-  { keys: ['Delete'], description: '← Back to grid from the editor (Backspace on non-Mac keyboards). Ignored while typing in the textarea', group: 'Notes' },
+  { keys: ['Delete'], description: '← Back to grid from the editor. Ignored while typing in the textarea', group: 'Notes' },
 
   { keys: ['Click'], description: 'Focus an issue (auto-opens detail when toolbar Detail toggle is on)', group: 'Selection' },
   { keys: ['Space'], description: 'Open detail panel for focused issue (ad-hoc, works when auto-open is off)', group: 'Selection' },
@@ -125,7 +126,7 @@ function ShortcutRow({ keys, description }: { keys: string[]; description: strin
         {keys.map((k, i) => (
           <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             {i > 0 && <span style={{ color: 'var(--fg-muted)' }}>+</span>}
-            <Key>{k}</Key>
+            <Key>{localizeKey(k)}</Key>
           </span>
         ))}
       </div>
