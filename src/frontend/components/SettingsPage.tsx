@@ -179,6 +179,7 @@ export function SettingsPage() {
       <div className="modal-backdrop" onClick={() => close(false)}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <ModalHeader title="Settings" onClose={() => close(false)} />
+        <div className="settings-body">
 
         <h4>Display</h4>
         <label style={{ display: 'block', marginBottom: 8 }}>
@@ -346,7 +347,8 @@ export function SettingsPage() {
           Backend: {env.backend as string}
         </div>
 
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
+        </div>
+        <div className="settings-footer">
           <button onClick={() => close(false)}>Cancel</button>
           <button className="primary" onClick={save}>Save</button>
         </div>

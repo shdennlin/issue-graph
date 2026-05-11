@@ -1003,6 +1003,36 @@ a:hover { text-decoration: underline; }
   font-weight: 600;
 }
 
+/* Settings page sub-section headings — each <h4> inside .settings-body
+   acts as a section divider (Display / Backend / Annotations / About).
+   Hangs an underline so visual hierarchy is clear without restructuring
+   the existing JSX into nested sections. */
+.settings-body h4 {
+  margin: 18px 0 10px;
+  padding-bottom: 6px;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--fg);
+  border-bottom: 1px solid color-mix(in srgb, var(--fg-muted) 14%, transparent);
+}
+.settings-body h4:first-of-type {
+  margin-top: 0;
+}
+
+/* Footer action row pinned right (Cancel / Save). Sticky so the Save
+   button stays reachable while the user scrolls a long Settings dialog. */
+.settings-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--fg-muted) 14%, transparent);
+  position: sticky;
+  bottom: -16px; /* offset the modal's 16px padding so the border hits the edge */
+  background: var(--bg);
+}
+
 .onboarding {
   max-width: 600px;
   margin: 80px auto;
