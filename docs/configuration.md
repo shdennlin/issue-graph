@@ -1,3 +1,5 @@
+**English** | [繁體中文](configuration.zh-TW.md)
+
 # Customizing labels and icons
 
 `issue-graph` uses Linear labels to group issues into buckets (Mix view) and pick leading icons. Two levels of customization are available.

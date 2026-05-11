@@ -42,7 +42,7 @@ open http://localhost:31415
 | `LINEAR_API_KEY` | 個人 API 金鑰 — Linear → Settings → API → Create Personal API Key |
 
 其他都有合理預設值。`.env.example` 刻意精簡；
-進階的工作區設定檔細節請見 [Advanced workspace profiles](docs/advanced-workspaces.md)。
+進階的工作區設定檔細節請見 [Advanced workspace profiles](docs/advanced-workspaces.zh-TW.md)。
 
 ### 多個 Linear 工作區
 
@@ -78,7 +78,7 @@ data/workspaces/client_a/graph.db
 `重設目前工作區資料` 只會清除目前作用中的設定檔快取。其他工作區資料庫不會被動到。
 
 關於設定檔命名、Docker mount，以及多個 repo 的設計文件掃描，請見
-[Advanced workspace profiles](docs/advanced-workspaces.md)。
+[Advanced workspace profiles](docs/advanced-workspaces.zh-TW.md)。
 
 ### 設計文件整合（選用）
 
@@ -92,7 +92,7 @@ data/workspaces/client_a/graph.db
 > `spec_dir`（預設為 `docs/specs/`，過渡期會 fallback 到 `openspec/`）。其他格式
 > （ADR、自訂佈局）不會自動偵測。
 
-請見 **[Design-doc integration](docs/design-doc-integration.md)** 了解完整設定、
+請見 **[Design-doc integration](docs/design-doc-integration.zh-TW.md)** 了解完整設定、
 三種連結策略（frontmatter / 資料夾名稱 / `Linear: PROJ-123` 行），以及 Coverage 報表流程。
 
 ![設計文件檢視 — 只顯示有連結提案的議題，每個都有從 proposal 的 tasks.md 推算的進度條](docs/screenshots/designdoc.png)
@@ -113,7 +113,7 @@ Service worker 只會預先快取 app shell（HTML / CSS / JS / icons）。Linea
 `issue-graph` 會自動偵測常見的 Linear 標籤群組名稱（分組用：
 `service|component|owner|module|team|area|domain`，圖示用：`type|kind|category`）。
 若使用不同命名規則或想透過 `label-schema.yaml` 完整控制，請見
-**[Customizing labels and icons](docs/configuration.md)**。
+**[Customizing labels and icons](docs/configuration.zh-TW.md)**。
 
 ## 備份策略
 
@@ -129,7 +129,7 @@ Service worker 只會預先快取 app shell（HTML / CSS / JS / icons）。Linea
 - **可插拔的後端轉接器**（`src/backend/sources/`） — v1 為 Linear；未來可能有 Jira / Plane / GitHub Projects。
 - **可插拔的設計文件轉接器**（`src/backend/designdoc/`） — v1 為 [Spectra](https://spectra.5xcamp.us/) / [OpenSpec](https://openspec.dev/)。
 
-完整設計理念請見 [`docs/PRD.md`](docs/PRD.md)。
+完整設計理念請見 [`docs/PRD.md`](docs/PRD.md)（英文）。
 
 ## 後端
 
@@ -182,12 +182,12 @@ bun run build      # 正式版建置 → dist/ + build/
 ## 疑難排解
 
 常見問題（例如更換 `LINEAR_API_KEY` 後快取陳舊、空白頁重設等）請見
-**[Troubleshooting](docs/troubleshooting.md)**。
+**[Troubleshooting](docs/troubleshooting.zh-TW.md)**。
 
 ## Roadmap
 
-請見 [ROADMAP.md](ROADMAP.md) 了解規劃中、可能會做、以及明確不在範圍內的項目。
-原始的工程 PRD 為了歷史脈絡保留在 [`docs/PRD.md`](docs/PRD.md)。
+請見 [ROADMAP.md](ROADMAP.zh-TW.md) 了解規劃中、可能會做、以及明確不在範圍內的項目。
+原始的工程 PRD 為了歷史脈絡保留在 [`docs/PRD.md`](docs/PRD.md)（英文）。
 
 ## 授權
 
