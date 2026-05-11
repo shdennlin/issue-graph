@@ -624,6 +624,54 @@ a:hover { text-decoration: underline; }
 .detail-panel .row { display: flex; gap: var(--sp-2); padding: 2px 0; }
 .detail-panel .row .k { color: var(--fg-muted); min-width: 80px; }
 
+/* Detail-panel header — title on the left flex, close button on the right. */
+.detail-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.detail-header h2 { flex: 1; margin: 0; }
+.detail-identifier {
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+}
+.detail-close {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* "Open in source" link — pairs the text with a small ExternalLink icon
+   that sits on the baseline. */
+.detail-source-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-meta);
+}
+.detail-source-link svg { opacity: 0.7; }
+
+/* Multi-spec warning callout — bordered, soft amber background, body
+   text uses --fg so it remains readable in both themes. The accent
+   lives on the border + leading icon, not on the prose. */
+.detail-spec-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--fg);
+  font-size: var(--fs-meta);
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--warn);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+}
+.detail-spec-warn-icon {
+  color: var(--warn);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
 .issue-node {
   background: var(--node-bg);
   border: 1px solid var(--node-border);

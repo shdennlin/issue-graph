@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AlertTriangle, ExternalLink, X } from 'lucide-react'
 import { marked } from 'marked'
 import type { AnnotationDTO, NormalizedIssue } from '@shared/types.js'
 import { useGraphStore } from '../store/graphStore'
@@ -116,16 +117,23 @@ export function DetailPanel() {
       style={{ width, flexShrink: 0 }}
     >
       <div className="resize-handle resize-handle-left" onMouseDown={startResize} title="Drag to resize" />
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-        <h2 style={{ flex: 1 }}>
-          <span style={{ color: 'var(--fg-muted)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-            {issue.identifier}
-          </span>{' '}
+      <div className="detail-header">
+        <h2>
+          <span className="detail-identifier">{issue.identifier}</span>{' '}
           {issue.title}
         </h2>
-        <button onClick={() => setFocusedId(null)} title="Close">×</button>
+        <button
+          className="icon-only detail-close"
+          onClick={() => setFocusedId(null)}
+          title="Close (Esc)"
+          aria-label="Close detail panel"
+        >
+          <X size={16} />
+        </button>
       </div>
-      <a href={issue.url} target="_blank" rel="noreferrer">Open in source ↗</a>
+      <a className="detail-source-link" href={issue.url} target="_blank" rel="noreferrer">
+        Open in source <ExternalLink size={12} />
+      </a>
 
       <div className="section">
         <div className="row"><span className="k">State</span><span>{stateLabel(issue.state.type)}</span></div>
@@ -145,27 +153,13 @@ export function DetailPanel() {
         <div className="section">
           <h3>Design docs ({docs.length})</h3>
           {docs.length > 1 && (
-            <div
-              style={{
-                // Body text uses --fg so it inherits the active theme's
-                // foreground (dark on light bg, light on dark bg). The
-                // amber accent lives on the border + ⚠ icon, not the
-                // text itself — using a fixed amber-fg color (the prior
-                // var(--warn-fg) which wasn't defined and fell back to
-                // dark amber) was unreadable on dark backgrounds.
-                color: 'var(--fg)',
-                fontSize: 12,
-                marginBottom: 8,
-                padding: '6px 8px',
-                border: '1px solid var(--warn)',
-                borderRadius: 4,
-                background: 'rgba(245, 158, 11, 0.10)',
-              }}
-            >
-              <span style={{ color: 'var(--warn)', fontWeight: 700, marginRight: 4 }}>⚠</span>
-              This issue spans <strong>{docs.length}</strong> design-doc changes (specs).
-              A spec is one delivery batch — an issue covering multiple specs is usually
-              too large for a single batch. Consider splitting it into per-spec sub-issues.
+            <div className="detail-spec-warn">
+              <AlertTriangle size={14} className="detail-spec-warn-icon" />
+              <span>
+                This issue spans <strong>{docs.length}</strong> design-doc changes (specs).
+                A spec is one delivery batch — an issue covering multiple specs is usually
+                too large for a single batch. Consider splitting it into per-spec sub-issues.
+              </span>
             </div>
           )}
           {docs.map((d) => (
