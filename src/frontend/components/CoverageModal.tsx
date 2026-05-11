@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { DesignDocCoverage } from '@shared/types.js'
 import { useViewStore } from '../store/viewStore'
 import { api } from '../lib/api'
+import { ModalHeader } from './ModalHeader'
 
 type StrategyFilter = 'all' | 'linked' | 'unlinked'
 
@@ -29,10 +30,7 @@ export function CoverageModal() {
   return (
     <div className="modal-backdrop" onClick={() => close(false)}>
       <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 900 }}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
-          <h3 style={{ flex: 1, margin: 0 }}>Design-doc Coverage</h3>
-          <button onClick={() => close(false)}>×</button>
-        </div>
+        <ModalHeader title="Design-doc Coverage" onClose={() => close(false)} />
 
         {!data && <p style={{ color: 'var(--fg-muted)' }}>Loading…</p>}
 

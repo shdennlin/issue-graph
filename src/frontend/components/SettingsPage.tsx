@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useViewStore } from '../store/viewStore'
 import { api, type SettingsResponse } from '../lib/api'
+import { ModalHeader } from './ModalHeader'
 
 export function SettingsPage() {
   const open = useViewStore((s) => s.settingsOpen)
@@ -177,7 +178,7 @@ export function SettingsPage() {
       {overlay}
       <div className="modal-backdrop" onClick={() => close(false)}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3 style={{ marginTop: 0 }}>Settings</h3>
+        <ModalHeader title="Settings" onClose={() => close(false)} />
 
         <h4>Display</h4>
         <label style={{ display: 'block', marginBottom: 8 }}>

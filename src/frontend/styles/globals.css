@@ -883,6 +883,21 @@ a:hover { text-decoration: underline; }
   box-shadow: var(--shadow-md);
 }
 
+/* Shared modal header — used by all 4 modals via the <ModalHeader> helper.
+   Title takes the available space; close button sits flush right. */
+.modal-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.modal-title {
+  flex: 1;
+  margin: 0;
+  font-size: var(--fs-title);
+  font-weight: 600;
+}
+
 .onboarding {
   max-width: 600px;
   margin: 80px auto;

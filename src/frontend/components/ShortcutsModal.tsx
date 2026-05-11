@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useViewStore } from '../store/viewStore'
+import { ModalHeader } from './ModalHeader'
 
 // Single source of truth for the keyboard shortcuts list. Add entries here as
 // new shortcuts ship — the modal renders directly from this array, grouped
@@ -85,10 +86,7 @@ export function ShortcutsModal() {
   return (
     <div className="modal-backdrop" onClick={close}>
       <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
-        <h3 style={{ marginTop: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          Keyboard shortcuts
-          <button onClick={close} title="Close (Esc)" style={{ fontSize: 14 }}>×</button>
-        </h3>
+        <ModalHeader title="Keyboard shortcuts" onClose={close} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {grouped.map(({ group, items }) => (
             <section key={group}>
