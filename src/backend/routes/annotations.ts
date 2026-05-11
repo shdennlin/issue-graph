@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { getDb } from '../db.js'
+import { originAllowed } from '../lib/http.js'
 import type { AnnotationDTO } from '@shared/types.js'
 
 const TARGETS = ['issue', 'edge', 'bucket'] as const
@@ -14,18 +15,6 @@ const CreateSchema = z.object({
 const PatchSchema = z.object({
   body: z.string().min(1).max(64 * 1024),
 })
-
-function originAllowed(c: any): boolean {
-  const origin = c.req.header('origin')
-  const host = c.req.header('host')
-  if (!origin) return true // same-origin form posts have no Origin
-  try {
-    const u = new URL(origin)
-    return u.host === host
-  } catch {
-    return false
-  }
-}
 
 export const annotationRoutes = new Hono()
 

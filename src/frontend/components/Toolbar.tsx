@@ -4,6 +4,7 @@ import {
   Camera,
   Eye,
   EyeOff,
+  FileText,
   Keyboard,
   Loader2,
   Monitor,
@@ -40,6 +41,7 @@ export function Toolbar() {
   const setSettingsOpen = useViewStore((s) => s.setSettingsOpen)
   const setCoverageOpen = useViewStore((s) => s.setCoverageOpen)
   const setShortcutsOpen = useViewStore((s) => s.setShortcutsOpen)
+  const setNotesOpen = useViewStore((s) => s.setNotesOpen)
   const filterPanelOpen = useViewStore((s) => s.filterPanelOpen)
   const toggleFilterPanel = useViewStore((s) => s.toggleFilterPanel)
   const detailPanelAutoOpen = useViewStore((s) => s.detailPanelAutoOpen)
@@ -277,6 +279,14 @@ export function Toolbar() {
             </div>
           )}
         </div>
+        <button
+          className="icon-only"
+          onClick={() => setNotesOpen(true)}
+          title="Workspace notes (n)"
+          aria-label="Workspace notes"
+        >
+          <FileText size={ICON_SIZE} />
+        </button>
         <button
           className={`icon-text${detailPanelAutoOpen ? ' active' : ''}`}
           onClick={toggleDetailPanelAutoOpen}

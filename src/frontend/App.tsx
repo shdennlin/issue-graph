@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useRef } from 'react'
 import { useGraphStore } from './store/graphStore'
+import { useNotesStore } from './store/notesStore'
 import { useSchemaStore } from './store/schemaStore'
 import { useViewStore } from './store/viewStore'
 import { makeTabId, useWorkspaceStore } from './store/workspaceStore'
@@ -26,6 +27,7 @@ const SyncHistoryModal = lazy(() =>
 const CoverageModal = lazy(() => import('./components/CoverageModal').then((m) => ({ default: m.CoverageModal })))
 const SettingsPage = lazy(() => import('./components/SettingsPage').then((m) => ({ default: m.SettingsPage })))
 const ShortcutsModal = lazy(() => import('./components/ShortcutsModal').then((m) => ({ default: m.ShortcutsModal })))
+const NotesModal = lazy(() => import('./components/notes/NotesModal').then((m) => ({ default: m.NotesModal })))
 
 export function App() {
   useTheme()
@@ -36,6 +38,7 @@ export function App() {
   const error = useGraphStore((s) => s.error)
   const loadGraph = useGraphStore((s) => s.load)
   const loadSchema = useSchemaStore((s) => s.load)
+  const loadNotes = useNotesStore((s) => s.load)
   const focusedId = useViewStore((s) => s.focusedId)
   const filterPanelOpen = useViewStore((s) => s.filterPanelOpen)
   const detailPanelOpen = useViewStore((s) => s.detailPanelOpen)
@@ -43,6 +46,7 @@ export function App() {
   const coverageOpen = useViewStore((s) => s.coverageOpen)
   const settingsOpen = useViewStore((s) => s.settingsOpen)
   const shortcutsOpen = useViewStore((s) => s.shortcutsOpen)
+  const notesOpen = useViewStore((s) => s.notesOpen)
 
   // Bootstrap step 1 — resolve this tab's workspace + tab list BEFORE any
   // graph/schema calls. The fetch helpers in lib/api.ts inject `?w=` from
@@ -168,7 +172,10 @@ export function App() {
     } else {
       loadGraph().then(() => loadSchema())
     }
-  }, [initialized, activeTabId, currentWorkspaceId, loadGraph, loadSchema, refetchSilent])
+    // Notes are workspace-scoped and stored independently from graph — load
+    // them on every workspace/tab switch so the modal shows the right set.
+    loadNotes()
+  }, [initialized, activeTabId, currentWorkspaceId, loadGraph, loadSchema, loadNotes, refetchSilent])
 
   // Background sync poller. After the first load, periodically check whether
   // the backend's TTL-driven bg sync produced fresher data, and if so swap
@@ -279,7 +286,7 @@ export function App() {
         // without losing the focused issue (graph-first workflow), second
         // Esc unfocuses. Most apps with a side detail panel work this way.
         const s = useViewStore.getState()
-        const modalOpen = s.settingsOpen || s.syncHistoryOpen || s.coverageOpen || s.shortcutsOpen
+        const modalOpen = s.settingsOpen || s.syncHistoryOpen || s.coverageOpen || s.shortcutsOpen || s.notesOpen
         if (modalOpen) return
         if (s.inlineSearch.open) {
           s.closeInlineSearch()
@@ -365,6 +372,20 @@ export function App() {
         if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
         e.preventDefault()
         useViewStore.getState().setShortcutsOpen(true)
+        return
+      }
+      // 'n' — toggle the workspace notes modal. Same input-focus guards as
+      // other letter shortcuts. When the modal is closed, pressing n reopens
+      // it on whatever the user was last viewing (grid OR a specific note's
+      // editor). Use the in-modal Back / Esc to peel editor → grid.
+      if (e.key === 'n') {
+        if (e.metaKey || e.ctrlKey || e.altKey) return
+        const target = e.target as HTMLElement | null
+        const tag = target?.tagName?.toLowerCase()
+        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        e.preventDefault()
+        const s = useViewStore.getState()
+        s.setNotesOpen(!s.notesOpen)
         return
       }
       // 'r' — toggle the Related-edges overlay (dependency view only). The
@@ -489,6 +510,7 @@ export function App() {
         {coverageOpen && <CoverageModal />}
         {settingsOpen && <SettingsPage />}
         {shortcutsOpen && <ShortcutsModal />}
+        {notesOpen && <NotesModal />}
       </Suspense>
       <ContextMenu />
     </div>

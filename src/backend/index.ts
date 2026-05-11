@@ -13,6 +13,7 @@ import { issueRoutes } from './routes/issue.js'
 import { labelsRoutes } from './routes/labels.js'
 import { healthRoutes } from './routes/health.js'
 import { annotationRoutes } from './routes/annotations.js'
+import { notesRoutes } from './routes/notes.js'
 import { settingsRoutes } from './routes/settings.js'
 import { snapshotRoutes } from './routes/snapshots.js'
 import { exportRoutes } from './routes/exportRoutes.js'
@@ -70,6 +71,7 @@ export function createApp(): Hono {
   app.route('/', issueRoutes)
   app.route('/', labelsRoutes)
   app.route('/', annotationRoutes)
+  app.route('/', notesRoutes)
   app.route('/', settingsRoutes)
   app.route('/', snapshotRoutes)
   app.route('/', exportRoutes)

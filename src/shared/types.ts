@@ -141,6 +141,18 @@ export interface AnnotationDTO {
   updatedAt: number
 }
 
+export interface NoteDTO {
+  id: number
+  /** Raw markdown. Title is derived from the first non-empty line at render time. */
+  body: string
+  /** Lower values sort first. Negative values allowed — new notes inserted at MIN-1. */
+  sortOrder: number
+  /** Archived notes are hidden from the default grid; recoverable via Restore. */
+  archived: boolean
+  createdAt: number
+  updatedAt: number
+}
+
 export interface GraphData {
   issues: NormalizedIssue[]
   labels: NormalizedLabel[]
