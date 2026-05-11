@@ -256,48 +256,86 @@ function CanvasInner() {
     )
   }, [rf])
   useEffect(() => {
-    // Restore the snapshotted viewport first if loadTab queued one.
-    // setViewport doesn't depend on layout — but we still wait for
-    // measuredHeights so it lands AFTER ReactFlow's initial fitView
-    // (triggered by the `fitView` prop on mount/remount), which would
-    // otherwise overwrite us.
-    const restoreVp = pendingViewportRestoreRef.current
-    if (restoreVp && measuredHeights) {
-      pendingViewportRestoreRef.current = null
-      // Also discard any pending fit queued AFTER the bridge cleared it
-      // — Producer 2 (view switch) re-arms it when the restored tab's
-      // activeView differs, and we don't want it to fire on the next
-      // unrelated consumer trigger.
-      pendingFitViewRef.current = null
-      rf.setViewport(restoreVp, { duration: 0 })
-      return
-    }
-    if (!pendingFitViewRef.current) return
     if (!measuredHeights) return  // wait until layout has settled
-    const { padding, preserveFocus } = pendingFitViewRef.current
-    pendingFitViewRef.current = null
-    // Re-layout flow: if a node is focused, recenter on it instead of
-    // framing the whole graph. After dagre re-runs, the focused issue may
-    // have moved across the canvas — fitView would yank the camera to
-    // wherever the new bounding box happens to be, losing the user's
-    // visual anchor. setCenter on the focused node keeps "what I was
-    // looking at" fixed while everything around it reflows.
-    if (preserveFocus && focusedId) {
+
+    const fitReq = pendingFitViewRef.current
+    const restoreVp = pendingViewportRestoreRef.current
+    if (!fitReq && !restoreVp) return
+
+    // Priority: focused-issue setCenter > viewport-restore > fitView.
+    //
+    // Why focus wins over viewport-restore: when the user has explicitly
+    // focused an issue (URL ?focus=X, click, etc.) and then triggers
+    // something that queues a fit (F5 with focusedId persisted, view
+    // switch, chain exit, ...), "show me that issue" is a stronger
+    // intent than "where I was panned before". Without this priority,
+    // F5 was landing the camera at the last-saved viewport even when
+    // the user clearly wanted to be back on their focused issue.
+    //
+    // Gated on `fitReq?.preserveFocus` so plain focus changes (clicking
+    // a different issue) don't yank the camera — only producers that
+    // explicitly opt in (cold start, view switch, layout bump) take the
+    // focus-priority path.
+    //
+    // CRITICAL: compute positionAbsolute from our local `nodes` array,
+    // NOT via rf.getNode(). RF's internal store lags one render frame
+    // behind the nodes prop we just passed in — when the consumer fires
+    // right after a view switch or layout bump, rf.getNode() can return
+    // stale positions from the *previous* layout, putting setCenter at
+    // the wrong coords. Our local nodes are the freshest source of
+    // truth because they're in the effect's closure.
+    //
+    // For Mix/Project views, the focused issue is a child of its
+    // bucket/project container — its `position` is RELATIVE to the
+    // parent. We resolve absolute coords by adding the parent's
+    // position to the child's. Top-level nodes (Dependency / Design-doc
+    // views) have no parentNode, so position is already absolute.
+    if (fitReq?.preserveFocus && focusedId) {
       const node = nodes.find((n) => n.id === focusedId)
       if (node?.position) {
+        let absX = node.position.x
+        let absY = node.position.y
+        if (node.parentNode) {
+          const parent = nodes.find((n) => n.id === node.parentNode)
+          if (parent?.position) {
+            absX += parent.position.x
+            absY += parent.position.y
+          }
+        }
         const w = (node.width ?? 320) as number
         const h = (node.height ?? 110) as number
-        rf.setCenter(node.position.x + w / 2, node.position.y + h / 2, {
+        pendingFitViewRef.current = null
+        pendingViewportRestoreRef.current = null
+        rf.setCenter(absX + w / 2, absY + h / 2, {
           zoom: rf.getZoom(),
           duration: 600,
         })
         return
       }
     }
-    rf.fitView({ duration: 600, padding, minZoom: 0.8 })
+
+    // No focus, or focused issue isn't in this view's visible set —
+    // fall through to viewport-restore (e.g. tab switch / F5 / chain
+    // exit) if one is queued.
+    if (restoreVp) {
+      pendingFitViewRef.current = null
+      pendingViewportRestoreRef.current = null
+      rf.setViewport(restoreVp, { duration: 0 })
+      return
+    }
+
+    // Plain fitView — cold start with no focus, view switch with no
+    // focus, etc.
+    if (fitReq) {
+      pendingFitViewRef.current = null
+      rf.fitView({ duration: 600, padding: fitReq.padding, minZoom: 0.8 })
+    }
   }, [measuredHeights, rf, focusedId, nodes])
 
-  // Producer 1: first non-empty load.
+  // Producer 1: first non-empty load. preserveFocus so that F5 / cold
+  // start with a focusedId in the URL (or restored from tabStateStore)
+  // lands the camera on that issue rather than the whole-graph fitView.
+  // Falls through to plain fitView when no issue is focused.
   const hasFitOnceRef = useRef(false)
   useEffect(() => {
     if (nodes.length === 0) return
@@ -308,13 +346,19 @@ function CanvasInner() {
     // canonical mutable-effect-state escape hatch.
     // eslint-disable-next-line react-hooks/immutability
     hasFitOnceRef.current = true
-    pendingFitViewRef.current = { padding: 0.1 }
+    pendingFitViewRef.current = { padding: 0.1, preserveFocus: true }
   }, [nodes.length])
 
-  // Producer 2: view switch (e.g. dependency → mix).
+  // Producer 2: view switch (e.g. dependency → mix). preserveFocus so the
+  // user stays anchored on the issue they were just looking at — switching
+  // view shouldn't yank the camera to frame the whole graph if they'd
+  // already drilled into a specific node. Falls through to plain fitView
+  // when no issue is focused, or when the focused issue isn't visible in
+  // the new view (e.g. focused issue has no design doc → not in
+  // design-doc view).
   useEffect(() => {
     if (nodes.length === 0) return
-    pendingFitViewRef.current = { padding: 0.1 }
+    pendingFitViewRef.current = { padding: 0.1, preserveFocus: true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView])
 
