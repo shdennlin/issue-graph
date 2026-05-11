@@ -22,6 +22,7 @@ import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { views } from '../views'
 import { api } from '../lib/api'
+import { formatShortcut } from '../lib/platform'
 import { computeChain } from '../views/chain'
 // Density + theme + search live here; Size moved to Settings → Display.
 
@@ -247,7 +248,7 @@ export function Toolbar() {
                 onClick={() => { setOverflowOpen(false); screenshot() }}
               >
                 <Camera size={14} /> Screenshot
-                <span className="toolbar-overflow-hint">⌘⇧S</span>
+                <span className="toolbar-overflow-hint">{formatShortcut(['Cmd', 'Shift', 'S'])}</span>
               </button>
               <button
                 type="button"
