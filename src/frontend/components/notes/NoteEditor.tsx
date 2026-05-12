@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Edit3, Eye } from 'lucide-react'
 import { useNotesStore } from '../../store/notesStore'
 import { notesApi } from '../../lib/notesApi'
-import { formatShortcut } from '../../lib/platform'
+import { formatShortcut, NOTE_TOGGLE_KEYS } from '../../lib/platform'
 import { formatAbsolute, formatRelative } from '../../lib/relativeTime'
 import { NotePreview } from './NotePreview'
 
@@ -115,13 +115,19 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
     if (mode === 'edit') textareaRef.current?.focus()
   }, [mode])
 
-  // Cmd+E toggles edit/preview. Backspace (the key labeled "delete" on Mac)
-  // acts as ← Back when focus is NOT inside a text input — so typing keeps
-  // working but pressing Backspace anywhere else navigates one level back to
-  // the grid.
+  // Cmd+E and Cmd+/ both toggle edit/preview. We accept both because Cmd+E
+  // is the conventional binding but gets swallowed by the macOS Edit menu's
+  // "Use Selection for Find" accelerator in Chrome PWA windows — the
+  // keydown never reaches JS. Cmd+/ matches no menu accelerator, so it
+  // works everywhere. The displayed hint (see NOTE_TOGGLE_KEYS in
+  // ../../lib/platform) switches between the two based on standalone mode.
+  // Backspace (the key labeled "delete" on Mac) acts as ← Back when focus
+  // is NOT inside a text input — so typing keeps working but pressing
+  // Backspace anywhere else navigates one level back to the grid.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'e') {
+      const mod = e.metaKey || e.ctrlKey
+      if (mod && !e.shiftKey && (e.key.toLowerCase() === 'e' || e.key === '/')) {
         e.preventDefault()
         setMode((m) => (m === 'edit' ? 'preview' : 'edit'))
         return
@@ -173,7 +179,7 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
             className={`icon-text${mode === 'edit' ? ' active' : ''}`}
             aria-selected={mode === 'edit'}
             onClick={() => setMode('edit')}
-            title={`Edit (${formatShortcut(['Cmd', 'E'])})`}
+            title={`Edit (${formatShortcut(NOTE_TOGGLE_KEYS)})`}
           >
             <Edit3 size={14} /> Edit
           </button>
@@ -183,7 +189,7 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
             className={`icon-text${mode === 'preview' ? ' active' : ''}`}
             aria-selected={mode === 'preview'}
             onClick={() => setMode('preview')}
-            title={`Preview (${formatShortcut(['Cmd', 'E'])})`}
+            title={`Preview (${formatShortcut(NOTE_TOGGLE_KEYS)})`}
           >
             <Eye size={14} /> Preview
           </button>

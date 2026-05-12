@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useViewStore } from '../store/viewStore'
-import { localizeKey } from '../lib/platform'
+import { localizeKey, NOTE_TOGGLE_KEYS } from '../lib/platform'
 import { ModalHeader } from './ModalHeader'
 import { useT, type DictKey } from '../i18n'
 
@@ -25,7 +25,7 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ['Esc'], descriptionKey: 'shortcuts.items.esc', group: 'Navigation' },
   { keys: ['?'], descriptionKey: 'shortcuts.items.cheatsheet', group: 'Navigation' },
   { keys: ['n'], descriptionKey: 'shortcuts.items.notesToggle', group: 'Notes' },
-  { keys: ['Cmd', 'E'], descriptionKey: 'shortcuts.items.noteEditPreview', group: 'Notes' },
+  { keys: NOTE_TOGGLE_KEYS, descriptionKey: 'shortcuts.items.noteEditPreview', group: 'Notes' },
   { keys: ['Delete'], descriptionKey: 'shortcuts.items.notesBack', group: 'Notes' },
 
   { keys: ['Click'], descriptionKey: 'shortcuts.items.click', group: 'Selection' },

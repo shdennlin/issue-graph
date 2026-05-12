@@ -8,9 +8,27 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 async function loadFor(
   platform: string,
-  opts: { search?: string; localStorage?: Record<string, string> } = {},
+  opts: {
+    search?: string
+    localStorage?: Record<string, string>
+    standalone?: boolean
+    iosStandalone?: boolean
+  } = {},
 ): Promise<typeof import('./platform')> {
-  vi.stubGlobal('navigator', { platform })
+  vi.stubGlobal('navigator', { platform, standalone: opts.iosStandalone === true })
+  // The module reads `window.matchMedia(...)`. Stub it so display-mode
+  // detection is deterministic per test.
+  ;(window as unknown as { matchMedia: (q: string) => MediaQueryList }).matchMedia = (q) =>
+    ({
+      matches: q === '(display-mode: standalone)' ? opts.standalone === true : false,
+      media: q,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList
   // Reset URL + localStorage before each load so prior tests don't bleed in.
   window.history.replaceState(null, '', `/${opts.search ?? ''}`)
   window.localStorage.clear()
@@ -112,5 +130,39 @@ describe('platform override (?platform= / localStorage)', () => {
   it('unknown override value falls back to navigator detection', async () => {
     const m = await loadFor('MacIntel', { search: '?platform=bogus' })
     expect(m.isMac).toBe(true)
+  })
+})
+
+describe('platform.isStandalone / NOTE_TOGGLE_KEYS', () => {
+  it('detects standalone via display-mode: standalone media query', async () => {
+    const m = await loadFor('MacIntel', { standalone: true })
+    expect(m.isStandalone).toBe(true)
+    // In a PWA window we advertise Cmd+/ instead of Cmd+E, since macOS
+    // Edit→Find→"Use Selection for Find" steals plain Cmd+E.
+    expect(m.NOTE_TOGGLE_KEYS).toEqual(['Cmd', '/'])
+  })
+  it('detects iOS Safari home-screen install via navigator.standalone', async () => {
+    const m = await loadFor('iPhone', { iosStandalone: true })
+    expect(m.isStandalone).toBe(true)
+    expect(m.NOTE_TOGGLE_KEYS).toEqual(['Cmd', '/'])
+  })
+  it('treats regular browser tab as non-standalone', async () => {
+    const m = await loadFor('MacIntel')
+    expect(m.isStandalone).toBe(false)
+    expect(m.NOTE_TOGGLE_KEYS).toEqual(['Cmd', 'E'])
+  })
+  it('?display=standalone forces standalone for testing', async () => {
+    const m = await loadFor('MacIntel', { search: '?display=standalone' })
+    expect(m.isStandalone).toBe(true)
+    expect(m.NOTE_TOGGLE_KEYS).toEqual(['Cmd', '/'])
+  })
+  it('?display=browser overrides true standalone (useful in dev)', async () => {
+    const m = await loadFor('MacIntel', { search: '?display=browser', standalone: true })
+    expect(m.isStandalone).toBe(false)
+    expect(m.NOTE_TOGGLE_KEYS).toEqual(['Cmd', 'E'])
+  })
+  it('ig-display localStorage applies when no URL param is set', async () => {
+    const m = await loadFor('MacIntel', { localStorage: { 'ig-display': 'standalone' } })
+    expect(m.isStandalone).toBe(true)
   })
 })

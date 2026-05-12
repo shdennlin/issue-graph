@@ -39,6 +39,51 @@ function detectIsMac(): boolean {
 
 export const isMac = detectIsMac()
 
+/**
+ * `true` when the app is running as an installed PWA (standalone display
+ * mode) rather than a normal browser tab. We expose this because some
+ * shortcuts behave differently in PWA windows — notably, macOS Chrome PWAs
+ * keep the Edit→Find menu's "Use Selection for Find" item, which steals
+ * Cmd+E at the OS level before keydown reaches the page. The note editor
+ * advertises a PWA-friendly alternative (⌘/) when this is `true`.
+ *
+ * QA override (so dev/test can simulate PWA without installing): append
+ * `?display=standalone` (or `browser`) to any URL, or
+ * `localStorage.setItem('ig-display', 'standalone')`.
+ */
+function detectIsStandalone(): boolean {
+  if (typeof window === 'undefined') return false
+  const params = new URLSearchParams(window.location.search)
+  let override = params.get('display')
+  if (!override) {
+    try {
+      override = window.localStorage?.getItem('ig-display') ?? null
+    } catch {
+      /* localStorage may throw in private mode — ignore */
+    }
+  }
+  if (override === 'standalone') return true
+  if (override === 'browser') return false
+  // W3C standard — Chromium / Firefox / Edge installed-app windows.
+  if (window.matchMedia?.('(display-mode: standalone)').matches) return true
+  // iOS Safari "Add to Home Screen" sets this non-standard flag.
+  const iosStandalone = (window.navigator as Navigator & { standalone?: boolean }).standalone
+  return iosStandalone === true
+}
+
+export const isStandalone = detectIsStandalone()
+
+/**
+ * Shortcut for toggling Edit/Preview inside the note editor.
+ *
+ * In a regular browser tab we advertise the conventional `Cmd+E`. In a PWA
+ * window on macOS, Cmd+E is intercepted by the inherited Edit menu's "Use
+ * Selection for Find" item before the keydown reaches JS, so we advertise
+ * `Cmd+/` instead — which collides with no menu accelerator. The handler
+ * itself accepts both; only the *displayed* hint switches.
+ */
+export const NOTE_TOGGLE_KEYS: string[] = isStandalone ? ['Cmd', '/'] : ['Cmd', 'E']
+
 /** Spelled-out modifier name used as the key-cap label in the cheat sheet. */
 export const MOD_KEY: 'Cmd' | 'Ctrl' = isMac ? 'Cmd' : 'Ctrl'
 
