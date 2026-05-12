@@ -2,8 +2,11 @@ import { useEffect, useRef } from 'react'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { toggleChecklistAt } from '../../lib/checklist'
-import { linkifyIssueIds } from '../../lib/issueLinks'
+import { decorateIssueLinksWithStatus, linkifyIssueIds } from '../../lib/issueLinks'
+import { stateLabelFor } from '../../lib/colors'
+import { useGraphStore } from '../../store/graphStore'
 import { useViewStore } from '../../store/viewStore'
+import { useLocale } from '../../i18n'
 
 interface Props {
   body: string
@@ -16,6 +19,7 @@ interface Props {
 
 export function NotePreview({ body, onCloseModal, onBodyChange }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const locale = useLocale()
 
   useEffect(() => {
     const el = containerRef.current
@@ -36,7 +40,18 @@ export function NotePreview({ body, onCloseModal, onBodyChange }: Props) {
       })
     }
     linkifyIssueIds(el)
-  }, [body, onBodyChange])
+    // O(1) lookup map built once per render — cheaper than `find` per anchor
+    // when a note mentions many IDs in a large workspace.
+    const issues = useGraphStore.getState().graph?.data.issues ?? []
+    const stateTypeByIdentifier = new Map(
+      issues.map((i) => [i.identifier, i.state.type] as const),
+    )
+    decorateIssueLinksWithStatus(el, (id) => {
+      const type = stateTypeByIdentifier.get(id)
+      if (!type) return null
+      return { type, label: stateLabelFor(type, locale) }
+    })
+  }, [body, onBodyChange, locale])
 
   function onClick(e: React.MouseEvent<HTMLDivElement>) {
     const target = e.target as HTMLElement

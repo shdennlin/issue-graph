@@ -1,3 +1,5 @@
+import { stateColorVar, stateIcon } from './colors'
+
 /**
  * Linear issue identifier pattern, e.g. `ABC-123`, `PROJ-9`, `MOBILE-1234`.
  * Requires:
@@ -70,5 +72,50 @@ export function linkifyIssueIds(root: HTMLElement): void {
       frag.appendChild(document.createTextNode(text.slice(lastIdx)))
     }
     node.parentNode?.replaceChild(frag, node)
+  }
+}
+
+export interface IssueLinkStatus {
+  /** Linear state-type bucket, e.g. 'started' | 'completed'. Same domain as `stateIcon()`. */
+  type: string
+  /** Already-localised label to render, e.g. 'In Progress'. */
+  label: string
+}
+
+/**
+ * Walk every `a[data-issue-id]` anchor produced by `linkifyIssueIds` and
+ * append an inline status badge (icon + label) when the resolver returns a
+ * status. Anchors whose ID resolves to `null`/`undefined` are left untouched.
+ *
+ * Idempotent — skips anchors that already have a `.issue-status-badge`
+ * sibling, so re-running on the same root (e.g. when `NotePreview`'s effect
+ * re-fires for an unrelated dep) does not duplicate badges.
+ */
+export function decorateIssueLinksWithStatus(
+  root: HTMLElement,
+  resolveStatus: (id: string) => IssueLinkStatus | null | undefined,
+): void {
+  const anchors = root.querySelectorAll<HTMLAnchorElement>('a[data-issue-id]')
+  for (const anchor of anchors) {
+    const id = anchor.getAttribute('data-issue-id')
+    if (!id) continue
+    const next = anchor.nextElementSibling
+    if (next?.classList.contains('issue-status-badge')) continue
+    const status = resolveStatus(id)
+    if (!status) continue
+    const badge = document.createElement('span')
+    badge.className = 'issue-status-badge'
+    badge.setAttribute('data-state-type', status.type)
+    const icon = document.createElement('span')
+    icon.className = 'issue-status-badge-icon'
+    icon.textContent = stateIcon(status.type)
+    icon.style.color = stateColorVar(status.type)
+    icon.setAttribute('aria-hidden', 'true')
+    const label = document.createElement('span')
+    label.className = 'issue-status-badge-label'
+    label.textContent = status.label
+    badge.appendChild(icon)
+    badge.appendChild(label)
+    anchor.insertAdjacentElement('afterend', badge)
   }
 }

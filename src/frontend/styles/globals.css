@@ -1575,6 +1575,28 @@ a:hover { text-decoration: underline; }
 .note-preview a.issue-link:hover {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
+.note-preview .issue-status-badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--fg-muted) 10%, transparent);
+  font-size: 0.85em;
+  font-weight: 500;
+  color: var(--fg-muted);
+  vertical-align: baseline;
+}
+.note-preview .issue-status-badge-icon {
+  /* Color is set inline via stateColorVar() so the glyph picks up the
+     per-state accent hue; the label stays muted for readability. */
+  font-size: 1em;
+  line-height: 1;
+}
+.note-preview .issue-status-badge-label {
+  white-space: nowrap;
+}
 .note-preview img {
   max-width: 100%;
   height: auto;

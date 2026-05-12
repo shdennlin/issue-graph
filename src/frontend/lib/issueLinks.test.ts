@@ -1,6 +1,11 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest'
-import { findIssueIds, isIssueId, linkifyIssueIds } from './issueLinks'
+import {
+  decorateIssueLinksWithStatus,
+  findIssueIds,
+  isIssueId,
+  linkifyIssueIds,
+} from './issueLinks'
 
 function mkDom(html: string): HTMLDivElement {
   const tpl = document.createElement('template')
@@ -78,5 +83,67 @@ describe('linkifyIssueIds', () => {
     root.textContent = 'PROJ-1 PROJ-2 PROJ-3'
     linkifyIssueIds(root)
     expect(root.querySelectorAll('a.issue-link').length).toBe(3)
+  })
+})
+
+describe('decorateIssueLinksWithStatus', () => {
+  function resolverFor(map: Record<string, string>) {
+    return (id: string) =>
+      map[id] ? { type: map[id]!, label: `label:${map[id]}` } : null
+  }
+
+  it('appends a status badge after each known issue anchor', () => {
+    const root = mkDom('<p>See PROJ-1 and PROJ-2 today.</p>')
+    linkifyIssueIds(root)
+    decorateIssueLinksWithStatus(
+      root,
+      resolverFor({ 'PROJ-1': 'started', 'PROJ-2': 'completed' }),
+    )
+    const badges = root.querySelectorAll('.issue-status-badge')
+    expect(badges.length).toBe(2)
+    expect(badges[0]!.getAttribute('data-state-type')).toBe('started')
+    expect(badges[0]!.querySelector('.issue-status-badge-label')!.textContent).toBe(
+      'label:started',
+    )
+    // Glyph from stateIcon('started') is ◐.
+    expect(badges[0]!.querySelector('.issue-status-badge-icon')!.textContent).toBe('◐')
+    expect(badges[1]!.getAttribute('data-state-type')).toBe('completed')
+  })
+
+  it('inserts the badge as the anchor\'s next sibling', () => {
+    const root = mkDom('<p>See PROJ-1 here.</p>')
+    linkifyIssueIds(root)
+    decorateIssueLinksWithStatus(root, resolverFor({ 'PROJ-1': 'unstarted' }))
+    const anchor = root.querySelector('a.issue-link')!
+    const sibling = anchor.nextElementSibling!
+    expect(sibling.classList.contains('issue-status-badge')).toBe(true)
+  })
+
+  it('skips anchors whose ID does not resolve', () => {
+    const root = mkDom('<p>See PROJ-1 and ZZZZ-9999 here.</p>')
+    linkifyIssueIds(root)
+    decorateIssueLinksWithStatus(root, resolverFor({ 'PROJ-1': 'started' }))
+    const badges = root.querySelectorAll('.issue-status-badge')
+    expect(badges.length).toBe(1)
+    expect(badges[0]!.getAttribute('data-state-type')).toBe('started')
+    // The unknown anchor is left untouched.
+    const anchors = root.querySelectorAll('a.issue-link')
+    expect(anchors.length).toBe(2)
+  })
+
+  it('is idempotent — calling twice does not duplicate badges', () => {
+    const root = mkDom('<p>PROJ-1 and PROJ-2.</p>')
+    linkifyIssueIds(root)
+    const resolver = resolverFor({ 'PROJ-1': 'started', 'PROJ-2': 'canceled' })
+    decorateIssueLinksWithStatus(root, resolver)
+    decorateIssueLinksWithStatus(root, resolver)
+    expect(root.querySelectorAll('.issue-status-badge').length).toBe(2)
+  })
+
+  it('does nothing when there are no linkified anchors', () => {
+    // Note: text contains an issue ID but linkifyIssueIds was never called.
+    const root = mkDom('<p>Raw PROJ-1 text only.</p>')
+    decorateIssueLinksWithStatus(root, resolverFor({ 'PROJ-1': 'started' }))
+    expect(root.querySelectorAll('.issue-status-badge').length).toBe(0)
   })
 })
