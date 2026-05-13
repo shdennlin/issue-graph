@@ -388,6 +388,19 @@ export function App() {
         s.setNotesOpen(!s.notesOpen)
         return
       }
+      // 'd' — toggle the "auto-open detail panel on click" preference. Same
+      // affordance as clicking the Detail toggle in the toolbar. Same
+      // input-focus guards as the other letter shortcuts.
+      if (e.key === 'd' || e.key === 'D') {
+        if (e.metaKey || e.ctrlKey || e.altKey) return
+        const target = e.target as HTMLElement | null
+        const tag = target?.tagName?.toLowerCase()
+        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        e.preventDefault()
+        const s = useViewStore.getState()
+        s.setDetailPanelAutoOpen(!s.detailPanelAutoOpen)
+        return
+      }
       // 'r' — toggle the Related-edges overlay (dependency view only). The
       // case-shifted variant 'R' (Shift+R) is reserved for re-layout below.
       // Same input-focus guards as the other letter shortcuts.
