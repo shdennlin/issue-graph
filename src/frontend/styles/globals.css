@@ -719,6 +719,27 @@ a:hover { text-decoration: underline; }
 .detail-panel .row { display: flex; gap: var(--sp-2); padding: 2px 0; }
 .detail-panel .row .k { color: var(--fg-muted); min-width: 80px; }
 
+/* Linear comments — card layout so each comment reads as a distinct block
+   rather than a thin top border that gets lost against the section dividers. */
+.detail-comment {
+  border: 1px solid var(--node-border);
+  border-radius: 6px;
+  background: var(--chip-bg);
+  padding: var(--sp-2) var(--sp-3);
+  margin-top: var(--sp-2);
+}
+.detail-comment:first-of-type { margin-top: var(--sp-1); }
+.detail-comment-head {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-size: var(--fs-meta);
+  margin-bottom: var(--sp-1);
+}
+.detail-comment-time { color: var(--fg-muted); font-size: var(--fs-meta); }
+.detail-comment p:first-child { margin-top: 0; }
+.detail-comment p:last-child { margin-bottom: 0; }
+
 /* Detail-panel header — title on the left flex, close button on the right. */
 .detail-header {
   display: flex;

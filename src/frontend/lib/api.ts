@@ -94,7 +94,7 @@ export const api = {
     }),
   getSyncScope: () => http<{ days: number }>('/api/sync/extend'),
   fetchIssueDetail: (identifier: string) =>
-    http<{ data: import('@shared/types.js').NormalizedIssue & { description: string | null } }>(
+    http<{ data: import('@shared/types.js').NormalizedIssue & { description: string | null; comments: import('@shared/types.js').IssueComment[] } }>(
       `/api/issues/${encodeURIComponent(identifier)}`,
     ),
   fetchLabels: () => http<LabelsResponse>('/api/labels'),

@@ -1,4 +1,4 @@
-import type { NormalizedIssue, NormalizedLabel, Viewer, WorkflowState } from '@shared/types.js'
+import type { IssueComment, NormalizedIssue, NormalizedLabel, Viewer, WorkflowState } from '@shared/types.js'
 
 export interface FetchOpts {
   /** PRD §5.3 — 'active' | 'active+recent' | 'all' */
@@ -14,6 +14,7 @@ export interface FetchOpts {
 
 export interface IssueDetail extends NormalizedIssue {
   description: string | null
+  comments: IssueComment[]
 }
 
 export interface RateLimitInfo {

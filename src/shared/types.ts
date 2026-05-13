@@ -132,6 +132,14 @@ export interface DesignDocCoverage {
   }>
 }
 
+export interface IssueComment {
+  id: string
+  body: string
+  createdAt: string
+  updatedAt: string
+  user: { displayName: string } | null
+}
+
 export interface AnnotationDTO {
   id: number
   targetType: 'issue' | 'edge' | 'bucket'

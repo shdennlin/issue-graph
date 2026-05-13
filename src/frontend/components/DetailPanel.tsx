@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, ExternalLink, Maximize2, Minimize2, Type, X } from 'lucide-react'
 import { marked } from 'marked'
-import type { AnnotationDTO, NormalizedIssue } from '@shared/types.js'
+import DOMPurify from 'dompurify'
+import type { AnnotationDTO, IssueComment, NormalizedIssue } from '@shared/types.js'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { useSchemaStore } from '../store/schemaStore'
@@ -10,6 +11,29 @@ import { api } from '../lib/api'
 import { priorityLabelFor, stateLabelFor } from '../lib/colors'
 import { getDesignDocsForIssue } from '../lib/labelSchema'
 import { translate, useLocale, useT } from '../i18n'
+
+function MarkdownBody({ body }: { body: string }) {
+  const ref = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const html = marked.parse(body || '', { async: false }) as string
+    const safe = DOMPurify.sanitize(html, { ADD_ATTR: ['target', 'rel'] })
+    const parsed = new DOMParser().parseFromString(safe, 'text/html')
+    const nodes = Array.from(parsed.body.childNodes)
+    if (nodes.length === 0 && body) {
+      // Sanitizer stripped everything (e.g., Linear bot comment with raw HTML).
+      // Fall back to plaintext so the card isn't blank.
+      const pre = document.createElement('div')
+      pre.style.whiteSpace = 'pre-wrap'
+      pre.textContent = body
+      el.replaceChildren(pre)
+      return
+    }
+    el.replaceChildren(...nodes)
+  }, [body])
+  return <div ref={ref} />
+}
 
 function timeAgo(iso: string, locale: ReturnType<typeof useLocale>): string {
   const ms = Date.now() - new Date(iso).getTime()
@@ -38,6 +62,7 @@ export function DetailPanel() {
   const locale = useLocale()
   const [description, setDescription] = useState<string | null>(null)
   const [descLoading, setDescLoading] = useState(false)
+  const [comments, setComments] = useState<IssueComment[] | null>(null)
   const [annotationDraft, setAnnotationDraft] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editingBody, setEditingBody] = useState('')
@@ -83,13 +108,24 @@ export function DetailPanel() {
     // fetching library that's out of scope.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDescription(null)
+    setComments(null)
     if (!issueId) return
+    let cancelled = false
     setDescLoading(true)
     api
       .fetchIssueDetail(issueId)
-      .then((res) => setDescription(res.data.description ?? ''))
-      .catch(() => setDescription(null))
-      .finally(() => setDescLoading(false))
+      .then((res) => {
+        if (cancelled) return
+        setDescription(res.data.description ?? '')
+        setComments(res.data.comments ?? [])
+      })
+      .catch(() => {
+        if (cancelled) return
+        setDescription(null)
+        setComments(null)
+      })
+      .finally(() => { if (!cancelled) setDescLoading(false) })
+    return () => { cancelled = true }
   }, [issueId])
 
   const { width, startResize, resizing } = useResizable({
@@ -398,6 +434,25 @@ export function DetailPanel() {
           <div dangerouslySetInnerHTML={{ __html: marked.parse(description || t('detailPanel.noDescription')) as string }} />
         )}
         {!descLoading && description === null && <div style={{ color: 'var(--fg-muted)' }}>{t('detailPanel.descriptionLoadFail')}</div>}
+      </div>
+
+      <div className="section">
+        <h3>{t('detailPanel.comments', { count: comments?.length ?? 0 })}</h3>
+        {descLoading && comments === null && (
+          <div style={{ color: 'var(--fg-muted)' }}>{t('detailPanel.commentsLoading')}</div>
+        )}
+        {comments !== null && comments.length === 0 && !descLoading && (
+          <div style={{ color: 'var(--fg-muted)' }}>{t('detailPanel.noComments')}</div>
+        )}
+        {comments !== null && comments.map((cm) => (
+          <div key={cm.id} className="detail-comment">
+            <div className="detail-comment-head">
+              <strong>{cm.user?.displayName ?? t('detailPanel.unknownAuthor')}</strong>
+              <span className="detail-comment-time">{timeAgo(cm.createdAt, locale)}</span>
+            </div>
+            <MarkdownBody body={cm.body} />
+          </div>
+        ))}
       </div>
     </aside>
   )
