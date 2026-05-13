@@ -719,6 +719,22 @@ a:hover { text-decoration: underline; }
 .detail-panel .row { display: flex; gap: var(--sp-2); padding: 2px 0; }
 .detail-panel .row .k { color: var(--fg-muted); min-width: 80px; }
 
+/* Text-size cycle button — pairs the Type icon with a 2-char label
+   (sm/md/lg/xl) so users can see the current grade without hovering for
+   the tooltip. Width is set to fit the longest label at the current font
+   size; tabular-nums keeps the label width steady across grades. */
+.detail-text-size-btn {
+  gap: 3px;
+}
+.detail-text-size-label {
+  font-size: var(--fs-meta);
+  font-variant-numeric: tabular-nums;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--fg-muted);
+  line-height: 1;
+}
+
 /* Linear comments — card layout so each comment reads as a distinct block
    rather than a thin top border that gets lost against the section dividers. */
 .detail-comment {
@@ -782,18 +798,25 @@ a:hover { text-decoration: underline; }
 }
 .detail-panel.is-wide .resize-handle { display: none; }
 
-/* Text size — independent from the global font-size setting. Redefines
-   the --fs-* tokens within .detail-panel scope so every child rule that
-   reads them (h2, h3, .row, .detail-identifier, ...) scales together. */
+/* Text size — relative offsets from whatever the global font scale resolves
+   to. Reading --fs-base-root (defined at :root or by useFontSize for the
+   custom case) avoids the self-referential cycle that would arise from
+   `--fs-base: calc(var(--fs-base) + Npx)`. The 'md' state has no rule so
+   the panel inherits the global scale exactly. */
 .detail-panel.detail-text-sm {
-  --fs-base: 12px;
-  --fs-meta: 10px;
-  --fs-title: 14px;
+  --fs-base: calc(var(--fs-base-root) - 2px);
+  --fs-meta: calc(var(--fs-meta-root) - 2px);
+  --fs-title: calc(var(--fs-title-root) - 2px);
 }
 .detail-panel.detail-text-lg {
-  --fs-base: 15px;
-  --fs-meta: 13px;
-  --fs-title: 19px;
+  --fs-base: calc(var(--fs-base-root) + 2px);
+  --fs-meta: calc(var(--fs-meta-root) + 2px);
+  --fs-title: calc(var(--fs-title-root) + 3px);
+}
+.detail-panel.detail-text-xl {
+  --fs-base: calc(var(--fs-base-root) + 4px);
+  --fs-meta: calc(var(--fs-meta-root) + 4px);
+  --fs-title: calc(var(--fs-title-root) + 6px);
 }
 
 /* Multi-spec warning callout — bordered, soft amber background, body

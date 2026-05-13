@@ -49,7 +49,7 @@ function timeAgo(iso: string, locale: ReturnType<typeof useLocale>): string {
 // of the UI can opt in here.
 const WIDE_MODE_KEY = 'ig-detail-wide-v1'
 const TEXT_SIZE_KEY = 'ig-detail-text-size-v1'
-type TextSize = 'sm' | 'md' | 'lg'
+type TextSize = 'sm' | 'md' | 'lg' | 'xl'
 
 export function DetailPanel() {
   const focusedId = useViewStore((s) => s.focusedId)
@@ -75,7 +75,7 @@ export function DetailPanel() {
     if (typeof localStorage === 'undefined') return 'md'
     try {
       const v = localStorage.getItem(TEXT_SIZE_KEY)
-      return v === 'sm' || v === 'lg' ? v : 'md'
+      return v === 'sm' || v === 'lg' || v === 'xl' ? v : 'md'
     } catch { return 'md' }
   })
 
@@ -89,7 +89,8 @@ export function DetailPanel() {
 
   const cycleTextSize = useCallback(() => {
     setTextSize((prev) => {
-      const next: TextSize = prev === 'sm' ? 'md' : prev === 'md' ? 'lg' : 'sm'
+      const next: TextSize =
+        prev === 'sm' ? 'md' : prev === 'md' ? 'lg' : prev === 'lg' ? 'xl' : 'sm'
       try { localStorage.setItem(TEXT_SIZE_KEY, next) } catch { /* silent */ }
       return next
     })
@@ -208,12 +209,13 @@ export function DetailPanel() {
           {issue.title}
         </h2>
         <button
-          className="icon-only"
+          className="icon-only detail-text-size-btn"
           onClick={cycleTextSize}
           title={t('detailPanel.cycleTextSize', { size: textSize })}
           aria-label={t('detailPanel.cycleTextSizeAria')}
         >
-          <Type size={14} />
+          <Type size={12} />
+          <span className="detail-text-size-label">{textSize}</span>
         </button>
         <button
           className="icon-only"

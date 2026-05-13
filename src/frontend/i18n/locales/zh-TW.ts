@@ -273,7 +273,7 @@ export const zhTW: Dict = {
     activeAria: '{count} 項生效中',
   },
   detailPanel: {
-    cycleTextSize: '文字大小：{size}（點擊切換 sm／md／lg）',
+    cycleTextSize: '文字大小：{size}（點擊切換 sm／md／lg／xl）',
     cycleTextSizeAria: '切換文字大小',
     expand: '展開為寬版檢視',
     collapse: '收回為側邊面板',

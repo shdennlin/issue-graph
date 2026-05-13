@@ -273,7 +273,7 @@ export const en = {
     activeAria: '{count} active',
   },
   detailPanel: {
-    cycleTextSize: 'Text size: {size} (click to cycle sm/md/lg)',
+    cycleTextSize: 'Text size: {size} (click to cycle sm/md/lg/xl)',
     cycleTextSizeAria: 'Cycle text size',
     expand: 'Expand to wide view',
     collapse: 'Collapse to side panel',
