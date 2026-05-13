@@ -735,6 +735,39 @@ a:hover { text-decoration: underline; }
   line-height: 1;
 }
 
+/* Markdown tables — marked emits bare <table>/<th>/<td>, which browsers
+   render without borders. Give them visible separators in every surface
+   that renders user markdown (notes + detail panel description, annotations,
+   comments). Scoped (rather than a global `table` rule) so we don't disturb
+   layout tables in modals/coverage views.
+
+   Border uses color-mix against --fg-muted so the line reads clearly in
+   both light and dark themes — plain --node-border was too close to the
+   dark bg (~2 luminance steps) and tables read as floating text. */
+.note-preview table,
+.detail-panel table {
+  border-collapse: collapse;
+  margin: 0.6em 0;
+  font-size: 0.95em;
+  border: 1px solid color-mix(in srgb, var(--fg-muted) 45%, transparent);
+}
+.note-preview th, .note-preview td,
+.detail-panel th, .detail-panel td {
+  border: 1px solid color-mix(in srgb, var(--fg-muted) 45%, transparent);
+  padding: 4px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.note-preview thead th,
+.detail-panel thead th {
+  background: color-mix(in srgb, var(--fg-muted) 18%, transparent);
+  font-weight: 600;
+}
+.note-preview tbody tr:nth-child(even) td,
+.detail-panel tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--fg-muted) 8%, transparent);
+}
+
 /* Linear comments — card layout so each comment reads as a distinct block
    rather than a thin top border that gets lost against the section dividers. */
 .detail-comment {
