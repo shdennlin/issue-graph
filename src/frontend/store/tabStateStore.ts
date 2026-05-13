@@ -286,3 +286,10 @@ export function clearAllTabSnapshots(): void {
   snapshots.clear()
   persist()
 }
+
+/** Read a tab's snapshotted graph. Returns null for the active tab
+ *  (its graph lives in useGraphStore) and for tabs the user hasn't
+ *  visited yet in this session. Callers should fall back accordingly. */
+export function getTabGraph(tabId: string): import('@shared/types.js').GraphResponse | null {
+  return snapshots.get(tabId)?.graph ?? null
+}
