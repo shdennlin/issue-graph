@@ -153,6 +153,7 @@ export const zhTW: Dict = {
       'Chain isolation': '鏈隔離',
       Layout: '排版',
       Notes: '筆記',
+      'Quick switcher': '快速切換器',
       Other: '其他',
     },
     items: {
@@ -179,6 +180,10 @@ export const zhTW: Dict = {
       relatedToggle: '切換「相關」連線顯示（灰色虛線，相依檢視）',
       relayout: '重新排版；若有聚焦議題會置中於該議題',
       screenshot: '將目前畫布存成 PNG 截圖',
+      quickSwitcherOpen: '開啟快速切換器（跨所有開啟分頁搜尋議題、筆記與分頁）',
+      quickSwitcherDown: '選取下一項',
+      quickSwitcherUp: '選取上一項',
+      quickSwitcherOpenInNewTab: '在新分頁中開啟選取的議題',
     },
   },
   onboarding: {
