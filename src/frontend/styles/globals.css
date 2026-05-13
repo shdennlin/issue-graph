@@ -818,18 +818,17 @@ a:hover { text-decoration: underline; }
 
 /* Wide mode — pops the panel out of the flex flow into a fixed overlay
    on the right. The canvas behind it stays interactive (no backdrop) so
-   you can still pan/click underneath. Drag-to-resize handle hidden
-   because width is fixed in this mode. */
+   you can still pan/click underneath. Width is driven by inline style
+   (its own useResizable instance with `ig-detail-panel-wide-w` storage)
+   so users can drag the same left-edge handle to resize wide mode too. */
 .detail-panel.is-wide {
   position: fixed;
   top: 0;
   right: 0;
   height: 100vh;
-  width: min(900px, 70vw) !important;
   z-index: 50;
   box-shadow: -8px 0 24px color-mix(in srgb, var(--fg) 30%, transparent);
 }
-.detail-panel.is-wide .resize-handle { display: none; }
 
 /* Text size — relative offsets from whatever the global font scale resolves
    to. Reading --fs-base-root (defined at :root or by useFontSize for the

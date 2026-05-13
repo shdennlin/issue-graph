@@ -31,6 +31,7 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ['Click'], descriptionKey: 'shortcuts.items.click', group: 'Selection' },
   { keys: ['Space'], descriptionKey: 'shortcuts.items.space', group: 'Selection' },
   { keys: ['Enter'], descriptionKey: 'shortcuts.items.enter', group: 'Selection' },
+  { keys: ['m'], descriptionKey: 'shortcuts.items.detailWideToggle', group: 'Selection' },
   { keys: ['Cmd', 'Click'], descriptionKey: 'shortcuts.items.cmdClick', group: 'Selection' },
   { keys: ['Right-click'], descriptionKey: 'shortcuts.items.rightClick', group: 'Selection' },
   { keys: ['Double-click'], descriptionKey: 'shortcuts.items.doubleClick', group: 'Selection' },

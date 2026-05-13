@@ -87,6 +87,24 @@ export function DetailPanel() {
     })
   }, [])
 
+  // 'm' (maximize) toggles wide mode while the panel is open. Same
+  // input-focus guards as the other global letter shortcuts in App.tsx so
+  // typing 'm' into the annotation textarea doesn't trigger it.
+  useEffect(() => {
+    if (!focusedId) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'm' && e.key !== 'M') return
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
+      const target = e.target as HTMLElement | null
+      const tag = target?.tagName?.toLowerCase()
+      if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+      e.preventDefault()
+      toggleWide()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [focusedId, toggleWide])
+
   // Mirror wide mode onto <body> so canvas-floating controls (inline search
   // button/bar) can hide themselves — they live inside GraphCanvas and would
   // otherwise sit on top of the wide panel via their higher z-index. Gated
@@ -144,13 +162,44 @@ export function DetailPanel() {
     return () => { cancelled = true }
   }, [issueId])
 
-  const { width, startResize, resizing } = useResizable({
+  // Viewport-adaptive max: never wider than 60% of the window, never wider
+  // than 900px (long-form reading column ceiling). Re-derived on window
+  // resize so the hook's clamp tracks the current viewport.
+  const [viewportW, setViewportW] = useState<number>(() =>
+    typeof window === 'undefined' ? 1280 : window.innerWidth,
+  )
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onResize = () => setViewportW(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  // Side mode: capped at 60% viewport / 900px (long-form reading column).
+  const sideMax = Math.max(320, Math.min(900, Math.floor(viewportW * 0.6)))
+  // Wide mode: own resize range — wider lower bound, viewport-percentage cap.
+  const wideMax = Math.max(600, Math.floor(viewportW * 0.95))
+
+  const side = useResizable({
     storageKey: 'ig-detail-panel-w',
     defaultWidth: 380,
     min: 280,
-    max: 720,
+    max: sideMax,
     side: 'right',
   })
+  const wide = useResizable({
+    storageKey: 'ig-detail-panel-wide-w',
+    defaultWidth: Math.min(900, wideMax),
+    min: 600,
+    max: wideMax,
+    side: 'right',
+  })
+  const active = wideMode ? wide : side
+  const activeMax = wideMode ? wideMax : sideMax
+  // Stored width may exceed the current max after a viewport shrink — clamp
+  // at render time so the panel never overflows before the next drag.
+  const renderedWidth = Math.min(active.width, activeMax)
+  const startResize = active.startResize
+  const resizing = active.resizing
 
   if (!issue) return null
 
@@ -215,7 +264,7 @@ export function DetailPanel() {
         wideMode ? 'is-wide' : '',
         resizing ? 'is-resizing' : '',
       ].filter(Boolean).join(' ')}
-      style={wideMode ? undefined : { width, flexShrink: 0 }}
+      style={wideMode ? { width: renderedWidth } : { width: renderedWidth, flexShrink: 0 }}
     >
       <div className="resize-handle resize-handle-left" onMouseDown={startResize} title="Drag to resize" />
       <div className="detail-header">
