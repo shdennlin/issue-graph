@@ -35,7 +35,13 @@ export function buildCandidates(args: Args): Candidate[] {
     const isActive = tab.id === args.activeTabId
     const graph = isActive ? args.activeGraph : args.snapshotGraph(tab.id)
     const issues = (graph as any)?.data?.issues as
-      | { id: string; identifier: string; title: string; labels: { name: string }[] }[]
+      | {
+          id: string
+          identifier: string
+          title: string
+          labels: { name: string }[]
+          state?: { name: string; type: string }
+        }[]
       | undefined
     if (!issues) continue
     const scopeLabel = args.workspaceName(tab.workspaceId)
@@ -48,6 +54,7 @@ export function buildCandidates(args: Args): Candidate[] {
         tabId: tab.id,
         scopeLabel,
         hint: i.labels.map((l) => l.name).join(', '),
+        state: i.state ? { name: i.state.name, type: i.state.type } : undefined,
       }
       out.push(cand)
     }

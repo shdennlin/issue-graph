@@ -7,6 +7,8 @@ import { getTabGraph } from '../store/tabStateStore'
 import { buildCandidates } from './quickSwitcher/buildCandidates'
 import { fuzzyMatch } from './quickSwitcher/fuzzyMatch'
 import type { Candidate, RecentItem } from './quickSwitcher/types'
+import { stateColorVar, stateIcon, stateLabelFor } from '../lib/colors'
+import { useLocale } from '../i18n'
 
 const GROUP_ORDER: Candidate['kind'][] = ['issue', 'note', 'tab']
 const PER_GROUP_CAP = 20
@@ -18,6 +20,7 @@ interface Props {
 }
 
 export function QuickSwitcher({ onActivate }: Props) {
+  const locale = useLocale()
   const open = useQuickSwitcherStore((s) => s.open)
   const close = useQuickSwitcherStore((s) => s.closePalette)
   const recents = useQuickSwitcherStore((s) => s.recents)
@@ -183,7 +186,8 @@ export function QuickSwitcher({ onActivate }: Props) {
           {showingRecents
             ? flat.map((c, i) => (
                 <Row key={c.id} idx={i} c={c} selected={i === selectedIdx}
-                     onClick={() => activate(i, false)} groupHeader={i === 0 ? 'Recent' : null} />
+                     onClick={() => activate(i, false)} groupHeader={i === 0 ? 'Recent' : null}
+                     locale={locale} />
               ))
             : GROUP_ORDER.flatMap((kind) => {
                 const list = grouped[kind]
@@ -199,6 +203,7 @@ export function QuickSwitcher({ onActivate }: Props) {
                     selected={offset + i === selectedIdx}
                     onClick={() => activate(offset + i, false)}
                     groupHeader={i === 0 ? GROUP_LABEL[kind] : null}
+                    locale={locale}
                   />
                 ))
               })}
@@ -215,14 +220,16 @@ const GROUP_LABEL: Record<Candidate['kind'], string> = {
 }
 
 function Row({
-  idx, c, selected, onClick, groupHeader,
+  idx, c, selected, onClick, groupHeader, locale,
 }: {
   idx: number
   c: Candidate
   selected: boolean
   onClick: () => void
   groupHeader: string | null
+  locale: ReturnType<typeof useLocale>
 }) {
+  const issueState = c.kind === 'issue' ? c.state : null
   return (
     <>
       {groupHeader && (
@@ -242,6 +249,21 @@ function Row({
         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {c.label}
         </span>
+        {issueState && (
+          <span
+            title={issueState.name}
+            style={{
+              fontSize: 11, padding: '1px 6px', borderRadius: 4,
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              color: stateColorVar(issueState.type),
+              border: `1px solid ${stateColorVar(issueState.type)}`,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <span aria-hidden>{stateIcon(issueState.type)}</span>
+            <span>{stateLabelFor(issueState.type, locale)}</span>
+          </span>
+        )}
         {c.hint && (
           <span style={{ fontSize: 11, opacity: 0.55, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {c.hint}

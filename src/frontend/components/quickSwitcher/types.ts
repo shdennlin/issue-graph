@@ -15,6 +15,8 @@ export interface IssueCandidate {
   scopeLabel: string
   /** Secondary muted text (labels joined). */
   hint: string
+  /** Workflow state (name + type). Omitted when restored from recents. */
+  state?: { name: string; type: string }
 }
 
 export interface NoteCandidate {
