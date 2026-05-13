@@ -2,7 +2,7 @@
 // Bonuses: prefix match, word-boundary hits.
 // No new dependency.
 
-const WORD_BOUNDARY = /[\s_\-\/\.:]/
+const WORD_BOUNDARY = /[\s_\-/.:]/
 
 /** Score `text` against `query`. Returns null when query is not a subsequence of text. */
 export function fuzzyScore(query: string, text: string): number | null {
@@ -13,14 +13,14 @@ export function fuzzyScore(query: string, text: string): number | null {
   let ti = 0
   let matchedFirstAtZero = false
   for (let qi = 0; qi < q.length; qi++) {
-    const qc = q[qi]
+    const qc = q[qi]!
     let found = -1
     for (let i = ti; i < t.length; i++) {
       if (t[i] === qc) { found = i; break }
     }
     if (found === -1) return null
     if (qi === 0 && found === 0) matchedFirstAtZero = true
-    if (found > 0 && WORD_BOUNDARY.test(t[found - 1])) score += 8
+    if (found > 0 && WORD_BOUNDARY.test(t[found - 1]!)) score += 8
     score += Math.max(0, 10 - (found - ti)) // closer to previous match = better
     ti = found + 1
   }
