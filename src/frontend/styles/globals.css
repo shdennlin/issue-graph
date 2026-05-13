@@ -953,6 +953,12 @@ a:hover { text-decoration: underline; }
 }
 .inline-search-btn:hover { background: var(--chip-bg); }
 
+/* Wide-mode detail panel covers the canvas entirely, so the floating
+   inline-search button/bar would otherwise punch through with its higher
+   z-index. Suppress both whenever a wide-mode detail panel is mounted. */
+body[data-detail-wide='1'] .inline-search-btn,
+body[data-detail-wide='1'] .inline-search { display: none; }
+
 .inline-search {
   position: absolute;
   top: 12px;

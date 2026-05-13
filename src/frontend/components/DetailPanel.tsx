@@ -87,6 +87,21 @@ export function DetailPanel() {
     })
   }, [])
 
+  // Mirror wide mode onto <body> so canvas-floating controls (inline search
+  // button/bar) can hide themselves — they live inside GraphCanvas and would
+  // otherwise sit on top of the wide panel via their higher z-index. Gated
+  // on focusedId because wideMode persists in localStorage but the panel
+  // only actually renders when an issue is focused.
+  useEffect(() => {
+    const body = document.body
+    if (wideMode && focusedId) {
+      body.dataset.detailWide = '1'
+    } else {
+      delete body.dataset.detailWide
+    }
+    return () => { delete body.dataset.detailWide }
+  }, [wideMode, focusedId])
+
   const cycleTextSize = useCallback(() => {
     setTextSize((prev) => {
       const next: TextSize =
