@@ -162,8 +162,8 @@ export function DetailPanel() {
     return () => { cancelled = true }
   }, [issueId])
 
-  // Viewport-adaptive max: never wider than 60% of the window, never wider
-  // than 900px (long-form reading column ceiling). Re-derived on window
+  // Viewport-adaptive max: never wider than 75% of the window, never wider
+  // than 1200px (long-form reading column ceiling). Re-derived on window
   // resize so the hook's clamp tracks the current viewport.
   const [viewportW, setViewportW] = useState<number>(() =>
     typeof window === 'undefined' ? 1280 : window.innerWidth,
@@ -174,8 +174,8 @@ export function DetailPanel() {
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
-  // Side mode: capped at 60% viewport / 900px (long-form reading column).
-  const sideMax = Math.max(320, Math.min(900, Math.floor(viewportW * 0.6)))
+  // Side mode: capped at 75% viewport / 1200px (long-form reading column).
+  const sideMax = Math.max(320, Math.min(1200, Math.floor(viewportW * 0.75)))
   // Wide mode: own resize range — wider lower bound, viewport-percentage cap.
   const wideMax = Math.max(600, Math.floor(viewportW * 0.95))
 
