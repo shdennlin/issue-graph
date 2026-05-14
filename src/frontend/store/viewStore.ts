@@ -74,11 +74,12 @@ export interface ViewState {
   contextMenu: { x: number; y: number; targetIdentifier: string } | null
   staleDays: number
   filterPanelOpen: boolean
-  // Transient panel visibility (resets when focusedId changes). The
-  // persistent preference is `detailPanelAutoOpen` below; that flag
-  // decides whether selecting a new issue auto-opens the panel.
-  // detailPanelOpen lets Esc peel the panel without losing focus, and
-  // lets Space/Enter open the panel ad-hoc when auto-open is off.
+  // Session panel visibility. The persistent preference is
+  // `detailPanelAutoOpen` below; that flag decides whether selecting a new
+  // issue *automatically* opens the panel. detailPanelOpen tracks the actual
+  // current visibility — sticky across focus changes once the user opens it
+  // ad-hoc (Space/Enter/'d'), so subsequent focus switches keep showing the
+  // detail. Esc, clearing focus, or pressing 'd' again resets it to false.
   detailPanelOpen: boolean
 
   setActiveView: (v: ViewId) => void
