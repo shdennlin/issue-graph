@@ -170,6 +170,7 @@ export const en = {
       click: 'Focus an issue (auto-opens detail when toolbar Detail toggle is on)',
       space: 'Open detail panel for focused issue (ad-hoc, works when auto-open is off)',
       enter: 'Same as Space — open detail panel',
+      detailPanelToggle: 'Open / close detail panel for the focused issue',
       detailAutoToggle: 'Toggle auto-open detail panel on click (same as toolbar Detail toggle)',
       detailWideToggle: 'Toggle wide / side detail panel (only when open)',
       cmdClick: 'Toggle multi-select',
