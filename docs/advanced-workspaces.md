@@ -1,3 +1,5 @@
+**English** | [繁體中文](advanced-workspaces.zh-TW.md)
+
 # Advanced workspace profiles
 
 The default setup still uses one `LINEAR_API_KEY`. Workspace profiles are for

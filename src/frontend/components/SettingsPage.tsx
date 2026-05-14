@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useViewStore } from '../store/viewStore'
+import { useSchemaStore } from '../store/schemaStore'
 import { api, type SettingsResponse } from '../lib/api'
+import { ModalHeader } from './ModalHeader'
+import { LOCALES, useLocale, useSetLocale, useT, type Locale } from '../i18n'
 
 export function SettingsPage() {
   const open = useViewStore((s) => s.settingsOpen)
@@ -8,6 +11,10 @@ export function SettingsPage() {
   const setStaleDays = useViewStore((s) => s.setStaleDays)
   const fontSize = useViewStore((s) => s.fontSize)
   const setFontSize = useViewStore((s) => s.setFontSize)
+  const locale = useLocale()
+  const setLocale = useSetLocale()
+  const t = useT()
+  const schema = useSchemaStore((s) => s.schema)
   const [data, setData] = useState<SettingsResponse | null>(null)
   const [draft, setDraft] = useState<Record<string, unknown>>({})
   const [resetting, setResetting] = useState(false)
@@ -38,27 +45,19 @@ export function SettingsPage() {
   }
 
   const resetCache = async () => {
-    const ok = confirm(
-      'Reset cache?\n\n' +
-        'This wipes the cached issue + label data and the workspace-tied ' +
-        'meta entries (design-doc payload, workflow states), then re-syncs ' +
-        'from Linear.\n\n' +
-        'Annotations, snapshots, and sync history are preserved.\n\n' +
-        'This affects only the current workspace profile.',
-    )
+    const ok = confirm(t('settings.confirmReset'))
     if (!ok) return
     setResetting(true)
     try {
       setResetPhase('clearing')
-      setResetMessage('Clearing local cache…')
+      setResetMessage(t('settings.overlayClearing'))
       const result = await api.resetCache()
       setResetPhase('syncing')
-      setResetMessage('Re-syncing from Linear (this can take a few seconds)…')
+      setResetMessage(t('settings.overlaySyncing'))
       await api.forceSync()
       setResetPhase('done')
       setResetMessage(
-        `Cleared ${result.cleared.issues} issues + ${result.cleared.labels} labels. ` +
-          'Reloading page to pick up the new workspace…',
+        t('settings.overlayDoneMsg', { issues: result.cleared.issues, labels: result.cleared.labels }),
       )
       // Hard-reload so every store re-initializes from the fresh cache. This
       // avoids stale labels / filters / focusedIds left over from the previous
@@ -81,9 +80,9 @@ export function SettingsPage() {
       if (!file) return
       const text = await file.text()
       const parsed = JSON.parse(text)
-      const mode = confirm('Replace existing annotations? (Cancel = merge)') ? 'replace' : 'merge'
+      const mode = confirm(t('settings.importMergePrompt')) ? 'replace' : 'merge'
       await api.importAnnotations(mode as 'merge' | 'replace', parsed.annotations ?? parsed)
-      alert('Imported.')
+      alert(t('settings.importedAlert'))
     }
     input.click()
   }
@@ -130,10 +129,10 @@ export function SettingsPage() {
         }}
       >
         <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 'var(--fs-base)' }}>
-          {resetPhase === 'clearing' && 'Resetting cache'}
-          {resetPhase === 'syncing' && 'Re-syncing from Linear'}
-          {resetPhase === 'done' && 'Done'}
-          {resetPhase === 'error' && 'Reset failed'}
+          {resetPhase === 'clearing' && t('settings.overlayResetting')}
+          {resetPhase === 'syncing' && t('settings.overlaySyncTitle')}
+          {resetPhase === 'done' && t('settings.overlayDone')}
+          {resetPhase === 'error' && t('settings.overlayError')}
         </div>
         {/* Indeterminate progress bar — shows motion so user knows we're alive. */}
         {(resetPhase === 'clearing' || resetPhase === 'syncing') && (
@@ -159,7 +158,7 @@ export function SettingsPage() {
         <div style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-meta)' }}>{resetMessage}</div>
         {resetPhase === 'error' && (
           <button onClick={() => setResetPhase('idle')} style={{ marginTop: 14 }}>
-            Dismiss
+            {t('common.dismiss')}
           </button>
         )}
       </div>
@@ -177,33 +176,34 @@ export function SettingsPage() {
       {overlay}
       <div className="modal-backdrop" onClick={() => close(false)}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3 style={{ marginTop: 0 }}>Settings</h3>
+        <ModalHeader title={t('settings.title')} onClose={() => close(false)} />
+        <div className="settings-body">
 
-        <h4>Display</h4>
+        <h4>{t('settings.display')}</h4>
         <label style={{ display: 'block', marginBottom: 8 }}>
-          Default view{' '}
+          {t('settings.defaultView')}{' '}
           <select
             defaultValue={(stored.default_view as string) ?? (env.default_view as string)}
             onChange={(e) => setDraft({ ...draft, default_view: e.target.value })}
           >
-            <option value="dependency">Dependency</option>
-            <option value="mix">Mix</option>
-            <option value="designdoc">Design docs</option>
+            <option value="dependency">{t('views.dependency.label')}</option>
+            <option value="mix">{t('views.mix.label')}</option>
+            <option value="designdoc">{t('views.designdoc.label')}</option>
           </select>
         </label>
         <label style={{ display: 'block', marginBottom: 8 }}>
-          Default theme{' '}
+          {t('settings.defaultTheme')}{' '}
           <select
             defaultValue={(stored.default_theme as string) ?? (env.default_theme as string)}
             onChange={(e) => setDraft({ ...draft, default_theme: e.target.value })}
           >
-            <option value="auto">Auto</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
+            <option value="auto">{t('settings.themeAuto')}</option>
+            <option value="light">{t('settings.themeLight')}</option>
+            <option value="dark">{t('settings.themeDark')}</option>
           </select>
         </label>
         <label style={{ display: 'block', marginBottom: 8 }}>
-          Stale threshold (days){' '}
+          {t('settings.staleThreshold')}{' '}
           <input
             type="number"
             min={1}
@@ -213,7 +213,7 @@ export function SettingsPage() {
           />
         </label>
         <div style={{ marginBottom: 8 }}>
-          <div style={{ marginBottom: 4 }}>Font size</div>
+          <div style={{ marginBottom: 4 }}>{t('settings.fontSize')}</div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
             {(['sm', 'md', 'lg'] as const).map((p) => (
               <button
@@ -221,7 +221,7 @@ export function SettingsPage() {
                 onClick={() => setFontSize(p)}
                 className={fontSize === p ? 'primary' : ''}
               >
-                {p === 'sm' ? 'Small' : p === 'md' ? 'Medium' : 'Large'}
+                {p === 'sm' ? t('settings.fontSm') : p === 'md' ? t('settings.fontMd') : t('settings.fontLg')}
               </button>
             ))}
             {/* "Custom" indicator: highlights as primary when fontSize is a
@@ -240,7 +240,7 @@ export function SettingsPage() {
                 fontSize: 'var(--fs-base)',
               }}
             >
-              Custom
+              {t('settings.fontCustom')}
               {typeof fontSize === 'number' && (
                 <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fontSize}px</span>
               )}
@@ -264,23 +264,36 @@ export function SettingsPage() {
                 if (Number.isFinite(n) && n >= 9 && n <= 24) setFontSize(n)
               }}
               style={{ width: 70 }}
-              title="Base font size in px (9–24). Other sizes derive from this."
+              title={t('settings.fontHelp')}
             />
           </div>
         </div>
 
-        <h4>Backend</h4>
+        <h4>{t('settings.language')}</h4>
+        <label style={{ display: 'block', marginBottom: 8 }}>
+          {t('settings.language')}{' '}
+          <select
+            value={locale}
+            onChange={(e) => setLocale(e.target.value as Locale)}
+          >
+            {LOCALES.map((l) => (
+              <option key={l.id} value={l.id}>{l.label}</option>
+            ))}
+          </select>
+        </label>
+
+        <h4>{t('settings.backend')}</h4>
         <div style={{ color: 'var(--fg-muted)', fontSize: 12 }}>
-          Profile:{' '}
+          {t('settings.profile')}{' '}
           {data?.workspace?.active ? (
             <>
               {data.workspace.active.name} <code>({data.workspace.active.id})</code>
             </>
           ) : (
-            'legacy .env mode'
+            t('settings.legacyEnv')
           )}
           <br />
-          Workspace:{' '}
+          {t('settings.workspace')}{' '}
           {data?.viewer?.organization ? (
             <>
               {data.viewer.organization.name} (
@@ -295,59 +308,98 @@ export function SettingsPage() {
               )
             </>
           ) : (
-            'unknown — re-sync to populate'
+            t('settings.unknownResync')
           )}
           <br />
-          API key: {(env.linear_api_key_set as boolean) ? '●●●●●●●●●● (set in .env)' : 'not set'}
+          {t('settings.apiKey')} {(env.linear_api_key_set as boolean) ? t('settings.apiKeySet') : t('settings.apiKeyUnset')}
           <br />
-          Team filter: {(env.linear_team_id as string | null) ?? 'all'}
+          {t('settings.teamFilter')} {(env.linear_team_id as string | null) ?? t('settings.teamAll')}
           {data?.workspace?.active?.dbPath && (
             <>
               <br />
-              DB: <code>{data.workspace.active.dbPath}</code>
+              {t('settings.db')} <code>{data.workspace.active.dbPath}</code>
             </>
           )}
           <br />
-          Identified as: {data?.viewer?.displayName ?? 'unknown'}
+          {t('settings.identifiedAs')} {data?.viewer?.displayName ?? t('settings.unknownUser')}
           <br />
-          Issue scope: {env.issue_scope as string}
+          {t('settings.issueScope')} {env.issue_scope as string}
+          <br />
+          {t('settings.bucketGroup')}{' '}
+          {schema.primaryGroup ? (
+            <>
+              <code>{schema.primaryGroup}</code>{' '}
+              {(env.label_schema_loaded as boolean | undefined)
+                ? t('settings.schemaSourceYaml')
+                : env.primary_group_override
+                  ? t('settings.schemaSourceEnv', { var: 'PRIMARY_GROUP' })
+                  : t('settings.schemaSourceAuto')}
+            </>
+          ) : (
+            t('settings.schemaSourceNone')
+          )}
+          <br />
+          {t('settings.typeGroup')}{' '}
+          {schema.typeGroup ? (
+            <>
+              <code>{schema.typeGroup}</code>{' '}
+              {(env.label_schema_loaded as boolean | undefined)
+                ? t('settings.schemaSourceYaml')
+                : env.type_group_override
+                  ? t('settings.schemaSourceEnv', { var: 'TYPE_GROUP' })
+                  : t('settings.schemaSourceAuto')}
+            </>
+          ) : (
+            t('common.none')
+          )}
+          {(env.label_schema_path as string | undefined) && (
+            <>
+              <br />
+              {t('settings.labelSchemaPath')}{' '}
+              <code>{env.label_schema_path as string}</code>{' '}
+              {(env.label_schema_loaded as boolean | undefined)
+                ? t('settings.labelSchemaLoaded')
+                : t('settings.labelSchemaAbsent')}
+            </>
+          )}
         </div>
         <label style={{ display: 'block', marginTop: 10, marginBottom: 8 }}>
-          Cache TTL (seconds){' '}
+          {t('settings.cacheTtl')}{' '}
           <input
             type="number"
             min={10}
             max={86400}
             defaultValue={cacheTtl}
             onChange={(e) => setDraft({ ...draft, cache_ttl_seconds: Number(e.target.value) })}
-            title="How long cached Linear data is considered fresh before a background sync is kicked. 10–86400. Lower = more frequent re-syncs; higher = quieter dev workflow."
+            title={t('settings.cacheTtlHelp')}
             style={{ width: 100 }}
           />
           <span style={{ color: 'var(--fg-muted)', fontSize: 11, marginLeft: 8 }}>
-            ≈ {Math.round(cacheTtl / 60)}min · default 900 (15min)
+            {t('settings.cacheTtlSuffix', { minutes: Math.round(cacheTtl / 60) })}
           </span>
         </label>
         <div style={{ marginTop: 10 }}>
-          <button onClick={resetCache} disabled={resetting} title="Wipe issue/label cache and re-sync for the current workspace profile.">
-            {resetting ? 'Resetting…' : 'Reset current workspace data'}
+          <button onClick={resetCache} disabled={resetting} title={t('settings.resetButtonTitle')}>
+            {resetting ? t('settings.resetting') : t('settings.resetButton')}
           </button>
           <div style={{ color: 'var(--fg-muted)', fontSize: 11, marginTop: 4 }}>
-            Clears only the active workspace profile. Preserves annotations + snapshots in that profile.
+            {t('settings.resetHelp')}
           </div>
         </div>
 
-        <h4>Annotations</h4>
-        <button onClick={exportAnnotations}>Export to JSON</button>{' '}
-        <button onClick={importAnnotations}>Import from JSON…</button>
+        <h4>{t('settings.annotations')}</h4>
+        <button onClick={exportAnnotations}>{t('settings.exportJson')}</button>{' '}
+        <button onClick={importAnnotations}>{t('settings.importJson')}</button>
 
-        <h4>About</h4>
+        <h4>{t('settings.about')}</h4>
         <div style={{ color: 'var(--fg-muted)', fontSize: 12 }}>
-          Backend: {env.backend as string}
+          {t('settings.backendValue', { value: env.backend as string })}
         </div>
 
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
-          <button onClick={() => close(false)}>Cancel</button>
-          <button className="primary" onClick={save}>Save</button>
+        </div>
+        <div className="settings-footer">
+          <button onClick={() => close(false)}>{t('common.cancel')}</button>
+          <button className="primary" onClick={save}>{t('common.save')}</button>
         </div>
       </div>
     </div>

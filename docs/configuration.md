@@ -1,3 +1,5 @@
+**English** | [繁體中文](configuration.zh-TW.md)
+
 # Customizing labels and icons
 
 `issue-graph` uses Linear labels to group issues into buckets (Mix view) and pick leading icons. Two levels of customization are available.
@@ -15,6 +17,10 @@ TYPE_ICONS={"Bug":"🐛","Feature":"✨","Spike":"🔬"}
 ```
 
 Restart, and the Mix view buckets, filter sidebar, and node icons all pick up the override.
+
+### Where to confirm what's active
+
+You don't have to guess which group ended up selected. **Settings → Backend** lists the active **bucket label group** and **type label group**, plus how each was decided (auto-detected / `PRIMARY_GROUP` env / `label-schema.yaml`). Hovering the Mix view button in the toolbar also names the bucketing group inline.
 
 ## Full control (`label-schema.yaml`)
 

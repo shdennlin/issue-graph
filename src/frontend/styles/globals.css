@@ -11,17 +11,76 @@ html, body, #root {
 
 button {
   font-family: inherit;
-  background: var(--bg-elev);
-  border: 1px solid var(--node-border);
+  background: transparent;
+  border: 1px solid transparent;
   color: var(--fg);
   padding: 4px 10px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: var(--fs-base);
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
-button:hover { background: var(--chip-bg); }
+button:hover { background: var(--chip-bg); border-color: var(--node-border); }
 button:disabled { opacity: 0.6; cursor: not-allowed; }
 button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+
+/* Inline icon + label buttons (lucide-react SVG + text). Keeps the icon
+   visually centered against the label baseline. */
+.icon-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* Pure icon buttons — square-ish padding so they read as icon affordances
+   rather than empty-looking text buttons. */
+.icon-only {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 6px;
+  color: var(--fg-muted);
+}
+.icon-only:hover { color: var(--fg); }
+
+/* Spinning loader (lucide-react Loader2). */
+@keyframes lucide-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.lucide-spin {
+  animation: lucide-spin 0.9s linear infinite;
+  transform-origin: center;
+}
+
+/* Skeleton placeholder — used in lieu of "Loading…" text while async
+   content streams in. The shimmer moves a translucent highlight band
+   across a muted-fg base, giving a sense of progress without needing a
+   spinner. Each skeleton-line varies in width so the stacked effect
+   suggests prose content rather than uniform blocks. */
+@keyframes skeleton-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+.skeleton {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--fg-muted) 18%, transparent) 0%,
+      color-mix(in srgb, var(--fg-muted) 28%, transparent) 50%,
+      color-mix(in srgb, var(--fg-muted) 18%, transparent) 100%
+    );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+.skeleton-line {
+  height: 12px;
+}
+.skeleton-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 
 input, select, textarea {
   font-family: inherit;
@@ -98,27 +157,35 @@ a:hover { text-decoration: underline; }
 }
 .react-flow__arrowhead { fill: var(--edge); }
 
-.banner {
+/* Global error banner — appears at the bottom of the app shell when a
+   non-recoverable graph load error occurs. Same visual grammar as the
+   workspace-change warning (in SyncBanner): tinted bg, accented border,
+   readable body text. Replaces a hand-rolled `.banner` rule that used
+   to be a shared layout class but only had this one consumer left. */
+.error-banner {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 6px 12px;
-  background: var(--bg-elev);
-  border-bottom: 1px solid var(--node-border);
-  font-size: var(--fs-base);
   gap: 12px;
+  padding: 8px 14px;
+  font-size: var(--fs-base);
+  color: var(--fg);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  border-top: 1px solid var(--danger);
 }
 
-.banner .left, .banner .right { display: flex; gap: 8px; align-items: center; }
-.banner .pill {
+/* Top-level glassy pill — used by the workspace-picker-button (and any
+   future status pills). Semi-transparent over the surrounding bg + thin
+   subtle border, matching the legacy-mode pill. */
+.pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 2px 8px;
   border-radius: var(--radius-sm);
-  background: var(--chip-bg);
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fg) 8%, transparent);
 }
-.banner .status-dot {
+.pill .status-dot {
   width: 8px;
   height: 8px;
   border-radius: 999px;
@@ -126,74 +193,84 @@ a:hover { text-decoration: underline; }
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--ok) 16%, transparent);
   flex: 0 0 auto;
 }
-.banner .workspace-select {
+
+/* Unified app header — tab strip on the left, sync metadata on the
+   right, in a single row. Replaces the old TabBar + SyncBanner pair.
+   The active tab visually fuses into the toolbar below (both share
+   `--bg-elev`) via the `top: 1px` overlap on `.tabbar-tab.is-active`. */
+.tabbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 8px 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--node-border);
+  flex-wrap: wrap;
+  /* Position+z-index lifts dropdown menus (add-tab, workspace-picker)
+     above the toolbar that follows in the flex column. Without this,
+     dropdowns render *under* the toolbar's opaque background.
+     Avoid `overflow-x: auto` — when paired with the default
+     `overflow-y: visible`, browsers promote y to auto/hidden, which
+     CLIPS the absolutely-positioned dropdowns. With ~handful of
+     profiles, wrapping instead of scrolling is the right tradeoff. */
   position: relative;
+  z-index: 10;
+}
+
+.tabbar-spacer { flex: 1 1 auto; min-width: 8px; }
+
+/* Browser-style back/forward arrows at the very left of the tabbar.
+   Mirrors Linear's app-shell back/forward — quick visual escape from a
+   filter / view / focus change. Buttons disable when there's no
+   navigation available in that direction (tracked via history.state's
+   seq counter). */
+.tabbar-history-nav {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 24px;
-  padding: 2px 28px 2px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--chip-bg);
-  border: 1px solid transparent;
-  cursor: pointer;
+  gap: 0;
+  padding: 0 4px;
+  align-self: center;
 }
-.banner .workspace-select:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent);
+.tabbar-history-nav button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
-.banner .workspace-select select {
-  appearance: none;
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  cursor: pointer;
+
+/* Right-side sync metadata: workspace picker (when N≥2), last-sync,
+   issue/doc counts, refresh. */
+.tabbar-sync {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 4px; /* match the tabbar's top padding for symmetry */
 }
-.banner .workspace-select .workspace-select-label {
-  color: var(--fg);
-  font-size: var(--fs-base);
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.banner .workspace-select select:disabled { cursor: not-allowed; }
-.banner .workspace-select .select-chevron {
-  position: absolute;
-  right: 8px;
-  color: var(--fg-muted);
-  pointer-events: none;
-  font-size: var(--fs-meta);
-}
-.banner .last-sync-link {
+
+.tabbar-sync .last-sync-link {
   font-size: var(--fs-meta);
   cursor: pointer;
   padding: 2px 6px;
   border-radius: var(--radius-sm);
 }
-.banner .last-sync-link:hover {
-  background: var(--chip-bg);
-}
-.banner .stale-ok { color: var(--ok); }
-.banner .stale-warn { color: var(--warn); }
-.banner .stale-bad { color: var(--danger); }
+.tabbar-sync .last-sync-link:hover { background: var(--chip-bg); }
+.tabbar-sync .stale-ok { color: var(--ok); }
+.tabbar-sync .stale-warn { color: var(--warn); }
+.tabbar-sync .stale-bad { color: var(--danger); }
 
-/* Workspace picker (the click-to-change pill in the banner left). The
-   button reuses the `.pill` look so it visually reads as the same
-   workspace indicator that's been there all along — clicking it now
-   opens a dropdown that repoints the *current tab* at a different
-   workspace (keeping filters/focus). Distinct from the TabBar above,
-   which switches between independent tab sessions. */
-.banner .workspace-picker {
+.tabbar-counts {
+  color: var(--fg-muted);
+  font-size: var(--fs-meta);
+}
+
+.tabbar-refresh {
+  /* Inherits global button styling — no extra rules needed. */
+}
+
+/* Workspace picker (repoint current tab) inside the unified header. */
+.tabbar-sync .workspace-picker {
   position: relative;
   display: inline-flex;
 }
-.banner .workspace-picker-button {
+.tabbar-sync .workspace-picker-button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -202,18 +279,16 @@ a:hover { text-decoration: underline; }
   font: inherit;
   color: inherit;
 }
-.banner .workspace-picker-button:hover {
-  border-color: var(--node-border);
-}
-.banner .workspace-picker-button .select-chevron {
+.tabbar-sync .workspace-picker-button:hover { border-color: var(--node-border); }
+.tabbar-sync .workspace-picker-button .select-chevron {
   font-size: 10px;
   color: var(--fg-muted);
   margin-left: 2px;
 }
-.banner .workspace-picker-menu {
+.tabbar-sync .workspace-picker-menu {
   position: absolute;
   top: calc(100% + 4px);
-  left: 0;
+  right: 0;
   min-width: 160px;
   background: var(--bg-elev);
   border: 1px solid var(--node-border);
@@ -224,7 +299,7 @@ a:hover { text-decoration: underline; }
   display: flex;
   flex-direction: column;
 }
-.banner .workspace-picker-item {
+.tabbar-sync .workspace-picker-item {
   background: transparent;
   border: none;
   color: var(--fg);
@@ -235,37 +310,33 @@ a:hover { text-decoration: underline; }
   font-size: var(--fs-base);
   white-space: nowrap;
 }
-.banner .workspace-picker-item:hover {
-  background: var(--chip-bg);
-}
-.banner .workspace-picker-item.is-current {
+.tabbar-sync .workspace-picker-item:hover { background: var(--chip-bg); }
+.tabbar-sync .workspace-picker-item.is-current {
   color: var(--accent);
   cursor: default;
 }
 
-/* In-app workspace tab bar — sits above .banner. Each tab represents a
-   workspace defined in `.env`; the ★ marker on a tab indicates the
-   server-default workspace (where the design-doc watcher runs). */
-.tabbar {
-  display: flex;
-  align-items: stretch;
-  gap: 2px;
-  padding: 4px 8px 0;
-  background: var(--bg);
-  border-bottom: 1px solid var(--node-border);
-  flex-wrap: wrap;
-  /* Position+z-index lifts the whole bar (and its absolutely-positioned
-     dropdown menu descendants) above the SyncBanner sibling that follows
-     in the flex column. Without this, the dropdown opens but renders
-     *under* the banner's opaque background — looking like the click had
-     no effect.
-     Avoid `overflow-x: auto` here — when paired with the default
-     `overflow-y: visible`, browsers promote y to auto/hidden too, which
-     CLIPS the absolutely-positioned dropdown menu (positioned just below
-     the bar) and hides it entirely. With ~handful of profiles, wrapping
-     instead of scrolling is the right tradeoff. */
-  position: relative;
-  z-index: 10;
+/* Legacy-mode (no WORKSPACE_* env profiles) identity pill — sits where
+   tabs would otherwise sit, on the left of the header. Glassy pill:
+   semi-transparent background + thin border. */
+.tabbar-legacy-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fg) 8%, transparent);
+  font-size: var(--fs-base);
+  color: var(--fg);
+}
+.tabbar-legacy-pill .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--ok);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ok) 16%, transparent);
+  flex: 0 0 auto;
 }
 
 .tabbar-tab {
@@ -400,6 +471,53 @@ a:hover { text-decoration: underline; }
 .toolbar .group button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 .toolbar .sep { width: 1px; height: 20px; background: var(--node-border); margin: 0 6px; }
 
+/* Toolbar overflow menu — collapses low-frequency actions (screenshot,
+   coverage, shortcuts, theme cycle) behind a single MoreHorizontal
+   trigger so the top bar stays scannable. */
+.toolbar-overflow {
+  position: relative;
+  display: inline-flex;
+}
+.toolbar-overflow-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 220px;
+  background: var(--bg-elev);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 4px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+}
+.toolbar-overflow-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  font-size: var(--fs-base);
+  cursor: pointer;
+}
+.toolbar-overflow-item:hover {
+  background: var(--chip-bg);
+  border: 0;
+}
+.toolbar-overflow-item svg { color: var(--fg-muted); flex-shrink: 0; }
+.toolbar-overflow-hint {
+  margin-left: auto;
+  color: var(--fg-muted);
+  font-size: var(--fs-meta);
+  font-family: var(--font-mono);
+}
+
 .filter-panel {
   /* width comes from inline style (useResizable). Keep position relative so the
      absolute-positioned resize-handle anchors here. */
@@ -410,7 +528,114 @@ a:hover { text-decoration: underline; }
   padding: 10px;
   font-size: var(--fs-base);
 }
-.filter-panel section { margin-bottom: var(--sp-4); }
+.filter-panel section {
+  margin-bottom: var(--sp-2);
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--fg-muted) 14%, transparent);
+}
+.filter-panel section:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+/* Sticky section header — stays pinned to the top of the .filter-panel
+   scroll container as you scroll. The negative-then-positive `top` math
+   accounts for the panel's 10px padding: at top: 0, the header would sit
+   10px below the visible top edge; using `top: 0` plus padding-top on the
+   heading itself keeps the visual offset minimal while letting the
+   sticky behavior register against the scroll edge. */
+.filter-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 var(--sp-2);
+  position: sticky;
+  top: 0;
+  background: var(--bg-elev);
+  z-index: 1;
+  /* match .filter-panel's padding so the heading bg covers the gap */
+  padding: 0px 0;
+}
+.filter-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+.filter-section-toggle:hover { background: transparent; border-color: transparent; }
+.filter-section-toggle:hover .filter-section-title { color: var(--accent); }
+.filter-section-toggle:hover svg { color: var(--accent); }
+.filter-section-toggle svg { color: var(--fg-muted); flex-shrink: 0; }
+
+.filter-section-title { flex: 1; }
+
+/* Active-filter count badge next to the section title — subtle accent
+   pill so you can see at a glance which sections have active filters
+   even when the section body is collapsed. */
+.filter-section-count {
+  font-size: var(--fs-meta);
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  padding: 0 6px;
+  border-radius: 999px;
+  font-weight: 500;
+  min-width: 18px;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* Per-section clear button (× icon). Lives as a sibling of the toggle
+   button inside the same h4 — HTML doesn't allow nested <button>s. */
+.filter-section-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 2px 4px;
+  background: transparent;
+  border: 0;
+  color: var(--fg-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.filter-section-clear:hover {
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  color: var(--fg);
+  border: 0;
+}
+
+/* Help affordance next to "Active only" — lucide HelpCircle replaces the
+   hand-rolled ?-in-a-circle that read as a heavy badge. */
+.filter-help-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--fg-muted);
+  margin-left: 4px;
+  cursor: help;
+  transition: color 0.12s ease;
+}
+.filter-help-icon:hover,
+.filter-help-icon:focus { color: var(--fg); outline: none; }
+
+/* Reset filters button — secondary/ghost. Lives at the bottom of the
+   sidebar so it shouldn't compete with the active filter controls. */
+.filter-reset {
+  margin-top: var(--sp-3);
+  width: 100%;
+  color: var(--fg-muted);
+  font-size: var(--fs-meta);
+}
+.filter-reset:hover { color: var(--fg); }
 /* Section headers: dropped tiny-uppercase-letterspaced look (cramped, hard to
    scan). Sentence-case bold at fs-base reads cleaner and matches Linear's
    own filter sidebar treatment. */
@@ -494,6 +719,190 @@ a:hover { text-decoration: underline; }
 .detail-panel .row { display: flex; gap: var(--sp-2); padding: 2px 0; }
 .detail-panel .row .k { color: var(--fg-muted); min-width: 80px; }
 
+/* Text-size cycle button — pairs the Type icon with a 2-char label
+   (sm/md/lg/xl) so users can see the current grade without hovering for
+   the tooltip. Width is set to fit the longest label at the current font
+   size; tabular-nums keeps the label width steady across grades. */
+.detail-text-size-btn {
+  gap: 3px;
+}
+.detail-text-size-label {
+  font-size: var(--fs-meta);
+  font-variant-numeric: tabular-nums;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--fg-muted);
+  line-height: 1;
+}
+
+/* Markdown tables — marked emits bare <table>/<th>/<td>, which browsers
+   render without borders. Give them visible separators in every surface
+   that renders user markdown (notes + detail panel description, annotations,
+   comments). Scoped (rather than a global `table` rule) so we don't disturb
+   layout tables in modals/coverage views.
+
+   Border uses color-mix against --fg-muted so the line reads clearly in
+   both light and dark themes — plain --node-border was too close to the
+   dark bg (~2 luminance steps) and tables read as floating text. */
+.note-preview table,
+.detail-panel table {
+  border-collapse: collapse;
+  margin: 0.6em 0;
+  font-size: 0.95em;
+  border: 1px solid color-mix(in srgb, var(--fg-muted) 45%, transparent);
+}
+.note-preview th, .note-preview td,
+.detail-panel th, .detail-panel td {
+  border: 1px solid color-mix(in srgb, var(--fg-muted) 45%, transparent);
+  padding: 4px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.note-preview thead th,
+.detail-panel thead th {
+  background: color-mix(in srgb, var(--fg-muted) 18%, transparent);
+  font-weight: 600;
+}
+.note-preview tbody tr:nth-child(even) td,
+.detail-panel tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--fg-muted) 8%, transparent);
+}
+
+/* Linear comments — card layout so each comment reads as a distinct block
+   rather than a thin top border that gets lost against the section dividers. */
+.detail-comment {
+  border: 1px solid var(--node-border);
+  border-radius: 6px;
+  background: var(--chip-bg);
+  padding: var(--sp-2) var(--sp-3);
+  margin-top: var(--sp-2);
+}
+.detail-comment:first-of-type { margin-top: var(--sp-1); }
+.detail-comment-head {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-size: var(--fs-meta);
+  margin-bottom: var(--sp-1);
+}
+.detail-comment-time { color: var(--fg-muted); font-size: var(--fs-meta); }
+.detail-comment p:first-child { margin-top: 0; }
+.detail-comment p:last-child { margin-bottom: 0; }
+
+/* Detail-panel header — title on the left flex, close button on the right. */
+.detail-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.detail-header h2 { flex: 1; margin: 0; }
+.detail-identifier {
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+}
+.detail-close {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* "Open in source" link — pairs the text with a small ExternalLink icon
+   that sits on the baseline. */
+.detail-source-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-meta);
+}
+.detail-source-link svg { opacity: 0.7; }
+
+/* Wide mode — pops the panel out of the flex flow into a fixed overlay
+   on the right. The canvas behind it stays interactive (no backdrop) so
+   you can still pan/click underneath. Width is driven by inline style
+   (its own useResizable instance with `ig-detail-panel-wide-w` storage)
+   so users can drag the same left-edge handle to resize wide mode too. */
+.detail-panel.is-wide {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  z-index: 50;
+  box-shadow: -8px 0 24px color-mix(in srgb, var(--fg) 30%, transparent);
+}
+
+/* Text size — relative offsets from whatever the global font scale resolves
+   to. Reading --fs-base-root (defined at :root or by useFontSize for the
+   custom case) avoids the self-referential cycle that would arise from
+   `--fs-base: calc(var(--fs-base) + Npx)`. The 'md' state has no rule so
+   the panel inherits the global scale exactly. */
+.detail-panel.detail-text-sm {
+  --fs-base: calc(var(--fs-base-root) - 2px);
+  --fs-meta: calc(var(--fs-meta-root) - 2px);
+  --fs-title: calc(var(--fs-title-root) - 2px);
+}
+.detail-panel.detail-text-lg {
+  --fs-base: calc(var(--fs-base-root) + 2px);
+  --fs-meta: calc(var(--fs-meta-root) + 2px);
+  --fs-title: calc(var(--fs-title-root) + 3px);
+}
+.detail-panel.detail-text-xl {
+  --fs-base: calc(var(--fs-base-root) + 4px);
+  --fs-meta: calc(var(--fs-meta-root) + 4px);
+  --fs-title: calc(var(--fs-title-root) + 6px);
+}
+
+/* Multi-spec warning callout — bordered, soft amber background, body
+   text uses --fg so it remains readable in both themes. The accent
+   lives on the border + leading icon, not on the prose. */
+.detail-spec-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--fg);
+  font-size: var(--fs-meta);
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--warn);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+}
+.detail-spec-warn-icon {
+  color: var(--warn);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* Click-to-filter values in DetailPanel's metadata rows. Rendered as
+   chip-style pills so the click affordance is visible at rest (was
+   previously a plain-text-with-hover-underline that read as
+   non-interactive). Hover/focus deepen the tint and add an accent
+   border. Click sets the corresponding filter dimension to *just*
+   that value and closes the DetailPanel so the canvas is unobstructed. */
+.detail-filter-link {
+  display: inline-flex;
+  align-items: center;
+  background: color-mix(in srgb, var(--fg-muted) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fg-muted) 18%, transparent);
+  padding: 1px 8px;
+  border-radius: 999px;
+  font: inherit;
+  color: var(--fg);
+  cursor: pointer;
+  text-align: left;
+  line-height: 1.4;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.detail-filter-link:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.detail-filter-link:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
 .issue-node {
   background: var(--node-bg);
   border: 1px solid var(--node-border);
@@ -542,6 +951,12 @@ a:hover { text-decoration: underline; }
   justify-content: center;
 }
 .inline-search-btn:hover { background: var(--chip-bg); }
+
+/* Wide-mode detail panel covers the canvas entirely, so the floating
+   inline-search button/bar would otherwise punch through with its higher
+   z-index. Suppress both whenever a wide-mode detail panel is mounted. */
+body[data-detail-wide='1'] .inline-search-btn,
+body[data-detail-wide='1'] .inline-search { display: none; }
 
 .inline-search {
   position: absolute;
@@ -643,14 +1058,41 @@ a:hover { text-decoration: underline; }
   border-color: color-mix(in srgb, currentColor 55%, transparent);
 }
 
+/* Mix / Project view bucket container — wraps the issues that share a
+   bucket (service / module / team / project). Each bucket has its own
+   `b.color`, exposed via the inline `--bucket-tint` variable so the
+   background tint and dashed border accent automatically pick up that
+   color. Modest 1px dashed border (was a chunky 2px) reads as
+   "grouping affordance" without competing with the issue cards inside. */
 .mixed-container {
-  background: rgba(0, 0, 0, 0.04);
-  border: 2px dashed color-mix(in srgb, var(--fg-muted) 50%, transparent);
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  position: relative;
+  background: color-mix(in srgb, var(--bucket-tint) 6%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--bucket-tint) 38%, transparent);
   border-radius: var(--radius-lg);
 }
-[data-theme='dark'] .mixed-container {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: color-mix(in srgb, var(--fg-muted) 60%, transparent);
+.mixed-container-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.mixed-container-name {
+  font-weight: 600;
+  font-size: var(--fs-base);
+}
+.mixed-container-count {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+  background: color-mix(in srgb, var(--bucket-tint) 14%, transparent);
+  padding: 0 6px;
+  border-radius: 999px;
+  font-weight: 500;
+  min-width: 18px;
+  text-align: center;
 }
 
 .cross-bucket-edge { stroke: var(--edge-cross-bucket) !important; stroke-width: 2 !important; }
@@ -676,6 +1118,85 @@ a:hover { text-decoration: underline; }
   box-shadow: var(--shadow-md);
 }
 
+/* 2-column layout for the Keyboard Shortcuts modal. 3 columns looked
+   right on paper but in practice break-inside: avoid + uneven section
+   sizes (Navigation has many items, Other has one) makes the balancer
+   leave the third column blank. 2 columns distributes the 5 sections
+   ~3+2 reliably and uses the modal width without scrolling. Falls
+   back to 1 column on narrow viewports. */
+.shortcuts-columns {
+  column-count: 2;
+  column-gap: 32px;
+  column-fill: balance;
+}
+@media (max-width: 700px) {
+  .shortcuts-columns { column-count: 1; }
+}
+.shortcuts-section {
+  break-inside: avoid;
+  margin-bottom: 18px;
+  display: inline-block; /* needed for break-inside to behave on some engines */
+  width: 100%;
+}
+.shortcuts-section-title {
+  margin: 0 0 8px 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-meta);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.shortcuts-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  align-items: center;
+}
+
+/* Shared modal header — used by all 4 modals via the <ModalHeader> helper.
+   Title takes the available space; close button sits flush right. */
+.modal-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.modal-title {
+  flex: 1;
+  margin: 0;
+  font-size: var(--fs-title);
+  font-weight: 600;
+}
+
+/* Settings page sub-section headings — each <h4> inside .settings-body
+   acts as a section divider (Display / Backend / Annotations / About).
+   Hangs an underline so visual hierarchy is clear without restructuring
+   the existing JSX into nested sections. */
+.settings-body h4 {
+  margin: 18px 0 10px;
+  padding-bottom: 6px;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--fg);
+  border-bottom: 1px solid color-mix(in srgb, var(--fg-muted) 14%, transparent);
+}
+.settings-body h4:first-of-type {
+  margin-top: 0;
+}
+
+/* Footer action row pinned right (Cancel / Save). Sticky so the Save
+   button stays reachable while the user scrolls a long Settings dialog. */
+.settings-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--fg-muted) 14%, transparent);
+  position: sticky;
+  bottom: -16px; /* offset the modal's 16px padding so the border hits the edge */
+  background: var(--bg);
+}
+
 .onboarding {
   max-width: 600px;
   margin: 80px auto;
@@ -691,22 +1212,42 @@ a:hover { text-decoration: underline; }
   position: absolute;
   background: var(--bg-elev);
   border: 1px solid var(--node-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
-  padding: 4px 0;
+  padding: 4px;
   z-index: 100;
+  min-width: 200px;
   font-size: var(--fs-base);
+  display: flex;
+  flex-direction: column;
 }
 .context-menu button {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   text-align: left;
-  border: none;
-  padding: 6px 12px;
+  border: 0;
+  padding: 6px 10px;
   background: transparent;
-  border-radius: 0;
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  font-size: var(--fs-base);
+  cursor: pointer;
 }
-.context-menu button:hover { background: var(--chip-bg); }
+.context-menu button:hover { background: var(--chip-bg); border: 0; }
+.context-menu button svg { color: var(--fg-muted); flex-shrink: 0; }
+.context-menu-sep {
+  height: 1px;
+  background: color-mix(in srgb, var(--fg-muted) 14%, transparent);
+  margin: 4px 0;
+}
+.context-menu-hint {
+  margin-left: auto;
+  color: var(--fg-muted);
+  font-size: var(--fs-meta);
+  font-family: var(--font-mono);
+}
 
 /* Lightweight CSS-only tooltip — instant show on hover (no native ~500ms
    delay), themed, no JS state. Wrap the trigger element with `.tip` and
@@ -751,4 +1292,548 @@ a:hover { text-decoration: underline; }
 .tip:focus-visible::after {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+
+/* Workspace notes modal — bigger than the other modals because it needs to
+   fit a card grid + an editor. */
+.modal.notes-modal {
+  max-width: 1280px;
+  width: 92vw;
+  height: 90vh;
+  max-height: 90vh;
+  padding: 12px 16px 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.notes-modal-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.notes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+  padding: 4px 2px 12px;
+  overflow-y: auto;
+  align-content: start;
+  flex: 1;
+}
+.note-card {
+  position: relative;
+  background: var(--bg-elev);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px 0;
+  height: 300px;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--fg);
+  font: inherit;
+}
+.note-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--node-border));
+}
+.note-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.note-card-title {
+  margin: 0;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.note-card-title.empty {
+  color: var(--fg-muted);
+  font-style: italic;
+  font-weight: 500;
+}
+.note-card-thumbnail {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  color: var(--fg-muted);
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+  position: relative;
+  /* Children render markdown — make sure none of it intercepts clicks
+     destined for the card itself. */
+  pointer-events: none;
+  /* Fade the bottom so clipped content reads as "more below" instead of
+     an abrupt cut. */
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+          mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+}
+.note-card-thumbnail > :first-child { margin-top: 0; }
+.note-card-thumbnail h1,
+.note-card-thumbnail h2,
+.note-card-thumbnail h3,
+.note-card-thumbnail h4,
+.note-card-thumbnail h5,
+.note-card-thumbnail h6 {
+  margin: 0.4em 0 0.25em;
+  font-size: var(--fs-base);
+  color: var(--fg);
+  font-weight: 600;
+}
+.note-card-thumbnail p {
+  margin: 0.3em 0;
+}
+.note-card-thumbnail ul,
+.note-card-thumbnail ol {
+  margin: 0.3em 0;
+  padding-left: 1.2em;
+}
+.note-card-thumbnail li {
+  margin: 0.1em 0;
+}
+.note-card-thumbnail code {
+  background: var(--chip-bg);
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  font-size: 0.9em;
+  color: var(--fg);
+}
+.note-card-thumbnail pre {
+  background: var(--chip-bg);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  font-size: 0.8em;
+  max-height: 60px;
+}
+.note-card-thumbnail pre code { padding: 0; background: transparent; }
+.note-card-thumbnail blockquote {
+  margin: 0.3em 0;
+  padding-left: 8px;
+  border-left: 2px solid color-mix(in srgb, var(--fg-muted) 40%, transparent);
+}
+.note-card-thumbnail a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.note-card-thumbnail a.issue-link {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  font-weight: 500;
+}
+.note-card-thumbnail img {
+  max-width: 100%;
+  max-height: 110px;
+  height: auto;
+  border-radius: var(--radius-sm);
+  margin: 0.3em 0;
+}
+.note-card-thumbnail hr {
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--fg-muted) 20%, transparent);
+  margin: 0.4em 0;
+}
+.note-card-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  z-index: 1;
+}
+.note-card:hover .note-card-actions,
+.note-card:focus-within .note-card-actions {
+  opacity: 1;
+}
+.note-card-action {
+  background: transparent;
+  border: 0;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 120ms ease, color 120ms ease;
+}
+.note-card-action:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg-muted) 14%, transparent);
+}
+.note-card-action.note-card-delete:hover {
+  color: #d9534f;
+  background: color-mix(in srgb, #d9534f 12%, transparent);
+}
+.note-card.archived {
+  opacity: 0.85;
+}
+.notes-list-row-action {
+  background: transparent;
+  border: 0;
+  color: var(--fg-muted);
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.notes-list-row:hover .notes-list-row-action,
+.notes-list-row-action.pending {
+  opacity: 1;
+}
+.notes-list-row-action:hover {
+  color: var(--fg);
+}
+
+/* Shared 2-step confirm button. Default state is invisible until the host
+   surface hovers/focuses; the .pending state stays visible until confirmed
+   or dismissed so the user knows action is "armed". */
+.confirm-icon-button {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-muted);
+  transition: background 120ms ease, color 120ms ease, transform 120ms ease;
+}
+.confirm-icon-button:hover {
+  color: var(--fg);
+}
+.confirm-icon-button.pending {
+  /* Pulse subtly so it's clear the button is awaiting a confirm tap. */
+  animation: confirm-pulse 900ms ease-in-out infinite;
+}
+.confirm-icon-button.pending.tone-danger {
+  color: #d9534f;
+  background: color-mix(in srgb, #d9534f 16%, transparent);
+}
+.confirm-icon-button.pending.tone-warning {
+  color: #d28e1f;
+  background: color-mix(in srgb, #d28e1f 18%, transparent);
+}
+.confirm-icon-button.pending.tone-neutral {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg-muted) 20%, transparent);
+}
+@keyframes confirm-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+.note-card.note-card-new {
+  border-style: dashed;
+  background: transparent;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-muted);
+  font-weight: 500;
+  gap: 8px;
+}
+.note-card.note-card-new:hover {
+  color: var(--fg);
+  border-color: var(--accent);
+}
+.notes-grid-empty {
+  grid-column: 1 / -1;
+  color: var(--fg-muted);
+  padding: 24px 8px;
+}
+
+/* Editor view inside the notes modal. Fills the remaining vertical space. */
+.note-editor {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 10px;
+}
+.note-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.note-editor-mode-toggle {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 8px;
+  background: var(--chip-bg);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+}
+.note-editor-mode-toggle .icon-text.active {
+  background: var(--bg);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+}
+.note-editor-meta {
+  margin-left: auto;
+  color: var(--fg-muted);
+  font-size: var(--fs-meta);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.note-editor-meta-status {
+  color: var(--fg);
+}
+.note-editor-meta-sep {
+  opacity: 0.4;
+}
+.note-editor-textarea {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  resize: none;
+  padding: 12px 14px;
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--fs-base);
+  line-height: 1.55;
+}
+.note-editor-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.note-preview {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 14px;
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  line-height: 1.55;
+}
+.note-preview h1, .note-preview h2, .note-preview h3,
+.note-preview h4, .note-preview h5, .note-preview h6 { margin: 0.8em 0 0.4em; }
+.note-preview h1:first-child { margin-top: 0.2em; }
+.note-preview p { margin: 0.5em 0; }
+.note-preview ul, .note-preview ol { margin: 0.5em 0; padding-left: 1.6em; }
+.note-preview code {
+  background: var(--chip-bg);
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  font-size: 0.9em;
+}
+.note-preview pre {
+  background: var(--chip-bg);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+}
+.note-preview pre code { padding: 0; background: transparent; }
+.note-preview a { color: var(--accent); text-decoration: underline; }
+.note-preview a.issue-link {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  font-weight: 500;
+}
+.note-preview a.issue-link:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.note-preview .issue-status-badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--fg-muted) 10%, transparent);
+  font-size: 0.85em;
+  font-weight: 500;
+  color: var(--fg-muted);
+  vertical-align: baseline;
+}
+.note-preview .issue-status-badge-icon {
+  /* Color is set inline via stateColorVar() so the glyph picks up the
+     per-state accent hue; the label stays muted for readability. */
+  font-size: 1em;
+  line-height: 1;
+}
+.note-preview .issue-status-badge-label {
+  white-space: nowrap;
+}
+.note-preview img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+}
+.note-preview blockquote {
+  margin: 0.6em 0;
+  padding-left: 12px;
+  border-left: 3px solid color-mix(in srgb, var(--fg-muted) 40%, transparent);
+  color: var(--fg-muted);
+}
+
+/* Undo toast pinned bottom-right inside the notes modal. */
+.undo-toast {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  background: var(--fg);
+  color: var(--bg);
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-base);
+  z-index: 10;
+}
+.undo-toast-action {
+  background: transparent;
+  border: 0;
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.undo-toast-action:hover {
+  text-decoration: underline;
+}
+
+.notes-modal-header-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.notes-modal-header-row .modal-header {
+  flex: 1;
+  margin-bottom: 0;
+}
+.notes-view-toggle {
+  display: inline-flex;
+  gap: 2px;
+  background: var(--chip-bg);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+}
+.notes-view-toggle .icon-only.active {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  padding: 4px 2px 12px;
+  flex: 1;
+}
+.notes-list-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  color: var(--fg-muted);
+  border: 1px dashed var(--node-border);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  cursor: pointer;
+  margin-bottom: 6px;
+  font: inherit;
+}
+.notes-list-new:hover {
+  border-color: var(--accent);
+  color: var(--fg);
+}
+.notes-list-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  background: var(--bg-elev);
+  transition: border-color 80ms ease, background 80ms ease;
+}
+.notes-list-row:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--node-border));
+}
+.notes-list-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.notes-list-row-text {
+  flex: 1;
+  min-width: 0;
+}
+.notes-list-row-title {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.notes-list-row-title.empty {
+  color: var(--fg-muted);
+  font-style: italic;
+  font-weight: 500;
+}
+.notes-list-row-snippet {
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.notes-list-row-delete {
+  background: transparent;
+  border: 0;
+  color: var(--fg-muted);
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+.notes-list-row:hover .notes-list-row-delete {
+  opacity: 1;
+}
+.notes-list-row-delete:hover {
+  color: #d9534f;
+}
+
+/* dnd-kit: while a card is being dragged, dim it and lift the others. */
+.note-card.dragging {
+  z-index: 2;
+}
+
+.note-editor-error {
+  background: color-mix(in srgb, #d9534f 14%, transparent);
+  color: #d9534f;
+  border: 1px solid color-mix(in srgb, #d9534f 35%, transparent);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-meta);
 }

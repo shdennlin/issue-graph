@@ -1,23 +1,31 @@
+import { useT } from '../i18n'
+
 export function Onboarding() {
+  const t = useT()
   return (
     <div className="onboarding">
-      <h1>🌟 Welcome to Issue Graph</h1>
-      <p>The backend isn’t configured yet.</p>
-      <h3>Steps for Linear</h3>
+      <h1>{t('onboarding.title')}</h1>
+      <p>{t('onboarding.notConfigured')}</p>
+      <h3>{t('onboarding.stepsHeading')}</h3>
       <ol>
-        <li>Go to Linear → Settings → API</li>
-        <li>Click <em>Create Personal API Key</em></li>
-        <li>Copy the key into your <code>.env</code>:</li>
+        <li>{t('onboarding.step1')}</li>
+        <li>
+          {t('onboarding.step2Prefix')}
+          <em>{t('onboarding.step2Em')}</em>
+        </li>
+        <li>
+          {t('onboarding.step3')} <code>.env</code>:
+        </li>
       </ol>
       <pre>
 {`BACKEND=linear
 LINEAR_API_KEY=lin_api_xxx`}
       </pre>
       <p>
-        Then restart Docker: <code>docker compose restart</code>
+        {t('onboarding.restart')} <code>docker compose restart</code>
       </p>
       <p style={{ color: 'var(--fg-muted)', fontSize: 12 }}>
-        For other backends, see the README.
+        {t('onboarding.otherBackends')}
       </p>
     </div>
   )

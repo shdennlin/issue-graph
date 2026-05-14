@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { LayoutGrid } from 'lucide-react'
 import ReactFlow, {
   applyNodeChanges,
   Background,
@@ -8,6 +9,7 @@ import ReactFlow, {
   Panel,
   ReactFlowProvider,
   useReactFlow,
+  useStoreApi,
   type Node as RFNode,
   type NodeChange,
   type Edge as RFEdge,
@@ -19,6 +21,7 @@ import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { useSchemaStore } from '../store/schemaStore'
 import { registerViewportBridge } from '../store/tabStateStore'
+import { registerHistoryViewportSink, storeViewportInHistory } from '../store/urlSync'
 import { findView } from '../views'
 import { IssueNode } from './nodes/IssueNode'
 import { MixedContainerNode } from './nodes/MixedContainerNode'
@@ -121,6 +124,7 @@ function CanvasInner() {
   }, [])
 
   const rf = useReactFlow()
+  const storeApi = useStoreApi()
 
   // Phase 2 layout: read each issue card's *real* rendered height from the DOM
   // after RF has painted, then feed those back into `build()` so dagre lays
@@ -180,17 +184,130 @@ function CanvasInner() {
   // unified fitView consumer below to fire (when a fit was requested).
   useEffect(() => {
     measuredSigRef.current = null
+    // react-hooks/set-state-in-effect: clearing measuredHeights *is* the
+    // signal that drives the re-measure cycle in the effect above. The
+    // setState here is the cache-invalidation, not derived state — there
+    // isn't a "derive from deps" alternative.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMeasuredHeights(null)
   }, [activeView, density, layoutBump])
   // Save viewport snapshot whenever user clicks fit-view, so they can revert.
   // Stored in a ref (not store) — purely UI ephemeral, doesn't affect rendering.
   const lastViewportRef = useRef<Viewport | null>(null)
   const [hasSavedViewport, setHasSavedViewport] = useState(false)
+
+  // Fit-view helper that computes bounding box from our local `built.nodes`
+  // instead of calling rf.fitView(). RF's internal node store can lag the
+  // nodes prop we just passed by one render frame; calling rf.fitView()
+  // then uses stale/empty bounds and lands the camera far off-screen
+  // (reproduced after a view switch: tx=-209, ty=-1529.7 with zoom
+  // clamped at minZoom). Computing bounds from `built.nodes` is
+  // deterministic and synced with the current render.
+  //
+  // densityFit: when true (used for explicit fit-all triggers — Fit-view
+  // button, cold-load, view-switch with no focus), fits the densest
+  // N-issue neighborhood rather than every visible node. Dep view's
+  // dagre LR layout stacks orphans (no blocks/blocked-by) into a tall
+  // rank-0 column on the left, AND the connected chain itself can be
+  // taller than the canvas at readable zoom — either case makes
+  // "fit everything" land the camera on empty space. The density fit
+  // strategy:
+  //   1. Compute spatial centroid of connected issues (or all issues if
+  //      no connections).
+  //   2. Pick the N closest top-level issues to that centroid (N = 20).
+  //   3. Fit the bounding box of those N — keeps zoom comfortable
+  //      (cap [0.8, 1.5]) and frames a meaningful cluster, leaving
+  //      orphans and outliers reachable by scrolling.
+  // When false (small-view path), fits all top-level nodes — Design-docs
+  // view and similar contexts where the user wants to see everything.
+  const fitToBuiltBounds = useCallback((options: { duration?: number; padding?: number; densityFit?: boolean } = {}) => {
+    const padding = options.padding ?? 0.1
+    const duration = options.duration ?? 600
+    const densityFit = options.densityFit ?? false
+
+    interface NodeBox { x: number; y: number; w: number; h: number; cx: number; cy: number; id: string }
+    const topLevel: NodeBox[] = []
+    const issueBoxes: NodeBox[] = []
+    for (const n of built.nodes) {
+      if (n.parentNode) continue
+      if (!n.position) continue
+      const w = (n.width ?? 320) as number
+      const h = (n.height ?? 110) as number
+      const box: NodeBox = {
+        x: n.position.x,
+        y: n.position.y,
+        w,
+        h,
+        cx: n.position.x + w / 2,
+        cy: n.position.y + h / 2,
+        id: n.id,
+      }
+      topLevel.push(box)
+      if (n.type === 'issue') issueBoxes.push(box)
+    }
+
+    let boxes = topLevel
+    if (densityFit && issueBoxes.length > 0) {
+      // Density anchor: centroid of connected issues if any, else all
+      // issues. Pulls the focal point toward the topological cluster.
+      const connectedIds = new Set<string>()
+      for (const e of built.edges) {
+        connectedIds.add(e.source)
+        connectedIds.add(e.target)
+      }
+      const anchorPool = issueBoxes.filter((b) => connectedIds.has(b.id))
+      const pool = anchorPool.length >= 2 ? anchorPool : issueBoxes
+      const ax = pool.reduce((s, b) => s + b.cx, 0) / pool.length
+      const ay = pool.reduce((s, b) => s + b.cy, 0) / pool.length
+      // Take the N closest issues to the anchor. Containers (Mix/Project)
+      // pass through untouched — they group issues and shouldn't be
+      // distance-ranked the same way.
+      const N = 20
+      const ranked = issueBoxes
+        .map((b) => ({ b, d: (b.cx - ax) ** 2 + (b.cy - ay) ** 2 }))
+        .sort((p, q) => p.d - q.d)
+        .slice(0, N)
+        .map((r) => r.b)
+      // Include all non-issue top-level nodes (Mix/Project containers)
+      // since they're structural; otherwise pick our ranked subset.
+      const containers = topLevel.filter((b) => issueBoxes.indexOf(b) === -1)
+      boxes = [...ranked, ...containers]
+    }
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const b of boxes) {
+      if (b.x < minX) minX = b.x
+      if (b.y < minY) minY = b.y
+      if (b.x + b.w > maxX) maxX = b.x + b.w
+      if (b.y + b.h > maxY) maxY = b.y + b.h
+    }
+    if (!isFinite(minX)) {
+      // No top-level nodes — defer to RF's fitView as a last resort.
+      rf.fitView({ duration, padding, minZoom: 0.8 })
+      return
+    }
+    const canvasEl = document.querySelector('.react-flow') as HTMLElement | null
+    const canvasRect = canvasEl?.getBoundingClientRect()
+    const canvasW = canvasRect?.width ?? 1500
+    const canvasH = canvasRect?.height ?? 800
+    const boundsW = Math.max(1, maxX - minX)
+    const boundsH = Math.max(1, maxY - minY)
+    const zoomX = (canvasW * (1 - padding * 2)) / boundsW
+    const zoomY = (canvasH * (1 - padding * 2)) / boundsH
+    // Zoom range: floor at 0.8 (cards stay readable), cap at 1.5
+    // (single-cluster views don't zoom in absurdly).
+    const zoom = Math.max(0.8, Math.min(zoomX, zoomY, 1.5))
+    rf.setCenter((minX + maxX) / 2, (minY + maxY) / 2, { zoom, duration })
+  }, [rf, built])
+
   const fitViewWithSnapshot = useCallback(() => {
     lastViewportRef.current = rf.getViewport()
     setHasSavedViewport(true)
-    rf.fitView({ duration: 600, padding: 0.1, minZoom: 0.8 })
-  }, [rf])
+    // Density-fit: frame the densest ~20-issue neighborhood instead of
+    // every node — Dep view's orphan column and deep dependency chains
+    // would otherwise push the camera into empty space.
+    fitToBuiltBounds({ padding: 0.1, duration: 600, densityFit: true })
+  }, [rf, fitToBuiltBounds])
   const revertViewport = useCallback(() => {
     if (!lastViewportRef.current) return
     rf.setViewport(lastViewportRef.current, { duration: 400 })
@@ -249,61 +366,148 @@ function CanvasInner() {
       },
     )
   }, [rf])
+
+  // history.state ↔ viewport bridge. On popstate, urlSync pulls the
+  // viewport that was stashed when this history entry was first created
+  // and feeds it through the same pendingViewportRestoreRef pipeline
+  // the tab-switch bridge uses — so back/forward navigation restores
+  // pan/zoom in addition to URL state.
   useEffect(() => {
-    // Restore the snapshotted viewport first if loadTab queued one.
-    // setViewport doesn't depend on layout — but we still wait for
-    // measuredHeights so it lands AFTER ReactFlow's initial fitView
-    // (triggered by the `fitView` prop on mount/remount), which would
-    // otherwise overwrite us.
-    const restoreVp = pendingViewportRestoreRef.current
-    if (restoreVp && measuredHeights) {
-      pendingViewportRestoreRef.current = null
-      // Also discard any pending fit queued AFTER the bridge cleared it
-      // — Producer 2 (view switch) re-arms it when the restored tab's
-      // activeView differs, and we don't want it to fire on the next
-      // unrelated consumer trigger.
+    return registerHistoryViewportSink((vp) => {
+      pendingViewportRestoreRef.current = vp
       pendingFitViewRef.current = null
-      rf.setViewport(restoreVp, { duration: 0 })
-      return
-    }
-    if (!pendingFitViewRef.current) return
+    })
+  }, [])
+  useEffect(() => {
     if (!measuredHeights) return  // wait until layout has settled
-    const { padding, preserveFocus } = pendingFitViewRef.current
-    pendingFitViewRef.current = null
-    // Re-layout flow: if a node is focused, recenter on it instead of
-    // framing the whole graph. After dagre re-runs, the focused issue may
-    // have moved across the canvas — fitView would yank the camera to
-    // wherever the new bounding box happens to be, losing the user's
-    // visual anchor. setCenter on the focused node keeps "what I was
-    // looking at" fixed while everything around it reflows.
-    if (preserveFocus && focusedId) {
-      const node = nodes.find((n) => n.id === focusedId)
+
+    const fitReq = pendingFitViewRef.current
+    const restoreVp = pendingViewportRestoreRef.current
+    if (!fitReq && !restoreVp) return
+    // Priority: focused-issue setCenter > viewport-restore > fitView.
+    //
+    // Why focus wins over viewport-restore: when the user has explicitly
+    // focused an issue (URL ?focus=X, click, etc.) and then triggers
+    // something that queues a fit (F5 with focusedId persisted, view
+    // switch, chain exit, ...), "show me that issue" is a stronger
+    // intent than "where I was panned before". Without this priority,
+    // F5 was landing the camera at the last-saved viewport even when
+    // the user clearly wanted to be back on their focused issue.
+    //
+    // Gated on `fitReq?.preserveFocus` so plain focus changes (clicking
+    // a different issue) don't yank the camera — only producers that
+    // explicitly opt in (cold start, view switch, layout bump) take the
+    // focus-priority path.
+    //
+    // CRITICAL: compute positionAbsolute from our local `nodes` array,
+    // NOT via rf.getNode(). RF's internal store lags one render frame
+    // behind the nodes prop we just passed in — when the consumer fires
+    // right after a view switch or layout bump, rf.getNode() can return
+    // stale positions from the *previous* layout, putting setCenter at
+    // the wrong coords. Our local nodes are the freshest source of
+    // truth because they're in the effect's closure.
+    //
+    // For Mix/Project views, the focused issue is a child of its
+    // bucket/project container — its `position` is RELATIVE to the
+    // parent. We resolve absolute coords by adding the parent's
+    // position to the child's. Top-level nodes (Dependency / Design-doc
+    // views) have no parentNode, so position is already absolute.
+    if (fitReq?.preserveFocus && focusedId) {
+      // CRITICAL: read positions from `built.nodes` (useMemo), NOT the
+      // local `nodes` state. The local state is updated via setNodes in
+      // an earlier effect — that setState is queued and only visible on
+      // the NEXT render. Within the same effect tick, `nodes` still has
+      // the previous view's content while `built.nodes` is already the
+      // new view (because useMemo recomputes synchronously during the
+      // current render). Using `nodes` here makes setCenter land at the
+      // PREVIOUS view's coordinates after a view switch.
+      const sourceNodes = built.nodes
+      const node = sourceNodes.find((n) => n.id === focusedId)
+      const issueCount = sourceNodes.filter((n) => n.type === 'issue').length
+      // Small-view heuristic: when the visible issue count is low
+      // (typical of Design-docs view, or a narrow chain isolation),
+      // centering on a single focused issue leaves big "empty" gaps
+      // around it because the dagre layout spreads the remaining nodes
+      // across the canvas. Fit to the whole cluster instead — focused
+      // issue stays onscreen, in context with its peers.
+      const isSmallView = issueCount > 0 && issueCount <= 15
+      if (isSmallView) {
+        pendingFitViewRef.current = null
+        pendingViewportRestoreRef.current = null
+        fitToBuiltBounds({ padding: fitReq.padding, duration: 600 })
+        return
+      }
       if (node?.position) {
+        let absX = node.position.x
+        let absY = node.position.y
+        if (node.parentNode) {
+          const parent = sourceNodes.find((p) => p.id === node.parentNode)
+          if (parent?.position) {
+            absX += parent.position.x
+            absY += parent.position.y
+          }
+        }
         const w = (node.width ?? 320) as number
         const h = (node.height ?? 110) as number
-        rf.setCenter(node.position.x + w / 2, node.position.y + h / 2, {
+        pendingFitViewRef.current = null
+        pendingViewportRestoreRef.current = null
+        rf.setCenter(absX + w / 2, absY + h / 2, {
           zoom: rf.getZoom(),
           duration: 600,
         })
         return
       }
     }
-    rf.fitView({ duration: 600, padding, minZoom: 0.8 })
-  }, [measuredHeights, rf, focusedId, nodes])
 
-  // Producer 1: first non-empty load.
+    // No focus, or focused issue isn't in this view's visible set —
+    // fall through to viewport-restore (e.g. tab switch / F5 / chain
+    // exit) if one is queued.
+    if (restoreVp) {
+      pendingFitViewRef.current = null
+      pendingViewportRestoreRef.current = null
+      rf.setViewport(restoreVp, { duration: 0 })
+      return
+    }
+
+    // Plain fitView — cold start with no focus, view switch with no
+    // focus, etc. Uses the same fitToBuiltBounds helper as
+    // fitViewWithSnapshot so behavior is consistent regardless of trigger
+    // (Producer 1/2/3 vs the Fit-view ControlButton). densityFit picks
+    // a meaningful neighborhood (~20 issues) so the camera frames real
+    // content even when the graph is sparse / has a tall orphan column.
+    if (fitReq) {
+      pendingFitViewRef.current = null
+      fitToBuiltBounds({ padding: fitReq.padding, duration: 600, densityFit: true })
+    }
+  }, [measuredHeights, rf, focusedId, built, fitToBuiltBounds])
+
+  // Producer 1: first non-empty load. preserveFocus so that F5 / cold
+  // start with a focusedId in the URL (or restored from tabStateStore)
+  // lands the camera on that issue rather than the whole-graph fitView.
+  // Falls through to plain fitView when no issue is focused.
   const hasFitOnceRef = useRef(false)
   useEffect(() => {
     if (nodes.length === 0) return
     if (hasFitOnceRef.current) return
+    // react-hooks/immutability: the rule flags refs used as effect-local
+    // guards as "modifying a value used in the effect". For this once-
+    // only-fit guard, mutating the ref *is* the intent — refs are React's
+    // canonical mutable-effect-state escape hatch.
+    // eslint-disable-next-line react-hooks/immutability
     hasFitOnceRef.current = true
-    pendingFitViewRef.current = { padding: 0.1 }
+    pendingFitViewRef.current = { padding: 0.1, preserveFocus: true }
   }, [nodes.length])
 
-  // Producer 2: view switch (e.g. dependency → mix).
+  // Producer 2: view switch (e.g. dependency → mix). preserveFocus so the
+  // user stays anchored on the issue they were just looking at — switching
+  // view shouldn't yank the camera to frame the whole graph if they'd
+  // already drilled into a specific node. Falls through to plain fitView
+  // when no issue is focused, or when the focused issue isn't visible in
+  // the new view (e.g. focused issue has no design doc → not in
+  // design-doc view).
   useEffect(() => {
     if (nodes.length === 0) return
-    pendingFitViewRef.current = { padding: 0.1 }
+    pendingFitViewRef.current = { padding: 0.1, preserveFocus: true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView])
 
@@ -315,11 +519,94 @@ function CanvasInner() {
   const lastLayoutBumpRef = useRef(layoutBump)
   useEffect(() => {
     if (lastLayoutBumpRef.current === layoutBump) return
+    // react-hooks/immutability: same guard-ref pattern as hasFitOnceRef
+    // above — tracking "did we already process this bump value" via a ref.
+    // eslint-disable-next-line react-hooks/immutability
     lastLayoutBumpRef.current = layoutBump
     if (nodes.length === 0) return
     pendingFitViewRef.current = { padding: 0.15, preserveFocus: true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layoutBump])
+
+  // Producer 4: explicit pan-to-focused request. Bumped from external surfaces
+  // (e.g. an issue-id link clicked inside a workspace note) so the camera
+  // follows the focus change without forcing a full layout redo. We pan with
+  // current zoom (snapped up to a sensible minimum so the node is visible).
+  const panToFocusedSeq = useViewStore((s) => s.panToFocusedSeq)
+  const lastPanSeqRef = useRef(panToFocusedSeq)
+  useEffect(() => {
+    if (lastPanSeqRef.current === panToFocusedSeq) return
+    lastPanSeqRef.current = panToFocusedSeq
+    if (!focusedId) return
+    const node = rf.getNode(focusedId)
+    if (!node) return
+    // Resolve absolute coords: in Mix / Project views issues live inside
+    // bucket containers, so `node.position` is relative to the parent. The
+    // existing preserveFocus path (see Producer 1/2/3 consumer) does this
+    // same walk; without it, setCenter lands the camera somewhere far from
+    // the actual rendered position.
+    let absX = node.position.x
+    let absY = node.position.y
+    if (node.parentNode) {
+      const parent = rf.getNode(node.parentNode)
+      if (parent?.position) {
+        absX += parent.position.x
+        absY += parent.position.y
+      }
+    }
+    const w = node.width ?? 320
+    const h = node.height ?? 110
+    const cx = absX + w / 2
+    const cy = absY + h / 2
+    const zoomNow = rf.getZoom()
+    const targetZoom = Math.max(zoomNow, 0.9)
+    // Bypass rf.setCenter — it routes through `d3Selection.transition().duration(N)`,
+    // and d3-transitions don't reliably tick on every browser/HMR state. Apply
+    // the transform directly via d3-zoom (no transition wrapper) so the camera
+    // always snaps to the focused node. We mirror RF's setCenter math:
+    //   tx = width/2 - cx * zoom; ty = height/2 - cy * zoom
+    const rfState = storeApi.getState() as { width: number; height: number; d3Zoom: unknown; d3Selection: unknown }
+    const d3Zoom = rfState.d3Zoom as { transform: (selection: unknown, t: unknown) => void } | null
+    const d3Selection = rfState.d3Selection as { node: () => { __zoom: { k: number; x: number; y: number } } } | null
+    if (d3Zoom && d3Selection) {
+      // Self-driven rAF tween: bypasses d3-transition (which silently no-ops
+      // in some HMR/browser states — see investigation notes). 250ms with
+      // easeOutCubic gives a quick, perceivable glide without delaying the
+      // user. Each frame applies a non-transition d3Zoom.transform so the
+      // transform actually commits.
+      const node = d3Selection.node()
+      const start = node.__zoom
+      const startK = start.k, startX = start.x, startY = start.y
+      const targetX = rfState.width / 2 - cx * targetZoom
+      const targetY = rfState.height / 2 - cy * targetZoom
+      const ZoomTransform = Object.getPrototypeOf(start).constructor as new (k: number, x: number, y: number) => unknown
+      const duration = 250
+      const t0 = performance.now()
+      const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3)
+      let rafTicked = false
+      const tick = (now: number) => {
+        rafTicked = true
+        const p = Math.min(1, (now - t0) / duration)
+        const e = easeOutCubic(p)
+        const k = startK + (targetZoom - startK) * e
+        const x = startX + (targetX - startX) * e
+        const y = startY + (targetY - startY) * e
+        d3Zoom.transform(d3Selection, new ZoomTransform(k, x, y))
+        if (p < 1) requestAnimationFrame(tick)
+      }
+      requestAnimationFrame(tick)
+      // Safety net: if rAF never fires (background/throttled tab), snap to
+      // target after the expected animation window. Real browsers tick rAF
+      // normally and this fallback is a no-op.
+      setTimeout(() => {
+        if (rafTicked) return
+        d3Zoom.transform(d3Selection, new ZoomTransform(targetZoom, targetX, targetY))
+      }, duration + 50)
+    } else {
+      // Fallback: setCenter (may animate if d3 transitions work in this env).
+      rf.setCenter(cx, cy, { duration: 250, zoom: targetZoom })
+    }
+  }, [panToFocusedSeq, focusedId, rf, storeApi])
 
   // Auto-bump layout when chain isolation is *cleared* (chainRootId goes
   // non-null → null). Without this, exiting chain mode keeps the chain
@@ -328,15 +615,37 @@ function CanvasInner() {
   // when entering chain mode: plain "Isolate chain" deliberately preserves
   // positions ("Isolate chain (auto-layout)" is the entry path that wants
   // a fresh layout, and it bumps explicitly in the context-menu handler).
+  //
+  // Viewport preservation: bumpLayout queues a fitView (Producer 3), which
+  // would yank the camera to frame the full graph and lose the user's
+  // pan/zoom. To avoid that we snapshot the viewport on chain *entry*
+  // (null → non-null) and queue a restore on exit. The consumer at
+  // `pendingViewportRestoreRef` runs *before* fitView, so the saved
+  // viewport wins.
   const prevChainRef = useRef<string | null>(chainRootId)
+  const chainEntryViewportRef = useRef<Viewport | null>(null)
   useEffect(() => {
     const wasSet = prevChainRef.current !== null
+    const isSet = chainRootId !== null
     const isCleared = chainRootId === null
+    // react-hooks/immutability: tracking the previous chainRootId via a
+    // ref so we can detect non-null ↔ null transitions. Canonical
+    // "useEffect with previous value" pattern.
+    // eslint-disable-next-line react-hooks/immutability
     prevChainRef.current = chainRootId
+    if (!wasSet && isSet) {
+      // Entering chain mode — snapshot viewport so we can restore on exit.
+      chainEntryViewportRef.current = rf.getViewport()
+    }
     if (wasSet && isCleared) {
       bumpLayout()
+      const saved = chainEntryViewportRef.current
+      if (saved) {
+        pendingViewportRestoreRef.current = saved
+        chainEntryViewportRef.current = null
+      }
     }
-  }, [chainRootId, bumpLayout])
+  }, [chainRootId, bumpLayout, rf])
 
   // Manual re-layout button handler. Bumps layoutBump → measured cache
   // clears → dagre re-runs from scratch (ignores user-dragged positions) →
@@ -570,6 +879,11 @@ function CanvasInner() {
         onPaneMouseMove={onPaneMouseMove}
         onPaneClick={onPaneClick}
         onNodeContextMenu={onNodeContextMenu}
+        // Stash viewport in history.state on every pan/zoom settle so
+        // Cmd+] (forward) restores not just the URL state of a step but
+        // the camera position too. RF fires onMoveEnd at the end of pan
+        // and zoom gestures.
+        onMoveEnd={(_e, vp) => storeViewportInHistory(vp)}
         // fitView prop intentionally OMITTED. ReactFlow's internal
         // fitViewOnInit (triggered from updateNodeDimensions when nodes are
         // first measured after each mount) races with our setViewport on
@@ -625,7 +939,7 @@ function CanvasInner() {
                 : 'Re-layout (shortcut: Shift+R) — re-run dagre from scratch and refit. Discards user-dragged positions.'
             }
           >
-            ⤴
+            <LayoutGrid size={14} />
           </ControlButton>
         </Controls>
         <Panel position="bottom-left" style={{ marginLeft: 50, fontSize: 'var(--fs-meta)', color: 'var(--fg-muted)' }}>

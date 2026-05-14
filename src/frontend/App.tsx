@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useRef } from 'react'
 import { useGraphStore } from './store/graphStore'
+import { useNotesStore } from './store/notesStore'
 import { useSchemaStore } from './store/schemaStore'
 import { useViewStore } from './store/viewStore'
 import { makeTabId, useWorkspaceStore } from './store/workspaceStore'
@@ -15,6 +16,9 @@ import { FilterPanel } from './components/FilterPanel'
 import { SyncBanner } from './components/SyncBanner'
 import { Onboarding } from './components/Onboarding'
 import { ContextMenu } from './components/ContextMenu'
+import { QuickSwitcher } from './components/QuickSwitcher'
+import { useQuickSwitcherStore } from './store/quickSwitcherStore'
+import type { Candidate } from './components/quickSwitcher/types'
 
 // Code-split conditional surfaces. DetailPanel pulls in `marked`; the three
 // modals are heavy and only open on user action — splitting them keeps the
@@ -26,6 +30,7 @@ const SyncHistoryModal = lazy(() =>
 const CoverageModal = lazy(() => import('./components/CoverageModal').then((m) => ({ default: m.CoverageModal })))
 const SettingsPage = lazy(() => import('./components/SettingsPage').then((m) => ({ default: m.SettingsPage })))
 const ShortcutsModal = lazy(() => import('./components/ShortcutsModal').then((m) => ({ default: m.ShortcutsModal })))
+const NotesModal = lazy(() => import('./components/notes/NotesModal').then((m) => ({ default: m.NotesModal })))
 
 export function App() {
   useTheme()
@@ -36,12 +41,15 @@ export function App() {
   const error = useGraphStore((s) => s.error)
   const loadGraph = useGraphStore((s) => s.load)
   const loadSchema = useSchemaStore((s) => s.load)
+  const loadNotes = useNotesStore((s) => s.load)
   const focusedId = useViewStore((s) => s.focusedId)
   const filterPanelOpen = useViewStore((s) => s.filterPanelOpen)
+  const detailPanelOpen = useViewStore((s) => s.detailPanelOpen)
   const syncHistoryOpen = useViewStore((s) => s.syncHistoryOpen)
   const coverageOpen = useViewStore((s) => s.coverageOpen)
   const settingsOpen = useViewStore((s) => s.settingsOpen)
   const shortcutsOpen = useViewStore((s) => s.shortcutsOpen)
+  const notesOpen = useViewStore((s) => s.notesOpen)
 
   // Bootstrap step 1 — resolve this tab's workspace + tab list BEFORE any
   // graph/schema calls. The fetch helpers in lib/api.ts inject `?w=` from
@@ -167,7 +175,25 @@ export function App() {
     } else {
       loadGraph().then(() => loadSchema())
     }
-  }, [initialized, activeTabId, currentWorkspaceId, loadGraph, loadSchema, refetchSilent])
+    // Notes are workspace-scoped and stored independently from graph — load
+    // them on every workspace/tab switch so the modal shows the right set.
+    loadNotes()
+  }, [initialized, activeTabId, currentWorkspaceId, loadGraph, loadSchema, loadNotes, refetchSilent])
+
+  // Notes are workspace-scoped, but `focusedNoteId` lives in viewStore and is
+  // intentionally preserved across modal open/close. That preservation breaks
+  // down on workspace switch: the old note ID no longer exists in the new
+  // workspace's notes, and NotesModal falls back to a "Loading note…" placeholder
+  // that never resolves. Clear it whenever the workspace changes so the modal
+  // opens to the grid view instead of a stale editor stub.
+  const prevWorkspaceIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    const prev = prevWorkspaceIdRef.current
+    if (prev !== null && prev !== currentWorkspaceId) {
+      useViewStore.getState().setFocusedNoteId(null)
+    }
+    prevWorkspaceIdRef.current = currentWorkspaceId
+  }, [currentWorkspaceId])
 
   // Background sync poller. After the first load, periodically check whether
   // the backend's TTL-driven bg sync produced fresher data, and if so swap
@@ -265,19 +291,20 @@ export function App() {
         // Coverage / Shortcuts) own Esc fully and handle their own
         // dismissal; we don't peel under them.
         //
-        //   1. Find on canvas       — closes Find
-        //   2. Context menu         — closes the menu
-        //   3. focusedId            — closes the DetailPanel (focusedId
-        //                              drives DetailPanel visibility, so
-        //                              clearing it is what the user feels)
-        //   4. Chain isolation      — clears chain
+        //   1. Find on canvas        — closes Find
+        //   2. Context menu          — closes the menu
+        //   3. DetailPanel open      — closes the panel (focus retained,
+        //                               chain mode / find / connectivity
+        //                               highlights still work on the
+        //                               focused issue)
+        //   4. focusedId             — clears the focus
+        //   5. Chain isolation       — clears chain
         //
-        // Inserting focusedId before chain matters because users routinely
-        // have both at once: chain isolated, then click an issue to read
-        // its details. Without this, Esc would jump straight to clearing
-        // the chain — yanking them out of context just to close the panel.
+        // Two-step Esc for DetailPanel: first Esc closes the panel
+        // without losing the focused issue (graph-first workflow), second
+        // Esc unfocuses. Most apps with a side detail panel work this way.
         const s = useViewStore.getState()
-        const modalOpen = s.settingsOpen || s.syncHistoryOpen || s.coverageOpen || s.shortcutsOpen
+        const modalOpen = s.settingsOpen || s.syncHistoryOpen || s.coverageOpen || s.shortcutsOpen || s.notesOpen
         if (modalOpen) return
         if (s.inlineSearch.open) {
           s.closeInlineSearch()
@@ -285,6 +312,10 @@ export function App() {
         }
         if (s.contextMenu) {
           s.setContextMenu(null)
+          return
+        }
+        if (s.detailPanelOpen) {
+          s.setDetailPanelOpen(false)
           return
         }
         if (s.focusedId) {
@@ -316,17 +347,34 @@ export function App() {
         ws.setActiveTab(targetTab.id)
         return
       }
+      // Space / Enter — open the DetailPanel for the currently-focused
+      // issue. Ad-hoc one-shot: doesn't change the auto-open preference.
+      // Useful when auto-open is OFF (graph-first workflow) and the user
+      // occasionally wants to peek at an issue's details. No-op if panel
+      // is already open, or if no issue is focused.
+      if ((e.key === ' ' || e.key === 'Enter') && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        const target = e.target as HTMLElement | null
+        const tag = target?.tagName?.toLowerCase()
+        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        const s = useViewStore.getState()
+        if (!s.focusedId) return
+        if (s.detailPanelOpen) return
+        e.preventDefault()
+        s.setDetailPanelOpen(true)
+        return
+      }
       // 'c' / 'C' — isolate chain on the currently focused issue. 'C' (shift)
       // additionally bumps layout, matching the "auto-layout" context-menu
       // entry. Only fires when no modifier is held, no input is focused,
-      // we're in dependency view, and an issue is actually focused.
+      // and an issue is actually focused. Works in all views: chain
+      // isolation re-filters the visible set to the connected blocks
+      // component regardless of view.
       if (e.key === 'c' || e.key === 'C') {
         if (e.metaKey || e.ctrlKey || e.altKey) return
         const target = e.target as HTMLElement | null
         const tag = target?.tagName?.toLowerCase()
         if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
         const s = useViewStore.getState()
-        if (s.activeView !== 'dependency') return
         if (!s.focusedId) return
         e.preventDefault()
         setChainRootId(s.focusedId)
@@ -342,6 +390,33 @@ export function App() {
         if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
         e.preventDefault()
         useViewStore.getState().setShortcutsOpen(true)
+        return
+      }
+      // 'n' — toggle the workspace notes modal. Same input-focus guards as
+      // other letter shortcuts. When the modal is closed, pressing n reopens
+      // it on whatever the user was last viewing (grid OR a specific note's
+      // editor). Use the in-modal Back / Esc to peel editor → grid.
+      if (e.key === 'n') {
+        if (e.metaKey || e.ctrlKey || e.altKey) return
+        const target = e.target as HTMLElement | null
+        const tag = target?.tagName?.toLowerCase()
+        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        e.preventDefault()
+        const s = useViewStore.getState()
+        s.setNotesOpen(!s.notesOpen)
+        return
+      }
+      // 'd' — toggle the "auto-open detail panel on click" preference. Same
+      // affordance as clicking the Detail toggle in the toolbar. Same
+      // input-focus guards as the other letter shortcuts.
+      if (e.key === 'd' || e.key === 'D') {
+        if (e.metaKey || e.ctrlKey || e.altKey) return
+        const target = e.target as HTMLElement | null
+        const tag = target?.tagName?.toLowerCase()
+        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        e.preventDefault()
+        const s = useViewStore.getState()
+        s.setDetailPanelAutoOpen(!s.detailPanelAutoOpen)
         return
       }
       // 'r' — toggle the Related-edges overlay (dependency view only). The
@@ -369,6 +444,19 @@ export function App() {
         e.preventDefault()
         bumpLayout()
         return
+      }
+      // Cmd/Ctrl+K (and Cmd/Ctrl+P) — open the global quick switcher.
+      // Only fires when the palette is closed; once open, the modal handles its own keys.
+      if (
+        (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey &&
+        (e.key.toLowerCase() === 'k' || e.key.toLowerCase() === 'p')
+      ) {
+        const qsOpen = useQuickSwitcherStore.getState().open
+        if (!qsOpen) {
+          e.preventDefault()
+          useQuickSwitcherStore.getState().openPalette()
+          return
+        }
       }
       // Cmd/Ctrl+Shift+F → focus the toolbar's filter search box. Distinct
       // from Cmd+F (which opens the inline find-on-canvas). Pre-selects any
@@ -431,12 +519,57 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [openInlineSearch, setChainRootId, bumpLayout])
 
+  const onQuickSwitcherActivate = (c: Candidate, openInNewTab: boolean) => {
+    if (c.kind === 'tab') {
+      useWorkspaceStore.getState().setActiveTab(c.tabId)
+      return
+    }
+    if (c.kind === 'issue') {
+      // Preserve current DetailPanel state. setFocusedId always resets
+      // detailPanelOpen from the persistent `detailPanelAutoOpen` preference,
+      // which would close the panel if the user has auto-open OFF but had
+      // opened the panel manually. Quick-switcher navigation shouldn't
+      // discard that ad-hoc open state.
+      const wasDetailOpen = useViewStore.getState().detailPanelOpen
+      if (openInNewTab) {
+        const tab = useWorkspaceStore.getState().tabs.find((t) => t.id === c.tabId)
+        if (tab) {
+          useWorkspaceStore.getState().addTab(tab.workspaceId)
+          // After the new tab loads its graph, focus the issue.
+          const tryFocus = () => {
+            const g = useGraphStore.getState().graph
+            if (g?.data?.issues?.some((i) => i.identifier === c.identifier)) {
+              useViewStore.getState().setFocusedId(c.identifier)
+              if (wasDetailOpen) useViewStore.getState().setDetailPanelOpen(true)
+              useViewStore.getState().requestPanToFocused()
+            } else {
+              setTimeout(tryFocus, 100)
+            }
+          }
+          setTimeout(tryFocus, 100)
+          return
+        }
+      }
+      useWorkspaceStore.getState().setActiveTab(c.tabId)
+      useViewStore.getState().setFocusedId(c.identifier)
+      if (wasDetailOpen) useViewStore.getState().setDetailPanelOpen(true)
+      useViewStore.getState().requestPanToFocused()
+      return
+    }
+    if (c.kind === 'note') {
+      useWorkspaceStore.getState().setActiveTab(c.tabId)
+      useViewStore.getState().setNotesOpen(true)
+      useViewStore.getState().setFocusedNoteId(c.noteId)
+      return
+    }
+  }
+
   // Onboarding when backend unconfigured AND no cached data.
   if (graph?.authError && (graph?.data.issues.length ?? 0) === 0) {
     return (
       <div className="app-shell">
-        <TabBar />
         <SyncBanner />
+        <TabBar />
         <Onboarding />
       </div>
     )
@@ -444,20 +577,20 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <TabBar />
       <SyncBanner />
+      <TabBar />
       <Toolbar />
       <div className="app-main">
         {filterPanelOpen && <FilterPanel />}
         <GraphCanvas />
-        {focusedId && (
+        {focusedId && detailPanelOpen && (
           <Suspense fallback={null}>
             <DetailPanel />
           </Suspense>
         )}
       </div>
       {status === 'error' && error && (
-        <div className="banner" style={{ background: 'var(--danger)', color: '#fff' }}>
+        <div className="error-banner" role="alert">
           {error}
         </div>
       )}
@@ -466,8 +599,10 @@ export function App() {
         {coverageOpen && <CoverageModal />}
         {settingsOpen && <SettingsPage />}
         {shortcutsOpen && <ShortcutsModal />}
+        {notesOpen && <NotesModal />}
       </Suspense>
       <ContextMenu />
+      <QuickSwitcher onActivate={onQuickSwitcherActivate} />
     </div>
   )
 }

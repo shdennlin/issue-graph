@@ -2,6 +2,7 @@ import type { Edge, Node } from 'reactflow'
 import type { ViewDefinition } from './types'
 import { issueNodeHeight } from './types'
 import { applyFilters } from './filters'
+import { computeChain } from './chain'
 import { computeConnectivity } from './connectivity'
 import { chooseColumnCount, packIntoColumns } from './containerLayout'
 
@@ -27,9 +28,17 @@ export const projectView: ViewDefinition = {
   id: 'project',
   label: 'Project',
   description: 'Linear projects as containers + issues inside. Cross-project edges highlighted.',
-  build({ data, filters, staleDays, myUserName, focusedId, density, search, measuredHeights }) {
+  build({ data, filters, staleDays, myUserName, focusedId, chainRootId, showRelated, density, search, measuredHeights }) {
     const NODE_H = issueNodeHeight(density)
-    const issues = applyFilters(data.issues, filters, staleDays, myUserName, search)
+    let issues
+    if (chainRootId) {
+      const { members } = computeChain(data.issues, chainRootId, {
+        includeRelatedNeighbors: showRelated,
+      })
+      issues = data.issues.filter((i) => members.has(i.identifier))
+    } else {
+      issues = applyFilters(data.issues, filters, staleDays, myUserName, search)
+    }
     const conn = computeConnectivity(data.issues)
     const heightFor = (id: string): number => measuredHeights?.get(id) ?? NODE_H
 
@@ -87,7 +96,12 @@ export const projectView: ViewDefinition = {
         nodes.push({
           id,
           type: 'issue',
-          data: { issue: iss, focused: focusedId === id, connectivity: conn.get(id) },
+          data: {
+            issue: iss,
+            focused: focusedId === id,
+            isChainRoot: chainRootId === id,
+            connectivity: conn.get(id),
+          },
           parentNode: containerId,
           extent: 'parent',
           position: {

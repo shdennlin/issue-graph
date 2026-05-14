@@ -1,3 +1,5 @@
+**English** | [繁體中文](design-doc-integration.zh-TW.md)
+
 # Design-doc integration
 
 If your team writes design docs / RFCs / change proposals as markdown files alongside your code — common in **Spec-Driven Development (SDD)** workflows — `issue-graph` can read them and show **per-issue progress bars** on the graph (e.g. `4/9 tasks done`).

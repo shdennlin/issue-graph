@@ -62,6 +62,15 @@ export const ISSUE_DETAIL_QUERY = /* GraphQL */ `
       createdAt
       updatedAt
       completedAt
+      comments(first: 50) {
+        nodes {
+          id
+          body
+          createdAt
+          updatedAt
+          user { displayName }
+        }
+      }
     }
   }
 `

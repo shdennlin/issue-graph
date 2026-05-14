@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { getDb } from '../db.js'
 import { getWorkspaceInfo, loadConfig } from '../lib/env.js'
+import { loadLabelSchemaFile } from '../schema/yamlLoader.js'
 import { readViewerCached } from '../sync.js'
 
 const SettingsKeys = [
@@ -45,6 +46,10 @@ settingsRoutes.get('/api/settings', (c) => {
   const stored = readAllSettings()
   const viewer = readViewerCached()
   const workspace = getWorkspaceInfo()
+  // Surface the label-schema source so Settings can show users which
+  // group the Mix view is bucketing on AND how that decision was made
+  // (yaml file > PRIMARY_GROUP env > auto-detect from label group names).
+  const labelSchemaLoaded = loadLabelSchemaFile(cfg.LABEL_SCHEMA_PATH) !== null
   return c.json({
     env: {
       backend: cfg.BACKEND,
@@ -60,6 +65,10 @@ settingsRoutes.get('/api/settings', (c) => {
       daily_snapshot_hour: cfg.DAILY_SNAPSHOT_HOUR,
       snapshot_retention_days: cfg.SNAPSHOT_RETENTION_DAYS,
       show_active_only_default: cfg.SHOW_ACTIVE_ONLY_DEFAULT,
+      primary_group_override: cfg.PRIMARY_GROUP ?? null,
+      type_group_override: cfg.TYPE_GROUP ?? null,
+      label_schema_path: cfg.LABEL_SCHEMA_PATH,
+      label_schema_loaded: labelSchemaLoaded,
     },
     stored,
     viewer,

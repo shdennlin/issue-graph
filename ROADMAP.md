@@ -1,3 +1,5 @@
+**English** | [繁體中文](ROADMAP.zh-TW.md)
+
 # Roadmap
 
 Direction, not commitment. Issues and PRs welcome on anything below.
@@ -78,16 +80,148 @@ Direction, not commitment. Issues and PRs welcome on anything below.
 **Lint / hygiene**
 - All 5 pre-existing react-hooks / unused-disable warnings cleared (resolves "Resolve the 4 known `react-hooks/exhaustive-deps` warnings" v1.2 item)
 
-## v1.3 — next
+## v1.3 — shipped
+
+**Workspaces — multi-tab UI**
+- Tab bar replaces the single-workspace header. Each tab holds its own
+  workspace + view + filters + focus + viewport, persisted to
+  sessionStorage and restored across reload / browser restart
+- `Cmd/Ctrl + 1..9` jump-to-Nth-tab, drag to reorder, ⭐ "set as default"
+  per workspace
+- `WORKSPACE_<ID>_*` env-var schema with a fallback legacy mode for the
+  single-key `LINEAR_API_KEY` setup
+- Resolves the prior "Multi-workspace / multi-team toggle" Likely item
+
+**Project view**
+- New top-level view grouping issues by Linear project; cross-project
+  `blocks` edges highlighted; "(No project)" pinned last
+- Project filter dimension in the sidebar (combinable with all other
+  filters)
+
+**Layout — multi-column buckets**
+- Mix and Project containers pack into 2–3 columns based on issue count;
+  tall single-column stacks gone
+
+**Design-doc / git worktrees**
+- Adapter scans every git worktree rooted at `REPO_PATH` and dedupes
+  linked issues across worktrees so nothing renders twice
+- OpenSpec / Spectra adapters split into separate modules; Spectra picks
+  up the new default `spec_dir` introduced in v2.2.5+ and supports
+  configurable `spec_dir` for non-standard layouts
+
+**PWA**
+- Web app manifest + service worker; installable from Chrome / Edge URL
+  bar or Safari → File → Add to Dock. App shell pre-cached; Linear data
+  + SSE stream remain network-only
+
+**Stability**
+- Viewport restore wins over ReactFlow's startup `fitView` race
+- SQLite path pinned to `/app/data/graph.db` inside the Docker container
+  to prevent host-path leakage
+- `data-dev/` host-only dev tree gitignored, kept disjoint from `data/`
+  so concurrent SQLite WAL writes can't corrupt either
+
+## v1.4 — shipped
+
+**Quick switcher — `Cmd+K`**
+- Fuzzy palette searches issues across every open tab; rows show title,
+  identifier, and current state chip
+- Persisted recents float to the top; toolbar trigger button alongside
+  the keyboard shortcut
+- Selecting an item pans the canvas to that issue and preserves the
+  detail panel state across the navigation
+
+**Workspace notes**
+- Markdown notes scoped per workspace; grid + list views, archive +
+  one-step undo, `n` shortcut to toggle the modal, `Cmd+E` (or `Cmd+/`
+  inside the PWA) to flip Edit / Preview inside an open note
+- Issue-ID mentions inside a note render the issue's current status
+  inline next to the ID
+
+**Navigation history**
+- `Cmd/Ctrl + [ / ]` back-forward through view / filter / focus / chain
+  changes — restores viewport on undo too
+
+**Detail panel improvements**
+- Linear comment thread surfaced directly in the panel; no more
+  context-switching to Linear to read discussion
+- Click any metadata value (state, priority, assignee, project, primary
+  label) to filter the canvas by it
+- Wide-mode resize cap widened to 75 % of viewport / 1200 px; side-mode
+  also adopts the new cap. Per-panel 4-grade text-size cycle
+  independent of the global font setting
+- Shimmering skeleton placeholder replaces the plain "Loading…" text
+  during issue fetch
+- Inline canvas find auto-hides while wide mode is open to avoid overlap
+- Focus is decoupled from the panel: clicking a node highlights it
+  without forcing the panel open; `Space` / `Enter` open the panel
+  on-demand; two-step `Esc` peels the panel before clearing focus
+- `d` toggles the "auto-open detail panel on focus" preference
+
+**Cross-platform keyboard labels**
+- `Cmd/⌘` renders as `Ctrl` on Windows/Linux; `Delete` renders as
+  `Backspace`. Centralised in `src/frontend/lib/platform.ts`. QA override
+  via `?platform=windows` or `localStorage.ig-platform`
+
+**i18n — English + Traditional Chinese**
+- Tiny custom dict + Zustand-backed locale store; English is the default,
+  zh-TW opt-in via Settings → Language; persisted to localStorage
+- Translations cover Toolbar, Settings, Shortcuts cheat sheet,
+  Onboarding, Sync banner, modal headers, FilterPanel, DetailPanel,
+  NotesModal, view labels
+- `README.zh-TW.md` plus zh-TW companions for the user-facing docs in
+  `docs/` and `ROADMAP.md`. `docs/PRD.md` intentionally English-only
+
+**Chain isolation — universal**
+- Chain-isolation entry and exit now work in every view (dependency,
+  mix, project) with viewport preserved across the toggle
+
+**Filter sidebar overhaul**
+- Filter sections are collapsible with sticky headers + active-count
+  badges; each section has its own clear button. Semantic icons + section
+  dividers make scanning faster
+
+**Markdown tables**
+- Tables in design docs and notes render with visible borders and
+  zebra striping for legible structured data
+
+**Settings — label-group surface**
+- Active bucket / type label group is shown directly in Settings and
+  in the Mix tooltip, so it is always clear which schema drives layout
+
+**Polish**
+- Header row: TabBar and SyncBanner merged into a single row
+- Settings: visually delimited sections, sticky footer actions
+- Shortcuts modal: wider, responsive 2-column layout
+- Toolbar: low-frequency actions collapse into an overflow menu;
+  modernised with `lucide` icons and flat buttons
+- Mix containers tinted with per-bucket accent colour
+- ContextMenu / inline find / IssueNode glyphs swapped for `lucide`
+  icons; modal headers unified via shared `ModalHeader` helper
+
+**Stability**
+- Camera centering uses the freshly built node positions (no more
+  pre-layout off-center jumps when switching views or after `F5`)
+- Quick-switcher activation now reliably pans the canvas regardless of
+  detail-panel state (bypasses a broken d3-transition path with a
+  self-driven rAF tween)
+- Switching workspaces clears any focused-note stub so the notes modal
+  opens cleanly on the new workspace instead of hanging on
+  "Loading note…"
+
+**Dev experience**
+- React-hooks v7 recommended preset adopted
+- Opt-in bundle-composition report via `rollup-plugin-visualizer`
+
+## v1.5 — next
 
 - [ ] Optional auth (basic-auth or token gate) for non-localhost deployments
-- [ ] Migrate the remaining v7 hook-rule violations (`set-state-in-effect`, `purity`)
+- [ ] Migrate the remaining v7 hook-rule violations (`set-state-in-effect`, `purity`) — currently suppressed per-call-site
 - [ ] Document the JSON shape of `/api/export` so users can build their own tools on top
 
-## v1.4+ — likely
+## v1.6+ — likely
 
 - [ ] **GitHub Issues backend** — same `Source` interface as Linear; high-value for OSS teams
-- [ ] Multi-workspace / multi-team toggle in the UI (currently env-pinned)
 - [ ] Saved views (named filter sets, not just URL params)
 - [ ] **Mix view layout improvements** — the bucket-as-container layout gets cramped past ~15 nodes:
   - Collapsible buckets (click header to collapse to a `▶ docs (3)` chip)
@@ -112,5 +246,5 @@ Direction, not commitment. Issues and PRs welcome on anything below.
 
 ---
 
-If you want to work on something in **v1.2** or **v1.3+**, open an issue first so we can align on scope.
+If you want to work on something in **v1.5** or **v1.6+**, open an issue first so we can align on scope.
 For **Maybe** items, open an issue to gauge interest before writing code.

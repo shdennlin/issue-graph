@@ -1,3 +1,5 @@
+**English** | [繁體中文](README.zh-TW.md)
+
 # issue-graph
 
 Self-hosted, read-only graph viewer for issue dependencies. Fetches from Linear, renders an interactive graph of issues, buckets, and `blocks` relationships. Optionally enriches with local design-doc progress.

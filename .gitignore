@@ -41,3 +41,6 @@ Thumbs.db
 *.pid
 .tmp/
 *.tsbuildinfo
+
+# Linked worktrees (created via `git worktree add .worktree/<branch>`)
+.worktree/

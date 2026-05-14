@@ -1,3 +1,5 @@
+**English** | [繁體中文](troubleshooting.zh-TW.md)
+
 # Troubleshooting
 
 ## I changed my `LINEAR_API_KEY` and the graph still shows the old workspace's issues

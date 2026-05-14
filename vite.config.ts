@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { visualizer } from 'rollup-plugin-visualizer'
 import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig(({ mode }) => {
@@ -26,6 +27,18 @@ export default defineConfig(({ mode }) => {
     root: 'src/frontend',
     plugins: [
       react(),
+      // Bundle-composition report. Off by default; flip on with
+      // `ANALYZE=1 bun run build:web` to produce `dist/stats.html` —
+      // useful for spotting accidentally-included heavy deps or to
+      // check the effect of a lazy-load split.
+      env.ANALYZE
+        ? visualizer({
+            filename: 'dist/stats.html',
+            template: 'treemap',
+            gzipSize: true,
+            brotliSize: true,
+          })
+        : null,
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['icon.svg', 'icon-maskable.svg'],
@@ -57,6 +70,14 @@ export default defineConfig(({ mode }) => {
         '@shared': fileURLToPath(new URL('./src/shared', import.meta.url)),
         '@frontend': fileURLToPath(new URL('./src/frontend', import.meta.url)),
       },
+      // Force a single React instance. Without dedupe, Vite's optimizer can
+      // pre-bundle a dependency (e.g. @dnd-kit/core) against a different React
+      // copy than the app's, producing "Invalid hook call" errors at runtime.
+      dedupe: ['react', 'react-dom'],
+    },
+    // Pre-bundle @dnd-kit so it shares the same React instance as the app.
+    optimizeDeps: {
+      include: ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
     },
     server: {
       port: vitePort,

@@ -156,9 +156,24 @@ export class LinearBackend implements BackendAdapter {
   async fetchIssueDetail(idOrIdentifier: string): Promise<IssueDetail> {
     const data = await this.gql<{ issue: any }>(ISSUE_DETAIL_QUERY, { id: idOrIdentifier })
     const base = normalizeIssue(data.issue)
+    const commentNodes = (data.issue?.comments?.nodes ?? []) as Array<{
+      id: string
+      body: string
+      createdAt: string
+      updatedAt: string
+      user?: { displayName?: string } | null
+    }>
+    const comments = commentNodes.map((n) => ({
+      id: String(n.id),
+      body: String(n.body ?? ''),
+      createdAt: String(n.createdAt),
+      updatedAt: String(n.updatedAt),
+      user: n.user?.displayName ? { displayName: String(n.user.displayName) } : null,
+    }))
     return {
       ...base,
       description: data.issue?.description ?? null,
+      comments,
     }
   }
 

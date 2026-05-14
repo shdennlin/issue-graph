@@ -132,11 +132,31 @@ export interface DesignDocCoverage {
   }>
 }
 
+export interface IssueComment {
+  id: string
+  body: string
+  createdAt: string
+  updatedAt: string
+  user: { displayName: string } | null
+}
+
 export interface AnnotationDTO {
   id: number
   targetType: 'issue' | 'edge' | 'bucket'
   targetId: string
   body: string
+  createdAt: number
+  updatedAt: number
+}
+
+export interface NoteDTO {
+  id: number
+  /** Raw markdown. Title is derived from the first non-empty line at render time. */
+  body: string
+  /** Lower values sort first. Negative values allowed — new notes inserted at MIN-1. */
+  sortOrder: number
+  /** Archived notes are hidden from the default grid; recoverable via Restore. */
+  archived: boolean
   createdAt: number
   updatedAt: number
 }

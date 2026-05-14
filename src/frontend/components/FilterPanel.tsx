@@ -1,16 +1,108 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import { ChevronDown, ChevronRight, HelpCircle, X } from 'lucide-react'
 import type { IssueStateType } from '@shared/types.js'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { useSchemaStore } from '../store/schemaStore'
 import { useResizable } from '../hooks/useResizable'
-import { stateColorVar, stateIcon, stateLabel } from '../lib/colors'
+import { stateColorVar, stateIcon, stateLabelFor } from '../lib/colors'
 import { applyFiltersExcluding } from '../views/filters'
 import { Tooltip } from './Tooltip'
+import { useLocale, useT, type DictKey } from '../i18n'
 
 const ALL_STATES: IssueStateType[] = ['started', 'unstarted', 'backlog', 'triage', 'completed', 'canceled']
 const PRIORITIES = [1, 2, 3, 4, 0]
-const PRIORITY_NAMES: Record<number, string> = { 0: 'No priority', 1: 'Urgent', 2: 'High', 3: 'Medium', 4: 'Low' }
+const PRIORITY_KEYS: Record<number, DictKey> = {
+  0: 'filterPanel.priorityNoPriority',
+  1: 'filterPanel.priorityUrgent',
+  2: 'filterPanel.priorityHigh',
+  3: 'filterPanel.priorityMedium',
+  4: 'filterPanel.priorityLow',
+}
+
+// Collapsed sidebar sections persist across reloads. Stored as
+// { sectionId: true } — only collapsed sections are written, so newly-
+// added sections default to open and the map doesn't grow unbounded.
+const COLLAPSE_STORAGE_KEY = 'ig-filter-collapsed-v1'
+
+function readCollapsedMap(): Record<string, true> {
+  if (typeof localStorage === 'undefined') return {}
+  try {
+    const raw = localStorage.getItem(COLLAPSE_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
+
+function useCollapsedState(id: string): [boolean, () => void] {
+  const [collapsed, setCollapsed] = useState<boolean>(() => readCollapsedMap()[id] === true)
+  const toggle = useCallback(() => {
+    setCollapsed((prev) => {
+      const next = !prev
+      try {
+        const map = readCollapsedMap()
+        if (next) map[id] = true
+        else delete map[id]
+        localStorage.setItem(COLLAPSE_STORAGE_KEY, JSON.stringify(map))
+      } catch {
+        // Silent — full quota / disabled storage shouldn't block UI state.
+      }
+      return next
+    })
+  }, [id])
+  return [collapsed, toggle]
+}
+
+function CollapsibleSection({
+  id,
+  title,
+  activeCount,
+  onClear,
+  children,
+}: {
+  id: string
+  title: ReactNode
+  activeCount: number
+  onClear?: () => void
+  children: ReactNode
+}) {
+  const [collapsed, toggle] = useCollapsedState(id)
+  const hasActive = activeCount > 0
+  const t = useT()
+  return (
+    <section>
+      <h4 className="filter-section-heading">
+        <button
+          type="button"
+          className="filter-section-toggle"
+          onClick={toggle}
+          aria-expanded={!collapsed}
+        >
+          {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+          <span className="filter-section-title">{title}</span>
+          {hasActive && (
+            <span className="filter-section-count" aria-label={t('filterPanel.activeAria', { count: activeCount })}>
+              {activeCount}
+            </span>
+          )}
+        </button>
+        {hasActive && onClear && (
+          <button
+            type="button"
+            className="filter-section-clear"
+            onClick={onClear}
+            aria-label={t('filterPanel.sectionClear')}
+            title={t('filterPanel.sectionClear')}
+          >
+            <X size={12} />
+          </button>
+        )}
+      </h4>
+      {!collapsed && children}
+    </section>
+  )
+}
 
 export function FilterPanel() {
   const graph = useGraphStore((s) => s.graph)
@@ -26,6 +118,8 @@ export function FilterPanel() {
   const toggleStateName = useViewStore((s) => s.toggleStateName)
   const toggleProject = useViewStore((s) => s.toggleProject)
   const resetFilters = useViewStore((s) => s.resetFilters)
+  const t = useT()
+  const locale = useLocale()
 
   // Stable reference for the issues array so the leave-one-out useMemos
   // below have a referentially-stable dependency. `graph?.data.issues ?? []`
@@ -59,7 +153,10 @@ export function FilterPanel() {
     for (const i of applyFiltersExcluding(issues, filters, staleDays, myUserName, search, 'priority')) {
       byPrio[i.priority] = (byPrio[i.priority] ?? 0) + 1
     }
-    // Assignee counts (excluding assignee + myIssuesOnly)
+    // Assignee counts (excluding assignee + myIssuesOnly).
+    // Use a stable canonical string for the unassigned bucket so the value
+    // stored in `filters.assignees` (and in the URL) doesn't shift across
+    // locales — display-only translation happens at render time below.
     for (const i of applyFiltersExcluding(issues, filters, staleDays, myUserName, search, 'assignee')) {
       const a = i.assignee?.displayName ?? '(unassigned)'
       byAssignee.set(a, (byAssignee.get(a) ?? 0) + 1)
@@ -80,6 +177,9 @@ export function FilterPanel() {
     const byProject = new Map<string, { name: string; count: number }>()
     for (const i of applyFiltersExcluding(issues, filters, staleDays, myUserName, search, 'project')) {
       const id = i.project?.id ?? '__noproject'
+      // Stable canonical name — translation of the "(No project)" display
+      // happens at render time; we keep the canonical English here so URL
+      // / filter state doesn't churn across locales.
       const name = i.project?.name ?? '(No project)'
       const cur = byProject.get(id)
       if (cur) cur.count += 1
@@ -166,35 +266,34 @@ export function FilterPanel() {
       style={{ width, flexShrink: 0 }}
     >
       <div className="resize-handle resize-handle-right" onMouseDown={startResize} title="Drag to resize" />
-      <section>
-        <h4>Quick</h4>
+      <CollapsibleSection
+        id="quick"
+        title={t('filterPanel.quick')}
+        activeCount={
+          (filters.activeOnly ? 1 : 0) +
+          (filters.myIssuesOnly ? 1 : 0) +
+          (filters.staleOnly ? 1 : 0)
+        }
+        onClear={() => {
+          setFilter('activeOnly', false)
+          setFilter('myIssuesOnly', false)
+          setFilter('staleOnly', false)
+        }}
+      >
         <label>
           <input
             type="checkbox"
             checked={filters.activeOnly}
             onChange={(e) => setFilter('activeOnly', e.target.checked)}
           />
-          Active only
-          <Tooltip text="Hides completed & canceled. Click those rows in State to fetch up to 1 year back.">
+          {t('filterPanel.activeOnly')}
+          <Tooltip text={t('filterPanel.activeOnlyHelp')}>
             <span
               tabIndex={0}
-              aria-label="Active only filter help"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 14,
-                height: 14,
-                borderRadius: '50%',
-                border: '1px solid var(--fg-muted)',
-                color: 'var(--fg-muted)',
-                fontSize: 9,
-                fontWeight: 600,
-                marginLeft: 4,
-                cursor: 'help',
-              }}
+              aria-label={t('filterPanel.activeOnlyHelpAria')}
+              className="filter-help-icon"
             >
-              ?
+              <HelpCircle size={14} />
             </span>
           </Tooltip>
         </label>
@@ -204,7 +303,7 @@ export function FilterPanel() {
             checked={filters.myIssuesOnly}
             onChange={(e) => setFilter('myIssuesOnly', e.target.checked)}
           />
-          My issues
+          {t('filterPanel.myIssues')}
         </label>
         <label>
           <input
@@ -212,46 +311,53 @@ export function FilterPanel() {
             checked={filters.staleOnly}
             onChange={(e) => setFilter('staleOnly', e.target.checked)}
           />
-          Stale only
+          {t('filterPanel.staleOnly')}
         </label>
-      </section>
+      </CollapsibleSection>
 
-      <section>
-        <h4>State</h4>
+      <CollapsibleSection
+        id="state"
+        title={t('filterPanel.state')}
+        activeCount={filters.stateTypes.length + filters.stateNames.length}
+        onClear={() => {
+          setFilter('stateTypes', [])
+          setFilter('stateNames', [])
+        }}
+      >
         {/* Hierarchical: each canonical type is a row; if multiple actual state
             names roll up to it, they appear as indented children. Empty types
             are hidden. Toggle the type checkbox to select the whole group; the
             child checkboxes filter by the literal Linear state.name. */}
         {/* Hide types whose count is 0 — including ones in default stateTypes
             like 'triage' that the workspace doesn't actually use. */}
-        {ALL_STATES.filter((t) => stateNamesByType[t].length > 0).map((t) => {
-          const children = stateNamesByType[t]
-          const groupCount = counts.byState[t] ?? 0
+        {ALL_STATES.filter((type) => stateNamesByType[type].length > 0).map((type) => {
+          const children = stateNamesByType[type]
+          const groupCount = counts.byState[type] ?? 0
           return (
-            <div key={t} className="state-group">
+            <div key={type} className="state-group">
               <label className="state-group-header">
                 <input
                   type="checkbox"
-                  checked={filters.stateTypes.includes(t)}
+                  checked={filters.stateTypes.includes(type)}
                   onChange={() => {
-                    const willBeChecked = !filters.stateTypes.includes(t)
-                    toggleStateType(t)
+                    const willBeChecked = !filters.stateTypes.includes(type)
+                    toggleStateType(type)
                     // Lazy-fetch: when the user opts into a state type the
                     // default sync doesn't pull (canceled, or completed older
                     // than 30 days), trigger backend to extend its query
                     // window. Backend dedupes if already covered.
-                    if (willBeChecked && (t === 'canceled' || t === 'completed')) {
+                    if (willBeChecked && (type === 'canceled' || type === 'completed')) {
                       useGraphStore.getState().extendScope(365)
                     }
                   }}
                   title={
-                    t === 'canceled' || t === 'completed'
-                      ? `Toggle the whole group (will fetch up to 365 days back)`
-                      : 'Toggle the whole group'
+                    type === 'canceled' || type === 'completed'
+                      ? t('filterPanel.stateGroupTitleFetch')
+                      : t('filterPanel.stateGroupTitle')
                   }
                 />
-                <span className="glyph" style={{ color: stateColorVar(t) }}>{stateIcon(t)}</span>
-                <span style={{ fontWeight: 600 }}>{stateLabel(t)}</span>
+                <span className="glyph" style={{ color: stateColorVar(type) }}>{stateIcon(type)}</span>
+                <span style={{ fontWeight: 600 }}>{stateLabelFor(type, locale)}</span>
                 <span className="count">{groupCount}</span>
               </label>
               {/* Always show children — the user can see the actual Linear state
@@ -267,7 +373,7 @@ export function FilterPanel() {
                         toggleStateName(c.name)
                         // Same lazy-fetch trigger for the granular state name
                         // when its canonical type isn't covered by default.
-                        if (willBeChecked && (t === 'canceled' || t === 'completed')) {
+                        if (willBeChecked && (type === 'canceled' || type === 'completed')) {
                           useGraphStore.getState().extendScope(365)
                         }
                       }}
@@ -280,11 +386,15 @@ export function FilterPanel() {
             </div>
           )
         })}
-      </section>
+      </CollapsibleSection>
 
       {primaryLabels.length > 0 && (
-        <section>
-          <h4>{primaryGroupSingular ? `${primaryGroupSingular}s` : schema.primaryGroup}</h4>
+        <CollapsibleSection
+          id="primary"
+          title={primaryGroupSingular ? `${primaryGroupSingular}s` : (schema.primaryGroup ?? t('filterPanel.group'))}
+          activeCount={filters.primaryValues.length}
+          onClear={() => setFilter('primaryValues', [])}
+        >
           {primaryLabels.map((l) => (
             <label key={l.id}>
               <input
@@ -296,12 +406,16 @@ export function FilterPanel() {
               <span className="count">{counts.byLabel.get(l.id) ?? 0}</span>
             </label>
           ))}
-        </section>
+        </CollapsibleSection>
       )}
 
       {typeLabels.length > 0 && (
-        <section>
-          <h4>{schema.typeGroup}</h4>
+        <CollapsibleSection
+          id="type"
+          title={schema.typeGroup ?? t('filterPanel.type')}
+          activeCount={filters.typeValues.length}
+          onClear={() => setFilter('typeValues', [])}
+        >
           {typeLabels.map((l) => (
             <label key={l.id}>
               <input
@@ -313,34 +427,46 @@ export function FilterPanel() {
               <span className="count">{counts.byLabel.get(l.id) ?? 0}</span>
             </label>
           ))}
-        </section>
+        </CollapsibleSection>
       )}
 
-      <section>
-        <h4>Priority</h4>
+      <CollapsibleSection
+        id="priority"
+        title={t('filterPanel.priority')}
+        activeCount={filters.priorities.length}
+        onClear={() => setFilter('priorities', [])}
+      >
         {PRIORITIES.map((p) => (
           <label key={p}>
             <input type="checkbox" checked={filters.priorities.includes(p)} onChange={() => togglePriority(p)} />
-            {PRIORITY_NAMES[p]}
+            {t(PRIORITY_KEYS[p]!)}
             <span className="count">{counts.byPrio[p] ?? 0}</span>
           </label>
         ))}
-      </section>
+      </CollapsibleSection>
 
-      <section>
-        <h4>Assignee</h4>
+      <CollapsibleSection
+        id="assignee"
+        title={t('filterPanel.assignee')}
+        activeCount={filters.assignees.length}
+        onClear={() => setFilter('assignees', [])}
+      >
         {assignees.slice(0, 30).map(([name, count]) => (
           <label key={name}>
             <input type="checkbox" checked={filters.assignees.includes(name)} onChange={() => toggleAssignee(name)} />
-            {name}
+            {name === '(unassigned)' ? t('common.unassigned') : name}
             <span className="count">{count}</span>
           </label>
         ))}
-      </section>
+      </CollapsibleSection>
 
       {projects.length > 0 && (
-        <section>
-          <h4>Project</h4>
+        <CollapsibleSection
+          id="project"
+          title={t('filterPanel.project')}
+          activeCount={filters.projectIds.length}
+          onClear={() => setFilter('projectIds', [])}
+        >
           {projects.map(([id, { name, count }]) => (
             <label key={id}>
               <input
@@ -348,16 +474,21 @@ export function FilterPanel() {
                 checked={filters.projectIds.includes(id)}
                 onChange={() => toggleProject(id)}
               />
-              {name}
+              {name === '(No project)' ? t('common.noProject') : name}
               <span className="count">{count}</span>
             </label>
           ))}
-        </section>
+        </CollapsibleSection>
       )}
 
       {schema.prefixes.map((g) => (
-        <section key={g.token}>
-          <h4>{g.token}:</h4>
+        <CollapsibleSection
+          key={g.token}
+          id={`prefix:${g.token}`}
+          title={`${g.token}:`}
+          activeCount={(filters.prefixSelections[g.token] ?? []).length}
+          onClear={() => setFilter('prefixSelections', { ...filters.prefixSelections, [g.token]: [] })}
+        >
           {g.labels.map((l) => (
             <label key={l.id}>
               <input
@@ -369,12 +500,16 @@ export function FilterPanel() {
               <span className="count">{counts.byLabel.get(l.id) ?? 0}</span>
             </label>
           ))}
-        </section>
+        </CollapsibleSection>
       ))}
 
       {showDesigndocFilter && (
-        <section>
-          <h4>Design doc</h4>
+        <CollapsibleSection
+          id="designdoc"
+          title={t('filterPanel.designDoc')}
+          activeCount={filters.designdocFilter !== 'all' ? 1 : 0}
+          onClear={() => setFilter('designdocFilter', 'all')}
+        >
           {(['all', 'has', 'missing'] as const).map((v) => (
             <label key={v}>
               <input
@@ -383,13 +518,13 @@ export function FilterPanel() {
                 checked={filters.designdocFilter === v}
                 onChange={() => setFilter('designdocFilter', v)}
               />
-              {v}
+              {v === 'all' ? t('filterPanel.designDocAll') : v === 'has' ? t('filterPanel.designDocHas') : t('filterPanel.designDocMissing')}
             </label>
           ))}
-        </section>
+        </CollapsibleSection>
       )}
 
-      <button onClick={resetFilters} style={{ marginTop: 8 }}>Reset filters</button>
+      <button onClick={resetFilters} className="filter-reset">{t('filterPanel.resetFilters')}</button>
     </aside>
   )
 }

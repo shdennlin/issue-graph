@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { AlertTriangle, ArrowLeft, ArrowRight, MessageSquare, Minus, Star } from 'lucide-react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import type { AnnotationDTO, NormalizedIssue } from '@shared/types.js'
 import { useSchemaStore } from '../../store/schemaStore'
@@ -87,17 +88,18 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
             position: 'absolute',
             top: -8,
             left: -8,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             background: 'var(--accent, #2563eb)',
             color: '#fff',
-            fontSize: 11,
             lineHeight: 1,
-            padding: '3px 6px',
+            padding: 4,
             borderRadius: 999,
-            fontWeight: 700,
             boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
           }}
         >
-          ★
+          <Star size={11} fill="currentColor" />
         </span>
       )}
       {connectivity && !isCompact && (connectivity.out > 0 || connectivity.in > 0 || connectivity.related > 0) && (
@@ -142,31 +144,28 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
             pointerEvents: 'none',
           }}
         >
-          {/* Glyphs chosen for stronger fill at small sizes:
-                ⇨ U+21E8 Rightwards White Arrow
-                ⇦ U+21E6 Leftwards White Arrow
-                ╍ U+254D Box Drawings Heavy Double Dash Horizontal
-              ⇨/⇦ are paired (same Arrows block, matched weight). The
-              dashed-bar glyph reads as "non-directional connection" and
-              echoes the dashed `related` edge style on the canvas. */}
-          {/* Symbols rendered larger than the surrounding number for at-a-
-              glance shape recognition. Numbers inherit the badge's 12px so
-              they stay legible without dominating the card. */}
+          {/* Lucide icons replace the previous Unicode glyphs
+              (⇨ U+21E8 / ⇦ U+21E6 / ╍ U+254D). SVG renders with
+              consistent stroke weight across OS / browser font
+              fallbacks, where the glyphs varied (especially the
+              dashed-bar that some platforms rendered as just a dash).
+              Minus stays as the "non-directional connection" cue,
+              echoing the dashed related-edge style on the canvas. */}
           {connectivity.out > 0 && (
-            <span>
-              <span style={{ fontSize: 18, fontWeight: 800 }} aria-hidden>⇨</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+              <ArrowRight size={13} strokeWidth={2.5} aria-hidden />
               {connectivity.out}
             </span>
           )}
           {connectivity.in > 0 && (
-            <span>
-              <span style={{ fontSize: 18, fontWeight: 800 }} aria-hidden>⇦</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+              <ArrowLeft size={13} strokeWidth={2.5} aria-hidden />
               {connectivity.in}
             </span>
           )}
           {connectivity.related > 0 && (
-            <span>
-              <span style={{ fontSize: 18, fontWeight: 800 }} aria-hidden>╍</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+              <Minus size={13} strokeWidth={3} aria-hidden />
               {connectivity.related}
             </span>
           )}
@@ -203,9 +202,7 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
           </span>
           {annCount > 0 && (
             <span className="annotation-count" title={`${annCount} annotations`} aria-label={`${annCount} annotations`}>
-              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
-                <path d="M2 4.5C2 3.67 2.67 3 3.5 3h9c0.83 0 1.5 0.67 1.5 1.5v5c0 0.83-0.67 1.5-1.5 1.5H6l-3 3v-3H3.5C2.67 11 2 10.33 2 9.5v-5z" />
-              </svg>
+              <MessageSquare size={11} strokeWidth={1.7} aria-hidden />
               {annCount}
             </span>
           )}
@@ -241,7 +238,13 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
               // split, or the docs should be split, or the linkage is wrong.
               // Make it red so the human reviewer notices and decides.
               <span
-                style={{ color: 'var(--warn, #f59e0b)', fontWeight: 600 }}
+                style={{
+                  color: 'var(--warn, #f59e0b)',
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                }}
                 title={
                   `This issue is linked to ${docs.length} design-doc changes (specs):\n` +
                   docs.map((d) => `  • ${d.name}`).join('\n') +
@@ -250,7 +253,7 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
                   `into per-spec sub-issues so each batch has contained scope.`
                 }
               >
-                ⚠ {docs.length} specs
+                <AlertTriangle size={11} aria-hidden /> {docs.length} specs
               </span>
             )}
           </div>
