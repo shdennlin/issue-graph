@@ -16,6 +16,9 @@ import { FilterPanel } from './components/FilterPanel'
 import { SyncBanner } from './components/SyncBanner'
 import { Onboarding } from './components/Onboarding'
 import { ContextMenu } from './components/ContextMenu'
+import { QuickSwitcher } from './components/QuickSwitcher'
+import { useQuickSwitcherStore } from './store/quickSwitcherStore'
+import type { Candidate } from './components/quickSwitcher/types'
 
 // Code-split conditional surfaces. DetailPanel pulls in `marked`; the three
 // modals are heavy and only open on user action — splitting them keeps the
@@ -427,6 +430,19 @@ export function App() {
         bumpLayout()
         return
       }
+      // Cmd/Ctrl+K (and Cmd/Ctrl+P) — open the global quick switcher.
+      // Only fires when the palette is closed; once open, the modal handles its own keys.
+      if (
+        (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey &&
+        (e.key.toLowerCase() === 'k' || e.key.toLowerCase() === 'p')
+      ) {
+        const qsOpen = useQuickSwitcherStore.getState().open
+        if (!qsOpen) {
+          e.preventDefault()
+          useQuickSwitcherStore.getState().openPalette()
+          return
+        }
+      }
       // Cmd/Ctrl+Shift+F → focus the toolbar's filter search box. Distinct
       // from Cmd+F (which opens the inline find-on-canvas). Pre-selects any
       // existing query for fast replace, mirroring InlineSearch's reopen
@@ -488,6 +504,51 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [openInlineSearch, setChainRootId, bumpLayout])
 
+  const onQuickSwitcherActivate = (c: Candidate, openInNewTab: boolean) => {
+    if (c.kind === 'tab') {
+      useWorkspaceStore.getState().setActiveTab(c.tabId)
+      return
+    }
+    if (c.kind === 'issue') {
+      // Preserve current DetailPanel state. setFocusedId always resets
+      // detailPanelOpen from the persistent `detailPanelAutoOpen` preference,
+      // which would close the panel if the user has auto-open OFF but had
+      // opened the panel manually. Quick-switcher navigation shouldn't
+      // discard that ad-hoc open state.
+      const wasDetailOpen = useViewStore.getState().detailPanelOpen
+      if (openInNewTab) {
+        const tab = useWorkspaceStore.getState().tabs.find((t) => t.id === c.tabId)
+        if (tab) {
+          useWorkspaceStore.getState().addTab(tab.workspaceId)
+          // After the new tab loads its graph, focus the issue.
+          const tryFocus = () => {
+            const g = useGraphStore.getState().graph
+            if (g?.data?.issues?.some((i) => i.identifier === c.identifier)) {
+              useViewStore.getState().setFocusedId(c.identifier)
+              if (wasDetailOpen) useViewStore.getState().setDetailPanelOpen(true)
+              useViewStore.getState().requestPanToFocused()
+            } else {
+              setTimeout(tryFocus, 100)
+            }
+          }
+          setTimeout(tryFocus, 100)
+          return
+        }
+      }
+      useWorkspaceStore.getState().setActiveTab(c.tabId)
+      useViewStore.getState().setFocusedId(c.identifier)
+      if (wasDetailOpen) useViewStore.getState().setDetailPanelOpen(true)
+      useViewStore.getState().requestPanToFocused()
+      return
+    }
+    if (c.kind === 'note') {
+      useWorkspaceStore.getState().setActiveTab(c.tabId)
+      useViewStore.getState().setNotesOpen(true)
+      useViewStore.getState().setFocusedNoteId(c.noteId)
+      return
+    }
+  }
+
   // Onboarding when backend unconfigured AND no cached data.
   if (graph?.authError && (graph?.data.issues.length ?? 0) === 0) {
     return (
@@ -526,6 +587,7 @@ export function App() {
         {notesOpen && <NotesModal />}
       </Suspense>
       <ContextMenu />
+      <QuickSwitcher onActivate={onQuickSwitcherActivate} />
     </div>
   )
 }

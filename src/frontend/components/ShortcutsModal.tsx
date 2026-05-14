@@ -9,7 +9,7 @@ import { useT, type DictKey } from '../i18n'
 // by `group`. Descriptions are i18n keys under `shortcuts.items.*` so locales
 // can translate the prose without touching `keys` (the visible key glyphs
 // stay identical across languages).
-type Group = 'Navigation' | 'Selection' | 'Chain isolation' | 'Layout' | 'Notes' | 'Other'
+type Group = 'Navigation' | 'Selection' | 'Chain isolation' | 'Layout' | 'Notes' | 'Quick switcher' | 'Other'
 interface Shortcut {
   keys: string[]
   descriptionKey: DictKey
@@ -21,6 +21,7 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ['Cmd', ']'], descriptionKey: 'shortcuts.items.forward', group: 'Navigation' },
   { keys: ['Cmd', 'F'], descriptionKey: 'shortcuts.items.find', group: 'Navigation' },
   { keys: ['Cmd', 'Shift', 'F'], descriptionKey: 'shortcuts.items.focusToolbarSearch', group: 'Navigation' },
+  { keys: ['Cmd', 'K'], descriptionKey: 'shortcuts.items.quickSwitcherOpen', group: 'Navigation' },
   { keys: ['Enter'], descriptionKey: 'shortcuts.items.findNext', group: 'Navigation' },
   { keys: ['Esc'], descriptionKey: 'shortcuts.items.esc', group: 'Navigation' },
   { keys: ['?'], descriptionKey: 'shortcuts.items.cheatsheet', group: 'Navigation' },
@@ -44,9 +45,15 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ['Shift', 'R'], descriptionKey: 'shortcuts.items.relayout', group: 'Layout' },
 
   { keys: ['Cmd', 'Shift', 'S'], descriptionKey: 'shortcuts.items.screenshot', group: 'Other' },
+
+  { keys: ['Ctrl', 'J'], descriptionKey: 'shortcuts.items.quickSwitcherDown', group: 'Quick switcher' },
+  { keys: ['Ctrl', 'N'], descriptionKey: 'shortcuts.items.quickSwitcherDown', group: 'Quick switcher' },
+  { keys: ['Ctrl', 'K'], descriptionKey: 'shortcuts.items.quickSwitcherUp', group: 'Quick switcher' },
+  { keys: ['Ctrl', 'P'], descriptionKey: 'shortcuts.items.quickSwitcherUp', group: 'Quick switcher' },
+  { keys: ['Cmd', 'Enter'], descriptionKey: 'shortcuts.items.quickSwitcherOpenInNewTab', group: 'Quick switcher' },
 ]
 
-const GROUP_ORDER: Group[] = ['Navigation', 'Selection', 'Chain isolation', 'Layout', 'Notes', 'Other']
+const GROUP_ORDER: Group[] = ['Navigation', 'Selection', 'Chain isolation', 'Layout', 'Notes', 'Quick switcher', 'Other']
 
 const GROUP_KEY: Record<Group, DictKey> = {
   Navigation: 'shortcuts.groups.Navigation',
@@ -54,6 +61,7 @@ const GROUP_KEY: Record<Group, DictKey> = {
   'Chain isolation': 'shortcuts.groups.Chain isolation',
   Layout: 'shortcuts.groups.Layout',
   Notes: 'shortcuts.groups.Notes',
+  'Quick switcher': 'shortcuts.groups.Quick switcher',
   Other: 'shortcuts.groups.Other',
 }
 

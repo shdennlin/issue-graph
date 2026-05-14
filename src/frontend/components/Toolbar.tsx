@@ -26,6 +26,7 @@ import { api } from '../lib/api'
 import { formatShortcut } from '../lib/platform'
 import { computeChain } from '../views/chain'
 import { useT, type DictKey } from '../i18n'
+import { QuickSwitcherTrigger } from './quickSwitcher/QuickSwitcherTrigger'
 // Density + theme + search live here; Size moved to Settings → Display.
 
 const ICON_SIZE = 16
@@ -233,6 +234,7 @@ export function Toolbar() {
         </>
       )}
       <div style={{ marginLeft: 'auto' }} className="group">
+        <QuickSwitcherTrigger />
         {selection.length > 0 && (
           <>
             <span style={{ color: 'var(--fg-muted)', fontSize: 12 }}>{selection.length} {t('toolbar.selectedSuffix')}</span>

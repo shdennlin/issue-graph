@@ -153,6 +153,7 @@ export const en = {
       'Chain isolation': 'Chain isolation',
       Layout: 'Layout',
       Notes: 'Notes',
+      'Quick switcher': 'Quick switcher',
       Other: 'Other',
     },
     items: {
@@ -179,6 +180,10 @@ export const en = {
       relatedToggle: 'Toggle Related-edges overlay (dashed gray, dependency view)',
       relayout: 'Re-layout from scratch; recenters on focused issue if any',
       screenshot: 'Save canvas screenshot as PNG',
+      quickSwitcherOpen: 'Open quick switcher (search issues, notes, tabs across all open tabs)',
+      quickSwitcherDown: 'Move selection down',
+      quickSwitcherUp: 'Move selection up',
+      quickSwitcherOpenInNewTab: 'Open selected issue in a new tab',
     },
   },
   onboarding: {
