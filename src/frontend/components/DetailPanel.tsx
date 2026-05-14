@@ -1,15 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, ExternalLink, Maximize2, Minimize2, Type, X } from 'lucide-react'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
 import type { AnnotationDTO, IssueComment, NormalizedIssue } from '@shared/types.js'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { useSchemaStore } from '../store/schemaStore'
 import { useResizable } from '../hooks/useResizable'
 import { api } from '../lib/api'
-import { priorityLabelFor, stateLabelFor } from '../lib/colors'
+import { sortCommentsOldestFirst } from '../lib/comments'
+import { priorityLabelFor, stateColorVar, stateIcon, stateLabelFor } from '../lib/colors'
 import { getDesignDocsForIssue } from '../lib/labelSchema'
+import { renderMarkdownHtml, renderMarkdownNodes } from '../lib/markdown'
 import { translate, useLocale, useT } from '../i18n'
 
 function MarkdownBody({ body }: { body: string }) {
@@ -17,10 +17,7 @@ function MarkdownBody({ body }: { body: string }) {
   useEffect(() => {
     const el = ref.current
     if (!el) return
-    const html = marked.parse(body || '', { async: false }) as string
-    const safe = DOMPurify.sanitize(html, { ADD_ATTR: ['target', 'rel'] })
-    const parsed = new DOMParser().parseFromString(safe, 'text/html')
-    const nodes = Array.from(parsed.body.childNodes)
+    const nodes = renderMarkdownNodes(body)
     if (nodes.length === 0 && body) {
       // Sanitizer stripped everything (e.g., Linear bot comment with raw HTML).
       // Fall back to plaintext so the card isn't blank.
@@ -200,6 +197,10 @@ export function DetailPanel() {
   const renderedWidth = Math.min(active.width, activeMax)
   const startResize = active.startResize
   const resizing = active.resizing
+  const sortedComments = useMemo(
+    () => comments === null ? null : sortCommentsOldestFirst(comments),
+    [comments],
+  )
 
   if (!issue) return null
 
@@ -307,11 +308,13 @@ export function DetailPanel() {
           <span className="k">{t('detailPanel.state')}</span>
           <button
             type="button"
-            className="detail-filter-link"
+            className={`state-pill detail-state-pill is-${issue.state.type}`}
+            style={{ color: stateColorVar(issue.state.type) }}
             onClick={() => { setFilter('stateTypes', [issue.state.type]); setDetailPanelOpen(false) }}
             title={t('detailPanel.filterByState', { value: stateLabelFor(issue.state.type, locale) })}
           >
-            {stateLabelFor(issue.state.type, locale)}
+            <span className="glyph" aria-hidden>{stateIcon(issue.state.type)}</span>
+            <span>{issue.state.name}</span>
           </button>
         </div>
         <div className="row">
@@ -464,7 +467,7 @@ export function DetailPanel() {
               </>
             ) : (
               <>
-                <div dangerouslySetInnerHTML={{ __html: marked.parse(a.body) as string }} />
+                <div dangerouslySetInnerHTML={{ __html: renderMarkdownHtml(a.body) }} />
                 <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
                   <button onClick={() => { setEditingId(a.id); setEditingBody(a.body) }}>{t('common.edit')}</button>
                   <button onClick={() => remove(a.id)}>{t('common.delete')}</button>
@@ -497,20 +500,20 @@ export function DetailPanel() {
           </div>
         )}
         {!descLoading && description !== null && (
-          <div dangerouslySetInnerHTML={{ __html: marked.parse(description || t('detailPanel.noDescription')) as string }} />
+          <div dangerouslySetInnerHTML={{ __html: renderMarkdownHtml(description || '', t('detailPanel.noDescription')) }} />
         )}
         {!descLoading && description === null && <div style={{ color: 'var(--fg-muted)' }}>{t('detailPanel.descriptionLoadFail')}</div>}
       </div>
 
       <div className="section">
-        <h3>{t('detailPanel.comments', { count: comments?.length ?? 0 })}</h3>
-        {descLoading && comments === null && (
+        <h3>{t('detailPanel.comments', { count: sortedComments?.length ?? 0 })}</h3>
+        {descLoading && sortedComments === null && (
           <div style={{ color: 'var(--fg-muted)' }}>{t('detailPanel.commentsLoading')}</div>
         )}
-        {comments !== null && comments.length === 0 && !descLoading && (
+        {sortedComments !== null && sortedComments.length === 0 && !descLoading && (
           <div style={{ color: 'var(--fg-muted)' }}>{t('detailPanel.noComments')}</div>
         )}
-        {comments !== null && comments.map((cm) => (
+        {sortedComments !== null && sortedComments.map((cm) => (
           <div key={cm.id} className="detail-comment">
             <div className="detail-comment-head">
               <strong>{cm.user?.displayName ?? t('detailPanel.unknownAuthor')}</strong>
