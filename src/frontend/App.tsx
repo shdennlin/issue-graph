@@ -180,6 +180,21 @@ export function App() {
     loadNotes()
   }, [initialized, activeTabId, currentWorkspaceId, loadGraph, loadSchema, loadNotes, refetchSilent])
 
+  // Notes are workspace-scoped, but `focusedNoteId` lives in viewStore and is
+  // intentionally preserved across modal open/close. That preservation breaks
+  // down on workspace switch: the old note ID no longer exists in the new
+  // workspace's notes, and NotesModal falls back to a "Loading note…" placeholder
+  // that never resolves. Clear it whenever the workspace changes so the modal
+  // opens to the grid view instead of a stale editor stub.
+  const prevWorkspaceIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    const prev = prevWorkspaceIdRef.current
+    if (prev !== null && prev !== currentWorkspaceId) {
+      useViewStore.getState().setFocusedNoteId(null)
+    }
+    prevWorkspaceIdRef.current = currentWorkspaceId
+  }, [currentWorkspaceId])
+
   // Background sync poller. After the first load, periodically check whether
   // the backend's TTL-driven bg sync produced fresher data, and if so swap
   // it in silently (no loading-state flash). Cheap call (~12ms cached read);
