@@ -119,19 +119,35 @@
 - `data-dev/` host-only 開發目錄加進 gitignore，與 `data/` 完全分離，
   避免並行 SQLite WAL 寫入互相破壞
 
-## v1.4 — 進行中（尚未釋出）
+## v1.4 — 已釋出
+
+**Quick switcher — `Cmd+K`**
+- 模糊搜尋面板可跨所有開啟分頁查找議題；每一列顯示標題、識別碼與目前
+  state chip
+- 最近選過的項目浮到最上面；工具列另外配置快速啟動鈕
+- 選定後相機平移到該議題，並保留詳情面板原本的開關狀態
 
 **工作區筆記**
-- 以工作區為範圍的 markdown 筆記；網格 + 列表檢視、封存 + 復原、
-  `n` 鍵切換 modal、開啟筆記後 `Cmd+E` 切換 Edit / Preview
+- 以工作區為範圍的 markdown 筆記；網格 + 列表檢視、封存 + 一鍵復原、
+  `n` 切換 modal、開啟筆記後 `Cmd+E`（在 PWA 中也可 `Cmd+/`）切換
+  Edit / Preview
+- 筆記裡提到的 issue ID 會在旁邊內嵌顯示該議題的目前狀態
 
 **導覽歷史**
 - `Cmd/Ctrl + [ / ]` 在 view / filter / focus / chain 變動之間前後跳；
   undo 時連 viewport 也會還原
 
-**詳情面板的篩選點擊**
-- 點詳情面板裡的任一 metadata 值（state、priority、assignee、project、
-  primary label）就能用它篩選畫布
+**詳情面板強化**
+- 直接在面板顯示 Linear 的留言串，不再需要切到 Linear 才能看討論
+- 點任一 metadata 值（state、priority、assignee、project、primary
+  label）就能用它篩選畫布
+- 寬模式拖拉上限放寬到視窗的 75 % / 1200 px；側邊模式也採用同一組
+  上限。面板內字級可在 4 階獨立切換，與全域字體設定脫鉤
+- 載入議題時改為光澤骨架佔位，取代原本純文字 "Loading…"
+- 寬模式開啟時自動隱藏畫布行內查找，避免重疊
+- focus 與面板解耦：點節點只會高亮、不會強制開啟面板；`Space` /
+  `Enter` 才會打開；`Esc` 兩段式 — 先收起面板再清除 focus
+- `d` 切換「focus 時自動開啟詳情面板」的偏好
 
 **跨平台鍵盤標籤**
 - `Cmd/⌘` 在 Windows/Linux 顯示為 `Ctrl`；`Delete` 顯示為 `Backspace`。
@@ -146,12 +162,40 @@
 - 加上 `README.zh-TW.md` 與 `docs/`、`ROADMAP.md` 中對應的繁中版本。
   `docs/PRD.md` 刻意只保留英文
 
+**鏈隔離 — 跨檢視一致**
+- 鏈隔離的進入與離開現在在每個檢視（dependency、mix、project）都一致
+  運作，切換時保留 viewport
+
+**篩選側邊欄翻新**
+- 篩選區段可摺疊，header 改為 sticky 並顯示啟用中的篩選計數；每個區段
+  有自己的清除按鈕。加上語意 icon 與分隔線，掃讀速度更快
+
+**Markdown 表格**
+- 設計文件與筆記裡的表格現在會畫框線與斑馬條，結構化資料更好讀
+
+**Settings — 顯示作用中的 label-group**
+- 目前作用中的 bucket / type label group 直接顯示在 Settings 與 Mix
+  tooltip 裡，隨時知道排版是依哪一組 schema
+
 **打磨**
+- Header 列：TabBar 與 SyncBanner 合併成單一列
 - Settings：區段加分隔線、footer 動作改成 sticky
 - Shortcuts modal：拉寬，採用響應式 2 欄排版
-- Toolbar：低頻動作收進 overflow 選單
+- Toolbar：低頻動作收進 overflow 選單；改用 `lucide` icon + 扁平按鈕
 - Mix container 依 bucket 各自上強調色
-- ContextMenu / 行內查找 / IssueNode 的 glyph 換成 `lucide` icon
+- ContextMenu / 行內查找 / IssueNode 的 glyph 換成 `lucide` icon；
+  modal header 統一改用共用的 `ModalHeader`
+
+**穩定性**
+- 相機置中改用最新建好的節點座標（切換檢視或 `F5` 後不會再有偏移）
+- Quick switcher 啟動後現在不論詳情面板開關都能可靠 pan（用自寫 rAF
+  tween 繞過壞掉的 d3-transition 路徑）
+- 切換工作區時清掉殘留的 focused-note 暫存，避免筆記 modal 卡在
+  「載入筆記中…」
+
+**開發體驗**
+- 採用 React-hooks v7 推薦規則組
+- 透過 `rollup-plugin-visualizer` 提供可選用的 bundle 組成報表
 
 ## v1.5 — 接下來
 

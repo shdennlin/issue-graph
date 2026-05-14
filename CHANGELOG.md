@@ -6,6 +6,63 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [v1.4.0] - 2026-05-14
+
+### What's New
+
+**Quick Switcher — jump to any issue instantly**
+Press `Cmd+K` (or click the new toolbar button) to open the quick switcher palette. Start typing and a fuzzy search surfaces matching issues across every open tab in real time. Each row shows the issue's title, ID, and current state chip so you can confirm the right item at a glance. Recent picks are remembered and float to the top the next time you open it. Selecting an item pans the canvas to that issue and keeps the detail panel open if it was already visible.
+
+**Workspace notes**
+A lightweight markdown notepad scoped to each workspace is now built in. Press `n` to open the notes modal, write in Markdown, and flip between Edit and Preview with `Cmd+E` (or `Cmd+/`). Notes are organised in a grid or list view, can be archived with a one-step undo, and persist alongside the rest of your workspace state. Anywhere you mention an issue ID inside a note, its current status renders inline next to the ID so you always know where things stand.
+
+**Navigation history — back and forward on the canvas**
+`Cmd+[` and `Cmd+]` (or `Ctrl+[` / `Ctrl+]` on Windows/Linux) step backward and forward through your view, filter, focus, and chain changes, viewport position included. It works exactly like browser history but scoped to your graph session.
+
+**Linear comments in the detail panel**
+The detail panel now surfaces the comment thread from Linear directly inside the app. You no longer need to switch context to Linear to read or reference discussion on an issue.
+
+**Internationalisation — English and Traditional Chinese**
+The full UI is now available in Traditional Chinese. Switch languages from Settings → Language; the preference is saved across sessions. English remains the default. The keyboard shortcut cheat sheet, filter panel, detail panel, notes modal, toolbar, onboarding flow, and sync banner are all translated. User-facing documentation (`README`, `docs/`, `ROADMAP`) also ships Traditional Chinese companions.
+
+### Improved
+
+**Detail panel is wider and more flexible**
+Wide mode can now stretch up to 75% of the window width (previously capped lower) with a maximum of 1200 px. Resize by dragging the left edge; the panel remembers your chosen width. The text size inside the panel cycles through four grades independently of the global font setting — press the text-size button in the panel header. While the wide panel is open, the canvas inline search automatically hides to avoid overlap. A shimmering skeleton placeholder replaces the plain "Loading…" text while issue data is fetching.
+
+**Click any metadata value in the detail panel to filter the canvas**
+Tapping a state, priority, assignee, project, or primary label chip in the detail panel immediately applies that value as a canvas filter. It is the fastest way to jump from a single issue to all related work.
+
+**Keyboard shortcut `d` toggles detail panel auto-open**
+Press `d` to flip the auto-open preference for the detail panel. When enabled, focusing an issue opens the panel automatically; when disabled, the panel only opens when you explicitly click through.
+
+**OS-aware keyboard labels**
+Shortcut labels now reflect the keyboard you are actually using. `Cmd/⌘` shows as `Ctrl` on Windows and Linux; `Delete` shows as `Backspace`. The correct glyphs appear throughout the app — toolbar tooltips, the shortcuts cheat sheet, and inline hints — without any configuration needed.
+
+**Chain isolation works across all views**
+Entering and exiting chain isolation now works consistently in every view (dependency, mix, project), and the viewport position is preserved when you leave isolation mode.
+
+**Filter sidebar overhaul**
+Filter sections are now collapsible — click a section header to fold it away and keep the sidebar tidy. Active filter count badges on collapsed headers tell you at a glance what is filtering without expanding. Each section has its own clear button so you can reset one dimension without touching others. Sections are separated by dividers with semantic icons for faster scanning.
+
+**Markdown tables look like tables**
+Tables in design docs and notes now render with visible borders and alternating row shading, making structured data readable at a glance.
+
+**Settings label-group surface**
+The active bucket or type label group is now visible directly in Settings and in the Mix tooltip, so it is always clear which label schema is driving the current layout.
+
+**UI polish throughout**
+Icons across the toolbar, context menu, inline find, and issue node glyphs have been unified to the Lucide icon set. The toolbar collapses lower-frequency actions into an overflow menu to keep the primary bar uncluttered. Mix view containers are tinted with a per-bucket accent colour for quicker visual grouping. Modal headers follow a shared layout. The Settings panel has visually delimited sections and a sticky footer for action buttons. The keyboard shortcuts modal is wider and uses a responsive two-column layout.
+
+### Fixed
+
+- Switching workspaces now correctly clears the focused note, preventing a note from a previous workspace appearing briefly in the new one.
+- Opening the quick switcher and selecting an issue pans the canvas to that issue even when starting from a different position, and leaves the detail panel state intact.
+- The canvas inline search no longer overlaps the wide-mode detail panel when both would otherwise be visible simultaneously.
+- Camera centering (including `F5` / focus-on-issue) now uses the final built node positions rather than pre-layout estimates, eliminating off-center jumps when switching views.
+
+---
+
 ## [v1.3.0] - 2026-05-09
 
 ### What's New

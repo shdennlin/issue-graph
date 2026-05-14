@@ -121,20 +121,42 @@ Direction, not commitment. Issues and PRs welcome on anything below.
 - `data-dev/` host-only dev tree gitignored, kept disjoint from `data/`
   so concurrent SQLite WAL writes can't corrupt either
 
-## v1.4 — in progress (unreleased)
+## v1.4 — shipped
+
+**Quick switcher — `Cmd+K`**
+- Fuzzy palette searches issues across every open tab; rows show title,
+  identifier, and current state chip
+- Persisted recents float to the top; toolbar trigger button alongside
+  the keyboard shortcut
+- Selecting an item pans the canvas to that issue and preserves the
+  detail panel state across the navigation
 
 **Workspace notes**
 - Markdown notes scoped per workspace; grid + list views, archive +
-  undo, `n` shortcut to toggle the modal, `Cmd+E` to flip Edit / Preview
-  inside an open note
+  one-step undo, `n` shortcut to toggle the modal, `Cmd+E` (or `Cmd+/`
+  inside the PWA) to flip Edit / Preview inside an open note
+- Issue-ID mentions inside a note render the issue's current status
+  inline next to the ID
 
 **Navigation history**
 - `Cmd/Ctrl + [ / ]` back-forward through view / filter / focus / chain
   changes — restores viewport on undo too
 
-**Detail-panel filter clicks**
-- Click any metadata value in the detail panel (state, priority,
-  assignee, project, primary label) to filter the canvas by it
+**Detail panel improvements**
+- Linear comment thread surfaced directly in the panel; no more
+  context-switching to Linear to read discussion
+- Click any metadata value (state, priority, assignee, project, primary
+  label) to filter the canvas by it
+- Wide-mode resize cap widened to 75 % of viewport / 1200 px; side-mode
+  also adopts the new cap. Per-panel 4-grade text-size cycle
+  independent of the global font setting
+- Shimmering skeleton placeholder replaces the plain "Loading…" text
+  during issue fetch
+- Inline canvas find auto-hides while wide mode is open to avoid overlap
+- Focus is decoupled from the panel: clicking a node highlights it
+  without forcing the panel open; `Space` / `Enter` open the panel
+  on-demand; two-step `Esc` peels the panel before clearing focus
+- `d` toggles the "auto-open detail panel on focus" preference
 
 **Cross-platform keyboard labels**
 - `Cmd/⌘` renders as `Ctrl` on Windows/Linux; `Delete` renders as
@@ -150,12 +172,46 @@ Direction, not commitment. Issues and PRs welcome on anything below.
 - `README.zh-TW.md` plus zh-TW companions for the user-facing docs in
   `docs/` and `ROADMAP.md`. `docs/PRD.md` intentionally English-only
 
+**Chain isolation — universal**
+- Chain-isolation entry and exit now work in every view (dependency,
+  mix, project) with viewport preserved across the toggle
+
+**Filter sidebar overhaul**
+- Filter sections are collapsible with sticky headers + active-count
+  badges; each section has its own clear button. Semantic icons + section
+  dividers make scanning faster
+
+**Markdown tables**
+- Tables in design docs and notes render with visible borders and
+  zebra striping for legible structured data
+
+**Settings — label-group surface**
+- Active bucket / type label group is shown directly in Settings and
+  in the Mix tooltip, so it is always clear which schema drives layout
+
 **Polish**
+- Header row: TabBar and SyncBanner merged into a single row
 - Settings: visually delimited sections, sticky footer actions
 - Shortcuts modal: wider, responsive 2-column layout
-- Toolbar: low-frequency actions collapse into an overflow menu
+- Toolbar: low-frequency actions collapse into an overflow menu;
+  modernised with `lucide` icons and flat buttons
 - Mix containers tinted with per-bucket accent colour
-- ContextMenu / inline find / IssueNode glyphs swapped for `lucide` icons
+- ContextMenu / inline find / IssueNode glyphs swapped for `lucide`
+  icons; modal headers unified via shared `ModalHeader` helper
+
+**Stability**
+- Camera centering uses the freshly built node positions (no more
+  pre-layout off-center jumps when switching views or after `F5`)
+- Quick-switcher activation now reliably pans the canvas regardless of
+  detail-panel state (bypasses a broken d3-transition path with a
+  self-driven rAF tween)
+- Switching workspaces clears any focused-note stub so the notes modal
+  opens cleanly on the new workspace instead of hanging on
+  "Loading note…"
+
+**Dev experience**
+- React-hooks v7 recommended preset adopted
+- Opt-in bundle-composition report via `rollup-plugin-visualizer`
 
 ## v1.5 — next
 
