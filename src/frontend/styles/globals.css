@@ -1647,6 +1647,95 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   outline: none;
   border-color: var(--accent);
 }
+.note-editor-issue-refs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--node-border);
+  flex: 0 1 auto;
+  max-height: 30vh;
+  overflow-y: auto;
+}
+.note-editor-issue-refs-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  background: transparent;
+  border: 0;
+  padding: 2px 4px;
+  color: var(--fg-muted);
+  font-size: var(--fs-meta);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  margin-bottom: 2px;
+}
+.note-editor-issue-refs-toggle:hover {
+  color: var(--fg);
+}
+.note-copy-split {
+  position: relative;
+  display: inline-flex;
+}
+.note-copy-main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.note-copy-chevron {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left-width: 0;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+.note-copy-menu {
+  min-width: 220px;
+  top: calc(100% + 4px);
+  left: 0;
+  right: auto;
+}
+.note-editor-issue-ref.is-unresolved {
+  cursor: default;
+  opacity: 0.6;
+  font-style: italic;
+}
+.note-editor-issue-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: var(--chip-bg);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-meta);
+  color: var(--fg);
+  cursor: pointer;
+  text-align: left;
+}
+.note-editor-issue-ref:hover {
+  border-color: var(--accent);
+}
+.note-editor-issue-ref-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 600;
+}
+.note-editor-issue-ref-state {
+  font-size: 13px;
+  line-height: 1;
+}
+.note-editor-issue-ref-state-label,
+.note-editor-issue-ref-priority {
+  color: var(--fg-muted);
+}
+.note-editor-issue-ref-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .note-preview {
   flex: 1;
   min-height: 0;

@@ -1,10 +1,19 @@
-import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Edit3, Eye } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowLeft, Check, ChevronDown, ChevronRight, Copy, Edit3, Eye } from 'lucide-react'
 import { useNotesStore } from '../../store/notesStore'
 import { notesApi } from '../../lib/notesApi'
 import { formatShortcut, NOTE_TOGGLE_KEYS } from '../../lib/platform'
 import { formatAbsolute, formatRelative } from '../../lib/relativeTime'
+import { findIssueIds } from '../../lib/issueLinks'
+import { priorityLabelFor, stateColorVar, stateIcon, stateLabelFor } from '../../lib/colors'
+import { useGraphStore } from '../../store/graphStore'
+import { useViewStore } from '../../store/viewStore'
+import { useClickOutside } from '../../hooks/useClickOutside'
+import { useLocale } from '../../i18n'
 import { NotePreview } from './NotePreview'
+
+const SHOW_REFS_KEY = 'ig-note-show-refs-v1'
+type CopyMode = 'full' | 'body' | 'refs'
 
 interface Props {
   noteId: number
@@ -34,6 +43,23 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
   })
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [copyMenuOpen, setCopyMenuOpen] = useState(false)
+  const copyMenuRef = useRef<HTMLDivElement | null>(null)
+  useClickOutside(copyMenuRef, copyMenuOpen, () => setCopyMenuOpen(false))
+  const [showRefs, setShowRefs] = useState<boolean>(() => {
+    if (typeof localStorage === 'undefined') return false
+    try { return localStorage.getItem(SHOW_REFS_KEY) === '1' } catch { return false }
+  })
+  const toggleShowRefs = () => {
+    setShowRefs((prev) => {
+      const next = !prev
+      try { localStorage.setItem(SHOW_REFS_KEY, next ? '1' : '0') } catch { /* silent */ }
+      return next
+    })
+  }
+  const locale = useLocale()
+  const issues = useGraphStore((s) => s.graph?.data.issues)
   // `now` advances once a minute so the "updated 2 min ago" label ages in
   // place. Updating less often keeps re-renders cheap; the label resolution
   // is in minutes anyway.
@@ -155,6 +181,67 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
     }
   }, [flushPending])
 
+  const body = note?.body ?? ''
+  const referencedIssues = useMemo(() => {
+    const ids = findIssueIds(body)
+    if (ids.length === 0) return []
+    const byId = new Map((issues ?? []).map((i) => [i.identifier, i] as const))
+    const seen = new Set<string>()
+    const out: { id: string; issue: ReturnType<typeof byId.get> }[] = []
+    for (const id of ids) {
+      if (seen.has(id)) continue
+      seen.add(id)
+      out.push({ id, issue: byId.get(id) })
+    }
+    return out
+  }, [body, issues])
+  const resolvedIssues = useMemo(
+    () => referencedIssues.filter((r): r is { id: string; issue: NonNullable<typeof r.issue> } => r.issue !== undefined),
+    [referencedIssues],
+  )
+  const unresolvedIds = useMemo(
+    () => referencedIssues.filter((r) => r.issue === undefined).map((r) => r.id),
+    [referencedIssues],
+  )
+
+  const hasBody = body.trim().length > 0
+  const hasRefs = resolvedIssues.length > 0 || unresolvedIds.length > 0
+  const canCopy = hasBody || hasRefs
+
+  function buildPayload(mode: CopyMode): string {
+    const refLines: string[] = []
+    if (mode !== 'body' && hasRefs) {
+      refLines.push('**Referenced issues:**')
+      for (const { issue } of resolvedIssues) {
+        const state = stateLabelFor(issue.state.type, locale)
+        const priority = priorityLabelFor(issue.priority, locale)
+        refLines.push(`- **${issue.identifier}** · ${state} · ${priority} · ${issue.title}`)
+      }
+      for (const id of unresolvedIds) {
+        refLines.push(`- **${id}** · (not in cache)`)
+      }
+    }
+    if (mode === 'refs') return refLines.join('\n')
+    if (mode === 'body') return body.trimEnd()
+    const parts = [body.trimEnd()]
+    if (refLines.length > 0) parts.push('', '---', ...refLines)
+    return parts.join('\n')
+  }
+
+  async function copyAs(mode: CopyMode) {
+    if (!note) return
+    const payload = buildPayload(mode)
+    if (!payload) return
+    try {
+      await navigator.clipboard.writeText(payload)
+      setCopied(true)
+      setCopyMenuOpen(false)
+      window.setTimeout(() => setCopied(false), 1500)
+    } catch {
+      setUploadError('Copy failed — clipboard unavailable')
+    }
+  }
+
   if (!note) {
     return (
       <div className="note-editor empty">
@@ -193,6 +280,52 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
           >
             <Eye size={14} /> Preview
           </button>
+        </div>
+        <div className="note-copy-split" ref={copyMenuRef}>
+          <button
+            type="button"
+            className="icon-text note-copy-main"
+            onClick={() => copyAs('full')}
+            disabled={!canCopy}
+            title="Copy note + referenced issue statuses (for AI)"
+            aria-label="Copy as Markdown"
+          >
+            {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : 'Copy note + issues'}
+          </button>
+          <button
+            type="button"
+            className="icon-only note-copy-chevron"
+            onClick={() => setCopyMenuOpen((o) => !o)}
+            disabled={!canCopy}
+            aria-haspopup="menu"
+            aria-expanded={copyMenuOpen}
+            aria-label="Copy options"
+            title="Copy options"
+          >
+            <ChevronDown size={12} />
+          </button>
+          {copyMenuOpen && (
+            <div className="toolbar-overflow-menu note-copy-menu" role="menu">
+              <button
+                type="button"
+                role="menuitem"
+                className="toolbar-overflow-item"
+                onClick={() => copyAs('body')}
+                disabled={!hasBody}
+              >
+                Copy note only
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="toolbar-overflow-item"
+                onClick={() => copyAs('refs')}
+                disabled={!hasRefs}
+              >
+                Copy referenced issues only
+              </button>
+            </div>
+          )}
         </div>
         <span className="note-editor-meta" aria-live="polite">
           {uploading ? (
@@ -239,6 +372,56 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
           onCloseModal={onCloseModal}
           onBodyChange={(next) => updateBody(noteId, next)}
         />
+      )}
+      {hasRefs && (
+        <div className="note-editor-issue-refs" aria-label="Referenced issues">
+          <button
+            type="button"
+            className="note-editor-issue-refs-toggle"
+            onClick={toggleShowRefs}
+            aria-expanded={showRefs}
+          >
+            {showRefs ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+            Referenced issues ({resolvedIssues.length + unresolvedIds.length})
+          </button>
+          {showRefs && <>
+          {resolvedIssues.map(({ issue: iss }) => (
+            <button
+              key={iss.identifier}
+              type="button"
+              className="note-editor-issue-ref"
+              onClick={() => {
+                useViewStore.getState().setFocusedId(iss.identifier)
+                useViewStore.getState().requestPanToFocused()
+                onCloseModal()
+              }}
+              title={`Open ${iss.identifier} in graph`}
+            >
+              <span className="note-editor-issue-ref-id">{iss.identifier}</span>
+              <span
+                className="note-editor-issue-ref-state"
+                style={{ color: stateColorVar(iss.state.type) }}
+                aria-hidden
+              >
+                {stateIcon(iss.state.type)}
+              </span>
+              <span className="note-editor-issue-ref-state-label">
+                {stateLabelFor(iss.state.type, locale)}
+              </span>
+              <span className="note-editor-issue-ref-priority">
+                {priorityLabelFor(iss.priority, locale)}
+              </span>
+              <span className="note-editor-issue-ref-title">{iss.title}</span>
+            </button>
+          ))}
+          {unresolvedIds.map((id) => (
+            <div key={id} className="note-editor-issue-ref is-unresolved" title="Not in graph cache">
+              <span className="note-editor-issue-ref-id">{id}</span>
+              <span className="note-editor-issue-ref-title">(not in cache)</span>
+            </div>
+          ))}
+          </>}
+        </div>
       )}
     </div>
   )
