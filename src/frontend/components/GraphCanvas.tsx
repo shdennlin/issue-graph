@@ -9,6 +9,7 @@ import ReactFlow, {
   Panel,
   ReactFlowProvider,
   useReactFlow,
+  useStoreApi,
   type Node as RFNode,
   type NodeChange,
   type Edge as RFEdge,
@@ -123,6 +124,7 @@ function CanvasInner() {
   }, [])
 
   const rf = useReactFlow()
+  const storeApi = useStoreApi()
 
   // Phase 2 layout: read each issue card's *real* rendered height from the DOM
   // after RF has painted, then feed those back into `build()` so dagre lays
@@ -554,11 +556,57 @@ function CanvasInner() {
     }
     const w = node.width ?? 320
     const h = node.height ?? 110
-    rf.setCenter(absX + w / 2, absY + h / 2, {
-      duration: 500,
-      zoom: Math.max(rf.getZoom(), 0.9),
-    })
-  }, [panToFocusedSeq, focusedId, rf])
+    const cx = absX + w / 2
+    const cy = absY + h / 2
+    const zoomNow = rf.getZoom()
+    const targetZoom = Math.max(zoomNow, 0.9)
+    // Bypass rf.setCenter — it routes through `d3Selection.transition().duration(N)`,
+    // and d3-transitions don't reliably tick on every browser/HMR state. Apply
+    // the transform directly via d3-zoom (no transition wrapper) so the camera
+    // always snaps to the focused node. We mirror RF's setCenter math:
+    //   tx = width/2 - cx * zoom; ty = height/2 - cy * zoom
+    const rfState = storeApi.getState() as { width: number; height: number; d3Zoom: unknown; d3Selection: unknown }
+    const d3Zoom = rfState.d3Zoom as { transform: (selection: unknown, t: unknown) => void } | null
+    const d3Selection = rfState.d3Selection as { node: () => { __zoom: { k: number; x: number; y: number } } } | null
+    if (d3Zoom && d3Selection) {
+      // Self-driven rAF tween: bypasses d3-transition (which silently no-ops
+      // in some HMR/browser states — see investigation notes). 250ms with
+      // easeOutCubic gives a quick, perceivable glide without delaying the
+      // user. Each frame applies a non-transition d3Zoom.transform so the
+      // transform actually commits.
+      const node = d3Selection.node()
+      const start = node.__zoom
+      const startK = start.k, startX = start.x, startY = start.y
+      const targetX = rfState.width / 2 - cx * targetZoom
+      const targetY = rfState.height / 2 - cy * targetZoom
+      const ZoomTransform = Object.getPrototypeOf(start).constructor as new (k: number, x: number, y: number) => unknown
+      const duration = 250
+      const t0 = performance.now()
+      const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3)
+      let rafTicked = false
+      const tick = (now: number) => {
+        rafTicked = true
+        const p = Math.min(1, (now - t0) / duration)
+        const e = easeOutCubic(p)
+        const k = startK + (targetZoom - startK) * e
+        const x = startX + (targetX - startX) * e
+        const y = startY + (targetY - startY) * e
+        d3Zoom.transform(d3Selection, new ZoomTransform(k, x, y))
+        if (p < 1) requestAnimationFrame(tick)
+      }
+      requestAnimationFrame(tick)
+      // Safety net: if rAF never fires (background/throttled tab), snap to
+      // target after the expected animation window. Real browsers tick rAF
+      // normally and this fallback is a no-op.
+      setTimeout(() => {
+        if (rafTicked) return
+        d3Zoom.transform(d3Selection, new ZoomTransform(targetZoom, targetX, targetY))
+      }, duration + 50)
+    } else {
+      // Fallback: setCenter (may animate if d3 transitions work in this env).
+      rf.setCenter(cx, cy, { duration: 250, zoom: targetZoom })
+    }
+  }, [panToFocusedSeq, focusedId, rf, storeApi])
 
   // Auto-bump layout when chain isolation is *cleared* (chainRootId goes
   // non-null → null). Without this, exiting chain mode keeps the chain

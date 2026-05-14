@@ -510,6 +510,12 @@ export function App() {
       return
     }
     if (c.kind === 'issue') {
+      // Preserve current DetailPanel state. setFocusedId always resets
+      // detailPanelOpen from the persistent `detailPanelAutoOpen` preference,
+      // which would close the panel if the user has auto-open OFF but had
+      // opened the panel manually. Quick-switcher navigation shouldn't
+      // discard that ad-hoc open state.
+      const wasDetailOpen = useViewStore.getState().detailPanelOpen
       if (openInNewTab) {
         const tab = useWorkspaceStore.getState().tabs.find((t) => t.id === c.tabId)
         if (tab) {
@@ -519,6 +525,8 @@ export function App() {
             const g = useGraphStore.getState().graph
             if (g?.data?.issues?.some((i) => i.identifier === c.identifier)) {
               useViewStore.getState().setFocusedId(c.identifier)
+              if (wasDetailOpen) useViewStore.getState().setDetailPanelOpen(true)
+              useViewStore.getState().requestPanToFocused()
             } else {
               setTimeout(tryFocus, 100)
             }
@@ -529,6 +537,8 @@ export function App() {
       }
       useWorkspaceStore.getState().setActiveTab(c.tabId)
       useViewStore.getState().setFocusedId(c.identifier)
+      if (wasDetailOpen) useViewStore.getState().setDetailPanelOpen(true)
+      useViewStore.getState().requestPanToFocused()
       return
     }
     if (c.kind === 'note') {
