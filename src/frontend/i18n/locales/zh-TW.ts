@@ -170,6 +170,7 @@ export const zhTW: Dict = {
       click: '聚焦一個議題（當工具列「詳情」開關開啟時會自動打開詳情）',
       space: '打開聚焦議題的詳情面板（臨時用，自動開啟關閉時也可用）',
       enter: '同 Space — 打開詳情面板',
+      detailPanelToggle: '開啟 / 關閉目前聚焦議題的詳情面板',
       detailAutoToggle: '切換點擊議題時自動開啟詳情面板（與工具列的 Detail 開關同義）',
       detailWideToggle: '切換詳情面板的寬版／側欄模式（僅在面板開啟時）',
       cmdClick: '切換多選',

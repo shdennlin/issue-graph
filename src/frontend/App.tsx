@@ -406,10 +406,23 @@ export function App() {
         s.setNotesOpen(!s.notesOpen)
         return
       }
-      // 'd' — toggle the "auto-open detail panel on click" preference. Same
-      // affordance as clicking the Detail toggle in the toolbar. Same
-      // input-focus guards as the other letter shortcuts.
-      if (e.key === 'd' || e.key === 'D') {
+      // 'd' — open/close the detail panel for the currently focused issue.
+      // No-op when nothing is focused (panel can't render anyway).
+      // 'Shift+D' — toggle the persistent "auto-open detail panel on click"
+      // preference (same affordance as clicking the toolbar Detail toggle).
+      // Same input-focus guards as the other letter shortcuts.
+      if (e.key === 'd') {
+        if (e.metaKey || e.ctrlKey || e.altKey) return
+        const target = e.target as HTMLElement | null
+        const tag = target?.tagName?.toLowerCase()
+        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        const s = useViewStore.getState()
+        if (s.focusedId === null) return
+        e.preventDefault()
+        s.setDetailPanelOpen(!s.detailPanelOpen)
+        return
+      }
+      if (e.key === 'D') {
         if (e.metaKey || e.ctrlKey || e.altKey) return
         const target = e.target as HTMLElement | null
         const tag = target?.tagName?.toLowerCase()
