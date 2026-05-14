@@ -225,10 +225,11 @@ export const useViewStore = create<ViewState>((set) => ({
   setFocusedId: (id) =>
     set((s) => ({
       focusedId: id,
-      // Auto-apply the detail-panel preference whenever a new issue is
-      // focused: ON → open the panel for the new focus; OFF → leave it
-      // closed. Clearing focus (id === null) always closes the panel.
-      detailPanelOpen: id !== null && s.detailPanelAutoOpen,
+      // Panel visibility on focus change: open if auto-open is on, OR if the
+      // panel was already open (user explicitly opened it ad-hoc and likely
+      // wants to keep inspecting the next issue too). Clearing focus
+      // (id === null) always closes.
+      detailPanelOpen: id !== null && (s.detailPanelAutoOpen || s.detailPanelOpen),
     })),
   setChainRootId: (id) => set({ chainRootId: id }),
   bumpLayout: () => set((s) => ({ layoutBump: s.layoutBump + 1 })),
