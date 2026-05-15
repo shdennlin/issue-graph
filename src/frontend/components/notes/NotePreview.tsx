@@ -1,12 +1,14 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import type { NormalizedIssue } from '@shared/types.js'
 import { toggleChecklistAt } from '../../lib/checklist'
 import { decorateIssueLinksWithStatus, linkifyIssueIds } from '../../lib/issueLinks'
 import { stateLabelFor } from '../../lib/colors'
 import { useGraphStore } from '../../store/graphStore'
 import { useViewStore } from '../../store/viewStore'
 import { useLocale } from '../../i18n'
+import { IssueHoverCard } from './IssueHoverCard'
 
 interface Props {
   body: string
@@ -20,6 +22,43 @@ interface Props {
 export function NotePreview({ body, onCloseModal, onBodyChange }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const locale = useLocale()
+  const [hover, setHover] = useState<{ issue: NormalizedIssue; rect: DOMRect } | null>(null)
+
+  // Delegated hover on issue anchors. The badge that `decorateIssueLinksWithStatus`
+  // appends sits adjacent to the anchor; we treat moving between them as the
+  // same hover so the card doesn't flicker when the mouse crosses the seam.
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const onOver = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      const anchor =
+        (target.closest('a[data-issue-id]') as HTMLAnchorElement | null) ??
+        (target.closest('.issue-status-badge')?.previousElementSibling as HTMLAnchorElement | null)
+      if (!anchor) return
+      const id = anchor.getAttribute('data-issue-id')
+      if (!id) return
+      const issues = useGraphStore.getState().graph?.data.issues ?? []
+      const iss = issues.find((i) => i.identifier === id)
+      if (!iss) return
+      setHover({ issue: iss, rect: anchor.getBoundingClientRect() })
+    }
+    const onOut = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      const left = target.closest('a[data-issue-id], .issue-status-badge')
+      if (!left) return
+      const rt = e.relatedTarget as HTMLElement | null
+      if (rt?.closest('a[data-issue-id], .issue-status-badge')) return
+      setHover(null)
+    }
+    el.addEventListener('mouseover', onOver)
+    el.addEventListener('mouseout', onOut)
+    return () => {
+      el.removeEventListener('mouseover', onOver)
+      el.removeEventListener('mouseout', onOut)
+      setHover(null)
+    }
+  }, [body])
 
   useEffect(() => {
     const el = containerRef.current
@@ -92,10 +131,13 @@ export function NotePreview({ body, onCloseModal, onBodyChange }: Props) {
   }
 
   return (
-    <div
-      ref={containerRef}
-      className="note-preview markdown-body"
-      onClick={onClick}
-    />
+    <>
+      <div
+        ref={containerRef}
+        className="note-preview markdown-body"
+        onClick={onClick}
+      />
+      {hover && <IssueHoverCard issue={hover.issue} anchorRect={hover.rect} />}
+    </>
   )
 }

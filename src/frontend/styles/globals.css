@@ -1657,6 +1657,12 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   max-height: 30vh;
   overflow-y: auto;
 }
+.issue-hover-card {
+  /* Sits in document.body as a portal, so it doesn't inherit the canvas's
+     ReactFlow z-stack or any wrapper transforms. Slight shadow bump lifts it
+     visually off whatever it overlays in the modal. */
+  box-shadow: var(--shadow-md);
+}
 .note-editor-issue-refs-toggle {
   display: inline-flex;
   align-items: center;
