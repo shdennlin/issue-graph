@@ -6,7 +6,7 @@ import { useViewStore } from '../store/viewStore'
 import { useSchemaStore } from '../store/schemaStore'
 import { useResizable } from '../hooks/useResizable'
 import { stateColorVar, stateIcon, stateLabelFor } from '../lib/colors'
-import { applyFiltersExcluding } from '../views/filters'
+import { applyFiltersExcluding, milestoneFilterKey, NO_MILESTONE_TOKEN } from '../views/filters'
 import { Tooltip } from './Tooltip'
 import { useLocale, useT, type DictKey } from '../i18n'
 
@@ -117,6 +117,7 @@ export function FilterPanel() {
   const togglePrefix = useViewStore((s) => s.togglePrefix)
   const toggleStateName = useViewStore((s) => s.toggleStateName)
   const toggleProject = useViewStore((s) => s.toggleProject)
+  const toggleMilestone = useViewStore((s) => s.toggleMilestone)
   const resetFilters = useViewStore((s) => s.resetFilters)
   const t = useT()
   const locale = useLocale()
@@ -171,21 +172,55 @@ export function FilterPanel() {
     for (const i of labelSet) {
       for (const l of i.labels) byLabel.set(l.id, (byLabel.get(l.id) ?? 0) + 1)
     }
-    // Project counts (excluding project filter). '__noproject' covers
-    // issues without a Linear project — mirrors the Project view's
-    // grouping key so the filter and view stay in sync.
-    const byProject = new Map<string, { name: string; count: number }>()
+    // Project + milestone counts share the same leave-one-out base since they
+    // are one hierarchical dimension. '__noproject' covers issues without a
+    // Linear project — mirrors the Project view's grouping key so the filter
+    // and view stay in sync.
+    const byProject = new Map<
+      string,
+      { name: string; color: string | null; count: number }
+    >()
+    const byMilestone = new Map<
+      string,
+      {
+        projectId: string
+        milestoneId: string | null
+        milestoneName: string
+        sortOrder: number | null
+        count: number
+      }
+    >()
     for (const i of applyFiltersExcluding(issues, filters, staleDays, myUserName, search, 'project')) {
-      const id = i.project?.id ?? '__noproject'
-      // Stable canonical name — translation of the "(No project)" display
-      // happens at render time; we keep the canonical English here so URL
-      // / filter state doesn't churn across locales.
+      const projId = i.project?.id ?? '__noproject'
+      // Stable canonical name — translation of "(No project)" happens at
+      // render time; canonical English keeps URL / filter state stable
+      // across locales.
       const name = i.project?.name ?? '(No project)'
-      const cur = byProject.get(id)
+      const color = i.project?.color ?? null
+      const cur = byProject.get(projId)
       if (cur) cur.count += 1
-      else byProject.set(id, { name, count: 1 })
+      else byProject.set(projId, { name, color, count: 1 })
+
+      // Milestone counts only apply to issues with a project. Issues with
+      // no project never appear under any milestone (milestones are
+      // project-scoped in Linear).
+      if (i.project) {
+        const msId = i.projectMilestone?.id ?? null
+        const msKey = milestoneFilterKey(i.project.id, msId)
+        const msCur = byMilestone.get(msKey)
+        if (msCur) msCur.count += 1
+        else {
+          byMilestone.set(msKey, {
+            projectId: i.project.id,
+            milestoneId: msId,
+            milestoneName: i.projectMilestone?.name ?? '(No milestone)',
+            sortOrder: i.projectMilestone?.sortOrder ?? null,
+            count: 1,
+          })
+        }
+      }
     }
-    return { byState, byStateName, byPrio, byAssignee, byLabel, byProject }
+    return { byState, byStateName, byPrio, byAssignee, byLabel, byProject, byMilestone }
   }, [issues, filters, staleDays, myUserName, search])
 
   // Group state names by canonical type. Source = union of:
@@ -239,16 +274,53 @@ export function FilterPanel() {
     return [...counts.byAssignee.entries()].sort((a, b) => b[1] - a[1])
   }, [counts.byAssignee])
 
-  // Sort projects: largest first, '(No project)' pinned to end so orphan
-  // issues don't dominate the visual landing position. Mirrors the
-  // Project view's ordering for consistency.
-  const projects = useMemo(() => {
-    return [...counts.byProject.entries()].sort((a, b) => {
+  // Hierarchical project/milestone list. Each project entry carries its
+  // (already-filtered, sorted) milestone children. Projects with no
+  // milestones at all render as a flat row in the JSX. Sorting mirrors
+  // the milestone view: parent projects by issue count desc, '(No project)'
+  // pinned last; milestones within a project by Linear sortOrder asc with
+  // the '(No milestone)' bucket last.
+  const projectsWithMilestones = useMemo(() => {
+    // Bucket milestones by project for O(1) lookup during projects iteration.
+    const msByProject = new Map<
+      string,
+      Array<{ key: string; milestoneId: string | null; name: string; sortOrder: number | null; count: number }>
+    >()
+    for (const [key, m] of counts.byMilestone) {
+      const list = msByProject.get(m.projectId) ?? []
+      list.push({
+        key,
+        milestoneId: m.milestoneId,
+        name: m.milestoneName,
+        sortOrder: m.sortOrder,
+        count: m.count,
+      })
+      msByProject.set(m.projectId, list)
+    }
+    for (const list of msByProject.values()) {
+      list.sort((a, b) => {
+        if (a.milestoneId === null) return 1
+        if (b.milestoneId === null) return -1
+        const sa = a.sortOrder ?? Number.POSITIVE_INFINITY
+        const sb = b.sortOrder ?? Number.POSITIVE_INFINITY
+        if (sa !== sb) return sa - sb
+        return a.name.localeCompare(b.name)
+      })
+    }
+    const rows = [...counts.byProject.entries()].sort((a, b) => {
       if (a[0] === '__noproject') return 1
       if (b[0] === '__noproject') return -1
       return b[1].count - a[1].count
     })
-  }, [counts.byProject])
+    return rows.map(([projId, p]) => {
+      // Treat the only-child '(No milestone)' as 'no real milestones' —
+      // rendering a single grey '(No milestone)' child under every flat
+      // project would be redundant noise. Flat row instead.
+      const children = msByProject.get(projId) ?? []
+      const hasRealMilestones = children.some((c) => c.milestoneId !== null)
+      return { projId, name: p.name, color: p.color, count: p.count, children: hasRealMilestones ? children : [] }
+    })
+  }, [counts.byProject, counts.byMilestone])
 
   const showDesigndocFilter = (graph?.hasDesigndoc ?? false) && (graph?.data.designdocs?.length ?? 0) > 0
 
@@ -460,24 +532,86 @@ export function FilterPanel() {
         ))}
       </CollapsibleSection>
 
-      {projects.length > 0 && (
+      {projectsWithMilestones.length > 0 && (
         <CollapsibleSection
           id="project"
-          title={t('filterPanel.project')}
-          activeCount={filters.projectIds.length}
-          onClear={() => setFilter('projectIds', [])}
+          title={t('filterPanel.projectMilestone')}
+          activeCount={filters.projectIds.length + filters.milestoneIds.length}
+          onClear={() => {
+            setFilter('projectIds', [])
+            setFilter('milestoneIds', [])
+          }}
         >
-          {projects.map(([id, { name, count }]) => (
-            <label key={id}>
-              <input
-                type="checkbox"
-                checked={filters.projectIds.includes(id)}
-                onChange={() => toggleProject(id)}
-              />
-              {name === '(No project)' ? t('common.noProject') : name}
-              <span className="count">{count}</span>
-            </label>
-          ))}
+          {/* Hierarchical: each project is a parent row; if the project has
+              milestones, they appear as indented children. Mirrors the state
+              filter's two-level structure (parent + children are independent
+              checkboxes; milestoneIds takes precedence over projectIds when
+              non-empty — see filters.ts). */}
+          {projectsWithMilestones.map(({ projId, name, color, count, children }) => {
+            const isNoProject = projId === '__noproject'
+            const dotColor = color || 'var(--fg-muted)'
+            return (
+              <div key={projId} className="state-group">
+                <label className="state-group-header">
+                  <input
+                    type="checkbox"
+                    checked={filters.projectIds.includes(projId)}
+                    onChange={() => toggleProject(projId)}
+                  />
+                  {!isNoProject && (
+                    <span
+                      className="project-color-dot"
+                      style={{ background: dotColor }}
+                      aria-hidden="true"
+                    />
+                  )}
+                  <span style={{ fontWeight: 600 }}>
+                    {isNoProject ? t('common.noProject') : name}
+                  </span>
+                  <span className="count">{count}</span>
+                </label>
+                {children.length > 0 && (
+                  <div className="state-children">
+                    {children.map((c) => (
+                      <label key={c.key} className="state-child">
+                        <input
+                          type="checkbox"
+                          checked={filters.milestoneIds.includes(c.key)}
+                          onChange={() => toggleMilestone(c.key)}
+                        />
+                        <span style={{ color: 'var(--fg-muted)' }}>
+                          {c.milestoneId === null ? t('filterPanel.noMilestone') : c.name}
+                        </span>
+                        <span className="count">{c.count}</span>
+                      </label>
+                    ))}
+                    {/* Show '(No milestone)' explicitly if it has a count and
+                        wasn't already included above — happens when the project
+                        has both milestone-tagged and untagged issues. */}
+                    {(() => {
+                      const noneKey = `${projId}::${NO_MILESTONE_TOKEN}`
+                      const alreadyShown = children.some((c) => c.key === noneKey)
+                      const noneCount = counts.byMilestone.get(noneKey)?.count ?? 0
+                      if (alreadyShown || noneCount === 0) return null
+                      return (
+                        <label key={noneKey} className="state-child">
+                          <input
+                            type="checkbox"
+                            checked={filters.milestoneIds.includes(noneKey)}
+                            onChange={() => toggleMilestone(noneKey)}
+                          />
+                          <span style={{ color: 'var(--fg-muted)' }}>
+                            {t('filterPanel.noMilestone')}
+                          </span>
+                          <span className="count">{noneCount}</span>
+                        </label>
+                      )
+                    })()}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </CollapsibleSection>
       )}
 
