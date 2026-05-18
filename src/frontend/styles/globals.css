@@ -155,6 +155,13 @@ a:hover { text-decoration: underline; }
   stroke: var(--edge-cross-bucket);
   stroke-width: 2.2;
 }
+/* Same project, different milestones: a sequencing warning, not a project
+   boundary violation. Dashed to read as "soft warning" vs. solid red. */
+.react-flow__edge.cross-milestone-edge .react-flow__edge-path {
+  stroke: var(--edge-cross-milestone);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+}
 .react-flow__arrowhead { fill: var(--edge); }
 
 /* Global error banner — appears at the bottom of the app shell when a
@@ -1125,6 +1132,7 @@ body[data-detail-wide='1'] .inline-search { display: none; }
 }
 
 .cross-bucket-edge { stroke: var(--edge-cross-bucket) !important; stroke-width: 2 !important; }
+.cross-milestone-edge { stroke: var(--edge-cross-milestone) !important; stroke-width: 2 !important; stroke-dasharray: 6 4 !important; }
 
 .modal-backdrop {
   position: fixed;

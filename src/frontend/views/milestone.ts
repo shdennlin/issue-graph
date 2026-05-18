@@ -202,22 +202,40 @@ export const milestoneView: ViewDefinition = {
       })
     })
 
-    // Edges: only between issues both visible (same filter pass). Commit A
-    // keeps a single "cross-bucket" class — Commit B will split into
-    // cross-project vs cross-milestone-same-project.
+    // Edge classification (3-tier, ordered by severity):
+    //   1. Same milestone bucket          → no class (default subtle stroke)
+    //   2. Different milestone, same project → 'cross-milestone-edge' (orange
+    //      dashed — sequencing warning: an issue is blocked by another in a
+    //      later milestone of the same project)
+    //   3. Different project              → 'cross-bucket-edge' (red solid —
+    //      stronger signal; reuses the existing token shared with mix/project)
     const issueIds = new Set(issues.map((i) => i.identifier))
+    const issueToProject = new Map<string, string>()
+    for (const i of issues) issueToProject.set(i.identifier, i.project!.id)
     const edges: Edge[] = []
     for (const i of issues) {
       for (const r of i.relations) {
         if (r.type !== 'blocks') continue
         if (!issueIds.has(r.targetIdentifier)) continue
-        const cross = issueToBucket.get(i.identifier) !== issueToBucket.get(r.targetIdentifier)
+        const srcBucket = issueToBucket.get(i.identifier)
+        const dstBucket = issueToBucket.get(r.targetIdentifier)
+        const srcProj = issueToProject.get(i.identifier)
+        const dstProj = issueToProject.get(r.targetIdentifier)
+        let className: string | undefined
+        let kind: 'same' | 'cross-milestone' | 'cross-project' = 'same'
+        if (srcProj !== dstProj) {
+          className = 'cross-bucket-edge'
+          kind = 'cross-project'
+        } else if (srcBucket !== dstBucket) {
+          className = 'cross-milestone-edge'
+          kind = 'cross-milestone'
+        }
         edges.push({
           id: `${i.identifier}->${r.targetIdentifier}`,
           source: i.identifier,
           target: r.targetIdentifier,
-          className: cross ? 'cross-bucket-edge' : undefined,
-          data: { crossBucket: cross },
+          className,
+          data: { crossBucket: kind !== 'same', edgeKind: kind },
         })
       }
     }
