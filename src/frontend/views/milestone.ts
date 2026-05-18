@@ -18,7 +18,11 @@ function computeContainerWidth(cols: number): number {
 }
 const MAX_ROW_WIDTH = computeContainerWidth(1) * 4 + GAP_X * 3
 
-const MILESTONE_COLOR = 'var(--fg-muted)'
+// Same fallback contract as project view. Milestone buckets borrow the
+// parent project's color so all milestones of the same project share a tint
+// — visually clusters them, and reinforces cross-project edges as the
+// boundary-crossing case.
+const FALLBACK_COLOR = 'var(--fg-muted)'
 // Sentinel for "this issue has a project but no milestone within it" —
 // surfaces as a per-project "(No milestone)" bucket pinned last in the
 // project's milestone list. Issues without a project are skipped entirely
@@ -40,6 +44,7 @@ interface MilestoneBucket {
   key: string
   projectId: string
   projectName: string
+  projectColor: string
   milestoneId: string | null
   milestoneName: string
   milestoneSortOrder: number | null
@@ -95,6 +100,7 @@ export const milestoneView: ViewDefinition = {
           key,
           projectId: projId,
           projectName: projName,
+          projectColor: i.project!.color || FALLBACK_COLOR,
           milestoneId: msId,
           milestoneName: msName,
           milestoneSortOrder: msSort,
@@ -180,7 +186,7 @@ export const milestoneView: ViewDefinition = {
           bucket: {
             id: b.key,
             name: displayName,
-            color: MILESTONE_COLOR,
+            color: b.projectColor,
             count: b.issues.length,
             progress: { done, total: b.issues.length },
             targetDate: b.milestoneTargetDate,

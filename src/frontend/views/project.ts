@@ -17,11 +17,11 @@ function computeContainerWidth(cols: number): number {
 }
 const MAX_ROW_WIDTH = computeContainerWidth(1) * 4 + GAP_X * 3
 
-// Neutral color for the project container header. Projects don't have
-// a label-schema color the way buckets do (the label schema is
-// label-based, not project-based), so we render them in a uniform
-// muted gray to signal "this is a structural grouping, not a category".
-const PROJECT_COLOR = 'var(--fg-muted)'
+// Falls back to muted gray when a project has no Linear color set, or for
+// the synthetic '(No project)' bucket. Real project colors come from
+// NormalizedIssue.project.color (Linear hex) and pass through as-is so the
+// tint matches the color the user sees in the Linear app.
+const FALLBACK_COLOR = 'var(--fg-muted)'
 const NO_PROJECT_KEY = '__noproject'
 
 export const projectView: ViewDefinition = {
@@ -46,7 +46,8 @@ export const projectView: ViewDefinition = {
     for (const i of issues) {
       const key = i.project?.id ?? NO_PROJECT_KEY
       const name = i.project?.name ?? '(No project)'
-      if (!buckets.has(key)) buckets.set(key, { name, color: PROJECT_COLOR, issues: [] })
+      const color = i.project?.color || FALLBACK_COLOR
+      if (!buckets.has(key)) buckets.set(key, { name, color, issues: [] })
       buckets.get(key)!.issues.push(i)
     }
 
