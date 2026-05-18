@@ -188,6 +188,8 @@ export function SettingsPage() {
           >
             <option value="dependency">{t('views.dependency.label')}</option>
             <option value="mix">{t('views.mix.label')}</option>
+            <option value="project">{t('views.project.label')}</option>
+            <option value="milestone">{t('views.milestone.label')}</option>
             <option value="designdoc">{t('views.designdoc.label')}</option>
           </select>
         </label>

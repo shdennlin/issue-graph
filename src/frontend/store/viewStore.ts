@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { IssueStateType } from '@shared/types.js'
 
-export type ViewId = 'dependency' | 'mix' | 'project' | 'designdoc'
+export type ViewId = 'dependency' | 'mix' | 'project' | 'milestone' | 'designdoc'
 export type Density = 'compact' | 'default' | 'verbose'
 export type ThemeMode = 'light' | 'dark' | 'auto'
 // Either a preset (sm/md/lg) or a custom base px value (e.g. 14). When a

@@ -77,6 +77,10 @@ export const zhTW: Dict = {
       label: '專案',
       description: '以 Linear 專案為容器、議題置於其中。跨專案的 blocks 連線會被強調。',
     },
+    milestone: {
+      label: '里程碑',
+      description: '以 Linear 專案里程碑為容器。同專案內跨里程碑的依賴會標成橘色虛線(順序警示),跨專案的依賴則以紅色實線標示。沒有專案的議題會被隱藏。',
+    },
     designdoc: {
       label: '設計文件',
       description: '只顯示有連結到設計文件變更的議題。階段 3。',

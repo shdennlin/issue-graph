@@ -77,6 +77,10 @@ export const en = {
       label: 'Project',
       description: 'Linear projects as containers + issues inside. Cross-project edges highlighted.',
     },
+    milestone: {
+      label: 'Milestone',
+      description: 'Linear project milestones as containers. Cross-milestone edges (same project) flagged in orange dashed; cross-project edges in red. Issues without a project are hidden.',
+    },
     designdoc: {
       label: 'Design docs',
       description: 'Issues that have linked design-doc changes. Phase 3.',
