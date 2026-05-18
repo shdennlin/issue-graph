@@ -6,6 +6,7 @@ import { getPrimaryLabel } from '../lib/labelSchema'
 import { computeConnectivity } from './connectivity'
 import { chooseColumnCount, packIntoColumns } from './containerLayout'
 import { buildChainLayout } from './chainLayout'
+import { fanOutCurvatures } from './edgeStyle'
 
 const PADDING = 30
 const HEADER = 32
@@ -129,27 +130,23 @@ export const mixView: ViewDefinition = {
     })
 
     const issueIds = new Set(issues.map((i) => i.identifier))
+    const curvatures = fanOutCurvatures(issues, issueIds)
     const edges: Edge[] = []
     for (const i of issues) {
       for (const r of i.relations) {
         if (r.type !== 'blocks') continue
         if (!issueIds.has(r.targetIdentifier)) continue
         const cross = issueToBucket.get(i.identifier) !== issueToBucket.get(r.targetIdentifier)
+        const edgeId = `${i.identifier}->${r.targetIdentifier}`
         edges.push({
-          // bezier in container views: when rectangular cards form a grid,
-          // multiple smoothstep edges share the same orthogonal channel and
-          // overlap into a single indistinguishable line. Bezier curves
-          // naturally spread out when the source/target tangents differ,
-          // so parallel edges stay readable. Dependency view + chain mode
-          // keep smoothstep since dagre already separates the channels.
-          // curvature 0.4 (vs RF default 0.25) gives the arc more swing
-          // so the spread between parallel edges is wider — better
-          // readability when many edges share endpoints. RF v11 names
-          // the bezier edge type 'default' (not 'bezier' — that's just an
-          // undocumented alias that triggers a console fallback warning).
+          // bezier in container views (RF v11's 'default' type — not
+          // 'bezier' which is just an undocumented alias). Per-edge
+          // curvature varies across same-source fan-outs so parallel
+          // paths spread apart; see edgeStyle.ts for the spread logic
+          // and its (partial) effectiveness against RF's bezier math.
           type: 'default',
-          pathOptions: { curvature: 0.4 },
-          id: `${i.identifier}->${r.targetIdentifier}`,
+          pathOptions: { curvature: curvatures.get(edgeId) ?? 0.4 },
+          id: edgeId,
           source: i.identifier,
           target: r.targetIdentifier,
           className: cross ? 'cross-bucket-edge' : undefined,

@@ -6,6 +6,7 @@ import { computeConnectivity } from './connectivity'
 import { chooseColumnCount, packIntoColumns } from './containerLayout'
 import { projectColor } from '../lib/projectColor'
 import { buildChainLayout } from './chainLayout'
+import { fanOutCurvatures } from './edgeStyle'
 import type { IssueStateType, NormalizedIssue } from '@shared/types.js'
 
 const PADDING = 30
@@ -296,6 +297,7 @@ export const milestoneView: ViewDefinition = {
     const issueIds = new Set(issues.map((i) => i.identifier))
     const issueToProject = new Map<string, string>()
     for (const i of issues) issueToProject.set(i.identifier, i.project!.id)
+    const curvatures = fanOutCurvatures(issues, issueIds)
     const edges: Edge[] = []
     for (const i of issues) {
       for (const r of i.relations) {
@@ -314,11 +316,12 @@ export const milestoneView: ViewDefinition = {
           className = 'cross-milestone-edge'
           kind = 'cross-milestone'
         }
+        const edgeId = `${i.identifier}->${r.targetIdentifier}`
         edges.push({
-          // See mix.ts for the bezier-in-container-views rationale.
+          // See mix.ts / edgeStyle.ts for bezier + fan-out rationale.
           type: 'default',
-          pathOptions: { curvature: 0.4 },
-          id: `${i.identifier}->${r.targetIdentifier}`,
+          pathOptions: { curvature: curvatures.get(edgeId) ?? 0.4 },
+          id: edgeId,
           source: i.identifier,
           target: r.targetIdentifier,
           className,

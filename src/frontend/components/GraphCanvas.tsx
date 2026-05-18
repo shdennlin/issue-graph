@@ -751,9 +751,24 @@ function CanvasInner() {
       // separate SVG that renders above the nodes container.
       const baseClass = e.className ?? ''
       const className = isOn ? `${baseClass} is-highlighted`.trim() : baseClass
+      // Edge label hint: only the edge the user is *directly* hovering gets a
+      // mid-line "src → tgt" tag. Hovering a node lights up several edges but
+      // labelling them all would be noise — the user is asking about one edge
+      // at a time when they probe with the cursor.
+      const showLabel = hoveredEdgeId === e.id
       return {
         ...e,
         className,
+        label: showLabel ? `${e.source} → ${e.target}` : undefined,
+        labelShowBg: showLabel ? true : undefined,
+        labelBgPadding: showLabel ? [6, 3] : undefined,
+        labelBgBorderRadius: showLabel ? 4 : undefined,
+        labelStyle: showLabel
+          ? { fontSize: 11, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fill: 'var(--fg)' }
+          : undefined,
+        labelBgStyle: showLabel
+          ? { fill: 'var(--bg-elev)', stroke: 'var(--node-border)', strokeWidth: 1 }
+          : undefined,
         style: {
           ...(e.style ?? {}),
           opacity: isOn ? 1 : offOpacity,
@@ -766,7 +781,7 @@ function CanvasInner() {
         zIndex: isOn ? 1000 : 0,
       }
     })
-  }, [built.edges, highlight, highlightStrength])
+  }, [built.edges, highlight, highlightStrength, hoveredEdgeId])
 
   const onNodeClick: NodeMouseHandler = (event, node) => {
     if (event.metaKey || event.ctrlKey) {

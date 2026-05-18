@@ -6,6 +6,7 @@ import { computeConnectivity } from './connectivity'
 import { chooseColumnCount, packIntoColumns } from './containerLayout'
 import { projectColor } from '../lib/projectColor'
 import { buildChainLayout } from './chainLayout'
+import { fanOutCurvatures } from './edgeStyle'
 
 const PADDING = 30
 const HEADER = 32
@@ -137,17 +138,19 @@ export const projectView: ViewDefinition = {
     })
 
     const issueIds = new Set(issues.map((i) => i.identifier))
+    const curvatures = fanOutCurvatures(issues, issueIds)
     const edges: Edge[] = []
     for (const i of issues) {
       for (const r of i.relations) {
         if (r.type !== 'blocks') continue
         if (!issueIds.has(r.targetIdentifier)) continue
         const cross = issueToProject.get(i.identifier) !== issueToProject.get(r.targetIdentifier)
+        const edgeId = `${i.identifier}->${r.targetIdentifier}`
         edges.push({
-          // See mix.ts for the bezier-in-container-views rationale.
+          // See mix.ts / edgeStyle.ts for bezier + fan-out rationale.
           type: 'default',
-          pathOptions: { curvature: 0.4 },
-          id: `${i.identifier}->${r.targetIdentifier}`,
+          pathOptions: { curvature: curvatures.get(edgeId) ?? 0.4 },
+          id: edgeId,
           source: i.identifier,
           target: r.targetIdentifier,
           className: cross ? 'cross-bucket-edge' : undefined,
