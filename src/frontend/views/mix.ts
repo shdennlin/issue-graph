@@ -2,10 +2,10 @@ import type { Edge, Node } from 'reactflow'
 import type { ViewDefinition } from './types'
 import { issueNodeHeight } from './types'
 import { applyFilters } from './filters'
-import { computeChain } from './chain'
 import { getPrimaryLabel } from '../lib/labelSchema'
 import { computeConnectivity } from './connectivity'
 import { chooseColumnCount, packIntoColumns } from './containerLayout'
+import { buildChainLayout } from './chainLayout'
 
 const PADDING = 30
 const HEADER = 32
@@ -30,20 +30,20 @@ export const mixView: ViewDefinition = {
   id: 'mix',
   label: 'Mix',
   description: 'Buckets as containers + issues inside. Cross-bucket edges highlighted.',
-  build({ data, schema, filters, staleDays, myUserName, focusedId, chainRootId, showRelated, density, search, measuredHeights }) {
-    const NODE_H = issueNodeHeight(density)
-    // Chain isolation: when a root is set, replace user filters with the
-    // chain's connected component — mirrors the dependency-view behavior
-    // so an off-state blocker doesn't fragment the chain across views.
-    let issues
+  build(ctx) {
+    const { data, schema, filters, staleDays, myUserName, focusedId, chainRootId, density, search, measuredHeights } = ctx
+    // Chain mode: container layout fights dependency flow — drop the buckets
+    // and use dagre, decorating each card with its primary-label color stripe
+    // so bucket identity isn't lost. See chainLayout.ts for the rationale.
     if (chainRootId) {
-      const { members } = computeChain(data.issues, chainRootId, {
-        includeRelatedNeighbors: showRelated,
+      return buildChainLayout(ctx, (issue) => {
+        const lab = getPrimaryLabel(issue, schema)
+        if (!lab?.color) return null
+        return { color: lab.color, label: lab.name }
       })
-      issues = data.issues.filter((i) => members.has(i.identifier))
-    } else {
-      issues = applyFilters(data.issues, filters, staleDays, myUserName, search)
     }
+    const NODE_H = issueNodeHeight(density)
+    const issues = applyFilters(data.issues, filters, staleDays, myUserName, search)
     const conn = computeConnectivity(data.issues)
     // Per-issue height resolver — measured value when available (post-paint
     // re-layout pass), density estimate otherwise. Same mechanism as the

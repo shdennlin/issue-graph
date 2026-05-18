@@ -31,6 +31,12 @@ interface IssueNodeData {
    * by the badge tooltip to clarify "X visible / Y total" so the user
    * understands why the badge shows 5 but only 2 edges are drawn. */
   visibleConnectivity?: { out: number; in: number; related: number }
+  /** Container-view chain-mode stripe. When a container view (mix/project/
+   * milestone) falls through to dagre layout because chain mode is active,
+   * each card carries this color band on its left edge so the user still
+   * sees the issue's bucket/project identity without containers. Absent in
+   * the dependency view and in container views' default container mode. */
+  projectStripe?: { color: string; label?: string }
 }
 
 function truncate(s: string, n: number): string {
@@ -47,7 +53,7 @@ function truncate(s: string, n: number): string {
 const EMPTY_ANNOTATIONS: AnnotationDTO[] = []
 
 function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
-  const { issue, focused, isChainRoot, connectivity, visibleConnectivity } = data
+  const { issue, focused, isChainRoot, connectivity, visibleConnectivity, projectStripe } = data
   const { schema, typeIcons } = useSchemaStore()
   const density = useViewStore((s) => s.density)
   const annotations = useGraphStore((s) => s.graph?.data.annotations ?? EMPTY_ANNOTATIONS)
@@ -80,6 +86,14 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
         }),
       }}
     >
+      {projectStripe && (
+        <span
+          className="project-stripe"
+          style={{ background: projectStripe.color }}
+          title={projectStripe.label}
+          aria-label={projectStripe.label}
+        />
+      )}
       {isChainRoot && (
         <span
           title="Chain root — this is the issue you isolated the chain from"

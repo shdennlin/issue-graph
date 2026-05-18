@@ -681,6 +681,14 @@ function CanvasInner() {
   // both cases.
   const effectiveEdgeId = hoveredEdgeId ?? highlightedEdgeId
   const effectiveNodeId = hoveredNodeId ?? highlightedNodeId ?? focusedId
+  // Highlight strength: 'soft' for transient hover or focus-based dim;
+  // 'strong' for explicit click-pin isolation. Strong mode is for the user
+  // who's actively tracing a chain — drops unrelated cards to near-invisible
+  // and hides unrelated edges entirely so the chain reads cleanly. Hover
+  // stays soft so quick scanning doesn't feel violent.
+  const isHovering = Boolean(hoveredEdgeId || hoveredNodeId)
+  const isPinned = !isHovering && Boolean(highlightedEdgeId || highlightedNodeId)
+  const highlightStrength: 'soft' | 'strong' = isPinned ? 'strong' : 'soft'
 
   const highlight = useMemo(() => {
     if (effectiveEdgeId) {
@@ -710,25 +718,55 @@ function CanvasInner() {
 
   const displayNodes = useMemo(() => {
     if (!highlight) return nodes
+    // C3: container/backdrop chrome dims alongside issues when a highlight is
+    // active, so the user's chain isn't visually overrun by the project frame
+    // or milestone-container outline. Keep it at 0.4 (not deeper) so the
+    // project tint still signals "this is what cluster you're in".
+    const dimUnrelated = highlightStrength === 'strong' ? 0.08 : 0.25
     return nodes.map((n) => {
-      // Container nodes (mix view) stay opaque so the layout chrome doesn't fade.
-      if (n.type !== 'issue') return n
+      if (n.type !== 'issue') {
+        return {
+          ...n,
+          style: { ...(n.style ?? {}), opacity: 0.4, transition: 'opacity 200ms' },
+        }
+      }
       const isOn = highlight.nodes.has(n.id)
-      return { ...n, style: { ...(n.style ?? {}), opacity: isOn ? 1 : 0.25, transition: 'opacity 200ms' } }
+      return {
+        ...n,
+        style: { ...(n.style ?? {}), opacity: isOn ? 1 : dimUnrelated, transition: 'opacity 200ms' },
+      }
     })
-  }, [nodes, highlight])
+  }, [nodes, highlight, highlightStrength])
 
   const displayEdges = useMemo<RFEdge[]>(() => {
     if (!highlight) return built.edges
+    const isStrong = highlightStrength === 'strong'
+    const onStroke = isStrong ? 3.5 : 2.6
+    const offOpacity = isStrong ? 0 : 0.15
     return built.edges.map((e) => {
       const isOn = highlight.edges.has(e.id)
+      // C1 + C2: highlighted edges get `.is-highlighted` (CSS halo via
+      // drop-shadow so the line reads even where it crosses cards) and
+      // zIndex 1000 so RF v11's edge-layer-per-zIndex puts them in a
+      // separate SVG that renders above the nodes container.
+      const baseClass = e.className ?? ''
+      const className = isOn ? `${baseClass} is-highlighted`.trim() : baseClass
       return {
         ...e,
-        style: { ...(e.style ?? {}), opacity: isOn ? 1 : 0.15, strokeWidth: isOn ? 2.6 : (e.style?.strokeWidth ?? 1.8) },
-        zIndex: isOn ? 10 : 0,
+        className,
+        style: {
+          ...(e.style ?? {}),
+          opacity: isOn ? 1 : offOpacity,
+          strokeWidth: isOn ? onStroke : (e.style?.strokeWidth ?? 1.8),
+          // C4 strong mode: unrelated edges are invisible AND non-interactive,
+          // so the user can hover the chain without accidentally grabbing a
+          // hidden edge sitting underneath.
+          pointerEvents: !isOn && isStrong ? 'none' : undefined,
+        },
+        zIndex: isOn ? 1000 : 0,
       }
     })
-  }, [built.edges, highlight])
+  }, [built.edges, highlight, highlightStrength])
 
   const onNodeClick: NodeMouseHandler = (event, node) => {
     if (event.metaKey || event.ctrlKey) {

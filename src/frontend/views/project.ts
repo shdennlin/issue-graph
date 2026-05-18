@@ -2,10 +2,10 @@ import type { Edge, Node } from 'reactflow'
 import type { ViewDefinition } from './types'
 import { issueNodeHeight } from './types'
 import { applyFilters } from './filters'
-import { computeChain } from './chain'
 import { computeConnectivity } from './connectivity'
 import { chooseColumnCount, packIntoColumns } from './containerLayout'
 import { projectColor } from '../lib/projectColor'
+import { buildChainLayout } from './chainLayout'
 
 const PADDING = 30
 const HEADER = 32
@@ -29,17 +29,21 @@ export const projectView: ViewDefinition = {
   id: 'project',
   label: 'Project',
   description: 'Linear projects as containers + issues inside. Cross-project edges highlighted.',
-  build({ data, filters, staleDays, myUserName, focusedId, chainRootId, showRelated, density, search, measuredHeights }) {
-    const NODE_H = issueNodeHeight(density)
-    let issues
+  build(ctx) {
+    const { data, filters, staleDays, myUserName, focusedId, chainRootId, density, search, measuredHeights } = ctx
+    // Chain mode: dissolve project containers and switch to dagre — project
+    // membership is preserved as a 4px left stripe on each card so the user
+    // still sees which project each chain member belongs to.
     if (chainRootId) {
-      const { members } = computeChain(data.issues, chainRootId, {
-        includeRelatedNeighbors: showRelated,
+      return buildChainLayout(ctx, (issue) => {
+        if (!issue.project?.id) return null
+        const color = projectColor(issue.project.id, issue.project.color, FALLBACK_COLOR)
+        if (color === FALLBACK_COLOR) return null
+        return { color, label: issue.project.name }
       })
-      issues = data.issues.filter((i) => members.has(i.identifier))
-    } else {
-      issues = applyFilters(data.issues, filters, staleDays, myUserName, search)
     }
+    const NODE_H = issueNodeHeight(density)
+    const issues = applyFilters(data.issues, filters, staleDays, myUserName, search)
     const conn = computeConnectivity(data.issues)
     const heightFor = (id: string): number => measuredHeights?.get(id) ?? NODE_H
 

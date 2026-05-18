@@ -128,6 +128,30 @@ a:hover { text-decoration: underline; }
 .canvas .react-flow { background: var(--bg); }
 /* Edge stroke — fall back to var(--edge); cross-bucket override stays in mix.ts class. */
 .react-flow__edge-path { stroke: var(--edge); }
+/* Edge default opacity. At rest the canvas reads as a subtle web of edges
+   rather than a busy mess; hovering an issue (or click-pinning a highlight)
+   bumps connected edges to inline opacity:1 via GraphCanvas's displayEdges,
+   while non-connected edges fade to 0.15. Inline style always wins over this
+   rule, so the highlight pipeline keeps full control. */
+.react-flow__edge { opacity: 0.5; transition: opacity 200ms; }
+
+/* Smooth opacity changes when entering/leaving highlight state. Without this
+   base rule, clearing the highlight snaps containers back from 0.4 → 1.0
+   instantly because the inline transition is gone with the inline opacity. */
+.react-flow__node { transition: opacity 200ms; }
+
+/* Highlighted edges: halo around the stroke so the line stays readable even
+   where it crosses other cards (cards above the edge in z-order can't be
+   helped by stroke color alone — the halo carves a "punch-through" silhouette
+   in the bg color, mimicking an isolation outline). Two stacked drop-shadows
+   give a softer falloff than a single one and survive low/high zoom. The
+   shadow color = canvas bg, so it auto-adapts to light/dark theme.
+   Combined with zIndex:1000 on the RF edge (which puts the edge into a
+   separate SVG layer above nodes in v11), highlighted edges become the
+   most visible thing on the canvas regardless of card overlap. */
+.react-flow__edge.is-highlighted .react-flow__edge-path {
+  filter: drop-shadow(0 0 3px var(--bg)) drop-shadow(0 0 1px var(--bg));
+}
 
 /* Theme-aware Controls — RF defaults are white-only, so we override. */
 .react-flow__controls {
@@ -943,6 +967,20 @@ a:hover { text-decoration: underline; }
   color: var(--fg);
 }
 .issue-node.focused { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+/* Container-view chain-mode stripe: 4px color band hugging the card's left
+   edge, preserving project/bucket identity once the container chrome is
+   dissolved by chain-mode auto-expand. Sits inside the card padding so
+   layout is untouched. */
+.issue-node .project-stripe {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-top-left-radius: var(--radius-md);
+  border-bottom-left-radius: var(--radius-md);
+  pointer-events: none;
+}
 .issue-node.search-hit {
   border-color: var(--warn);
   box-shadow: 0 0 0 1.5px var(--warn);

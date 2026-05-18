@@ -9,7 +9,10 @@
   --node-bg: #ffffff;
   --node-border: #d8dee4;
   --node-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.02);
-  --edge: #475569;
+  /* Edge color compensates for the B1 default opacity (0.5). One Tailwind step
+     darker than the previous #475569 so the line still reads clearly when
+     half-transparent against the white canvas. */
+  --edge: #334155;
   --edge-cross-bucket: #d62828;
   /* Used by milestone view: dependency crosses milestones inside the same
      project. Distinct from cross-bucket-edge (cross-project, more severe).
@@ -92,7 +95,9 @@
   --node-bg: #2a2f38;
   --node-border: #3d4452;
   --node-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-  --edge: #94a3b8;
+  /* Same rationale as light theme — one Tailwind step brighter than #94a3b8
+     so the half-transparent line still reads clearly against the dark canvas. */
+  --edge: #cbd5e1;
   --edge-cross-bucket: #ff8a8a;
   --edge-cross-milestone: #fcae5a;
   --accent: #6ea8fb;

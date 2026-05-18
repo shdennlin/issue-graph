@@ -2,10 +2,10 @@ import type { Edge, Node } from 'reactflow'
 import type { ViewDefinition } from './types'
 import { issueNodeHeight } from './types'
 import { applyFilters } from './filters'
-import { computeChain } from './chain'
 import { computeConnectivity } from './connectivity'
 import { chooseColumnCount, packIntoColumns } from './containerLayout'
 import { projectColor } from '../lib/projectColor'
+import { buildChainLayout } from './chainLayout'
 import type { IssueStateType, NormalizedIssue } from '@shared/types.js'
 
 const PADDING = 30
@@ -60,28 +60,30 @@ export const milestoneView: ViewDefinition = {
   label: 'Milestone',
   description:
     'Linear project milestones as containers. Issues without a project are hidden; per-project "(No milestone)" bucket holds the rest.',
-  build({
-    data,
-    filters,
-    staleDays,
-    myUserName,
-    focusedId,
-    chainRootId,
-    showRelated,
-    density,
-    search,
-    measuredHeights,
-  }) {
-    const NODE_H = issueNodeHeight(density)
-    let issues
+  build(ctx) {
+    const {
+      data,
+      filters,
+      staleDays,
+      myUserName,
+      focusedId,
+      chainRootId,
+      density,
+      search,
+      measuredHeights,
+    } = ctx
+    // Chain mode: container/backdrop layout obscures dependency flow — switch
+    // to dagre and keep project identity via a 4px left stripe on each card.
     if (chainRootId) {
-      const { members } = computeChain(data.issues, chainRootId, {
-        includeRelatedNeighbors: showRelated,
+      return buildChainLayout(ctx, (issue) => {
+        if (!issue.project?.id) return null
+        const color = projectColor(issue.project.id, issue.project.color, FALLBACK_COLOR)
+        if (color === FALLBACK_COLOR) return null
+        return { color, label: issue.project.name }
       })
-      issues = data.issues.filter((i) => members.has(i.identifier))
-    } else {
-      issues = applyFilters(data.issues, filters, staleDays, myUserName, search)
     }
+    const NODE_H = issueNodeHeight(density)
+    let issues = applyFilters(data.issues, filters, staleDays, myUserName, search)
     // Milestone view is project-centric. Issues with no project carry no
     // structural signal here, so drop them before bucketing.
     issues = issues.filter((i) => i.project != null)
