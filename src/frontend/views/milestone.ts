@@ -150,80 +150,101 @@ export const milestoneView: ViewDefinition = {
       return a.projectName.localeCompare(b.projectName)
     })
 
+    // Per-project swimlane layout. Group buckets by project so each project's
+    // milestones cluster vertically as a single horizontal band; cross-project
+    // visual breaks (PROJECT_GAP) are much larger than within-project wraps
+    // (ROW_GAP) so the eye can chunk "same project" without reading container
+    // titles.
     const ROW_GAP = 30
+    const PROJECT_GAP = 70
+    const groupedByProject = new Map<string, MilestoneBucket[]>()
+    for (const b of ordered) {
+      const list = groupedByProject.get(b.projectId) ?? []
+      list.push(b)
+      groupedByProject.set(b.projectId, list)
+    }
+
     const nodes: Node[] = []
     const issueToBucket = new Map<string, string>()
-    let rowY = 0
-    let rowMaxH = 0
-    let rowWidth = 0
-    ordered.forEach((b) => {
-      const cols = chooseColumnCount(b.issues.length)
-      const containerW = computeContainerWidth(cols)
-      const heights = b.issues.map((iss) => ({
-        id: iss.identifier,
-        h: heightFor(iss.identifier),
-      }))
-      const { placed, maxColumnHeight } = packIntoColumns(heights, cols, GAP_Y)
-      const containerHeight = HEADER + PADDING / 2 + maxColumnHeight + PADDING / 2
+    let cursorY = 0
+    for (const group of groupedByProject.values()) {
+      // Each project group runs its own packing pass with fresh row state, so
+      // wrapping happens *within* the project's swimlane and never bleeds
+      // into the next project's vertical space.
+      let rowY = cursorY
+      let rowMaxH = 0
+      let rowWidth = 0
+      let projectBottom = cursorY
 
-      if (rowWidth > 0 && rowWidth + GAP_X + containerW > MAX_ROW_WIDTH) {
-        rowY += rowMaxH + ROW_GAP
-        rowMaxH = 0
-        rowWidth = 0
-      }
-      const xOffset = rowWidth === 0 ? 0 : rowWidth + GAP_X
-      rowMaxH = Math.max(rowMaxH, containerHeight)
-      rowWidth = xOffset + containerW
+      for (const b of group) {
+        const cols = chooseColumnCount(b.issues.length)
+        const containerW = computeContainerWidth(cols)
+        const heights = b.issues.map((iss) => ({
+          id: iss.identifier,
+          h: heightFor(iss.identifier),
+        }))
+        const { placed, maxColumnHeight } = packIntoColumns(heights, cols, GAP_Y)
+        const containerHeight = HEADER + PADDING / 2 + maxColumnHeight + PADDING / 2
 
-      const displayName = `${b.projectName} / ${b.milestoneName}`
-      const containerId = `milestone:${b.key}`
-      // 'done' = completed only. Canceled doesn't count toward progress —
-      // it's "won't ship" rather than "shipped".
-      const done = b.issues.filter((iss) => iss.state.type === 'completed').length
-      nodes.push({
-        id: containerId,
-        type: 'mixedContainer',
-        data: {
-          bucket: {
-            id: b.key,
-            name: displayName,
-            color: b.projectColor,
-            count: b.issues.length,
-            progress: { done, total: b.issues.length },
-            targetDate: b.milestoneTargetDate,
-          },
-        },
-        position: { x: xOffset, y: rowY },
-        width: containerW,
-        height: containerHeight,
-        style: { width: containerW, height: containerHeight },
-      })
-      b.issues.forEach((iss, i) => {
-        const id = iss.identifier
-        const p = placed[i]!
+        if (rowWidth > 0 && rowWidth + GAP_X + containerW > MAX_ROW_WIDTH) {
+          rowY += rowMaxH + ROW_GAP
+          rowMaxH = 0
+          rowWidth = 0
+        }
+        const xOffset = rowWidth === 0 ? 0 : rowWidth + GAP_X
+        rowMaxH = Math.max(rowMaxH, containerHeight)
+        rowWidth = xOffset + containerW
+        projectBottom = Math.max(projectBottom, rowY + containerHeight)
+
+        const displayName = `${b.projectName} / ${b.milestoneName}`
+        const containerId = `milestone:${b.key}`
+        // 'done' = completed only. Canceled doesn't count toward progress —
+        // it's "won't ship" rather than "shipped".
+        const done = b.issues.filter((iss) => iss.state.type === 'completed').length
         nodes.push({
-          id,
-          type: 'issue',
+          id: containerId,
+          type: 'mixedContainer',
           data: {
-            issue: iss,
-            focused: focusedId === id,
-            isChainRoot: chainRootId === id,
-            connectivity: conn.get(id),
+            bucket: {
+              id: b.key,
+              name: displayName,
+              color: b.projectColor,
+              count: b.issues.length,
+              progress: { done, total: b.issues.length },
+              targetDate: b.milestoneTargetDate,
+            },
           },
-          parentNode: containerId,
-          // See project.ts for the rationale on omitting `extent: 'parent'`.
-          // tl;dr: let the user drag issues out; container tint preserves
-          // the visual association.
-          position: {
-            x: PADDING + p.col * (NODE_W + INNER_GAP_X),
-            y: HEADER + PADDING / 2 + p.y,
-          },
-          width: NODE_W,
-          height: p.h,
+          position: { x: xOffset, y: rowY },
+          width: containerW,
+          height: containerHeight,
+          style: { width: containerW, height: containerHeight },
         })
-        issueToBucket.set(id, b.key)
-      })
-    })
+        b.issues.forEach((iss, i) => {
+          const id = iss.identifier
+          const p = placed[i]!
+          nodes.push({
+            id,
+            type: 'issue',
+            data: {
+              issue: iss,
+              focused: focusedId === id,
+              isChainRoot: chainRootId === id,
+              connectivity: conn.get(id),
+            },
+            parentNode: containerId,
+            // See project.ts for the rationale on omitting `extent: 'parent'`.
+            position: {
+              x: PADDING + p.col * (NODE_W + INNER_GAP_X),
+              y: HEADER + PADDING / 2 + p.y,
+            },
+            width: NODE_W,
+            height: p.h,
+          })
+          issueToBucket.set(id, b.key)
+        })
+      }
+      cursorY = projectBottom + PROJECT_GAP
+    }
 
     // Edge classification (3-tier, ordered by severity):
     //   1. Same milestone bucket          → no class (default subtle stroke)
