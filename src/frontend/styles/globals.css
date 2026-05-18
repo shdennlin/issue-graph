@@ -128,13 +128,6 @@ a:hover { text-decoration: underline; }
 .canvas .react-flow { background: var(--bg); }
 /* Edge stroke — fall back to var(--edge); cross-bucket override stays in mix.ts class. */
 .react-flow__edge-path { stroke: var(--edge); }
-/* Edge default opacity. At rest the canvas reads as a subtle web of edges
-   rather than a busy mess; hovering an issue (or click-pinning a highlight)
-   bumps connected edges to inline opacity:1 via GraphCanvas's displayEdges,
-   while non-connected edges fade to 0.15. Inline style always wins over this
-   rule, so the highlight pipeline keeps full control. */
-.react-flow__edge { opacity: 0.5; transition: opacity 200ms; }
-
 /* Smooth opacity changes when entering/leaving highlight state. Without this
    base rule, clearing the highlight snaps containers back from 0.4 → 1.0
    instantly because the inline transition is gone with the inline opacity. */
