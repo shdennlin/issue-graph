@@ -4,10 +4,8 @@ import DOMPurify from 'dompurify'
 import type { NormalizedIssue } from '@shared/types.js'
 import { toggleChecklistAt } from '../../lib/checklist'
 import { decorateIssueLinksWithStatus, linkifyIssueIds } from '../../lib/issueLinks'
-import { stateLabelFor } from '../../lib/colors'
 import { useGraphStore } from '../../store/graphStore'
 import { useViewStore } from '../../store/viewStore'
-import { useLocale } from '../../i18n'
 import { IssueHoverCard } from './IssueHoverCard'
 
 interface Props {
@@ -21,7 +19,6 @@ interface Props {
 
 export function NotePreview({ body, onCloseModal, onBodyChange }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const locale = useLocale()
   const [hover, setHover] = useState<{ issue: NormalizedIssue; rect: DOMRect } | null>(null)
 
   // Delegated hover on issue anchors. The badge that `decorateIssueLinksWithStatus`
@@ -82,15 +79,20 @@ export function NotePreview({ body, onCloseModal, onBodyChange }: Props) {
     // O(1) lookup map built once per render — cheaper than `find` per anchor
     // when a note mentions many IDs in a large workspace.
     const issues = useGraphStore.getState().graph?.data.issues ?? []
-    const stateTypeByIdentifier = new Map(
-      issues.map((i) => [i.identifier, i.state.type] as const),
+    // Show Linear's actual state name (e.g. "Review") rather than the canonical
+    // type label ("In Progress"). Linear users name custom states per their
+    // workflow; collapsing to the type label is misleading when the workflow
+    // distinguishes states the canonical labels don't (Review vs Code Review,
+    // QA vs Live Verification, etc.). The hover-card already uses .state.name.
+    const stateByIdentifier = new Map(
+      issues.map((i) => [i.identifier, { type: i.state.type, name: i.state.name }] as const),
     )
     decorateIssueLinksWithStatus(el, (id) => {
-      const type = stateTypeByIdentifier.get(id)
-      if (!type) return null
-      return { type, label: stateLabelFor(type, locale) }
+      const s = stateByIdentifier.get(id)
+      if (!s) return null
+      return { type: s.type, label: s.name }
     })
-  }, [body, onBodyChange, locale])
+  }, [body, onBodyChange])
 
   function onClick(e: React.MouseEvent<HTMLDivElement>) {
     const target = e.target as HTMLElement
