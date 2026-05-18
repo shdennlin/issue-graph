@@ -82,10 +82,21 @@ export const projectView: ViewDefinition = {
       rowWidth = xOffset + containerW
 
       const containerId = `project:${key}`
+      // 'done' counts only completed (excludes canceled — matches the
+      // semantics used by milestone view).
+      const done = b.issues.filter((iss) => iss.state.type === 'completed').length
       nodes.push({
         id: containerId,
         type: 'mixedContainer',
-        data: { bucket: { id: key, name: b.name, color: b.color, count: b.issues.length } },
+        data: {
+          bucket: {
+            id: key,
+            name: b.name,
+            color: b.color,
+            count: b.issues.length,
+            progress: { done, total: b.issues.length },
+          },
+        },
         position: { x: xOffset, y: rowY },
         width: containerW,
         height: containerHeight,
@@ -104,7 +115,11 @@ export const projectView: ViewDefinition = {
             connectivity: conn.get(id),
           },
           parentNode: containerId,
-          extent: 'parent',
+          // Intentionally NOT setting `extent: 'parent'` — issues should be
+          // free to be dragged outside their container if the user wants to
+          // rearrange. The container still tints the area they started in,
+          // so the visual association is preserved on first paint. Drag
+          // positions are reset on re-layout (density change, view switch).
           position: {
             x: PADDING + p.col * (NODE_W + INNER_GAP_X),
             y: HEADER + PADDING / 2 + p.y,

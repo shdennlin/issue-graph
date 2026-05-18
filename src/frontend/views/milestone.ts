@@ -210,7 +210,9 @@ export const milestoneView: ViewDefinition = {
             connectivity: conn.get(id),
           },
           parentNode: containerId,
-          extent: 'parent',
+          // See project.ts for the rationale on omitting `extent: 'parent'`.
+          // tl;dr: let the user drag issues out; container tint preserves
+          // the visual association.
           position: {
             x: PADDING + p.col * (NODE_W + INNER_GAP_X),
             y: HEADER + PADDING / 2 + p.y,
