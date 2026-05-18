@@ -5,7 +5,7 @@ import { notesApi } from '../../lib/notesApi'
 import { formatShortcut, NOTE_TOGGLE_KEYS } from '../../lib/platform'
 import { formatAbsolute, formatRelative } from '../../lib/relativeTime'
 import { findIssueIds } from '../../lib/issueLinks'
-import { priorityLabelFor, stateColorVar, stateIcon, stateLabelFor } from '../../lib/colors'
+import { priorityLabelFor, stateColorVar, stateIcon } from '../../lib/colors'
 import { useGraphStore } from '../../store/graphStore'
 import { useViewStore } from '../../store/viewStore'
 import { useClickOutside } from '../../hooks/useClickOutside'
@@ -213,7 +213,10 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
     if (mode !== 'body' && hasRefs) {
       refLines.push('**Referenced issues:**')
       for (const { issue } of resolvedIssues) {
-        const state = stateLabelFor(issue.state.type, locale)
+        // Linear's actual state name (e.g. "Review") not the canonical type
+        // label ("In Progress") — the AI consumer needs to match what the
+        // human sees in Linear, and the human's vocabulary is the custom name.
+        const state = issue.state.name
         const priority = priorityLabelFor(issue.priority, locale)
         refLines.push(`- **${issue.identifier}** · ${state} · ${priority} · ${issue.title}`)
       }
@@ -406,7 +409,7 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
                 {stateIcon(iss.state.type)}
               </span>
               <span className="note-editor-issue-ref-state-label">
-                {stateLabelFor(iss.state.type, locale)}
+                {iss.state.name}
               </span>
               <span className="note-editor-issue-ref-priority">
                 {priorityLabelFor(iss.priority, locale)}
