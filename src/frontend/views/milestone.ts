@@ -315,6 +315,9 @@ export const milestoneView: ViewDefinition = {
           kind = 'cross-milestone'
         }
         edges.push({
+          // See mix.ts for the bezier-in-container-views rationale.
+          type: 'default',
+          pathOptions: { curvature: 0.4 },
           id: `${i.identifier}->${r.targetIdentifier}`,
           source: i.identifier,
           target: r.targetIdentifier,

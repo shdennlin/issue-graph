@@ -136,6 +136,19 @@ export const mixView: ViewDefinition = {
         if (!issueIds.has(r.targetIdentifier)) continue
         const cross = issueToBucket.get(i.identifier) !== issueToBucket.get(r.targetIdentifier)
         edges.push({
+          // bezier in container views: when rectangular cards form a grid,
+          // multiple smoothstep edges share the same orthogonal channel and
+          // overlap into a single indistinguishable line. Bezier curves
+          // naturally spread out when the source/target tangents differ,
+          // so parallel edges stay readable. Dependency view + chain mode
+          // keep smoothstep since dagre already separates the channels.
+          // curvature 0.4 (vs RF default 0.25) gives the arc more swing
+          // so the spread between parallel edges is wider — better
+          // readability when many edges share endpoints. RF v11 names
+          // the bezier edge type 'default' (not 'bezier' — that's just an
+          // undocumented alias that triggers a console fallback warning).
+          type: 'default',
+          pathOptions: { curvature: 0.4 },
           id: `${i.identifier}->${r.targetIdentifier}`,
           source: i.identifier,
           target: r.targetIdentifier,
