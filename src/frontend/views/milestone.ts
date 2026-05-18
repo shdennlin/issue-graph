@@ -27,9 +27,13 @@ const MAX_ROW_WIDTH = computeContainerWidth(1) * 4 + GAP_X * 3
 const FALLBACK_COLOR = 'var(--fg-muted)'
 // Sentinel for "this issue has a project but no milestone within it" —
 // surfaces as a per-project "(No milestone)" bucket pinned last in the
-// project's milestone list. Issues without a project are skipped entirely
-// (milestone view's whole point is project/milestone structure).
+// project's milestone list.
 const NO_MILESTONE_KEY = '__nomilestone'
+// Sentinel for "this issue has no project at all". Renders as a single
+// "(No project)" backdrop containing one "(No milestone)" bucket at the
+// very end of the view. Matches project view's same-named bucket so
+// orphan issues are still discoverable from any container view.
+const NO_PROJECT_KEY = '__noproject'
 
 // State sort order within a milestone bucket: actively-worked first, then
 // queued, then waiting, then closed. Mirrors what Linear users skim for.
@@ -60,7 +64,7 @@ export const milestoneView: ViewDefinition = {
   id: 'milestone',
   label: 'Milestone',
   description:
-    'Linear project milestones as containers. Issues without a project are hidden; per-project "(No milestone)" bucket holds the rest.',
+    'Linear project milestones as containers. Per-project "(No milestone)" bucket holds within-project orphans; a final "(No project)" frame holds project-less issues.',
   build(ctx) {
     const {
       data,
@@ -84,17 +88,17 @@ export const milestoneView: ViewDefinition = {
       })
     }
     const NODE_H = issueNodeHeight(density)
-    let issues = applyFilters(data.issues, filters, staleDays, myUserName, search)
-    // Milestone view is project-centric. Issues with no project carry no
-    // structural signal here, so drop them before bucketing.
-    issues = issues.filter((i) => i.project != null)
+    const issues = applyFilters(data.issues, filters, staleDays, myUserName, search)
     const conn = computeConnectivity(data.issues)
     const heightFor = (id: string): number => measuredHeights?.get(id) ?? NODE_H
 
     const buckets = new Map<string, MilestoneBucket>()
     for (const i of issues) {
-      const projId = i.project!.id
-      const projName = i.project!.name
+      const projId = i.project?.id ?? NO_PROJECT_KEY
+      const projName = i.project?.name ?? '(No project)'
+      const projColor = i.project
+        ? projectColor(i.project.id, i.project.color, FALLBACK_COLOR)
+        : FALLBACK_COLOR
       const msId = i.projectMilestone?.id ?? null
       const msName = i.projectMilestone?.name ?? '(No milestone)'
       const msSort = i.projectMilestone?.sortOrder ?? null
@@ -104,7 +108,7 @@ export const milestoneView: ViewDefinition = {
           key,
           projectId: projId,
           projectName: projName,
-          projectColor: projectColor(i.project!.id, i.project!.color, FALLBACK_COLOR),
+          projectColor: projColor,
           milestoneId: msId,
           milestoneName: msName,
           milestoneSortOrder: msSort,
@@ -137,6 +141,10 @@ export const milestoneView: ViewDefinition = {
     }
 
     const ordered = [...buckets.values()].sort((a, b) => {
+      // Orphan project (__noproject) pinned last regardless of size — same
+      // rule as project view, so the user always knows where to look.
+      if (a.projectId === NO_PROJECT_KEY && b.projectId !== NO_PROJECT_KEY) return 1
+      if (b.projectId === NO_PROJECT_KEY && a.projectId !== NO_PROJECT_KEY) return -1
       const pa = projectSizes.get(a.projectId) ?? 0
       const pb = projectSizes.get(b.projectId) ?? 0
       if (pa !== pb) return pb - pa
@@ -296,7 +304,7 @@ export const milestoneView: ViewDefinition = {
     //      stronger signal; reuses the existing token shared with mix/project)
     const issueIds = new Set(issues.map((i) => i.identifier))
     const issueToProject = new Map<string, string>()
-    for (const i of issues) issueToProject.set(i.identifier, i.project!.id)
+    for (const i of issues) issueToProject.set(i.identifier, i.project?.id ?? NO_PROJECT_KEY)
     const curvatures = fanOutCurvatures(issues, issueIds)
     const edges: Edge[] = []
     for (const i of issues) {
