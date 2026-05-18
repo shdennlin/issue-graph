@@ -157,6 +157,10 @@ export const milestoneView: ViewDefinition = {
     // titles.
     const ROW_GAP = 30
     const PROJECT_GAP = 70
+    // Frame around milestone containers — leaves room for the project name
+    // label at the top and breathing space on the other three sides.
+    const BACKDROP_HEADER = 44
+    const BACKDROP_PAD = 18
     const groupedByProject = new Map<string, MilestoneBucket[]>()
     for (const b of ordered) {
       const list = groupedByProject.get(b.projectId) ?? []
@@ -164,17 +168,30 @@ export const milestoneView: ViewDefinition = {
       groupedByProject.set(b.projectId, list)
     }
 
+    // Backdrops are collected separately and prepended below — React Flow
+    // renders nodes in array order, so backdrops must appear first to sit
+    // *behind* the milestone containers and issue cards.
+    const backdrops: Node[] = []
     const nodes: Node[] = []
     const issueToBucket = new Map<string, string>()
     let cursorY = 0
     for (const group of groupedByProject.values()) {
-      // Each project group runs its own packing pass with fresh row state, so
-      // wrapping happens *within* the project's swimlane and never bleeds
-      // into the next project's vertical space.
-      let rowY = cursorY
+      const projectTop = cursorY
+      const contentStartY = projectTop + BACKDROP_HEADER
+      const contentStartX = BACKDROP_PAD
+      let rowY = contentStartY
       let rowMaxH = 0
       let rowWidth = 0
-      let projectBottom = cursorY
+      let projectBottom = contentStartY
+      let projectRight = contentStartX
+      const firstBucket = group[0]!
+      const projectColorVal = firstBucket.projectColor
+      const projectName = firstBucket.projectName
+      const projectIssueCount = group.reduce((sum, b) => sum + b.issues.length, 0)
+      const projectDoneCount = group.reduce(
+        (sum, b) => sum + b.issues.filter((iss) => iss.state.type === 'completed').length,
+        0,
+      )
 
       for (const b of group) {
         const cols = chooseColumnCount(b.issues.length)
@@ -191,15 +208,16 @@ export const milestoneView: ViewDefinition = {
           rowMaxH = 0
           rowWidth = 0
         }
-        const xOffset = rowWidth === 0 ? 0 : rowWidth + GAP_X
+        const xOffset = rowWidth === 0 ? contentStartX : contentStartX + rowWidth + GAP_X
         rowMaxH = Math.max(rowMaxH, containerHeight)
-        rowWidth = xOffset + containerW
+        rowWidth = (rowWidth === 0 ? 0 : rowWidth + GAP_X) + containerW
         projectBottom = Math.max(projectBottom, rowY + containerHeight)
+        projectRight = Math.max(projectRight, xOffset + containerW)
 
-        const displayName = `${b.projectName} / ${b.milestoneName}`
+        // Title drops the project prefix — the backdrop carries the project
+        // name now, repeating it on every container is just noise.
+        const displayName = b.milestoneName
         const containerId = `milestone:${b.key}`
-        // 'done' = completed only. Canceled doesn't count toward progress —
-        // it's "won't ship" rather than "shipped".
         const done = b.issues.filter((iss) => iss.state.type === 'completed').length
         nodes.push({
           id: containerId,
@@ -243,7 +261,27 @@ export const milestoneView: ViewDefinition = {
           issueToBucket.set(id, b.key)
         })
       }
-      cursorY = projectBottom + PROJECT_GAP
+
+      const backdropW = projectRight + BACKDROP_PAD
+      const backdropH = projectBottom + BACKDROP_PAD - projectTop
+      backdrops.push({
+        id: `projectBackdrop:${firstBucket.projectId}`,
+        type: 'projectBackdrop',
+        data: {
+          projectName,
+          color: projectColorVal,
+          done: projectDoneCount,
+          total: projectIssueCount,
+        },
+        position: { x: 0, y: projectTop },
+        width: backdropW,
+        height: backdropH,
+        style: { width: backdropW, height: backdropH },
+        selectable: false,
+        draggable: false,
+      })
+
+      cursorY = projectBottom + BACKDROP_PAD + PROJECT_GAP
     }
 
     // Edge classification (3-tier, ordered by severity):
@@ -284,6 +322,6 @@ export const milestoneView: ViewDefinition = {
       }
     }
 
-    return { nodes, edges }
+    return { nodes: [...backdrops, ...nodes], edges }
   },
 }

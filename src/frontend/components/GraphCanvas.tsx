@@ -25,11 +25,13 @@ import { registerHistoryViewportSink, storeViewportInHistory } from '../store/ur
 import { findView } from '../views'
 import { IssueNode } from './nodes/IssueNode'
 import { MixedContainerNode } from './nodes/MixedContainerNode'
+import { ProjectBackdropNode } from './nodes/ProjectBackdropNode'
 import { InlineSearch } from './InlineSearch'
 
 const nodeTypes = {
   issue: IssueNode,
   mixedContainer: MixedContainerNode,
+  projectBackdrop: ProjectBackdropNode,
 }
 
 function CanvasInner() {

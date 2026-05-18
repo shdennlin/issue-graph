@@ -1156,6 +1156,45 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   font-weight: 600;
 }
 
+/* Project backdrop — drawn behind same-project milestone containers in the
+   milestone view as a second redundant chunking signal (alongside the
+   per-project swimlane spacing). Soft tint, no border, project name + roll-up
+   count sit top-left so the eye picks up the grouping at the start of a scan
+   without having to read each container's title. */
+.project-backdrop {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 10px 16px;
+  background: color-mix(in srgb, var(--project-tint) 6%, transparent);
+  border-radius: var(--radius-lg);
+  /* Prevent grabbing the backdrop when trying to drag an issue out — it must
+     stay non-interactive so it doesn't intercept click/drag from the
+     containers stacked above. */
+  pointer-events: none;
+}
+.project-backdrop-header {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  /* Re-enable interaction only on the label region in case future affordances
+     (collapse toggle, project actions) attach here. */
+  pointer-events: auto;
+}
+.project-backdrop-name {
+  font-size: calc(var(--fs-base) + 1px);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.project-backdrop-count {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+  background: color-mix(in srgb, var(--project-tint) 14%, transparent);
+  padding: 0 8px;
+  border-radius: 999px;
+}
+
 .cross-bucket-edge { stroke: var(--edge-cross-bucket) !important; stroke-width: 2 !important; }
 .cross-milestone-edge { stroke: var(--edge-cross-milestone) !important; stroke-width: 2 !important; stroke-dasharray: 6 4 !important; }
 
