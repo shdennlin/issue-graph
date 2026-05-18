@@ -43,6 +43,9 @@ interface MilestoneBucket {
   milestoneId: string | null
   milestoneName: string
   milestoneSortOrder: number | null
+  /** Linear ISO date string (YYYY-MM-DD) or null. Only set for real milestones,
+   *  never for the per-project '(No milestone)' bucket. */
+  milestoneTargetDate: string | null
   issues: NormalizedIssue[]
 }
 
@@ -95,6 +98,7 @@ export const milestoneView: ViewDefinition = {
           milestoneId: msId,
           milestoneName: msName,
           milestoneSortOrder: msSort,
+          milestoneTargetDate: i.projectMilestone?.targetDate ?? null,
           issues: [],
         })
       }
@@ -166,11 +170,21 @@ export const milestoneView: ViewDefinition = {
 
       const displayName = `${b.projectName} / ${b.milestoneName}`
       const containerId = `milestone:${b.key}`
+      // 'done' = completed only. Canceled doesn't count toward progress —
+      // it's "won't ship" rather than "shipped".
+      const done = b.issues.filter((iss) => iss.state.type === 'completed').length
       nodes.push({
         id: containerId,
         type: 'mixedContainer',
         data: {
-          bucket: { id: b.key, name: displayName, color: MILESTONE_COLOR, count: b.issues.length },
+          bucket: {
+            id: b.key,
+            name: displayName,
+            color: MILESTONE_COLOR,
+            count: b.issues.length,
+            progress: { done, total: b.issues.length },
+            targetDate: b.milestoneTargetDate,
+          },
         },
         position: { x: xOffset, y: rowY },
         width: containerW,

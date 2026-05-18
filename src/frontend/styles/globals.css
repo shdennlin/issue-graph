@@ -1130,6 +1130,17 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   min-width: 18px;
   text-align: center;
 }
+/* Milestone view: targetDate chip beside the count. Subtle by default; the
+   .overdue modifier swaps in the danger color so a missed deadline jumps. */
+.mixed-container-date {
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+.mixed-container-date.overdue {
+  color: var(--danger);
+  font-weight: 600;
+}
 
 .cross-bucket-edge { stroke: var(--edge-cross-bucket) !important; stroke-width: 2 !important; }
 .cross-milestone-edge { stroke: var(--edge-cross-milestone) !important; stroke-width: 2 !important; stroke-dasharray: 6 4 !important; }
