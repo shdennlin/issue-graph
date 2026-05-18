@@ -115,6 +115,14 @@ export function normalizeIssue(raw: any): NormalizedIssue {
         }
       : null,
     project: raw.project ? { id: String(raw.project.id), name: String(raw.project.name) } : null,
+    projectMilestone: raw.projectMilestone
+      ? {
+          id: String(raw.projectMilestone.id),
+          name: String(raw.projectMilestone.name ?? ''),
+          targetDate: raw.projectMilestone.targetDate ?? null,
+          sortOrder: typeof raw.projectMilestone.sortOrder === 'number' ? raw.projectMilestone.sortOrder : null,
+        }
+      : null,
     parent: raw.parent?.identifier ?? null,
     children,
     relations,

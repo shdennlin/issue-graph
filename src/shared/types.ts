@@ -60,6 +60,13 @@ export interface NormalizedIssue {
   labels: NormalizedLabel[]
   cycle?: { number: number; startsAt: string; endsAt: string } | null
   project?: { id: string; name: string } | null
+  /** Linear Project Milestone — present only when both project and milestone are assigned. */
+  projectMilestone?: {
+    id: string
+    name: string
+    targetDate: string | null
+    sortOrder: number | null
+  } | null
   parent: string | null
   children: string[]
   relations: NormalizedRelation[]
