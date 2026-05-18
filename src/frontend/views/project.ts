@@ -5,6 +5,7 @@ import { applyFilters } from './filters'
 import { computeChain } from './chain'
 import { computeConnectivity } from './connectivity'
 import { chooseColumnCount, packIntoColumns } from './containerLayout'
+import { projectColor } from '../lib/projectColor'
 
 const PADDING = 30
 const HEADER = 32
@@ -46,7 +47,7 @@ export const projectView: ViewDefinition = {
     for (const i of issues) {
       const key = i.project?.id ?? NO_PROJECT_KEY
       const name = i.project?.name ?? '(No project)'
-      const color = i.project?.color || FALLBACK_COLOR
+      const color = projectColor(i.project?.id, i.project?.color, FALLBACK_COLOR)
       if (!buckets.has(key)) buckets.set(key, { name, color, issues: [] })
       buckets.get(key)!.issues.push(i)
     }

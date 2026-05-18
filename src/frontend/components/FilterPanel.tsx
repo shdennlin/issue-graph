@@ -7,6 +7,7 @@ import { useSchemaStore } from '../store/schemaStore'
 import { useResizable } from '../hooks/useResizable'
 import { stateColorVar, stateIcon, stateLabelFor } from '../lib/colors'
 import { applyFiltersExcluding, milestoneFilterKey, NO_MILESTONE_TOKEN } from '../views/filters'
+import { projectColor } from '../lib/projectColor'
 import { Tooltip } from './Tooltip'
 import { useLocale, useT, type DictKey } from '../i18n'
 
@@ -549,7 +550,7 @@ export function FilterPanel() {
               non-empty — see filters.ts). */}
           {projectsWithMilestones.map(({ projId, name, color, count, children }) => {
             const isNoProject = projId === '__noproject'
-            const dotColor = color || 'var(--fg-muted)'
+            const dotColor = projectColor(projId, color, 'var(--fg-muted)')
             return (
               <div key={projId} className="state-group">
                 <label className="state-group-header">

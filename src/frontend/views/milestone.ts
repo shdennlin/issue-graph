@@ -5,6 +5,7 @@ import { applyFilters } from './filters'
 import { computeChain } from './chain'
 import { computeConnectivity } from './connectivity'
 import { chooseColumnCount, packIntoColumns } from './containerLayout'
+import { projectColor } from '../lib/projectColor'
 import type { IssueStateType, NormalizedIssue } from '@shared/types.js'
 
 const PADDING = 30
@@ -100,7 +101,7 @@ export const milestoneView: ViewDefinition = {
           key,
           projectId: projId,
           projectName: projName,
-          projectColor: i.project!.color || FALLBACK_COLOR,
+          projectColor: projectColor(i.project!.id, i.project!.color, FALLBACK_COLOR),
           milestoneId: msId,
           milestoneName: msName,
           milestoneSortOrder: msSort,
