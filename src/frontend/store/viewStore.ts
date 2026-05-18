@@ -29,6 +29,11 @@ export interface Filters {
   // mirroring the Project view's grouping convention so the two features
   // stay in sync visually and behaviorally.
   projectIds: string[]
+  // Composite milestone keys of the form '<projectId>::<milestoneId>' (or
+  // '<projectId>::__nomilestone' for issues that have a project but no
+  // milestone within it). Sub-filter of projectIds: when non-empty, takes
+  // precedence — projectIds is ignored (mirrors stateNames > stateTypes).
+  milestoneIds: string[]
 }
 
 export interface ViewState {
@@ -92,6 +97,7 @@ export interface ViewState {
   toggleAssignee: (name: string) => void
   togglePrefix: (token: string, id: string) => void
   toggleProject: (id: string) => void
+  toggleMilestone: (compositeKey: string) => void
   setFocusedId: (id: string | null) => void
   setChainRootId: (id: string | null) => void
   bumpLayout: () => void
@@ -143,6 +149,7 @@ export const defaultFilters: Filters = {
   tagIds: [],
   designdocFilter: 'all',
   projectIds: [],
+  milestoneIds: [],
 }
 
 function toggle<T>(arr: T[], v: T): T[] {
@@ -223,6 +230,8 @@ export const useViewStore = create<ViewState>((set) => ({
       }
     }),
   toggleProject: (id) => set((s) => ({ filters: { ...s.filters, projectIds: toggle(s.filters.projectIds, id) } })),
+  toggleMilestone: (key) =>
+    set((s) => ({ filters: { ...s.filters, milestoneIds: toggle(s.filters.milestoneIds, key) } })),
   setFocusedId: (id) =>
     set((s) => ({
       focusedId: id,

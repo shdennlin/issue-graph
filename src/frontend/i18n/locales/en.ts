@@ -277,6 +277,8 @@ export const en = {
     priorityLow: 'Low',
     assignee: 'Assignee',
     project: 'Project',
+    projectMilestone: 'Project / Milestone',
+    noMilestone: '(No milestone)',
     designDoc: 'Design doc',
     designDocAll: 'all',
     designDocHas: 'has',

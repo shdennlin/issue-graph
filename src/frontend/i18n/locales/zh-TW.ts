@@ -277,6 +277,8 @@ export const zhTW: Dict = {
     priorityLow: '低',
     assignee: '指派人',
     project: '專案',
+    projectMilestone: '專案 / 里程碑',
+    noMilestone: '（無里程碑）',
     designDoc: '設計文件',
     designDocAll: '全部',
     designDocHas: '已連結',

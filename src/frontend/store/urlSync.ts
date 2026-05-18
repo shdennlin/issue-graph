@@ -224,6 +224,7 @@ function parseUrl(): void {
     priorities: (params.get('priority')?.split(',').map(Number).filter((n) => !isNaN(n)) ?? []),
     assignees: (params.get('assignee')?.split(',') ?? []),
     projectIds: [] as string[],
+    milestoneIds: [] as string[],
     prefixSelections: {} as Record<string, string[]>,
     tagIds: (params.get('tag')?.split(',') ?? []),
     designdocFilter: ((): 'all' | 'has' | 'missing' => {

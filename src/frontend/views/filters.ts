@@ -55,10 +55,24 @@ export function applyFiltersExcluding(
       f.prefixSelections = {}
       break
     case 'project':
+      // Project and milestone are the same hierarchical dimension. Clearing
+      // 'project' clears both so leave-one-out counts for any row in that
+      // section share the same base (mirrors how 'state' clears stateTypes
+      // + stateNames + activeOnly together).
       f.projectIds = []
+      f.milestoneIds = []
       break
   }
   return applyFilters(issues, f, staleDays, myUserName, search)
+}
+
+/** Composite key for issues that have a project but no milestone within it.
+ *  Stored inside Filters.milestoneIds as '<projectId>::__nomilestone'. */
+export const NO_MILESTONE_TOKEN = '__nomilestone'
+
+/** Build the composite key used in Filters.milestoneIds for an issue. */
+export function milestoneFilterKey(projectId: string, milestoneId: string | null): string {
+  return `${projectId}::${milestoneId ?? NO_MILESTONE_TOKEN}`
 }
 
 export function applyFilters(
@@ -111,7 +125,17 @@ export function applyFilters(
       const hit = i.labels.some((l) => ids.includes(l.id))
       if (!hit) return false
     }
-    if (filters.projectIds.length > 0) {
+    // Project / milestone hierarchy. Child (milestoneIds) takes precedence
+    // over parent (projectIds) — mirrors stateNames > stateTypes. When the
+    // child is empty, parent applies; when child is set, parent is ignored.
+    if (filters.milestoneIds.length > 0) {
+      const projId = i.project?.id
+      // Issues without a project can never match any milestone selection
+      // (milestones are project-scoped in Linear's data model).
+      if (!projId) return false
+      const key = milestoneFilterKey(projId, i.projectMilestone?.id ?? null)
+      if (!filters.milestoneIds.includes(key)) return false
+    } else if (filters.projectIds.length > 0) {
       // '__noproject' is the sentinel for "issues without a Linear project".
       // Mirrors the Project view's grouping key so the filter UI and view
       // stay aligned.
