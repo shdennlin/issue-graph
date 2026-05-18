@@ -9,6 +9,7 @@ import { api } from '../lib/api'
 import { sortCommentsOldestFirst } from '../lib/comments'
 import { priorityLabelFor, stateColorVar, stateIcon, stateLabelFor } from '../lib/colors'
 import { getDesignDocsForIssue } from '../lib/labelSchema'
+import { milestoneFilterKey } from '../views/filters'
 import { renderMarkdownHtml, renderMarkdownNodes } from '../lib/markdown'
 import { translate, useLocale, useT } from '../i18n'
 
@@ -354,6 +355,32 @@ export function DetailPanel() {
             <span style={{ color: 'var(--fg-muted)' }}>—</span>
           )}
         </div>
+        {/* Milestone row only renders when the issue has a project — a
+            milestone without a project isn't representable in Linear's data
+            model and would have no filter key. Mirrors the milestone view's
+            "skip projectless issues" rule. */}
+        {issue.project && (
+          <div className="row">
+            <span className="k">{t('detailPanel.milestone')}</span>
+            {issue.projectMilestone ? (
+              <button
+                type="button"
+                className="detail-filter-link"
+                onClick={() => {
+                  setFilter('milestoneIds', [
+                    milestoneFilterKey(issue.project!.id, issue.projectMilestone!.id),
+                  ])
+                  setDetailPanelOpen(false)
+                }}
+                title={t('detailPanel.filterByMilestone', { value: issue.projectMilestone.name })}
+              >
+                {issue.projectMilestone.name}
+              </button>
+            ) : (
+              <span style={{ color: 'var(--fg-muted)' }}>{t('detailPanel.noMilestone')}</span>
+            )}
+          </div>
+        )}
         <div className="row"><span className="k">{t('detailPanel.created')}</span><span>{timeAgo(issue.createdAt, locale)}</span></div>
         <div className="row"><span className="k">{t('detailPanel.updated')}</span><span>{timeAgo(issue.updatedAt, locale)}</span></div>
         {schema.primaryGroup && (() => {
