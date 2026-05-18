@@ -21,7 +21,7 @@ export const ISSUES_QUERY = /* GraphQL */ `
           }
         }
         cycle { number startsAt endsAt }
-        project { id name }
+        project { id name color }
         projectMilestone { id name targetDate sortOrder }
         parent { identifier }
         children(first: 20) { nodes { identifier } }

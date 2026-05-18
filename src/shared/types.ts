@@ -59,7 +59,12 @@ export interface NormalizedIssue {
   assignee: NormalizedAssignee | null
   labels: NormalizedLabel[]
   cycle?: { number: number; startsAt: string; endsAt: string } | null
-  project?: { id: string; name: string } | null
+  project?: {
+    id: string
+    name: string
+    /** Linear project color (hex, e.g. '#a44a3f'). Null when never set in Linear. */
+    color?: string | null
+  } | null
   /** Linear Project Milestone — present only when both project and milestone are assigned. */
   projectMilestone?: {
     id: string

@@ -114,7 +114,15 @@ export function normalizeIssue(raw: any): NormalizedIssue {
           endsAt: String(raw.cycle.endsAt ?? ''),
         }
       : null,
-    project: raw.project ? { id: String(raw.project.id), name: String(raw.project.name) } : null,
+    project: raw.project
+      ? {
+          id: String(raw.project.id),
+          name: String(raw.project.name),
+          // Linear's project color is a hex like '#a44a3f'. May be null/missing
+          // for projects that never had a color set — UI falls back to muted.
+          color: typeof raw.project.color === 'string' ? raw.project.color : null,
+        }
+      : null,
     projectMilestone: raw.projectMilestone
       ? {
           id: String(raw.projectMilestone.id),
