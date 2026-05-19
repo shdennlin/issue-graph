@@ -838,11 +838,64 @@ a:hover { text-decoration: underline; }
   align-items: flex-start;
   gap: 6px;
 }
-.detail-header h2 { flex: 1; margin: 0; }
+/* Flex so the identifier pill can be aligned against the title text.
+   `align-items: center` is optimal for the common single-line case
+   (pill centers against the title's optical center). For multi-line
+   wrapped titles the pill sits in the vertical middle of the title
+   block — the same pattern Linear uses, reads as the badge being
+   anchored to the title as a whole rather than just the first line. */
+.detail-header h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.detail-title-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* Clickable rectangular pill — copies the identifier on click. A ✓ icon
+   briefly appends during the 1.2s "copied" feedback window (rendered
+   conditionally so it doesn't reserve layout space at rest). Hover tint
+   + tooltip carry the affordance the rest of the time. Also bound to
+   Cmd/Ctrl+Shift+C while the panel is open. */
 .detail-identifier {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border: 1px solid var(--node-border);
+  border-radius: 4px;
+  background: var(--chip-bg);
   color: var(--fg-muted);
   font-family: var(--font-mono);
   font-size: var(--fs-meta);
+  line-height: 1.4;
+  /* Pill is a flex item inside h2 — without these it would (a) shrink
+     below its content width and (b) let the identifier text break onto
+     a second line. The title beside it does the truncating, not the pill. */
+  flex-shrink: 0;
+  white-space: nowrap;
+  cursor: pointer;
+  /* Vertical alignment is handled by the parent h2's `align-items:
+     center` (flex). No vertical-align needed here. */
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.detail-identifier:hover {
+  background: color-mix(in srgb, var(--accent) 12%, var(--chip-bg));
+  color: var(--fg);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--node-border));
+}
+.detail-identifier.is-copied {
+  background: color-mix(in srgb, var(--accent) 18%, var(--chip-bg));
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--node-border));
+}
+.detail-identifier-icon {
+  display: inline-flex;
+  align-items: center;
 }
 .detail-close {
   flex-shrink: 0;

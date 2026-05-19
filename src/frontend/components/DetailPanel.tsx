@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, ExternalLink, Maximize2, Minimize2, Type, X } from 'lucide-react'
+import { AlertTriangle, Check, ExternalLink, Maximize2, Minimize2, Type, X } from 'lucide-react'
 import type { AnnotationDTO, IssueComment, NormalizedIssue } from '@shared/types.js'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
@@ -103,6 +103,57 @@ export function DetailPanel() {
     return () => window.removeEventListener('keydown', onKey)
   }, [focusedId, toggleWide])
 
+  // "Copied!" feedback after the user copies the issue identifier. The
+  // transient swap lasts ~1.2s — long enough to register, short enough to
+  // not block re-copy. Reset whenever the focused issue changes so the
+  // pill text matches the displayed identifier (see the issueId effect).
+  // No useCallback: the project uses React Compiler, which auto-memoizes
+  // and complains when manual memoization is added on top.
+  const [copied, setCopied] = useState(false)
+  const copyTimerRef = useRef<number | null>(null)
+  const copyIdentifier = async (id: string) => {
+    try {
+      await navigator.clipboard.writeText(id)
+      setCopied(true)
+      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current)
+      copyTimerRef.current = window.setTimeout(() => setCopied(false), 1200)
+    } catch {
+      // Clipboard API can fail on non-secure origins (http://) or when
+      // permission is denied. Silently swallow — the ID stays visible
+      // (selectable text inside the button) so the user has a fallback.
+    }
+  }
+  useEffect(() => () => {
+    if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current)
+  }, [])
+
+  // Cmd/Ctrl+Shift+C → copy the focused issue's identifier. Mirrors the
+  // existing right-click "Copy ID" action but as a keyboard shortcut.
+  // Active only when the panel is open (gated on focusedId). Unlike the
+  // letter-only `m` shortcut above we don't need to guard against typing
+  // in inputs — Cmd/Ctrl+Shift+C is a chorded combo and doesn't collide
+  // with text entry. Body inlined (instead of calling copyIdentifier) so
+  // the effect doesn't re-bind on every render — copyIdentifier has an
+  // unstable identity since we can't wrap it in useCallback (React
+  // Compiler rejects manual memoization in this codebase).
+  useEffect(() => {
+    if (!focusedId) return
+    const onKey = async (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return
+      if (!e.shiftKey || e.altKey) return
+      if (e.key.toLowerCase() !== 'c') return
+      e.preventDefault()
+      try {
+        await navigator.clipboard.writeText(focusedId)
+        setCopied(true)
+        if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current)
+        copyTimerRef.current = window.setTimeout(() => setCopied(false), 1200)
+      } catch { /* see copyIdentifier comment */ }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [focusedId])
+
   // Mirror wide mode onto <body> so canvas-floating controls (inline search
   // button/bar) can hide themselves — they live inside GraphCanvas and would
   // otherwise sit on top of the wide panel via their higher z-index. Gated
@@ -141,6 +192,8 @@ export function DetailPanel() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDescription(null)
     setComments(null)
+    setCopied(false)
+    if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current)
     if (!issueId) return
     let cancelled = false
     setDescLoading(true)
@@ -271,8 +324,21 @@ export function DetailPanel() {
       <div className="resize-handle resize-handle-left" onMouseDown={startResize} title="Drag to resize" />
       <div className="detail-header">
         <h2>
-          <span className="detail-identifier">{issue.identifier}</span>{' '}
-          {issue.title}
+          <button
+            type="button"
+            className={`detail-identifier${copied ? ' is-copied' : ''}`}
+            onClick={() => void copyIdentifier(issue.identifier)}
+            title={copied ? t('detailPanel.copied') : t('detailPanel.copyId')}
+            aria-label={t('detailPanel.copyIdAria', { id: issue.identifier })}
+          >
+            <span className="detail-identifier-text">{issue.identifier}</span>
+            {copied && (
+              <span className="detail-identifier-icon" aria-hidden>
+                <Check size={11} />
+              </span>
+            )}
+          </button>
+          <span className="detail-title-text">{issue.title}</span>
         </h2>
         <button
           className="icon-only detail-text-size-btn"
