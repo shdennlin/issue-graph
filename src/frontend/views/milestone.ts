@@ -229,6 +229,7 @@ export const milestoneView: ViewDefinition = {
         // name now, repeating it on every container is just noise.
         const displayName = b.milestoneName
         const containerId = `milestone:${b.key}`
+        const backdropId = `projectBackdrop:${firstBucket.projectId}`
         const done = b.issues.filter((iss) => iss.state.type === 'completed').length
         nodes.push({
           id: containerId,
@@ -243,7 +244,11 @@ export const milestoneView: ViewDefinition = {
               targetDate: b.milestoneTargetDate,
             },
           },
-          position: { x: xOffset, y: rowY },
+          // Parented to the project backdrop so dragging the project header
+          // carries every milestone (and its issue children) with it. Position
+          // is now relative to the backdrop's origin at (0, projectTop).
+          parentNode: backdropId,
+          position: { x: xOffset, y: rowY - projectTop },
           width: containerW,
           height: containerHeight,
           style: { width: containerW, height: containerHeight },
