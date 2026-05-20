@@ -19,54 +19,69 @@ export interface PackedItem {
 }
 
 /**
- * Pick a column count based on issue count. Tuned so small containers
- * stay vertical (preserves the at-a-glance "scan top-down" reading
- * model that Linear's own UI uses), and large ones widen instead of
- * scrolling forever.
+ * Pick a column count: up to MAX_COLS issues per row, wrap when the row
+ * is full. If a container has fewer issues than MAX_COLS it just uses
+ * that many columns so the box isn't padded with empty slots.
  *
- * Thresholds:
- *   ≤ 8   → 1 column   (typical project size, stays scannable)
- *   9-20  → 2 columns  (medium project, still fits a screen width)
- *   > 20  → 3 columns  (cap; 4+ columns make the container too wide
- *                       to read without panning)
+ * Combined with row-major packing in `packIntoColumns`, this gives a
+ * predictable flat-and-wide layout where issue order reads naturally
+ * left-to-right, top-to-bottom. Responsive (cols-from-viewport-width)
+ * is a future enhancement; this fixed cap is simpler and good enough.
  */
+const MAX_COLS = 4
 export function chooseColumnCount(itemCount: number): number {
-  if (itemCount <= 8) return 1
-  if (itemCount <= 20) return 2
-  return 3
+  if (itemCount <= 0) return 1
+  return Math.min(MAX_COLS, itemCount)
 }
 
 /**
- * Greedy column packing: place each issue in the currently-shortest
- * column. Preserves input order within each column (stable when ties).
+ * Row-major packing: item `i` lands at column `i % cols`, row `floor(i / cols)`.
+ * Each row's vertical span is the tallest item in that row, so cards in the
+ * same row top-align with a ragged bottom (standard CSS-grid behavior).
  *
- * Returns per-item placement plus the resulting tallest-column height
- * so the caller can size the container.
+ * Why row-major: the visual order matches the issue order (item 0 top-left,
+ * item 1 to its right, wraps to next row when the row is full). The previous
+ * "shortest column first" packing produced shorter containers when card
+ * heights varied a lot, but the reading order skipped around — a less
+ * intuitive default. Toggle is planned to expose the old behavior as an
+ * option.
+ *
+ * Returns per-item placement plus the resulting total content height so the
+ * caller can size the container.
  */
 export function packIntoColumns(
   items: PackInput[],
   cols: number,
   gapY: number,
 ): { placed: PackedItem[]; maxColumnHeight: number } {
-  const colHeights = new Array<number>(cols).fill(0)
-  // Track whether each column already has at least one item, so we know
-  // whether to add a top gap before the next item.
-  const colHasItem = new Array<boolean>(cols).fill(false)
-  const placed: PackedItem[] = []
-
-  for (const item of items) {
-    let minIdx = 0
-    for (let i = 1; i < cols; i++) {
-      if (colHeights[i]! < colHeights[minIdx]!) minIdx = i
-    }
-    // Add a gap above this item iff the column already has something
-    // — avoids a leading gap at the top of each column.
-    const y = colHeights[minIdx]! + (colHasItem[minIdx] ? gapY : 0)
-    placed.push({ id: item.id, col: minIdx, y, h: item.h })
-    colHeights[minIdx] = y + item.h
-    colHasItem[minIdx] = true
+  // Pass 1: compute the height of each row (max height of items in that row).
+  const rowHeights: number[] = []
+  for (let i = 0; i < items.length; i++) {
+    const row = Math.floor(i / cols)
+    const h = items[i]!.h
+    rowHeights[row] = Math.max(rowHeights[row] ?? 0, h)
   }
 
-  const maxColumnHeight = Math.max(0, ...colHeights)
-  return { placed, maxColumnHeight }
+  // Pass 2: compute each row's y offset by accumulating prior row heights.
+  const rowYs: number[] = []
+  let cum = 0
+  for (let r = 0; r < rowHeights.length; r++) {
+    rowYs[r] = cum
+    cum += rowHeights[r]!
+    if (r < rowHeights.length - 1) cum += gapY
+  }
+
+  // Pass 3: place each item at its (col, row) slot, top-aligned within the row.
+  const placed: PackedItem[] = items.map((item, i) => ({
+    id: item.id,
+    col: i % cols,
+    y: rowYs[Math.floor(i / cols)]!,
+    h: item.h,
+  }))
+
+  // Total content height is the cumulative span; the field name stays
+  // `maxColumnHeight` for back-compat with callers that compute container
+  // height from it (the value is now total-content-height for row-major,
+  // which is the equivalent vertical size).
+  return { placed, maxColumnHeight: cum }
 }
