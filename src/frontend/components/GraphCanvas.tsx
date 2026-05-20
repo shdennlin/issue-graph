@@ -22,6 +22,7 @@ import { useViewStore } from '../store/viewStore'
 import { useSchemaStore } from '../store/schemaStore'
 import { registerViewportBridge } from '../store/tabStateStore'
 import { registerHistoryViewportSink, storeViewportInHistory } from '../store/urlSync'
+import { resolveAbsolutePosition } from '../lib/nodeCoords'
 import { findView } from '../views'
 import { IssueNode } from './nodes/IssueNode'
 import { MixedContainerNode } from './nodes/MixedContainerNode'
@@ -440,15 +441,11 @@ function CanvasInner() {
         return
       }
       if (node?.position) {
-        let absX = node.position.x
-        let absY = node.position.y
-        if (node.parentNode) {
-          const parent = sourceNodes.find((p) => p.id === node.parentNode)
-          if (parent?.position) {
-            absX += parent.position.x
-            absY += parent.position.y
-          }
-        }
+        // Walk the full parent chain — milestone view nests issue → milestone
+        // → projectBackdrop, so a single-level lookup misses the backdrop's
+        // offset and pans the camera to the wrong place.
+        const lookupById = new Map(sourceNodes.map((n) => [n.id, n]))
+        const { x: absX, y: absY } = resolveAbsolutePosition(node, (id) => lookupById.get(id))
         const w = (node.width ?? 320) as number
         const h = (node.height ?? 110) as number
         pendingFitViewRef.current = null
@@ -542,20 +539,11 @@ function CanvasInner() {
     if (!focusedId) return
     const node = rf.getNode(focusedId)
     if (!node) return
-    // Resolve absolute coords: in Mix / Project views issues live inside
-    // bucket containers, so `node.position` is relative to the parent. The
-    // existing preserveFocus path (see Producer 1/2/3 consumer) does this
-    // same walk; without it, setCenter lands the camera somewhere far from
-    // the actual rendered position.
-    let absX = node.position.x
-    let absY = node.position.y
-    if (node.parentNode) {
-      const parent = rf.getNode(node.parentNode)
-      if (parent?.position) {
-        absX += parent.position.x
-        absY += parent.position.y
-      }
-    }
+    // Resolve absolute coords by walking the full parent chain. In
+    // milestone view this is issue → milestone → projectBackdrop (two
+    // hops); Mix/Project views are one hop. The existing preserveFocus
+    // path uses the same helper.
+    const { x: absX, y: absY } = resolveAbsolutePosition(node, (id) => rf.getNode(id))
     const w = node.width ?? 320
     const h = node.height ?? 110
     const cx = absX + w / 2
