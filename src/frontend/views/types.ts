@@ -14,6 +14,9 @@ export interface ViewContext {
   chainRootId: string | null
   showRelated: boolean
   density: Density
+  /** Max issues per row inside a container. Pulled from viewStore; views
+   *  pass this to chooseColumnCount so it stays user-tunable. */
+  maxColsPerRow: number
   search: string
   // Measured heights from React Flow after first paint, keyed by node id.
   // When present, views should prefer these over their density-based estimate

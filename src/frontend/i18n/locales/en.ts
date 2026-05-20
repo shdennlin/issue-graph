@@ -101,6 +101,8 @@ export const en = {
     fontLg: 'Large',
     fontCustom: 'Custom',
     fontHelp: 'Base font size in px (9–24). Other sizes derive from this.',
+    issuesPerRow: 'Issues per row',
+    issuesPerRowHelp: 'How many issue cards each container packs per row before wrapping. Bigger screens / Stage Manager off → bump it up.',
     language: 'Language / 語言',
     backend: 'Backend',
     profile: 'Profile:',

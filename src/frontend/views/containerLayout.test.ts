@@ -15,6 +15,11 @@ describe('chooseColumnCount', () => {
   it('defensively returns 1 for empty / non-positive input', () => {
     expect(chooseColumnCount(0)).toBe(1)
   })
+  it('honors a custom maxCols cap (user-tunable via Settings)', () => {
+    expect(chooseColumnCount(10, 6)).toBe(6)
+    expect(chooseColumnCount(3, 6)).toBe(3) // still uses N when below cap
+    expect(chooseColumnCount(20, 2)).toBe(2)
+  })
 })
 
 describe('packIntoColumns (row-major)', () => {

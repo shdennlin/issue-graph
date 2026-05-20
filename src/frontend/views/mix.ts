@@ -32,7 +32,7 @@ export const mixView: ViewDefinition = {
   label: 'Mix',
   description: 'Buckets as containers + issues inside. Cross-bucket edges highlighted.',
   build(ctx) {
-    const { data, schema, filters, staleDays, myUserName, focusedId, chainRootId, density, search, measuredHeights } = ctx
+    const { data, schema, filters, staleDays, myUserName, focusedId, chainRootId, density, maxColsPerRow, search, measuredHeights } = ctx
     // Chain mode: container layout fights dependency flow — drop the buckets
     // and use dagre, decorating each card with its primary-label color stripe
     // so bucket identity isn't lost. See chainLayout.ts for the rationale.
@@ -78,7 +78,7 @@ export const mixView: ViewDefinition = {
     ordered.forEach(([key, b]) => {
       // Pack issues into N columns inside this bucket so a long list
       // doesn't become an unscannable vertical strip.
-      const cols = chooseColumnCount(b.issues.length)
+      const cols = chooseColumnCount(b.issues.length, maxColsPerRow)
       const containerW = computeContainerWidth(cols)
       const heights = b.issues.map((iss) => ({ id: iss.identifier, h: heightFor(iss.identifier) }))
       const { placed, maxColumnHeight } = packIntoColumns(heights, cols, GAP_Y)

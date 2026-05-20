@@ -101,6 +101,8 @@ export const zhTW: Dict = {
     fontLg: '大',
     fontCustom: '自訂',
     fontHelp: '基準字級（9–24 px）。其他字級會由此推算。',
+    issuesPerRow: '每排 Issue 數',
+    issuesPerRowHelp: 'Container 內每排放幾張卡之後換行。大螢幕 / 沒開 Stage Manager 可以調高。',
     language: 'Language / 語言',
     backend: '後端',
     profile: '設定檔：',

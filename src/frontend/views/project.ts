@@ -31,7 +31,7 @@ export const projectView: ViewDefinition = {
   label: 'Project',
   description: 'Linear projects as containers + issues inside. Cross-project edges highlighted.',
   build(ctx) {
-    const { data, filters, staleDays, myUserName, focusedId, chainRootId, density, search, measuredHeights } = ctx
+    const { data, filters, staleDays, myUserName, focusedId, chainRootId, density, maxColsPerRow, search, measuredHeights } = ctx
     // Chain mode: dissolve project containers and switch to dagre — project
     // membership is preserved as a 4px left stripe on each card so the user
     // still sees which project each chain member belongs to.
@@ -72,7 +72,7 @@ export const projectView: ViewDefinition = {
     let rowMaxH = 0
     let rowWidth = 0
     ordered.forEach(([key, b]) => {
-      const cols = chooseColumnCount(b.issues.length)
+      const cols = chooseColumnCount(b.issues.length, maxColsPerRow)
       const containerW = computeContainerWidth(cols)
       const heights = b.issues.map((iss) => ({ id: iss.identifier, h: heightFor(iss.identifier) }))
       const { placed, maxColumnHeight } = packIntoColumns(heights, cols, GAP_Y)

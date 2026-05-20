@@ -74,6 +74,7 @@ export const milestoneView: ViewDefinition = {
       focusedId,
       chainRootId,
       density,
+      maxColsPerRow,
       search,
       measuredHeights,
     } = ctx
@@ -205,7 +206,7 @@ export const milestoneView: ViewDefinition = {
       )
 
       for (const b of group) {
-        const cols = chooseColumnCount(b.issues.length)
+        const cols = chooseColumnCount(b.issues.length, maxColsPerRow)
         const containerW = computeContainerWidth(cols)
         const heights = b.issues.map((iss) => ({
           id: iss.identifier,

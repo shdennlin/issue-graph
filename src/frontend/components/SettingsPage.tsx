@@ -11,6 +11,8 @@ export function SettingsPage() {
   const setStaleDays = useViewStore((s) => s.setStaleDays)
   const fontSize = useViewStore((s) => s.fontSize)
   const setFontSize = useViewStore((s) => s.setFontSize)
+  const maxColsPerRow = useViewStore((s) => s.maxColsPerRow)
+  const setMaxColsPerRow = useViewStore((s) => s.setMaxColsPerRow)
   const locale = useLocale()
   const setLocale = useSetLocale()
   const t = useT()
@@ -268,6 +270,25 @@ export function SettingsPage() {
               style={{ width: 70 }}
               title={t('settings.fontHelp')}
             />
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ marginBottom: 4 }}>{t('settings.issuesPerRow')}</div>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            {[2, 3, 4, 5, 6, 7, 8].map((n) => (
+              <button
+                key={n}
+                onClick={() => setMaxColsPerRow(n)}
+                className={maxColsPerRow === n ? 'primary' : ''}
+                style={{ minWidth: 32 }}
+              >
+                {n}
+              </button>
+            ))}
+            <span style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-meta)', marginLeft: 8 }}>
+              {t('settings.issuesPerRowHelp')}
+            </span>
           </div>
         </div>
 

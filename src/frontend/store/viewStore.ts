@@ -54,6 +54,9 @@ export interface ViewState {
   theme: ThemeMode
   density: Density
   fontSize: FontSize
+  /** Max issues per row inside a container. localStorage-backed so each
+   *  user can tune for their screen (Stage Manager → 4, ultrawide → 6+). */
+  maxColsPerRow: number
   search: string                 // toolbar filter search (narrows visible set)
   inlineSearch: { open: boolean; query: string; activeIdx: number }
   settingsOpen: boolean
@@ -104,6 +107,7 @@ export interface ViewState {
   setTheme: (t: ThemeMode) => void
   setDensity: (d: Density) => void
   setFontSize: (f: FontSize) => void
+  setMaxColsPerRow: (n: number) => void
   setSearch: (q: string) => void
   openInlineSearch: () => void
   closeInlineSearch: () => void
@@ -172,6 +176,15 @@ export const useViewStore = create<ViewState>((set) => ({
     if (raw === 'sm' || raw === 'md' || raw === 'lg') return raw
     const n = Number(raw)
     return Number.isFinite(n) && n >= 9 && n <= 24 ? n : ('md' as FontSize)
+  })(),
+  maxColsPerRow: (() => {
+    if (typeof window === 'undefined') return 4
+    const raw = window.localStorage?.getItem('ig-max-cols')
+    if (!raw) return 4
+    const n = Number(raw)
+    // Clamp to a sane range — 2 is the minimum that still feels like a grid,
+    // 8 covers ultrawide screens. Outside the range falls back to default.
+    return Number.isFinite(n) && n >= 2 && n <= 8 ? n : 4
   })(),
   search: '',
   inlineSearch: { open: false, query: '', activeIdx: 0 },
@@ -250,6 +263,14 @@ export const useViewStore = create<ViewState>((set) => ({
       window.localStorage?.setItem('ig-font-size', String(f))
     }
     set({ fontSize: f })
+  },
+  setMaxColsPerRow: (n) => {
+    // Defensive clamp at the setter too so a bad caller can't poison state.
+    const clamped = Math.max(2, Math.min(8, Math.round(n)))
+    if (typeof window !== 'undefined') {
+      window.localStorage?.setItem('ig-max-cols', String(clamped))
+    }
+    set({ maxColsPerRow: clamped })
   },
   setSearch: (q) => set({ search: q }),
   openInlineSearch: () => set((s) => ({ inlineSearch: { ...s.inlineSearch, open: true } })),

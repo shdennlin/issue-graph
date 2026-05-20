@@ -19,19 +19,20 @@ export interface PackedItem {
 }
 
 /**
- * Pick a column count: up to MAX_COLS issues per row, wrap when the row
- * is full. If a container has fewer issues than MAX_COLS it just uses
+ * Pick a column count: up to `maxCols` issues per row, wrap when the row
+ * is full. If a container has fewer issues than `maxCols` it just uses
  * that many columns so the box isn't padded with empty slots.
  *
  * Combined with row-major packing in `packIntoColumns`, this gives a
  * predictable flat-and-wide layout where issue order reads naturally
- * left-to-right, top-to-bottom. Responsive (cols-from-viewport-width)
- * is a future enhancement; this fixed cap is simpler and good enough.
+ * left-to-right, top-to-bottom. `maxCols` is user-tunable (Settings →
+ * Display → Issues per row) so people on big screens can pack more
+ * cards per row.
  */
-const MAX_COLS = 4
-export function chooseColumnCount(itemCount: number): number {
+export const DEFAULT_MAX_COLS = 4
+export function chooseColumnCount(itemCount: number, maxCols: number = DEFAULT_MAX_COLS): number {
   if (itemCount <= 0) return 1
-  return Math.min(MAX_COLS, itemCount)
+  return Math.min(maxCols, itemCount)
 }
 
 /**

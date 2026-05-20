@@ -48,6 +48,7 @@ function CanvasInner() {
   const bumpLayout = useViewStore((s) => s.bumpLayout)
   const staleDays = useViewStore((s) => s.staleDays)
   const density = useViewStore((s) => s.density)
+  const maxColsPerRow = useViewStore((s) => s.maxColsPerRow)
   const search = useViewStore((s) => s.search)
   const theme = useViewStore((s) => s.theme)
   const colorMode = theme === 'auto'
@@ -86,10 +87,11 @@ function CanvasInner() {
       chainRootId,
       showRelated,
       density,
+      maxColsPerRow,
       search,
       measuredHeights: measuredHeights ?? undefined,
     })
-  }, [graph, schema, activeView, filters, staleDays, focusedId, chainRootId, showRelated, selection, myUserId, myUserName, density, search, measuredHeights])
+  }, [graph, schema, activeView, filters, staleDays, focusedId, chainRootId, showRelated, selection, myUserId, myUserName, density, maxColsPerRow, search, measuredHeights])
 
   // Local node state so user drags persist between renders within the same
   // layout-equivalent context. Anything that changes node sizes (density) or
