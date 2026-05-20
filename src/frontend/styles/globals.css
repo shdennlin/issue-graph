@@ -132,6 +132,18 @@ a:hover { text-decoration: underline; }
    base rule, clearing the highlight snaps containers back from 0.4 → 1.0
    instantly because the inline transition is gone with the inline opacity. */
 .react-flow__node { transition: opacity 200ms; }
+/* Backdrop/container wrappers must not swallow edge-hover events. Inner
+   `.project-backdrop` / `.mixed-container` already set pointer-events:none
+   on the colored body, but RF's outer wrapper still defaults to receiving
+   events — so without this rule, hovering inside the tinted area never
+   reaches the edge beneath. Header children re-enable interaction via
+   `pointer-events: auto`. */
+/* React Flow sets `pointer-events: all` as an INLINE style on every node
+   wrapper, so no amount of selector specificity overrides it — !important
+   is the only mechanism that wins against inline styles. Header children
+   re-enable interaction via their own `pointer-events: auto`. */
+.react-flow__node-projectBackdrop,
+.react-flow__node-mixedContainer { pointer-events: none !important; }
 
 /* Highlighted edges: halo around the stroke so the line stays readable even
    where it crosses other cards (cards above the edge in z-order can't be
@@ -1207,11 +1219,16 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   background: color-mix(in srgb, var(--bucket-tint) 6%, transparent);
   border: 1px dashed color-mix(in srgb, var(--bucket-tint) 38%, transparent);
   border-radius: var(--radius-lg);
+  /* Mirror .project-backdrop: the tinted body must not swallow edge-hover or
+     drag events from the issue cards sitting on top. Header re-enables
+     pointer-events for chip interactions. */
+  pointer-events: none;
 }
 .mixed-container-header {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  pointer-events: auto;
 }
 .mixed-container-name {
   font-weight: 600;

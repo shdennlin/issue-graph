@@ -289,7 +289,9 @@ export const milestoneView: ViewDefinition = {
         height: backdropH,
         style: { width: backdropW, height: backdropH },
         selectable: false,
-        draggable: false,
+        // Drag only from the project header — the rest of the backdrop is
+        // pointer-events:none so it doesn't intercept edge-hover.
+        dragHandle: '.project-backdrop-header',
       })
 
       cursorY = projectBottom + BACKDROP_PAD + PROJECT_GAP

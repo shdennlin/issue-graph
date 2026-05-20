@@ -672,6 +672,10 @@ function CanvasInner() {
   // pinned/focused state when they leave.
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null)
+  // Position of the cursor while hovering an edge. Drives the floating
+  // "ONE-xxx → ONE-yyy" tag so it sits near the cursor instead of at the
+  // edge midpoint (RF's default), which can be far off-screen on long edges.
+  const [edgeHoverPos, setEdgeHoverPos] = useState<{ x: number; y: number } | null>(null)
 
   // Effective highlight target — priority order:
   //   1. hovered edge / node (instant, ephemeral)
@@ -751,24 +755,13 @@ function CanvasInner() {
       // separate SVG that renders above the nodes container.
       const baseClass = e.className ?? ''
       const className = isOn ? `${baseClass} is-highlighted`.trim() : baseClass
-      // Edge label hint: only the edge the user is *directly* hovering gets a
-      // mid-line "src → tgt" tag. Hovering a node lights up several edges but
-      // labelling them all would be noise — the user is asking about one edge
-      // at a time when they probe with the cursor.
-      const showLabel = hoveredEdgeId === e.id
+      // Edge label hint is rendered as a floating overlay near the cursor
+      // (see edgeHoverPos / EdgeHoverLabel below) rather than RF's built-in
+      // mid-edge label, which often lands far from where the user is probing
+      // on long edges.
       return {
         ...e,
         className,
-        label: showLabel ? `${e.source} → ${e.target}` : undefined,
-        labelShowBg: showLabel ? true : undefined,
-        labelBgPadding: showLabel ? [6, 3] : undefined,
-        labelBgBorderRadius: showLabel ? 4 : undefined,
-        labelStyle: showLabel
-          ? { fontSize: 11, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fill: 'var(--fg)' }
-          : undefined,
-        labelBgStyle: showLabel
-          ? { fill: 'var(--bg-elev)', stroke: 'var(--node-border)', strokeWidth: 1 }
-          : undefined,
         style: {
           ...(e.style ?? {}),
           opacity: isOn ? 1 : offOpacity,
@@ -846,14 +839,17 @@ function CanvasInner() {
   // priority order (effectiveEdgeId ?? highlightedEdgeId), so a wrongly-
   // pinned edge hijacks the entire highlight even when the user has moved
   // on to hovering an unrelated node.
-  const onEdgeMouseEnter: EdgeMouseHandler = (_e, edge) => {
+  const onEdgeMouseEnter: EdgeMouseHandler = (e, edge) => {
     setHoveredEdgeId(edge.id)
+    setEdgeHoverPos({ x: e.clientX, y: e.clientY })
   }
-  const onEdgeMouseMove: EdgeMouseHandler = (_e, edge) => {
+  const onEdgeMouseMove: EdgeMouseHandler = (e, edge) => {
     setHoveredEdgeId((prev) => (prev === edge.id ? prev : edge.id))
+    setEdgeHoverPos({ x: e.clientX, y: e.clientY })
   }
   const onEdgeMouseLeave: EdgeMouseHandler = (_e, edge) => {
     setHoveredEdgeId((prev) => (prev === edge.id ? null : prev))
+    setEdgeHoverPos(null)
   }
 
   // Final safety net: when the cursor is in the empty pane between nodes
@@ -871,6 +867,7 @@ function CanvasInner() {
     if (target.closest('.react-flow__node, .react-flow__edge')) return
     setHoveredNodeId((prev) => (prev === null ? prev : null))
     setHoveredEdgeId((prev) => (prev === null ? prev : null))
+    setEdgeHoverPos(null)
   }
 
   const onPaneClick = () => {
@@ -1037,6 +1034,31 @@ function CanvasInner() {
           />
         )}
       </ReactFlow>
+      {hoveredEdgeId && edgeHoverPos && (() => {
+        const e = built.edges.find((x) => x.id === hoveredEdgeId)
+        if (!e) return null
+        return (
+          <div
+            style={{
+              position: 'fixed',
+              left: edgeHoverPos.x + 12,
+              top: edgeHoverPos.y + 12,
+              padding: '3px 6px',
+              borderRadius: 4,
+              background: 'var(--bg-elev)',
+              border: '1px solid var(--node-border)',
+              color: 'var(--fg)',
+              fontSize: 11,
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+              pointerEvents: 'none',
+              zIndex: 1000,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {e.source} → {e.target}
+          </div>
+        )
+      })()}
     </div>
   )
 }
