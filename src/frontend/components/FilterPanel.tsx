@@ -238,6 +238,9 @@ export function FilterPanel() {
     const seen = new Map<string, { type: IssueStateType; position: number }>() // name → meta
     // Pass 1: workflow states from API (carry their declared position).
     for (const ws of workflowStates) {
+      // Skip unknown types — e.g. a stale cache containing Linear's "cancelled"
+      // (British) instead of our canonical "canceled" would crash groups[ws.type].
+      if (!groups[ws.type]) continue
       seen.set(ws.name, { type: ws.type, position: ws.position ?? 999 })
       groups[ws.type].push({ name: ws.name, count: counts.byStateName.get(ws.name)?.count ?? 0, position: ws.position ?? 999 })
     }

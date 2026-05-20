@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeIssue, normalizeRelations, normalizeLabel } from './normalize.js'
+import { coerceStateType, normalizeIssue, normalizeRelations, normalizeLabel } from './normalize.js'
+
+describe('coerceStateType', () => {
+  it("maps 'cancelled' (en-GB) → 'canceled' so workflowStates lookups stay safe", () => {
+    expect(coerceStateType('cancelled')).toBe('canceled')
+  })
+
+  it('falls back to backlog for unknown values (FilterPanel groups lookup would otherwise crash)', () => {
+    expect(coerceStateType('weird-new-type')).toBe('backlog')
+    expect(coerceStateType(undefined)).toBe('backlog')
+    expect(coerceStateType(null)).toBe('backlog')
+  })
+})
 
 describe('normalizeRelations', () => {
   it('keeps blocks edges as-is', () => {

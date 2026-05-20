@@ -19,7 +19,7 @@ const STATE_TYPES: ReadonlySet<IssueStateType> = new Set<IssueStateType>([
   'triage',
 ])
 
-function coerceStateType(t: unknown): IssueStateType {
+export function coerceStateType(t: unknown): IssueStateType {
   if (typeof t === 'string') {
     const lc = t.toLowerCase()
     if ((STATE_TYPES as ReadonlySet<string>).has(lc)) return lc as IssueStateType

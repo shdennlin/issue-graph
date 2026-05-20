@@ -1,4 +1,4 @@
-import type { IssueStateType, NormalizedIssue, NormalizedLabel, Viewer, WorkflowState } from '@shared/types.js'
+import type { NormalizedIssue, NormalizedLabel, Viewer, WorkflowState } from '@shared/types.js'
 import { getLogger } from '../../lib/log.js'
 import {
   AuthError,
@@ -9,7 +9,7 @@ import {
   type RateLimitInfo,
 } from '../types.js'
 import { ISSUES_QUERY, ISSUE_DETAIL_QUERY, LABELS_QUERY, VIEWER_QUERY, WORKFLOW_STATES_QUERY } from './queries.js'
-import { normalizeIssue, normalizeLabel } from './normalize.js'
+import { coerceStateType, normalizeIssue, normalizeLabel } from './normalize.js'
 
 interface LinearOptions {
   apiKey: string
@@ -195,7 +195,7 @@ export class LinearBackend implements BackendAdapter {
     return data.workflowStates.nodes.map((n) => ({
       id: String(n.id),
       name: String(n.name),
-      type: String(n.type) as IssueStateType,
+      type: coerceStateType(n.type),
       color: n.color ?? null,
       position: typeof n.position === 'number' ? n.position : null,
       teamKey: n.team?.key ?? null,
