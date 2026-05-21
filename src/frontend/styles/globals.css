@@ -1495,7 +1495,13 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   gap: var(--sp-2);
   font-size: var(--fs-meta);
 }
-.project-panel-milestone-name { color: var(--fg); }
+.project-panel-milestone-name { color: var(--fg); display: inline-flex; align-items: center; gap: 6px; }
+/* Linear's milestone status icon — meaningful color carries the signal,
+   sized small enough to sit inline with the name without breaking grid. */
+.project-panel-milestone-status { flex-shrink: 0; }
+.project-panel-milestone-status-done { color: var(--state-completed, #10b981); }
+.project-panel-milestone-status-overdue { color: var(--danger, #ef4444); }
+.project-panel-milestone-status-next { color: var(--accent); }
 .project-panel-milestone-counts { color: var(--fg-muted); font-variant-numeric: tabular-nums; }
 .project-panel-milestone-bar {
   grid-column: 1 / -1;
@@ -1550,7 +1556,13 @@ body[data-detail-wide='1'] .inline-search { display: none; }
 .project-panel-description { font-size: var(--fs-meta); color: var(--fg); }
 .project-panel-updates { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
 .project-panel-update { font-size: var(--fs-meta); }
-.project-panel-update-head { display: flex; gap: var(--sp-2); color: var(--fg-muted); }
+.project-panel-update-head { display: flex; align-items: center; gap: var(--sp-2); color: var(--fg-muted); }
+/* Linear's project-update health dot — colored to map onto Linear's own
+   convention: green = on track, amber = at risk, red = off track. */
+.project-panel-update-health { flex-shrink: 0; }
+.project-panel-update-health.is-onTrack { color: var(--state-completed, #10b981); }
+.project-panel-update-health.is-atRisk { color: #f59e0b; }
+.project-panel-update-health.is-offTrack { color: var(--danger, #ef4444); }
 .project-panel-update-author { font-weight: 600; color: var(--fg); }
 .project-panel-update-time { font-variant-numeric: tabular-nums; }
 .project-panel-update-body { margin-top: 2px; }

@@ -365,6 +365,17 @@ export const zhTW: Dict = {
     milestones: '里程碑',
     noMilestones: '無里程碑',
     milestoneDetails: '詳情',
+    milestoneStatus: {
+      done: '完成',
+      next: '下一個里程碑',
+      overdue: '已逾期',
+      unstarted: '未開始',
+    },
+    updateHealth: {
+      onTrack: '進度正常',
+      atRisk: '有風險',
+      offTrack: '進度落後',
+    },
     byState: '依狀態',
     description: '描述',
     noDescription: '無描述',

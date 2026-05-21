@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Check, Type, X } from 'lucide-react'
+import { AlertTriangle, Check, ChevronsRight, Circle, Type, X } from 'lucide-react'
 import type { IssueStateType, NormalizedIssue, ProjectStateType } from '@shared/types.js'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
@@ -49,6 +49,62 @@ const PROJECT_STATE_COLOR: Record<ProjectStateType, string> = {
   paused: '#d97706',
   completed: 'var(--state-completed, #10b981)',
   canceled: 'var(--state-canceled, #ef4444)',
+}
+
+// Milestone status (Linear enum) → small icon shown before the name. Falls
+// back to no decoration for unknown / 'unstarted' values.
+function MilestoneStatusIcon({ status }: { status: string | null }) {
+  const t = useT()
+  if (status === 'done') {
+    return (
+      <Check
+        className="project-panel-milestone-status project-panel-milestone-status-done"
+        size={14}
+        aria-label={t('projectPanel.milestoneStatus.done')}
+      />
+    )
+  }
+  if (status === 'overdue') {
+    return (
+      <AlertTriangle
+        className="project-panel-milestone-status project-panel-milestone-status-overdue"
+        size={14}
+        aria-label={t('projectPanel.milestoneStatus.overdue')}
+      />
+    )
+  }
+  if (status === 'next') {
+    return (
+      <ChevronsRight
+        className="project-panel-milestone-status project-panel-milestone-status-next"
+        size={14}
+        aria-label={t('projectPanel.milestoneStatus.next')}
+      />
+    )
+  }
+  return null
+}
+
+// Project update health (Linear enum 'onTrack' | 'atRisk' | 'offTrack' | null)
+// → small filled dot. Null hides the indicator entirely.
+function UpdateHealthDot({ health }: { health: string | null }) {
+  const t = useT()
+  if (health !== 'onTrack' && health !== 'atRisk' && health !== 'offTrack') return null
+  const labelKey =
+    health === 'onTrack'
+      ? 'projectPanel.updateHealth.onTrack'
+      : health === 'atRisk'
+        ? 'projectPanel.updateHealth.atRisk'
+        : 'projectPanel.updateHealth.offTrack'
+  return (
+    <Circle
+      className={`project-panel-update-health is-${health}`}
+      size={8}
+      fill="currentColor"
+      strokeWidth={0}
+      aria-label={t(labelKey as DictKey)}
+    />
+  )
 }
 
 function formatDate(iso: string | null): string | null {
@@ -429,7 +485,10 @@ export function ProjectPanel() {
                   const fillPct = Math.round((m.linearProgress ?? localPct) * 100)
                   return (
                     <li key={m.id} className="project-panel-milestone" data-milestone-id={m.id}>
-                      <span className="project-panel-milestone-name">{m.name}</span>
+                      <span className="project-panel-milestone-name">
+                        <MilestoneStatusIcon status={m.status} />
+                        {m.name}
+                      </span>
                       <span className="project-panel-milestone-counts">{m.done}/{m.total}</span>
                       <div className="project-panel-milestone-bar" aria-label={`${fillPct}%`}>
                         <div className="project-panel-milestone-bar-fill" style={{ width: `${fillPct}%` }} />
@@ -479,6 +538,7 @@ export function ProjectPanel() {
                 {detail.updates.map((u) => (
                   <li key={u.id} className="project-panel-update">
                     <div className="project-panel-update-head">
+                      <UpdateHealthDot health={u.health} />
                       <span className="project-panel-update-author">{u.userName ?? '—'}</span>
                       <span className="project-panel-update-time">
                         {formatDate(u.createdAt) ?? ''}

@@ -365,6 +365,17 @@ export const en = {
     milestones: 'Milestones',
     noMilestones: 'No milestones',
     milestoneDetails: 'Details',
+    milestoneStatus: {
+      done: 'Done',
+      next: 'Next milestone',
+      overdue: 'Overdue',
+      unstarted: 'Not started',
+    },
+    updateHealth: {
+      onTrack: 'On track',
+      atRisk: 'At risk',
+      offTrack: 'Off track',
+    },
     byState: 'By state',
     description: 'Description',
     noDescription: 'No description',
