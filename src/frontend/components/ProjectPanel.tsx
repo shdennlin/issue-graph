@@ -4,33 +4,13 @@ import type { IssueStateType, NormalizedIssue, ProjectStateType } from '@shared/
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { useResizable } from '../hooks/useResizable'
-import { renderMarkdownNodes } from '../lib/markdown'
+import { MarkdownBody } from './MarkdownBody'
 import { useT, type DictKey } from '../i18n'
 
 // Shared with DetailPanel — same storage key so cycling text size in either
 // panel updates the other on next render.
 const TEXT_SIZE_KEY = 'ig-detail-text-size-v1'
 type TextSize = 'sm' | 'md' | 'lg' | 'xl'
-
-function MarkdownBody({ body }: { body: string }) {
-  const ref = useRef<HTMLDivElement | null>(null)
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const nodes = renderMarkdownNodes(body)
-    if (nodes.length === 0 && body) {
-      // Sanitizer stripped everything — fall back to plaintext so the card
-      // isn't blank. Same fallback as DetailPanel.MarkdownBody.
-      const pre = document.createElement('div')
-      pre.style.whiteSpace = 'pre-wrap'
-      pre.textContent = body
-      el.replaceChildren(pre)
-      return
-    }
-    el.replaceChildren(...nodes)
-  }, [body])
-  return <div ref={ref} />
-}
 
 const PROJECT_STATE_DICT_KEY: Record<ProjectStateType, DictKey> = {
   backlog: 'projectPanel.projectStates.backlog',

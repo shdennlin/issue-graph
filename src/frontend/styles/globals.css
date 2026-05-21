@@ -785,6 +785,19 @@ a:hover { text-decoration: underline; }
   line-height: 1;
 }
 
+/* Shared baseline for any DOM that holds rendered markdown. `marked` pretty-
+   prints its output with literal `\n` between block tags; if a wrapper sets
+   `white-space: pre-wrap` those newlines render as blank lines. The component
+   `<MarkdownBody>` always carries this class so the rules here are guaranteed
+   to apply, regardless of the host panel's own styling. */
+.markdown-body p { margin: 0 0 var(--sp-2); }
+.markdown-body p:last-child { margin-bottom: 0; }
+.markdown-body ul, .markdown-body ol { margin: 0 0 var(--sp-2); padding-left: 1.25rem; }
+.markdown-body ul:last-child, .markdown-body ol:last-child { margin-bottom: 0; }
+.markdown-body li { margin: 0; }
+.markdown-body li > p { margin: 0; }
+.markdown-body li > p + p { margin-top: 4px; }
+
 /* Markdown tables — marked emits bare <table>/<th>/<td>, which browsers
    render without borders. Give them visible separators in every surface
    that renders user markdown (notes + detail panel description, annotations,
@@ -1485,8 +1498,6 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   color: var(--fg-muted);
   padding: 4px 0 2px;
 }
-.project-panel-milestone-description p { margin: 0 0 4px; }
-.project-panel-milestone-description p:last-child { margin-bottom: 0; }
 .project-panel-by-state { list-style: none; margin: 0; padding: 0; }
 .project-panel-by-state-row {
   display: flex;
@@ -1498,13 +1509,13 @@ body[data-detail-wide='1'] .inline-search { display: none; }
 .project-panel-by-state-row:last-child { border-bottom: none; }
 .project-panel-by-state-name { color: var(--fg); }
 .project-panel-by-state-count { color: var(--fg-muted); font-variant-numeric: tabular-nums; }
-.project-panel-description { white-space: pre-wrap; font-size: var(--fs-meta); color: var(--fg); }
+.project-panel-description { font-size: var(--fs-meta); color: var(--fg); }
 .project-panel-updates { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
 .project-panel-update { font-size: var(--fs-meta); }
 .project-panel-update-head { display: flex; gap: var(--sp-2); color: var(--fg-muted); }
 .project-panel-update-author { font-weight: 600; color: var(--fg); }
 .project-panel-update-time { font-variant-numeric: tabular-nums; }
-.project-panel-update-body { white-space: pre-wrap; margin-top: 2px; }
+.project-panel-update-body { margin-top: 2px; }
 .project-panel-empty {
   font-size: var(--fs-meta);
   color: var(--fg-muted);

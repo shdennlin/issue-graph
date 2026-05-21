@@ -10,28 +10,9 @@ import { sortCommentsOldestFirst } from '../lib/comments'
 import { priorityLabelFor, stateColorVar, stateIcon, stateLabelFor } from '../lib/colors'
 import { getDesignDocsForIssue } from '../lib/labelSchema'
 import { milestoneFilterKey } from '../views/filters'
-import { renderMarkdownHtml, renderMarkdownNodes } from '../lib/markdown'
+import { renderMarkdownHtml } from '../lib/markdown'
+import { MarkdownBody } from './MarkdownBody'
 import { translate, useLocale, useT } from '../i18n'
-
-function MarkdownBody({ body }: { body: string }) {
-  const ref = useRef<HTMLDivElement | null>(null)
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const nodes = renderMarkdownNodes(body)
-    if (nodes.length === 0 && body) {
-      // Sanitizer stripped everything (e.g., Linear bot comment with raw HTML).
-      // Fall back to plaintext so the card isn't blank.
-      const pre = document.createElement('div')
-      pre.style.whiteSpace = 'pre-wrap'
-      pre.textContent = body
-      el.replaceChildren(pre)
-      return
-    }
-    el.replaceChildren(...nodes)
-  }, [body])
-  return <div ref={ref} />
-}
 
 function timeAgo(iso: string, locale: ReturnType<typeof useLocale>): string {
   const ms = Date.now() - new Date(iso).getTime()
