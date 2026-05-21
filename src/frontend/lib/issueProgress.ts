@@ -3,24 +3,25 @@ import type { IssueStateType, NormalizedIssue } from '@shared/types.js'
 /**
  * Which Linear issue states count as "done" for our count-based progress.
  *
- * Centralizes a policy that used to be hardcoded at 5 call sites
- * (ProjectPanel, milestone view, project view). Note: this is a *count*
- * policy, distinct from Linear's `progress` field on Project/ProjectMilestone
- * which is scope-weighted and already comes from the API. Where Linear's
- * own `progress` is available, prefer it; this helper covers the cases
- * where it isn't (canvas headers rendered before detail loads).
+ * Centralizes a policy that used to be hardcoded at 5 call sites. This
+ * helper is a *count* policy, distinct from Linear's scope-weighted
+ * `progress` field on Project/ProjectMilestone which we use directly
+ * where available (ProjectPanel bar). Helper covers the cases where
+ * Linear's own number isn't yet loaded (canvas headers).
  *
- * Current policy: only `completed` is done. `canceled` is NOT done, but
- * still counts toward total (i.e. an all-canceled milestone reads 0/N).
- * If we ever switch to Linear's semantics (canceled excluded from total),
- * change `isCountedInTotal` below — every consumer goes through it.
+ * Policy: `completed` is done. `canceled` is excluded from total
+ * entirely — matches Linear's own scope semantics (a milestone with
+ * only canceled issues reads 0/0, and Linear's progress reports 100%
+ * because there is nothing left in scope to ship). Without this, the
+ * local count contradicted the Linear-driven bar: panel would show
+ * 0/1 next to a 100%-full bar for an all-canceled milestone.
  */
 export function isDoneState(t: IssueStateType): boolean {
   return t === 'completed'
 }
 
-export function isCountedInTotal(_t: IssueStateType): boolean {
-  return true
+export function isCountedInTotal(t: IssueStateType): boolean {
+  return t !== 'canceled'
 }
 
 export interface ProgressCounts {
