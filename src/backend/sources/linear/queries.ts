@@ -89,7 +89,7 @@ export const PROJECT_DETAIL_QUERY = /* GraphQL */ `
       content
       lead { displayName }
       projectMilestones(first: 50) {
-        nodes { id name targetDate sortOrder description }
+        nodes { id name targetDate sortOrder description progress status }
       }
       projectUpdates(first: 5, orderBy: updatedAt) {
         nodes {

@@ -167,6 +167,26 @@ describe('normalizeProjectDetail', () => {
     expect(normalizeProjectDetail({ id: 'p', state: 'backlog', progress: -0.5 }).progress).toBe(0)
     expect(normalizeProjectDetail({ id: 'p', state: 'backlog', progress: 1.5 }).progress).toBe(1)
   })
+
+  it('extracts and clamps per-milestone progress + status', () => {
+    const detail = normalizeProjectDetail({
+      id: 'p',
+      state: 'started',
+      progress: 0,
+      projectMilestones: {
+        nodes: [
+          { id: 'm1', name: 'A', progress: 0.75, status: 'next' },
+          { id: 'm2', name: 'B', progress: 1.5, status: 'done' },
+          { id: 'm3', name: 'C', progress: -0.2, status: 'overdue' },
+          { id: 'm4', name: 'D' /* progress / status absent */ },
+        ],
+      },
+    })
+    expect(detail.milestones[0]).toMatchObject({ progress: 0.75, status: 'next' })
+    expect(detail.milestones[1]).toMatchObject({ progress: 1, status: 'done' })
+    expect(detail.milestones[2]).toMatchObject({ progress: 0, status: 'overdue' })
+    expect(detail.milestones[3]).toMatchObject({ progress: null, status: null })
+  })
 })
 
 describe('normalizeIssue', () => {

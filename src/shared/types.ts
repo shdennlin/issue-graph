@@ -193,6 +193,13 @@ export interface ProjectDetail {
     sortOrder: number | null
     /** Optional per-milestone markdown body. */
     description: string | null
+    /** Linear's scope-weighted progress, 0..1. Same scale as Project.progress.
+     *  Null when the backend doesn't expose it (e.g. older backends, or
+     *  Linear hasn't populated it yet for a brand-new milestone). */
+    progress: number | null
+    /** Linear's milestone status enum: 'done' | 'next' | 'overdue' |
+     *  'unstarted'. Null when not provided. Distinct from project status. */
+    status: string | null
   }>
 }
 

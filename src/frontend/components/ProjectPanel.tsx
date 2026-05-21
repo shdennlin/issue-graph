@@ -86,12 +86,25 @@ interface MilestoneRollup {
   description: string | null
   done: number
   total: number
+  /** Linear's scope-weighted progress (0..1) when the API returned it.
+   *  When null, the panel falls back to done/total for the bar fill. */
+  linearProgress: number | null
+  /** Linear's milestone status: 'done' | 'next' | 'overdue' | 'unstarted'. */
+  status: string | null
 }
 
 function computeMilestoneRollups(
   issues: NormalizedIssue[],
   projectId: string,
-  declared: Array<{ id: string; name: string; targetDate: string | null; sortOrder: number | null; description: string | null }>,
+  declared: Array<{
+    id: string
+    name: string
+    targetDate: string | null
+    sortOrder: number | null
+    description: string | null
+    progress: number | null
+    status: string | null
+  }>,
 ): MilestoneRollup[] {
   // Start from the project's declared milestones (so empty milestones still
   // show up) and fold in issue counts. Issues with no milestone are grouped
@@ -128,6 +141,8 @@ function computeMilestoneRollups(
     description: m.description,
     done: counts.get(m.id)?.done ?? 0,
     total: counts.get(m.id)?.total ?? 0,
+    linearProgress: m.progress,
+    status: m.status,
   }))
 
   if (noneTotal > 0) {
@@ -138,6 +153,9 @@ function computeMilestoneRollups(
       description: null,
       done: noneDone,
       total: noneTotal,
+      // Synthetic '(No milestone)' bucket has no Linear-side equivalent.
+      linearProgress: null,
+      status: null,
     })
   }
   return rollups
@@ -404,13 +422,17 @@ export function ProjectPanel() {
             ) : (
               <ul className="project-panel-milestones" ref={milestonesListRef}>
                 {rollups.map((m) => {
-                  const pct = m.total > 0 ? Math.round((m.done / m.total) * 100) : 0
+                  // Prefer Linear's scope-weighted progress for the bar fill;
+                  // fall back to local count ratio when the API didn't expose
+                  // it (synthetic '(No milestone)' bucket, or older payload).
+                  const localPct = m.total > 0 ? m.done / m.total : 0
+                  const fillPct = Math.round((m.linearProgress ?? localPct) * 100)
                   return (
                     <li key={m.id} className="project-panel-milestone" data-milestone-id={m.id}>
                       <span className="project-panel-milestone-name">{m.name}</span>
                       <span className="project-panel-milestone-counts">{m.done}/{m.total}</span>
-                      <div className="project-panel-milestone-bar" aria-label={`${pct}%`}>
-                        <div className="project-panel-milestone-bar-fill" style={{ width: `${pct}%` }} />
+                      <div className="project-panel-milestone-bar" aria-label={`${fillPct}%`}>
+                        <div className="project-panel-milestone-bar-fill" style={{ width: `${fillPct}%` }} />
                       </div>
                       {m.description && (
                         <details className="project-panel-milestone-details">

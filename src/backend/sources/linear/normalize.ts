@@ -114,13 +114,22 @@ export function normalizeProjectDetail(raw: any): ProjectDetail {
     health: typeof u?.health === 'string' ? u.health : null,
   }))
 
-  const milestones = ((raw?.projectMilestones?.nodes ?? []) as any[]).map((m) => ({
-    id: String(m?.id ?? ''),
-    name: String(m?.name ?? ''),
-    targetDate: m?.targetDate ?? null,
-    sortOrder: typeof m?.sortOrder === 'number' ? m.sortOrder : null,
-    description: typeof m?.description === 'string' ? m.description : null,
-  }))
+  const milestones = ((raw?.projectMilestones?.nodes ?? []) as any[]).map((m) => {
+    const rawMilestoneProgress = typeof m?.progress === 'number' ? m.progress : null
+    const milestoneProgress =
+      rawMilestoneProgress === null
+        ? null
+        : Math.max(0, Math.min(1, Number.isFinite(rawMilestoneProgress) ? rawMilestoneProgress : 0))
+    return {
+      id: String(m?.id ?? ''),
+      name: String(m?.name ?? ''),
+      targetDate: m?.targetDate ?? null,
+      sortOrder: typeof m?.sortOrder === 'number' ? m.sortOrder : null,
+      description: typeof m?.description === 'string' ? m.description : null,
+      progress: milestoneProgress,
+      status: typeof m?.status === 'string' ? m.status : null,
+    }
+  })
 
   return {
     id: String(raw?.id ?? ''),
