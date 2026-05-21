@@ -1,6 +1,13 @@
 import { create } from 'zustand'
-import type { GraphResponse } from '@shared/types.js'
+import type { GraphResponse, ProjectDetail } from '@shared/types.js'
 import { api } from '../lib/api'
+
+/**
+ * Stored value for a single project's lazy-loaded detail. String sentinels
+ * keep the loading / error states in the same map so callers can drive UI
+ * (skeleton vs retry button vs real data) off one lookup.
+ */
+export type ProjectDetailCacheEntry = ProjectDetail | 'loading' | 'error'
 
 interface GraphState {
   graph: GraphResponse | null
@@ -33,6 +40,13 @@ interface GraphState {
    * (max 365), then we reload the graph.
    */
   extendScope: (days: number) => Promise<void>
+  /** Cache of fetched project details, keyed by Linear project id. */
+  projectDetails: Record<string, ProjectDetailCacheEntry>
+  /**
+   * Lazy-fetch a project's detail. No-op if already loaded or in-flight.
+   * `force: true` re-fetches even when cached (used by panel's retry button).
+   */
+  loadProjectDetail: (projectId: string, opts?: { force?: boolean }) => Promise<void>
 }
 
 export const useGraphStore = create<GraphState>((set, get) => ({
@@ -79,6 +93,19 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
     set({ syncing: false })
     await get().load()
+  },
+  projectDetails: {},
+  async loadProjectDetail(projectId, opts) {
+    if (!projectId) return
+    const current = get().projectDetails[projectId]
+    if (!opts?.force && current && current !== 'error') return
+    set((s) => ({ projectDetails: { ...s.projectDetails, [projectId]: 'loading' } }))
+    try {
+      const res = await api.fetchProjectDetail(projectId)
+      set((s) => ({ projectDetails: { ...s.projectDetails, [projectId]: res.data } }))
+    } catch {
+      set((s) => ({ projectDetails: { ...s.projectDetails, [projectId]: 'error' } }))
+    }
   },
   async extendScope(days) {
     set({ status: 'loading', syncing: true })

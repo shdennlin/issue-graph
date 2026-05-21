@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { coerceStateType, normalizeIssue, normalizeRelations, normalizeLabel } from './normalize.js'
+import {
+  coerceProjectStateType,
+  coerceStateType,
+  normalizeIssue,
+  normalizeProjectDetail,
+  normalizeRelations,
+  normalizeLabel,
+} from './normalize.js'
 
 describe('coerceStateType', () => {
   it("maps 'cancelled' (en-GB) → 'canceled' so workflowStates lookups stay safe", () => {
@@ -71,6 +78,114 @@ describe('normalizeLabel', () => {
   it('returns null group when no parent', () => {
     const lab = normalizeLabel({ id: '1', name: 'foo', color: '#fff' })
     expect(lab.group).toBeNull()
+  })
+})
+
+describe('coerceProjectStateType', () => {
+  it('passes through canonical values', () => {
+    expect(coerceProjectStateType('backlog')).toBe('backlog')
+    expect(coerceProjectStateType('planned')).toBe('planned')
+    expect(coerceProjectStateType('started')).toBe('started')
+    expect(coerceProjectStateType('paused')).toBe('paused')
+    expect(coerceProjectStateType('completed')).toBe('completed')
+    expect(coerceProjectStateType('canceled')).toBe('canceled')
+  })
+
+  it("maps 'cancelled' (en-GB) → 'canceled'", () => {
+    expect(coerceProjectStateType('cancelled')).toBe('canceled')
+  })
+
+  it('falls back to backlog for unknown / missing input', () => {
+    expect(coerceProjectStateType('mystery')).toBe('backlog')
+    expect(coerceProjectStateType(undefined)).toBe('backlog')
+    expect(coerceProjectStateType(null)).toBe('backlog')
+  })
+
+  it('is case-insensitive', () => {
+    expect(coerceProjectStateType('Planned')).toBe('planned')
+    expect(coerceProjectStateType('IN PROGRESS')).toBe('backlog') // not a value Linear sends; tested to confirm we don't try to "smart-map"
+  })
+})
+
+describe('normalizeProjectDetail', () => {
+  it('extracts canonical fields from a full Linear payload', () => {
+    const detail = normalizeProjectDetail({
+      id: 'proj-1',
+      state: 'started',
+      progress: 0.42,
+      lead: { displayName: 'Shawn' },
+      startDate: '2026-01-01',
+      targetDate: '2026-06-30',
+      description: 'Refactor X',
+      content: '# Heading\n\nLong markdown body…',
+      projectUpdates: {
+        nodes: [
+          { id: 'u1', body: 'Going well', createdAt: '2026-05-01', user: { displayName: 'Shawn' }, health: 'onTrack' },
+        ],
+      },
+      projectMilestones: {
+        nodes: [
+          { id: 'm1', name: 'Alpha', targetDate: '2026-02-01', sortOrder: 1, description: 'Cut alpha build' },
+          { id: 'm2', name: 'Beta', targetDate: null, sortOrder: 2 },
+        ],
+      },
+    })
+
+    expect(detail.id).toBe('proj-1')
+    expect(detail.state).toBe('started')
+    expect(detail.progress).toBe(0.42)
+    expect(detail.lead?.displayName).toBe('Shawn')
+    expect(detail.startDate).toBe('2026-01-01')
+    expect(detail.targetDate).toBe('2026-06-30')
+    expect(detail.description).toBe('Refactor X')
+    expect(detail.content).toBe('# Heading\n\nLong markdown body…')
+    expect(detail.updates).toHaveLength(1)
+    expect(detail.updates[0]).toMatchObject({ id: 'u1', userName: 'Shawn', health: 'onTrack' })
+    expect(detail.milestones).toHaveLength(2)
+    expect(detail.milestones[0]).toMatchObject({ id: 'm1', name: 'Alpha', sortOrder: 1, description: 'Cut alpha build' })
+    expect(detail.milestones[1]?.description).toBeNull()
+  })
+
+  it('handles missing / null collections gracefully', () => {
+    const detail = normalizeProjectDetail({ id: 'proj-2', state: 'backlog', progress: 0 })
+    expect(detail.lead).toBeNull()
+    expect(detail.startDate).toBeNull()
+    expect(detail.targetDate).toBeNull()
+    expect(detail.description).toBeNull()
+    expect(detail.content).toBeNull()
+    expect(detail.updates).toEqual([])
+    expect(detail.milestones).toEqual([])
+  })
+
+  it('coerces invalid progress to 0 and unknown state to backlog', () => {
+    const detail = normalizeProjectDetail({ id: 'p', state: 'made-up', progress: 'not-a-number' })
+    expect(detail.state).toBe('backlog')
+    expect(detail.progress).toBe(0)
+  })
+
+  it('clamps progress to [0, 1]', () => {
+    expect(normalizeProjectDetail({ id: 'p', state: 'backlog', progress: -0.5 }).progress).toBe(0)
+    expect(normalizeProjectDetail({ id: 'p', state: 'backlog', progress: 1.5 }).progress).toBe(1)
+  })
+
+  it('extracts and clamps per-milestone progress + status', () => {
+    const detail = normalizeProjectDetail({
+      id: 'p',
+      state: 'started',
+      progress: 0,
+      projectMilestones: {
+        nodes: [
+          { id: 'm1', name: 'A', progress: 0.75, status: 'next' },
+          { id: 'm2', name: 'B', progress: 1.5, status: 'done' },
+          { id: 'm3', name: 'C', progress: -0.2, status: 'overdue' },
+          { id: 'm4', name: 'D' /* progress / status absent */ },
+        ],
+      },
+    })
+    expect(detail.milestones[0]).toMatchObject({ progress: 0.75, status: 'next' })
+    expect(detail.milestones[1]).toMatchObject({ progress: 1, status: 'done' })
+    expect(detail.milestones[2]).toMatchObject({ progress: 0, status: 'overdue' })
+    expect(detail.milestones[3]).toMatchObject({ progress: null, status: null })
   })
 })
 

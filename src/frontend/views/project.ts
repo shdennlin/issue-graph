@@ -7,6 +7,7 @@ import { chooseColumnCount, packIntoColumns } from './containerLayout'
 import { projectColor } from '../lib/projectColor'
 import { buildChainLayout } from './chainLayout'
 import { fanOutCurvatures } from './edgeStyle'
+import { rollupProgress } from '../lib/issueProgress'
 
 const PADDING = 30
 const HEADER = 32
@@ -88,9 +89,7 @@ export const projectView: ViewDefinition = {
       rowWidth = xOffset + containerW
 
       const containerId = `project:${key}`
-      // 'done' counts only completed (excludes canceled — matches the
-      // semantics used by milestone view).
-      const done = b.issues.filter((iss) => iss.state.type === 'completed').length
+      const { done, total } = rollupProgress(b.issues)
       nodes.push({
         id: containerId,
         type: 'mixedContainer',
@@ -100,7 +99,10 @@ export const projectView: ViewDefinition = {
             name: b.name,
             color: b.color,
             count: b.issues.length,
-            progress: { done, total: b.issues.length },
+            progress: { done, total },
+            // null for the synthetic '(No project)' bucket — it has no real
+            // Linear project id, so leave the header non-clickable there.
+            projectId: key === NO_PROJECT_KEY ? null : key,
           },
         },
         position: { x: xOffset, y: rowY },

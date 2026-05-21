@@ -24,6 +24,7 @@ import type { Candidate } from './components/quickSwitcher/types'
 // modals are heavy and only open on user action — splitting them keeps the
 // initial bundle lean.
 const DetailPanel = lazy(() => import('./components/DetailPanel').then((m) => ({ default: m.DetailPanel })))
+const ProjectPanel = lazy(() => import('./components/ProjectPanel').then((m) => ({ default: m.ProjectPanel })))
 const SyncHistoryModal = lazy(() =>
   import('./components/SyncHistoryModal').then((m) => ({ default: m.SyncHistoryModal })),
 )
@@ -45,6 +46,8 @@ export function App() {
   const focusedId = useViewStore((s) => s.focusedId)
   const filterPanelOpen = useViewStore((s) => s.filterPanelOpen)
   const detailPanelOpen = useViewStore((s) => s.detailPanelOpen)
+  const focusedProjectId = useViewStore((s) => s.focusedProjectId)
+  const projectPanelOpen = useViewStore((s) => s.projectPanelOpen)
   const syncHistoryOpen = useViewStore((s) => s.syncHistoryOpen)
   const coverageOpen = useViewStore((s) => s.coverageOpen)
   const settingsOpen = useViewStore((s) => s.settingsOpen)
@@ -316,6 +319,10 @@ export function App() {
         }
         if (s.detailPanelOpen) {
           s.setDetailPanelOpen(false)
+          return
+        }
+        if (s.projectPanelOpen) {
+          s.closeProjectPanel()
           return
         }
         if (s.focusedId) {
@@ -599,6 +606,11 @@ export function App() {
         {focusedId && detailPanelOpen && (
           <Suspense fallback={null}>
             <DetailPanel />
+          </Suspense>
+        )}
+        {focusedProjectId && projectPanelOpen && (
+          <Suspense fallback={null}>
+            <ProjectPanel />
           </Suspense>
         )}
       </div>
