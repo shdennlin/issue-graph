@@ -24,6 +24,16 @@ export interface Filters {
   prefixSelections: Record<string, string[]>  // token → label ids
   tagIds: string[]
   designdocFilter: 'all' | 'has' | 'missing'
+  // Due-date filter:
+  //   'any'      — no filter (default)
+  //   'has'      — issues that have a dueDate set (regardless of state)
+  //   'overdue'  — past due, still actionable (state ∉ completed/canceled)
+  //   'soon7'    — due today through today+7, still actionable
+  //   'soon30'   — due today through today+30, still actionable
+  // Overdue/soon partition the "actionable" set: overdue covers dueDate < today,
+  // soon covers today <= dueDate <= today+N. Completed/canceled issues are
+  // excluded from overdue/soon (matches the chip-color rule in IssueNode).
+  dueFilter: 'any' | 'has' | 'overdue' | 'soon7' | 'soon30'
   // Linear project ids to filter by. Empty = no project filter (show all).
   // The literal string '__noproject' matches issues without a project,
   // mirroring the Project view's grouping convention so the two features
@@ -171,6 +181,7 @@ export const defaultFilters: Filters = {
   prefixSelections: {},
   tagIds: [],
   designdocFilter: 'all',
+  dueFilter: 'any',
   projectIds: [],
   milestoneIds: [],
 }

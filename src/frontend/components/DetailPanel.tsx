@@ -9,6 +9,7 @@ import { api } from '../lib/api'
 import { sortCommentsOldestFirst } from '../lib/comments'
 import { priorityLabelFor, stateColorVar, stateIcon, stateLabelFor } from '../lib/colors'
 import { getDesignDocsForIssue } from '../lib/labelSchema'
+import { isOverdueIssue } from '../lib/dueDate'
 import { milestoneFilterKey } from '../views/filters'
 import { renderMarkdownHtml } from '../lib/markdown'
 import { MarkdownBody } from './MarkdownBody'
@@ -21,16 +22,6 @@ function timeAgo(iso: string, locale: ReturnType<typeof useLocale>): string {
   const h = Math.floor(m / 60)
   if (h < 24) return translate(locale, 'detailPanel.hoursAgo', { count: h })
   return translate(locale, 'detailPanel.daysAgo', { count: Math.floor(h / 24) })
-}
-
-// Mirrors the card-side check in IssueNode. Completed/canceled issues never
-// highlight overdue — once shipped or dropped, the deadline is moot.
-function isOverdueIssue(issue: NormalizedIssue): boolean {
-  if (!issue.dueDate) return false
-  if (issue.state.type === 'completed' || issue.state.type === 'canceled') return false
-  const today = new Date()
-  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-  return issue.dueDate < todayKey
 }
 
 // Per-panel preferences — independent from the global theme/font-size settings

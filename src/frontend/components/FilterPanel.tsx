@@ -327,6 +327,10 @@ export function FilterPanel() {
   }, [counts.byProject, counts.byMilestone])
 
   const showDesigndocFilter = (graph?.hasDesigndoc ?? false) && (graph?.data.designdocs?.length ?? 0) > 0
+  // Only surface the due-date filter when the workspace actually uses due
+  // dates — otherwise the section is dead UI. Cheap O(N) scan; runs once
+  // per render via useMemo would be over-engineering for the issue count.
+  const showDueFilter = (graph?.data.issues ?? []).some((i) => !!i.dueDate)
 
   const { width, startResize, resizing } = useResizable({
     storageKey: 'ig-filter-panel-w',
@@ -657,6 +661,35 @@ export function FilterPanel() {
                 onChange={() => setFilter('designdocFilter', v)}
               />
               {v === 'all' ? t('filterPanel.designDocAll') : v === 'has' ? t('filterPanel.designDocHas') : t('filterPanel.designDocMissing')}
+            </label>
+          ))}
+        </CollapsibleSection>
+      )}
+
+      {showDueFilter && (
+        <CollapsibleSection
+          id="due"
+          title={t('filterPanel.dueDate')}
+          activeCount={filters.dueFilter !== 'any' ? 1 : 0}
+          onClear={() => setFilter('dueFilter', 'any')}
+        >
+          {(['any', 'has', 'overdue', 'soon7', 'soon30'] as const).map((v) => (
+            <label key={v}>
+              <input
+                type="radio"
+                name="dueFilter"
+                checked={filters.dueFilter === v}
+                onChange={() => setFilter('dueFilter', v)}
+              />
+              {v === 'any'
+                ? t('filterPanel.dueDateAny')
+                : v === 'has'
+                  ? t('filterPanel.dueDateHas')
+                  : v === 'overdue'
+                    ? t('filterPanel.dueDateOverdue')
+                    : v === 'soon7'
+                      ? t('filterPanel.dueDateSoon7')
+                      : t('filterPanel.dueDateSoon30')}
             </label>
           ))}
         </CollapsibleSection>

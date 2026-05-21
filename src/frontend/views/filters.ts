@@ -2,6 +2,7 @@
 
 import type { NormalizedIssue } from '@shared/types.js'
 import type { Filters } from '../store/viewStore'
+import { isDueWithin, isOverdueIssue } from '../lib/dueDate'
 
 // Filter-panel "leave-one-out" counting: when showing the count next to e.g.
 // "(unassigned)", we want it to reflect "if you click this, how many issues
@@ -18,6 +19,7 @@ export type FilterDimension =
   | 'type'
   | 'prefix'
   | 'project'
+  | 'due'
 
 export function applyFiltersExcluding(
   issues: NormalizedIssue[],
@@ -61,6 +63,9 @@ export function applyFiltersExcluding(
       // + stateNames + activeOnly together).
       f.projectIds = []
       f.milestoneIds = []
+      break
+    case 'due':
+      f.dueFilter = 'any'
       break
   }
   return applyFilters(issues, f, staleDays, myUserName, search)
@@ -124,6 +129,22 @@ export function applyFilters(
       if (ids.length === 0) continue
       const hit = i.labels.some((l) => ids.includes(l.id))
       if (!hit) return false
+    }
+    switch (filters.dueFilter) {
+      case 'any':
+        break
+      case 'has':
+        if (!i.dueDate) return false
+        break
+      case 'overdue':
+        if (!isOverdueIssue(i)) return false
+        break
+      case 'soon7':
+        if (!isDueWithin(i, 7)) return false
+        break
+      case 'soon30':
+        if (!isDueWithin(i, 30)) return false
+        break
     }
     // Project / milestone hierarchy. Child (milestoneIds) takes precedence
     // over parent (projectIds) — mirrors stateNames > stateTypes. When the

@@ -111,6 +111,7 @@ function buildUrl(): string {
   }
   if (s.filters.tagIds.length) params.set('tag', s.filters.tagIds.join(','))
   if (s.filters.designdocFilter !== 'all') params.set('designdoc', s.filters.designdocFilter)
+  if (s.filters.dueFilter !== 'any') params.set('due', s.filters.dueFilter)
   if (s.expandedBuckets.length) params.set('expand', s.expandedBuckets.join(','))
   if (s.notesOpen) params.set('notes', '1')
   if (s.focusedNoteId !== null) params.set('note', String(s.focusedNoteId))
@@ -149,6 +150,7 @@ function significantSignature(): string {
     f.assignees.slice().sort().join(','),
     f.projectIds.slice().sort().join(','),
     f.designdocFilter,
+    f.dueFilter,
     Object.entries(f.prefixSelections).map(([k, v]) => `${k}:${v.slice().sort().join(',')}`).sort().join('|'),
     s.notesOpen ? '1' : '0',
     s.focusedNoteId === null ? '' : String(s.focusedNoteId),
@@ -230,6 +232,10 @@ function parseUrl(): void {
     designdocFilter: ((): 'all' | 'has' | 'missing' => {
       const dd = params.get('designdoc')
       return dd === 'has' || dd === 'missing' ? dd : 'all'
+    })(),
+    dueFilter: ((): 'any' | 'has' | 'overdue' | 'soon7' | 'soon30' => {
+      const d = params.get('due')
+      return d === 'has' || d === 'overdue' || d === 'soon7' || d === 'soon30' ? d : 'any'
     })(),
   }
   for (const [k, v] of params.entries()) {

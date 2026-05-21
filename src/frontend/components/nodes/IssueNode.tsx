@@ -14,19 +14,8 @@ import {
   shortPrefixDisplay,
 } from '../../lib/labelSchema'
 import { priorityClass, priorityLabel, stateColorVar, stateIcon, stateLabel } from '../../lib/colors'
+import { isOverdueIssue } from '../../lib/dueDate'
 import { useT } from '../../i18n'
-
-// `dueDate` is an ISO date ("YYYY-MM-DD"). An issue is overdue iff today
-// (local date) is strictly past it AND the issue is still actionable
-// (not completed/canceled). Completed/canceled issues never highlight
-// overdue — once shipped or dropped, the deadline is moot.
-function isOverdue(issue: NormalizedIssue): boolean {
-  if (!issue.dueDate) return false
-  if (issue.state.type === 'completed' || issue.state.type === 'canceled') return false
-  const today = new Date()
-  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-  return issue.dueDate < todayKey
-}
 
 function formatDueDate(iso: string): string {
   // Render as locale-short ("MMM D") for the chip; full ISO stays on hover.
@@ -269,9 +258,9 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
           {issue.dueDate && (
             <span
               className="chip"
-              title={`${t('detailPanel.dueDate')}: ${issue.dueDate}${isOverdue(issue) ? ` (${t('detailPanel.overdue')})` : ''}`}
+              title={`${t('detailPanel.dueDate')}: ${issue.dueDate}${isOverdueIssue(issue) ? ` (${t('detailPanel.overdue')})` : ''}`}
               style={
-                isOverdue(issue)
+                isOverdueIssue(issue)
                   ? {
                       // Inline override to surface overdue without theming a new
                       // chip variant. Mirrors the multi-spec warn color so the
