@@ -69,7 +69,17 @@ export interface NormalizedIssue {
   title: string
   url: string
   priority: Priority
+  /** Linear story-point / time estimate. Null when unset. */
+  estimate?: number | null
+  /** ISO date string ("YYYY-MM-DD") — user-set issue deadline. Null when unset. */
+  dueDate?: string | null
+  /** ISO datetime — auto-set when issue first transitioned to a "started"
+   *  state. Not user-settable; null until the first transition. */
+  startedAt?: string | null
   state: { name: string; type: IssueStateType }
+  /** Owning Linear team. `key` is the identifier prefix (e.g. "ENG" in
+   *  "ENG-123"), `color` is the team accent (hex). */
+  team?: { id: string; key: string; name: string; color: string | null } | null
   assignee: NormalizedAssignee | null
   labels: NormalizedLabel[]
   cycle?: { number: number; startsAt: string; endsAt: string } | null

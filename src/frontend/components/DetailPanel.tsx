@@ -23,6 +23,16 @@ function timeAgo(iso: string, locale: ReturnType<typeof useLocale>): string {
   return translate(locale, 'detailPanel.daysAgo', { count: Math.floor(h / 24) })
 }
 
+// Mirrors the card-side check in IssueNode. Completed/canceled issues never
+// highlight overdue — once shipped or dropped, the deadline is moot.
+function isOverdueIssue(issue: NormalizedIssue): boolean {
+  if (!issue.dueDate) return false
+  if (issue.state.type === 'completed' || issue.state.type === 'canceled') return false
+  const today = new Date()
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  return issue.dueDate < todayKey
+}
+
 // Per-panel preferences — independent from the global theme/font-size settings
 // so users who want a roomier read of a single issue without inflating the rest
 // of the UI can opt in here.
@@ -426,6 +436,65 @@ export function DetailPanel() {
             ) : (
               <span style={{ color: 'var(--fg-muted)' }}>{t('detailPanel.noMilestone')}</span>
             )}
+          </div>
+        )}
+        {issue.team && (
+          <div className="row">
+            <span className="k">{t('detailPanel.team')}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              {issue.team.color && (
+                <span
+                  aria-hidden
+                  style={{
+                    display: 'inline-block',
+                    width: 8,
+                    height: 8,
+                    borderRadius: 999,
+                    background: issue.team.color,
+                  }}
+                />
+              )}
+              <span>
+                {issue.team.name}
+                {issue.team.key && (
+                  <span style={{ color: 'var(--fg-muted)', marginLeft: 6 }}>
+                    {issue.team.key}
+                  </span>
+                )}
+              </span>
+            </span>
+          </div>
+        )}
+        {typeof issue.estimate === 'number' && (
+          <div className="row">
+            <span className="k">{t('detailPanel.estimate')}</span>
+            <span>{t('detailPanel.estimatePointsShort', { value: issue.estimate })}</span>
+          </div>
+        )}
+        {issue.dueDate && (
+          <div className="row">
+            <span className="k">{t('detailPanel.dueDate')}</span>
+            <span
+              title={issue.dueDate}
+              style={
+                isOverdueIssue(issue)
+                  ? { color: 'var(--danger, #ef4444)', fontWeight: 600 }
+                  : undefined
+              }
+            >
+              {issue.dueDate}
+              {isOverdueIssue(issue) && (
+                <span style={{ marginLeft: 6, fontSize: 11 }}>
+                  · {t('detailPanel.overdue')}
+                </span>
+              )}
+            </span>
+          </div>
+        )}
+        {issue.startedAt && (
+          <div className="row">
+            <span className="k">{t('detailPanel.startedAt')}</span>
+            <span title={issue.startedAt}>{timeAgo(issue.startedAt, locale)}</span>
           </div>
         )}
         <div className="row"><span className="k">{t('detailPanel.created')}</span><span>{timeAgo(issue.createdAt, locale)}</span></div>

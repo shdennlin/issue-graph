@@ -14,6 +14,26 @@ import {
   shortPrefixDisplay,
 } from '../../lib/labelSchema'
 import { priorityClass, priorityLabel, stateColorVar, stateIcon, stateLabel } from '../../lib/colors'
+import { useT } from '../../i18n'
+
+// `dueDate` is an ISO date ("YYYY-MM-DD"). An issue is overdue iff today
+// (local date) is strictly past it AND the issue is still actionable
+// (not completed/canceled). Completed/canceled issues never highlight
+// overdue — once shipped or dropped, the deadline is moot.
+function isOverdue(issue: NormalizedIssue): boolean {
+  if (!issue.dueDate) return false
+  if (issue.state.type === 'completed' || issue.state.type === 'canceled') return false
+  const today = new Date()
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  return issue.dueDate < todayKey
+}
+
+function formatDueDate(iso: string): string {
+  // Render as locale-short ("MMM D") for the chip; full ISO stays on hover.
+  const d = new Date(`${iso}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
 
 interface IssueNodeData {
   issue: NormalizedIssue
@@ -58,6 +78,7 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
   const density = useViewStore((s) => s.density)
   const annotations = useGraphStore((s) => s.graph?.data.annotations ?? EMPTY_ANNOTATIONS)
   const designdocs = useGraphStore((s) => s.graph?.data.designdocs)
+  const t = useT()
 
   const primary = getPrimaryLabel(issue, schema)
   const type = getTypeLabel(issue, schema)
@@ -204,6 +225,20 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
             <span className="meta" style={{ fontSize: 11 }}>{priorityLabel(issue.priority)}</span>
           )}
         </span>
+        {issue.team?.color && (
+          <span
+            aria-hidden
+            title={issue.team.name}
+            style={{
+              display: 'inline-block',
+              width: 7,
+              height: 7,
+              borderRadius: 999,
+              background: issue.team.color,
+              flexShrink: 0,
+            }}
+          />
+        )}
         <span className="pid">{issue.identifier}</span>
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
           <span
@@ -226,6 +261,31 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
       {!isCompact && (
         <div className="meta">
           <span>{issue.assignee?.displayName ?? 'unassigned'}</span>
+          {typeof issue.estimate === 'number' && (
+            <span className="chip" title={`${t('detailPanel.estimate')}: ${issue.estimate}`}>
+              {t('detailPanel.estimatePointsShort', { value: issue.estimate })}
+            </span>
+          )}
+          {issue.dueDate && (
+            <span
+              className="chip"
+              title={`${t('detailPanel.dueDate')}: ${issue.dueDate}${isOverdue(issue) ? ` (${t('detailPanel.overdue')})` : ''}`}
+              style={
+                isOverdue(issue)
+                  ? {
+                      // Inline override to surface overdue without theming a new
+                      // chip variant. Mirrors the multi-spec warn color so the
+                      // "needs attention" semantics are consistent.
+                      background: 'var(--danger-bg, rgba(239, 68, 68, 0.15))',
+                      color: 'var(--danger, #ef4444)',
+                      fontWeight: 600,
+                    }
+                  : undefined
+              }
+            >
+              {formatDueDate(issue.dueDate)}
+            </span>
+          )}
           {primary && (
             <span
               className="chip"

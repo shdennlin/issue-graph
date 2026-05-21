@@ -228,4 +228,53 @@ describe('normalizeIssue', () => {
     })
     expect(i.children).toEqual(['Y-1', 'Y-2'])
   })
+
+  it('maps team / estimate / dueDate / startedAt when present', () => {
+    const i = normalizeIssue({
+      id: 'x',
+      identifier: 'ENG-1',
+      title: 't',
+      url: 'u',
+      priority: 0,
+      state: { name: 'Backlog', type: 'backlog' },
+      team: { id: 't1', key: 'ENG', name: 'Engineering', color: '#4f46e5' },
+      estimate: 3,
+      dueDate: '2026-06-01',
+      startedAt: '2026-05-15T10:00:00Z',
+    })
+    expect(i.team).toEqual({ id: 't1', key: 'ENG', name: 'Engineering', color: '#4f46e5' })
+    expect(i.estimate).toBe(3)
+    expect(i.dueDate).toBe('2026-06-01')
+    expect(i.startedAt).toBe('2026-05-15T10:00:00Z')
+  })
+
+  it('nulls team / estimate / dueDate / startedAt when missing or wrong type', () => {
+    const i = normalizeIssue({
+      id: 'x',
+      identifier: 'X-1',
+      title: 't',
+      url: 'u',
+      priority: 0,
+      state: { name: 'Backlog', type: 'backlog' },
+      // team omitted; estimate is a string (should reject); dueDate / startedAt absent
+      estimate: 'not-a-number',
+    })
+    expect(i.team).toBeNull()
+    expect(i.estimate).toBeNull()
+    expect(i.dueDate).toBeNull()
+    expect(i.startedAt).toBeNull()
+  })
+
+  it('tolerates team without color', () => {
+    const i = normalizeIssue({
+      id: 'x',
+      identifier: 'ENG-1',
+      title: 't',
+      url: 'u',
+      priority: 0,
+      state: { name: 'Backlog', type: 'backlog' },
+      team: { id: 't1', key: 'ENG', name: 'Engineering' },
+    })
+    expect(i.team).toEqual({ id: 't1', key: 'ENG', name: 'Engineering', color: null })
+  })
 })

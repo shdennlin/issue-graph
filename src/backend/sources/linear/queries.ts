@@ -10,7 +10,11 @@ export const ISSUES_QUERY = /* GraphQL */ `
         title
         url
         priority
+        estimate
+        dueDate
+        startedAt
         state { name type }
+        team { id key name color }
         assignee { id displayName email }
         labels(first: 30) {
           nodes {
@@ -48,7 +52,11 @@ export const ISSUE_DETAIL_QUERY = /* GraphQL */ `
       description
       url
       priority
+      estimate
+      dueDate
+      startedAt
       state { name type }
+      team { id key name color }
       assignee { id displayName email }
       labels(first: 30) {
         nodes { id name color parent { id name } }

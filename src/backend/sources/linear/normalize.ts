@@ -158,10 +158,21 @@ export function normalizeIssue(raw: any): NormalizedIssue {
     title: String(raw.title ?? ''),
     url: String(raw.url ?? ''),
     priority: coercePriority(raw.priority),
+    estimate: typeof raw.estimate === 'number' ? raw.estimate : null,
+    dueDate: typeof raw.dueDate === 'string' ? raw.dueDate : null,
+    startedAt: typeof raw.startedAt === 'string' ? raw.startedAt : null,
     state: {
       name: String(raw.state?.name ?? ''),
       type: coerceStateType(raw.state?.type),
     },
+    team: raw.team
+      ? {
+          id: String(raw.team.id),
+          key: String(raw.team.key ?? ''),
+          name: String(raw.team.name ?? ''),
+          color: typeof raw.team.color === 'string' ? raw.team.color : null,
+        }
+      : null,
     assignee: raw.assignee
       ? {
           id: raw.assignee.id ? String(raw.assignee.id) : undefined,
