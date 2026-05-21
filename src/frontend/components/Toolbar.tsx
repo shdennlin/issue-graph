@@ -176,7 +176,7 @@ export function Toolbar() {
           <button onClick={() => setSearch('')} title={t('toolbar.clearSearch')}>×</button>
         )}
       </div>
-      {activeView === 'dependency' && (
+      {(activeView === 'dependency' || activeView === 'designdoc') && (
         <>
           <div className="sep" />
           <div className="group">

@@ -448,7 +448,7 @@ export function App() {
         const tag = target?.tagName?.toLowerCase()
         if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
         const s = useViewStore.getState()
-        if (s.activeView !== 'dependency') return
+        if (s.activeView !== 'dependency' && s.activeView !== 'designdoc') return
         e.preventDefault()
         s.setShowRelated(!s.showRelated)
         return
