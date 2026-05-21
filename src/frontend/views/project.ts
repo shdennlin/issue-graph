@@ -101,6 +101,9 @@ export const projectView: ViewDefinition = {
             color: b.color,
             count: b.issues.length,
             progress: { done, total: b.issues.length },
+            // null for the synthetic '(No project)' bucket — it has no real
+            // Linear project id, so leave the header non-clickable there.
+            projectId: key === NO_PROJECT_KEY ? null : key,
           },
         },
         position: { x: xOffset, y: rowY },

@@ -1254,6 +1254,23 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   font-weight: 600;
   font-size: var(--fs-base);
 }
+/* Button variant — appears when bucket carries a projectId (project view).
+   Strips browser default styling so it visually matches the span variant. */
+.mixed-container-name-btn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  font-size: var(--fs-base);
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+.mixed-container-name-btn:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .mixed-container-count {
   font-variant-numeric: tabular-nums;
   font-size: var(--fs-meta);
