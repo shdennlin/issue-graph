@@ -97,6 +97,13 @@ export interface ViewState {
    * which tracks the issue selection.
    */
   focusedProjectId: string | null
+  /**
+   * When the user clicks a milestone container in milestone view, this carries
+   * the milestone id through to ProjectPanel so it can scroll to + open that
+   * milestone's <details>. One-shot: ProjectPanel clears it after applying so
+   * subsequent panel re-opens don't auto-expand stale focus.
+   */
+  focusedMilestoneId: string | null
   projectPanelOpen: boolean
 
   setActiveView: (v: ViewId) => void
@@ -143,7 +150,8 @@ export interface ViewState {
   setDetailPanelAutoOpen: (b: boolean) => void
   toggleDetailPanelAutoOpen: () => void
   setDetailPanelOpen: (b: boolean) => void
-  openProjectPanel: (projectId: string) => void
+  openProjectPanel: (projectId: string, focusMilestoneId?: string | null) => void
+  clearFocusedMilestone: () => void
   closeProjectPanel: () => void
   resetFilters: () => void
 }
@@ -224,6 +232,7 @@ export const useViewStore = create<ViewState>((set) => ({
     typeof window !== 'undefined' && window.localStorage?.getItem('ig-detail-panel-auto') === '1' ? true : false,
   detailPanelOpen: false,
   focusedProjectId: null,
+  focusedMilestoneId: null,
   projectPanelOpen: false,
 
   setActiveView: (v) => set({ activeView: v }),
@@ -350,15 +359,17 @@ export const useViewStore = create<ViewState>((set) => ({
       }
     }),
   setDetailPanelOpen: (b) => set({ detailPanelOpen: b }),
-  openProjectPanel: (projectId) =>
+  openProjectPanel: (projectId, focusMilestoneId = null) =>
     set({
       focusedProjectId: projectId,
+      focusedMilestoneId: focusMilestoneId,
       projectPanelOpen: true,
       // Mutex with the issue detail panel (right-edge slot is shared). Don't
       // clear focusedId — switching back to the issue panel later shouldn't
       // re-trigger a focus / re-pan.
       detailPanelOpen: false,
     }),
-  closeProjectPanel: () => set({ projectPanelOpen: false, focusedProjectId: null }),
+  clearFocusedMilestone: () => set({ focusedMilestoneId: null }),
+  closeProjectPanel: () => set({ projectPanelOpen: false, focusedProjectId: null, focusedMilestoneId: null }),
   resetFilters: () => set({ filters: defaultFilters, chainRootId: null }),
 }))

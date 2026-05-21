@@ -243,6 +243,11 @@ export const milestoneView: ViewDefinition = {
               count: b.issues.length,
               progress: { done, total: b.issues.length },
               targetDate: b.milestoneTargetDate,
+              // Clicking the milestone name opens ProjectPanel scrolled to
+              // this milestone's <details>. Null milestoneId = '(No milestone)'
+              // bucket, which still opens the project but with no focus.
+              projectId: firstBucket.projectId,
+              milestoneId: b.milestoneId,
             },
           },
           // Parented to the project backdrop so dragging the project header

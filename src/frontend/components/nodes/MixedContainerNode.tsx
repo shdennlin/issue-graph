@@ -17,9 +17,12 @@ interface MixedContainerData {
      *  the count. Past dates are flagged via the .overdue modifier. */
     targetDate?: string | null
     /** Optional Linear project id. When set, the header name becomes a button
-     *  that opens the ProjectPanel. Opt-in so mix view and milestone view's
-     *  inner-milestone containers stay non-clickable. */
+     *  that opens the ProjectPanel. Opt-in so mix view stays non-clickable. */
     projectId?: string | null
+    /** Optional Linear milestone id. When set alongside projectId, opening
+     *  the panel also scrolls + expands that milestone's <details>. Used by
+     *  milestone view's per-milestone containers. */
+    milestoneId?: string | null
   }
 }
 
@@ -52,7 +55,7 @@ function MixedContainerImpl({ data }: NodeProps<MixedContainerData>) {
   // also initiate a drag of the container. Same trick as ProjectBackdropNode.
   const onNameClick = (e: MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation()
-    if (b.projectId) openProjectPanel(b.projectId)
+    if (b.projectId) openProjectPanel(b.projectId, b.milestoneId ?? null)
   }
   const stopPointer = (e: PointerEvent<HTMLButtonElement>) => e.stopPropagation()
 

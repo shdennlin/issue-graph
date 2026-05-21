@@ -146,11 +146,14 @@ function computeMilestoneRollups(
 
 export function ProjectPanel() {
   const focusedProjectId = useViewStore((s) => s.focusedProjectId)
+  const focusedMilestoneId = useViewStore((s) => s.focusedMilestoneId)
+  const clearFocusedMilestone = useViewStore((s) => s.clearFocusedMilestone)
   const closeProjectPanel = useViewStore((s) => s.closeProjectPanel)
   const graph = useGraphStore((s) => s.graph)
   const projectDetails = useGraphStore((s) => s.projectDetails)
   const loadProjectDetail = useGraphStore((s) => s.loadProjectDetail)
   const t = useT()
+  const milestonesListRef = useRef<HTMLUListElement | null>(null)
 
   const [copied, setCopied] = useState(false)
   const copyTimerRef = useRef<number | null>(null)
@@ -196,6 +199,29 @@ export function ProjectPanel() {
     if (!focusedProjectId) return
     void loadProjectDetail(focusedProjectId)
   }, [focusedProjectId, loadProjectDetail])
+
+  // When opened with a focusMilestoneId (clicked a milestone container in
+  // milestone view), scroll that row into view and expand its <details>.
+  // Effect waits on `detail` so the milestone DOM exists by the time we
+  // query for it. One-shot — clear the focus once applied.
+  const detailForFocus = focusedProjectId ? projectDetails[focusedProjectId] : undefined
+  useEffect(() => {
+    if (!focusedMilestoneId) return
+    if (!detailForFocus) return
+    const list = milestonesListRef.current
+    if (!list) return
+    const row = list.querySelector<HTMLElement>(
+      `[data-milestone-id="${CSS.escape(focusedMilestoneId)}"]`,
+    )
+    if (!row) {
+      clearFocusedMilestone()
+      return
+    }
+    row.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    const details = row.querySelector<HTMLDetailsElement>('.project-panel-milestone-details')
+    if (details) details.open = true
+    clearFocusedMilestone()
+  }, [focusedMilestoneId, detailForFocus, clearFocusedMilestone])
 
   // Cmd/Ctrl+Shift+C → copy project id. Inlined like DetailPanel's shortcut
   // (React Compiler rejects useCallback wrappers).
@@ -377,11 +403,11 @@ export function ProjectPanel() {
             {rollups.length === 0 ? (
               <div className="project-panel-empty">{t('projectPanel.noMilestones')}</div>
             ) : (
-              <ul className="project-panel-milestones">
+              <ul className="project-panel-milestones" ref={milestonesListRef}>
                 {rollups.map((m) => {
                   const pct = m.total > 0 ? Math.round((m.done / m.total) * 100) : 0
                   return (
-                    <li key={m.id} className="project-panel-milestone">
+                    <li key={m.id} className="project-panel-milestone" data-milestone-id={m.id}>
                       <span className="project-panel-milestone-name">{m.name}</span>
                       <span className="project-panel-milestone-counts">{m.done}/{m.total}</span>
                       <div className="project-panel-milestone-bar" aria-label={`${pct}%`}>
