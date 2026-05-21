@@ -77,6 +77,33 @@ export const ISSUE_DETAIL_QUERY = /* GraphQL */ `
   }
 `
 
+export const PROJECT_DETAIL_QUERY = /* GraphQL */ `
+  query ProjectDetail($id: String!) {
+    project(id: $id) {
+      id
+      state
+      progress
+      startDate
+      targetDate
+      description
+      content
+      lead { displayName }
+      projectMilestones(first: 50) {
+        nodes { id name targetDate sortOrder description }
+      }
+      projectUpdates(first: 5, orderBy: updatedAt) {
+        nodes {
+          id
+          body
+          createdAt
+          health
+          user { displayName }
+        }
+      }
+    }
+  }
+`
+
 export const VIEWER_QUERY = /* GraphQL */ `
   query Viewer {
     viewer {

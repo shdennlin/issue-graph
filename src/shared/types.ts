@@ -9,6 +9,20 @@ export type IssueStateType =
   | 'canceled'
   | 'triage'
 
+/**
+ * Linear project state. Separate enum from IssueStateType: Linear's product
+ * model distinguishes Project status from Issue workflow status (a project
+ * can be 'planned' or 'paused' — states with no issue equivalent). We
+ * normalize 'cancelled' (en-GB) → 'canceled' for the same reason as issues.
+ */
+export type ProjectStateType =
+  | 'backlog'
+  | 'planned'
+  | 'started'
+  | 'paused'
+  | 'completed'
+  | 'canceled'
+
 export type Priority = 0 | 1 | 2 | 3 | 4
 
 // One row from the backend's full workflow-states list. We fetch this
@@ -141,6 +155,44 @@ export interface DesignDocCoverage {
     title: string
     state: IssueStateType
     url: string
+  }>
+}
+
+/**
+ * Detail for a single Linear project, fetched lazily when the user opens the
+ * ProjectPanel. Stored in graphStore.projectDetails keyed by project id.
+ *
+ * `progress` is what Linear reports (scope-weighted, 0..1). The panel also
+ * displays a locally-computed issue-count breakdown derived from the cached
+ * issue list, so both numbers may differ slightly.
+ */
+export interface ProjectDetail {
+  id: string
+  state: ProjectStateType
+  progress: number
+  lead: { displayName: string } | null
+  startDate: string | null
+  targetDate: string | null
+  /** Short summary teaser (Linear's `description`, ~255 char limit). */
+  description: string | null
+  /** Full markdown body (Linear's `content`). When present, panels should
+   *  render this instead of the short `description`. */
+  content: string | null
+  updates: Array<{
+    id: string
+    body: string
+    createdAt: string
+    userName: string | null
+    /** Optional health enum from Linear updates: 'onTrack' | 'atRisk' | 'offTrack' | null. */
+    health: string | null
+  }>
+  milestones: Array<{
+    id: string
+    name: string
+    targetDate: string | null
+    sortOrder: number | null
+    /** Optional per-milestone markdown body. */
+    description: string | null
   }>
 }
 

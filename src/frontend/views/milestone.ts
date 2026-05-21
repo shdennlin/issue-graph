@@ -285,6 +285,9 @@ export const milestoneView: ViewDefinition = {
         id: `projectBackdrop:${firstBucket.projectId}`,
         type: 'projectBackdrop',
         data: {
+          // null for the synthetic "(No project)" group — no project detail
+          // to open, so the node will skip the chevron affordance.
+          projectId: firstBucket.projectId === NO_PROJECT_KEY ? null : firstBucket.projectId,
           projectName,
           color: projectColorVal,
           done: projectDoneCount,

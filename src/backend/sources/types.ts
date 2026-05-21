@@ -1,4 +1,4 @@
-import type { IssueComment, NormalizedIssue, NormalizedLabel, Viewer, WorkflowState } from '@shared/types.js'
+import type { IssueComment, NormalizedIssue, NormalizedLabel, ProjectDetail, Viewer, WorkflowState } from '@shared/types.js'
 
 export interface FetchOpts {
   /** PRD §5.3 — 'active' | 'active+recent' | 'all' */
@@ -41,6 +41,13 @@ export interface BackendAdapter {
   readonly name: string
   fetchAllIssues(opts: FetchOpts): Promise<NormalizedIssue[]>
   fetchIssueDetail(idOrIdentifier: string): Promise<IssueDetail>
+  /**
+   * Optional — fetch one project's full detail (state, progress, lead,
+   * milestones, recent updates, description). Lazy: only called when the user
+   * opens the ProjectPanel. Adapters without project-aware backends can skip
+   * this; the UI gracefully degrades to showing only id + name + color.
+   */
+  fetchProjectDetail?(projectId: string): Promise<ProjectDetail>
   fetchViewer(): Promise<Viewer>
   fetchLabels(): Promise<NormalizedLabel[]>
   /**

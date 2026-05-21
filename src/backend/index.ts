@@ -10,6 +10,7 @@ import { LEGACY_WORKSPACE_ID, runWithWorkspace } from './lib/workspaceContext.js
 import { graphRoutes } from './routes/graph.js'
 import { syncRoutes } from './routes/sync.js'
 import { issueRoutes } from './routes/issue.js'
+import { projectRoutes } from './routes/project.js'
 import { labelsRoutes } from './routes/labels.js'
 import { healthRoutes } from './routes/health.js'
 import { annotationRoutes } from './routes/annotations.js'
@@ -69,6 +70,7 @@ export function createApp(): Hono {
   app.route('/', graphRoutes)
   app.route('/', syncRoutes)
   app.route('/', issueRoutes)
+  app.route('/', projectRoutes)
   app.route('/', labelsRoutes)
   app.route('/', annotationRoutes)
   app.route('/', notesRoutes)

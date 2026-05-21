@@ -7,6 +7,8 @@ import type {
   NormalizedLabel,
   NormalizedRelation,
   Priority,
+  ProjectDetail,
+  ProjectStateType,
   RelationType,
 } from '@shared/types.js'
 
@@ -24,6 +26,24 @@ export function coerceStateType(t: unknown): IssueStateType {
     const lc = t.toLowerCase()
     if ((STATE_TYPES as ReadonlySet<string>).has(lc)) return lc as IssueStateType
     // Linear sometimes uses "cancelled" in older docs; accept both.
+    if (lc === 'cancelled') return 'canceled'
+  }
+  return 'backlog'
+}
+
+const PROJECT_STATE_TYPES: ReadonlySet<ProjectStateType> = new Set<ProjectStateType>([
+  'backlog',
+  'planned',
+  'started',
+  'paused',
+  'completed',
+  'canceled',
+])
+
+export function coerceProjectStateType(t: unknown): ProjectStateType {
+  if (typeof t === 'string') {
+    const lc = t.toLowerCase()
+    if ((PROJECT_STATE_TYPES as ReadonlySet<string>).has(lc)) return lc as ProjectStateType
     if (lc === 'cancelled') return 'canceled'
   }
   return 'backlog'
@@ -80,6 +100,40 @@ export function normalizeRelations(rawRelations: any[] | undefined | null): Norm
     out.push({ type: canonical, targetIdentifier: String(target) })
   }
   return out
+}
+
+export function normalizeProjectDetail(raw: any): ProjectDetail {
+  const rawProgress = typeof raw?.progress === 'number' ? raw.progress : 0
+  const progress = Math.max(0, Math.min(1, Number.isFinite(rawProgress) ? rawProgress : 0))
+
+  const updates = ((raw?.projectUpdates?.nodes ?? []) as any[]).map((u) => ({
+    id: String(u?.id ?? ''),
+    body: String(u?.body ?? ''),
+    createdAt: String(u?.createdAt ?? ''),
+    userName: u?.user?.displayName ? String(u.user.displayName) : null,
+    health: typeof u?.health === 'string' ? u.health : null,
+  }))
+
+  const milestones = ((raw?.projectMilestones?.nodes ?? []) as any[]).map((m) => ({
+    id: String(m?.id ?? ''),
+    name: String(m?.name ?? ''),
+    targetDate: m?.targetDate ?? null,
+    sortOrder: typeof m?.sortOrder === 'number' ? m.sortOrder : null,
+    description: typeof m?.description === 'string' ? m.description : null,
+  }))
+
+  return {
+    id: String(raw?.id ?? ''),
+    state: coerceProjectStateType(raw?.state),
+    progress,
+    lead: raw?.lead?.displayName ? { displayName: String(raw.lead.displayName) } : null,
+    startDate: raw?.startDate ?? null,
+    targetDate: raw?.targetDate ?? null,
+    description: raw?.description ?? null,
+    content: typeof raw?.content === 'string' ? raw.content : null,
+    updates,
+    milestones,
+  }
 }
 
 export function normalizeIssue(raw: any): NormalizedIssue {

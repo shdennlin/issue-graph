@@ -1,4 +1,4 @@
-import type { NormalizedIssue, NormalizedLabel, Viewer, WorkflowState } from '@shared/types.js'
+import type { NormalizedIssue, NormalizedLabel, ProjectDetail, Viewer, WorkflowState } from '@shared/types.js'
 import { getLogger } from '../../lib/log.js'
 import {
   AuthError,
@@ -8,8 +8,15 @@ import {
   type IssueDetail,
   type RateLimitInfo,
 } from '../types.js'
-import { ISSUES_QUERY, ISSUE_DETAIL_QUERY, LABELS_QUERY, VIEWER_QUERY, WORKFLOW_STATES_QUERY } from './queries.js'
-import { coerceStateType, normalizeIssue, normalizeLabel } from './normalize.js'
+import {
+  ISSUES_QUERY,
+  ISSUE_DETAIL_QUERY,
+  LABELS_QUERY,
+  PROJECT_DETAIL_QUERY,
+  VIEWER_QUERY,
+  WORKFLOW_STATES_QUERY,
+} from './queries.js'
+import { coerceStateType, normalizeIssue, normalizeLabel, normalizeProjectDetail } from './normalize.js'
 
 interface LinearOptions {
   apiKey: string
@@ -175,6 +182,12 @@ export class LinearBackend implements BackendAdapter {
       description: data.issue?.description ?? null,
       comments,
     }
+  }
+
+  async fetchProjectDetail(projectId: string): Promise<ProjectDetail> {
+    const data = await this.gql<{ project: any }>(PROJECT_DETAIL_QUERY, { id: projectId })
+    if (!data.project) throw new Error(`Linear returned no project for id ${projectId}`)
+    return normalizeProjectDetail(data.project)
   }
 
   async fetchViewer(): Promise<Viewer> {

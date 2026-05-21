@@ -89,6 +89,15 @@ export interface ViewState {
   // ad-hoc (Space/Enter/'d'), so subsequent focus switches keep showing the
   // detail. Esc, clearing focus, or pressing 'd' again resets it to false.
   detailPanelOpen: boolean
+  /**
+   * Project detail panel — sister to detailPanelOpen but for projects. The
+   * two panels are mutually exclusive (open one → other closes) since they
+   * share the right-edge real estate. focusedProjectId is the project id
+   * (Linear UUID) currently showing in the panel, independent of focusedId
+   * which tracks the issue selection.
+   */
+  focusedProjectId: string | null
+  projectPanelOpen: boolean
 
   setActiveView: (v: ViewId) => void
   setFilter: <K extends keyof Filters>(k: K, v: Filters[K]) => void
@@ -134,6 +143,8 @@ export interface ViewState {
   setDetailPanelAutoOpen: (b: boolean) => void
   toggleDetailPanelAutoOpen: () => void
   setDetailPanelOpen: (b: boolean) => void
+  openProjectPanel: (projectId: string) => void
+  closeProjectPanel: () => void
   resetFilters: () => void
 }
 
@@ -212,6 +223,8 @@ export const useViewStore = create<ViewState>((set) => ({
   detailPanelAutoOpen:
     typeof window !== 'undefined' && window.localStorage?.getItem('ig-detail-panel-auto') === '1' ? true : false,
   detailPanelOpen: false,
+  focusedProjectId: null,
+  projectPanelOpen: false,
 
   setActiveView: (v) => set({ activeView: v }),
   setFilter: (k, v) => set((s) => ({ filters: { ...s.filters, [k]: v } })),
@@ -246,14 +259,14 @@ export const useViewStore = create<ViewState>((set) => ({
   toggleMilestone: (key) =>
     set((s) => ({ filters: { ...s.filters, milestoneIds: toggle(s.filters.milestoneIds, key) } })),
   setFocusedId: (id) =>
-    set((s) => ({
-      focusedId: id,
-      // Panel visibility on focus change: open if auto-open is on, OR if the
-      // panel was already open (user explicitly opened it ad-hoc and likely
-      // wants to keep inspecting the next issue too). Clearing focus
-      // (id === null) always closes.
-      detailPanelOpen: id !== null && (s.detailPanelAutoOpen || s.detailPanelOpen),
-    })),
+    set((s) => {
+      const detailPanelOpen = id !== null && (s.detailPanelAutoOpen || s.detailPanelOpen)
+      // Mutex: focusing an issue closes the project panel (right-edge slot is
+      // shared). Closing the project panel here doesn't clear focusedProjectId
+      // so a later "back to project" UX could restore it without re-fetching.
+      const projectPanelOpen = detailPanelOpen ? false : s.projectPanelOpen
+      return { focusedId: id, detailPanelOpen, projectPanelOpen }
+    }),
   setChainRootId: (id) => set({ chainRootId: id }),
   bumpLayout: () => set((s) => ({ layoutBump: s.layoutBump + 1 })),
   setTheme: (t) => set({ theme: t }),
@@ -337,5 +350,15 @@ export const useViewStore = create<ViewState>((set) => ({
       }
     }),
   setDetailPanelOpen: (b) => set({ detailPanelOpen: b }),
+  openProjectPanel: (projectId) =>
+    set({
+      focusedProjectId: projectId,
+      projectPanelOpen: true,
+      // Mutex with the issue detail panel (right-edge slot is shared). Don't
+      // clear focusedId — switching back to the issue panel later shouldn't
+      // re-trigger a focus / re-pan.
+      detailPanelOpen: false,
+    }),
+  closeProjectPanel: () => set({ projectPanelOpen: false, focusedProjectId: null }),
   resetFilters: () => set({ filters: defaultFilters, chainRootId: null }),
 }))
