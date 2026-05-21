@@ -7,6 +7,7 @@ import { chooseColumnCount, packIntoColumns } from './containerLayout'
 import { projectColor } from '../lib/projectColor'
 import { buildChainLayout } from './chainLayout'
 import { fanOutCurvatures } from './edgeStyle'
+import { rollupProgress } from '../lib/issueProgress'
 import type { IssueStateType, NormalizedIssue } from '@shared/types.js'
 
 const PADDING = 30
@@ -199,11 +200,9 @@ export const milestoneView: ViewDefinition = {
       const firstBucket = group[0]!
       const projectColorVal = firstBucket.projectColor
       const projectName = firstBucket.projectName
-      const projectIssueCount = group.reduce((sum, b) => sum + b.issues.length, 0)
-      const projectDoneCount = group.reduce(
-        (sum, b) => sum + b.issues.filter((iss) => iss.state.type === 'completed').length,
-        0,
-      )
+      const projectAggregate = rollupProgress(group.flatMap((b) => b.issues))
+      const projectIssueCount = projectAggregate.total
+      const projectDoneCount = projectAggregate.done
 
       for (const b of group) {
         const cols = chooseColumnCount(b.issues.length, maxColsPerRow)
@@ -231,7 +230,7 @@ export const milestoneView: ViewDefinition = {
         const displayName = b.milestoneName
         const containerId = `milestone:${b.key}`
         const backdropId = `projectBackdrop:${firstBucket.projectId}`
-        const done = b.issues.filter((iss) => iss.state.type === 'completed').length
+        const { done, total: bucketTotal } = rollupProgress(b.issues)
         nodes.push({
           id: containerId,
           type: 'mixedContainer',
@@ -241,7 +240,7 @@ export const milestoneView: ViewDefinition = {
               name: displayName,
               color: b.projectColor,
               count: b.issues.length,
-              progress: { done, total: b.issues.length },
+              progress: { done, total: bucketTotal },
               targetDate: b.milestoneTargetDate,
               // Clicking the milestone name opens ProjectPanel scrolled to
               // this milestone's <details>. Null milestoneId = '(No milestone)'

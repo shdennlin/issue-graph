@@ -5,6 +5,7 @@ import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { useResizable } from '../hooks/useResizable'
 import { MarkdownBody } from './MarkdownBody'
+import { isDoneState, isCountedInTotal, rollupProgress } from '../lib/issueProgress'
 import { useT, type DictKey } from '../i18n'
 
 // Shared with DetailPanel — same storage key so cycling text size in either
@@ -72,13 +73,10 @@ function computeIssueCounts(issues: NormalizedIssue[], projectId: string): Issue
     canceled: 0,
     triage: 0,
   }
-  let total = 0
-  for (const i of issues) {
-    if (i.project?.id !== projectId) continue
-    total += 1
-    byState[i.state.type] += 1
-  }
-  return { total, done: byState.completed, byState }
+  const projectIssues = issues.filter((i) => i.project?.id === projectId)
+  for (const i of projectIssues) byState[i.state.type] += 1
+  const { done, total } = rollupProgress(projectIssues)
+  return { total, done, byState }
 }
 
 interface MilestoneRollup {
@@ -103,15 +101,16 @@ function computeMilestoneRollups(
   let noneDone = 0
   for (const i of issues) {
     if (i.project?.id !== projectId) continue
+    if (!isCountedInTotal(i.state.type)) continue
     const m = i.projectMilestone
     if (!m) {
       noneTotal += 1
-      if (i.state.type === 'completed') noneDone += 1
+      if (isDoneState(i.state.type)) noneDone += 1
       continue
     }
     const slot = counts.get(m.id) ?? { done: 0, total: 0 }
     slot.total += 1
-    if (i.state.type === 'completed') slot.done += 1
+    if (isDoneState(i.state.type)) slot.done += 1
     counts.set(m.id, slot)
   }
 
