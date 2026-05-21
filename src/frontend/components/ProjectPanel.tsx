@@ -388,9 +388,14 @@ export function ProjectPanel() {
                         <div className="project-panel-milestone-bar-fill" style={{ width: `${pct}%` }} />
                       </div>
                       {m.description && (
-                        <div className="project-panel-milestone-description">
-                          <MarkdownBody body={m.description} />
-                        </div>
+                        <details className="project-panel-milestone-details">
+                          <summary className="project-panel-milestone-details-summary">
+                            {t('projectPanel.milestoneDetails')}
+                          </summary>
+                          <div className="project-panel-milestone-description">
+                            <MarkdownBody body={m.description} />
+                          </div>
+                        </details>
                       )}
                     </li>
                   )

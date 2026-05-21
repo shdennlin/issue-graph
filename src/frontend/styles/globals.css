@@ -1492,8 +1492,29 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   background: var(--accent);
   transition: width 200ms ease;
 }
-.project-panel-milestone-description {
+.project-panel-milestone-details {
   grid-column: 1 / -1;
+}
+.project-panel-milestone-details-summary {
+  cursor: pointer;
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+  padding: 2px 0;
+  list-style: none;
+  user-select: none;
+}
+.project-panel-milestone-details-summary::-webkit-details-marker { display: none; }
+.project-panel-milestone-details-summary::before {
+  content: '\25B8';
+  display: inline-block;
+  width: 1em;
+  transition: transform 120ms ease;
+}
+.project-panel-milestone-details[open] > .project-panel-milestone-details-summary::before {
+  transform: rotate(90deg);
+}
+.project-panel-milestone-details-summary:hover { color: var(--fg); }
+.project-panel-milestone-description {
   font-size: var(--fs-meta);
   color: var(--fg-muted);
   padding: 4px 0 2px;

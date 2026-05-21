@@ -364,6 +364,7 @@ export const zhTW: Dict = {
     noDate: '—',
     milestones: '里程碑',
     noMilestones: '無里程碑',
+    milestoneDetails: '詳情',
     byState: '依狀態',
     description: '描述',
     noDescription: '無描述',

@@ -364,6 +364,7 @@ export const en = {
     noDate: '—',
     milestones: 'Milestones',
     noMilestones: 'No milestones',
+    milestoneDetails: 'Details',
     byState: 'By state',
     description: 'Description',
     noDescription: 'No description',
