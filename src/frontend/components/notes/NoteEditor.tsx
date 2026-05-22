@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Check, ChevronDown, ChevronRight, Copy, Edit3, Eye } from 'lucide-react'
 import { useNotesStore } from '../../store/notesStore'
 import { notesApi } from '../../lib/notesApi'
@@ -11,6 +11,7 @@ import { useViewStore } from '../../store/viewStore'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import { useLocale } from '../../i18n'
 import { NotePreview } from './NotePreview'
+import { getNoteScroll, setNoteScroll } from '../../lib/noteScrollMemory'
 
 const SHOW_REFS_KEY = 'ig-note-show-refs-v1'
 type CopyMode = 'full' | 'body' | 'refs'
@@ -140,6 +141,16 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
   useEffect(() => {
     if (mode === 'edit') textareaRef.current?.focus()
   }, [mode])
+
+  // Restore the textarea's last scroll position when entering edit mode (incl.
+  // the first mount triggered by `n`). Runs before paint to avoid a frame at
+  // scrollTop=0 before the snap.
+  useLayoutEffect(() => {
+    if (mode !== 'edit') return
+    const ta = textareaRef.current
+    if (!ta) return
+    ta.scrollTop = getNoteScroll(noteId, 'edit')
+  }, [mode, noteId])
 
   // Cmd+E and Cmd+/ both toggle edit/preview. We accept both because Cmd+E
   // is the conventional binding but gets swallowed by the macOS Edit menu's
@@ -363,6 +374,7 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
           className="note-editor-textarea"
           value={note.body}
           onChange={(e) => updateBody(noteId, e.target.value)}
+          onScroll={(e) => setNoteScroll(noteId, 'edit', e.currentTarget.scrollTop)}
           onPaste={onPaste}
           onDrop={onDrop}
           onDragOver={onDragOver}
@@ -371,6 +383,7 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
         />
       ) : (
         <NotePreview
+          noteId={noteId}
           body={note.body}
           onCloseModal={onCloseModal}
           onBodyChange={(next) => updateBody(noteId, next)}

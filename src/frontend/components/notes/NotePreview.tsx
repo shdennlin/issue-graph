@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import type { NormalizedIssue } from '@shared/types.js'
@@ -6,9 +6,12 @@ import { toggleChecklistAt } from '../../lib/checklist'
 import { decorateIssueLinksWithStatus, linkifyIssueIds } from '../../lib/issueLinks'
 import { useGraphStore } from '../../store/graphStore'
 import { useViewStore } from '../../store/viewStore'
+import { getNoteScroll, setNoteScroll } from '../../lib/noteScrollMemory'
 import { IssueHoverCard } from './IssueHoverCard'
 
 interface Props {
+  /** Identifier used to key per-note scroll restoration. */
+  noteId: number
   body: string
   /** Called when the modal should close (after an issue link click). */
   onCloseModal: () => void
@@ -17,7 +20,7 @@ interface Props {
   onBodyChange?: (next: string) => void
 }
 
-export function NotePreview({ body, onCloseModal, onBodyChange }: Props) {
+export function NotePreview({ noteId, body, onCloseModal, onBodyChange }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [hover, setHover] = useState<{ issue: NormalizedIssue; rect: DOMRect } | null>(null)
 
@@ -57,7 +60,11 @@ export function NotePreview({ body, onCloseModal, onBodyChange }: Props) {
     }
   }, [body])
 
-  useEffect(() => {
+  // Content rendering runs as useLayoutEffect so the DOM is populated before
+  // paint — required so the scroll restore at the end of this effect lands
+  // on real content height instead of an empty container (which would reset
+  // to 0 after the first post-paint repopulation).
+  useLayoutEffect(() => {
     const el = containerRef.current
     if (!el) return
     const html = marked.parse(body || '*Empty note*', { async: false }) as string
@@ -92,7 +99,11 @@ export function NotePreview({ body, onCloseModal, onBodyChange }: Props) {
       if (!s) return null
       return { type: s.type, label: s.name }
     })
-  }, [body, onBodyChange])
+    // Restore the user's last scroll position for this note. The onScroll
+    // handler keeps the stored value current, so re-applying on body changes
+    // (e.g. checklist toggles) is a no-op rather than a jump.
+    el.scrollTop = getNoteScroll(noteId, 'preview')
+  }, [body, onBodyChange, noteId])
 
   function onClick(e: React.MouseEvent<HTMLDivElement>) {
     const target = e.target as HTMLElement
@@ -138,6 +149,7 @@ export function NotePreview({ body, onCloseModal, onBodyChange }: Props) {
         ref={containerRef}
         className="note-preview markdown-body"
         onClick={onClick}
+        onScroll={(e) => setNoteScroll(noteId, 'preview', e.currentTarget.scrollTop)}
       />
       {hover && <IssueHoverCard issue={hover.issue} anchorRect={hover.rect} />}
     </>
