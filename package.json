@@ -6,7 +6,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "concurrently -n server,web -c blue,green \"npm:dev:server\" \"npm:dev:web\"",
+    "dev": "concurrently -n server,web -c blue,green \"bun run dev:server\" \"bun run dev:web\"",
     "dev:server": "SERVE_STATIC=false bun --watch src/backend/index.ts",
     "dev:web": "vite",
     "build": "bun run build:web && bun run build:server",

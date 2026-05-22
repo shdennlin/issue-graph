@@ -124,7 +124,7 @@ export function createApp(): Hono {
       return c.html(readFileSync(indexPath, 'utf-8'))
     })
   } else {
-    log.warn('No dist/ found — frontend not served. Run `npm run build:web` or use `npm run dev:web`.')
+    log.warn('No dist/ found — frontend not served. Run `bun run build:web` or use `bun run dev:web`.')
   }
 
   log.info({ port: cfg.PORT, instance: cfg.INSTANCE_LABEL }, 'issue-graph server starting')
