@@ -187,6 +187,7 @@ export const en = {
       chainAuto: 'Isolate chain (auto-layout)',
       relatedToggle: 'Toggle Related-edges overlay (dashed gray, dependency view)',
       relayout: 'Re-layout from scratch; recenters on focused issue if any',
+      refresh: 'Refresh — re-pull from the backend (same as the top-right Refresh button)',
       screenshot: 'Save canvas screenshot as PNG',
       quickSwitcherOpen: 'Open quick switcher (search issues, notes, tabs across all open tabs)',
       quickSwitcherDown: 'Move selection down',

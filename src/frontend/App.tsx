@@ -439,6 +439,22 @@ export function App() {
         s.setDetailPanelAutoOpen(!s.detailPanelAutoOpen)
         return
       }
+      // Cmd/Ctrl+Alt+S — trigger Refresh (same as clicking the top-right
+      // Refresh button): re-pulls from the backend, then reloads the
+      // cached graph. We match on `e.code === 'KeyS'` rather than
+      // `e.key === 's'` because Alt+S on macOS US layout produces 'ß',
+      // and other layouts vary too — the physical key code is stable.
+      // No-op while a sync / load is already in flight so rapid presses
+      // don't queue duplicate requests. Always preventDefault on the
+      // chord (regardless of in-flight state) so the browser doesn't
+      // surface an unexpected fallback action.
+      if ((e.metaKey || e.ctrlKey) && e.altKey && !e.shiftKey && e.code === 'KeyS') {
+        e.preventDefault()
+        const g = useGraphStore.getState()
+        if (g.syncing || g.status === 'loading') return
+        void g.forceSync()
+        return
+      }
       // 'r' — toggle the Related-edges overlay (dependency view only). The
       // case-shifted variant 'R' (Shift+R) is reserved for re-layout below.
       // Same input-focus guards as the other letter shortcuts.

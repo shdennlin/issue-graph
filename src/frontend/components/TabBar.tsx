@@ -456,7 +456,7 @@ export function TabBar() {
           className="tabbar-refresh icon-text"
           onClick={forceSync}
           disabled={status === 'loading'}
-          title="Shift-click to force a fresh fetch"
+          title="Refresh (⌘⌥S) — re-pull from the backend"
         >
           {syncing ? (
             <><Loader2 size={14} className="lucide-spin" /> Syncing…</>

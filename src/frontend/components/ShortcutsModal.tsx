@@ -46,6 +46,7 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ['r'], descriptionKey: 'shortcuts.items.relatedToggle', group: 'Layout' },
   { keys: ['Shift', 'R'], descriptionKey: 'shortcuts.items.relayout', group: 'Layout' },
 
+  { keys: ['Cmd', 'Alt', 'S'], descriptionKey: 'shortcuts.items.refresh', group: 'Other' },
   { keys: ['Cmd', 'Shift', 'S'], descriptionKey: 'shortcuts.items.screenshot', group: 'Other' },
 
   { keys: ['Ctrl', 'J'], descriptionKey: 'shortcuts.items.quickSwitcherDown', group: 'Quick switcher' },

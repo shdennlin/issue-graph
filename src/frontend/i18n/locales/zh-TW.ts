@@ -187,6 +187,7 @@ export const zhTW: Dict = {
       chainAuto: '啟用鏈隔離（自動排版）',
       relatedToggle: '切換「相關」連線顯示（灰色虛線，相依檢視）',
       relayout: '重新排版；若有聚焦議題會置中於該議題',
+      refresh: '重新整理 — 重新向後端抓取資料（等同右上角的 Refresh 按鈕）',
       screenshot: '將目前畫布存成 PNG 截圖',
       quickSwitcherOpen: '開啟快速切換器（跨所有開啟分頁搜尋議題、筆記與分頁）',
       quickSwitcherDown: '選取下一項',
