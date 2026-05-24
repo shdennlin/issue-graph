@@ -15,6 +15,8 @@ import {
 } from '@dnd-kit/sortable'
 import { Plus } from 'lucide-react'
 import { useNotesStore } from '../../store/notesStore'
+import { matchesNote } from '../../lib/notesMatch'
+import { useT } from '../../i18n'
 import { NoteCard } from './NoteCard'
 
 interface Props {
@@ -23,12 +25,17 @@ interface Props {
 }
 
 export function NotesGridView({ onOpenNote, archived = false }: Props) {
-  const notes = useNotesStore((s) => (archived ? s.archivedNotes : s.notes))
+  const allNotes = useNotesStore((s) => (archived ? s.archivedNotes : s.notes))
   const status = useNotesStore((s) => s.status)
   const create = useNotesStore((s) => s.create)
   const del = useNotesStore((s) => s.delete)
   const reorder = useNotesStore((s) => s.reorder)
   const setArchived = useNotesStore((s) => s.setArchived)
+  const search = useNotesStore((s) => s.notesSearch)
+  const setSearch = useNotesStore((s) => s.setNotesSearch)
+  const t = useT()
+  const filtering = search.trim().length > 0
+  const notes = filtering ? allNotes.filter((n) => matchesNote(search, n.body)) : allNotes
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -42,6 +49,7 @@ export function NotesGridView({ onOpenNote, archived = false }: Props) {
 
   function onDragEnd(event: DragEndEvent) {
     if (archived) return // reordering only supported for active set
+    if (filtering) return // reorder semantics are unclear under a filter
     const { active, over } = event
     if (!over || active.id === over.id) return
     const oldIndex = notes.findIndex((n) => n.id === active.id)
@@ -53,7 +61,7 @@ export function NotesGridView({ onOpenNote, archived = false }: Props) {
 
   return (
     <div className="notes-grid" role="list">
-      {!archived && (
+      {!archived && !filtering && (
         <button
           type="button"
           className="note-card note-card-new"
@@ -71,7 +79,8 @@ export function NotesGridView({ onOpenNote, archived = false }: Props) {
               key={n.id}
               note={n}
               archived={archived}
-              draggable={!archived}
+              draggable={!archived && !filtering}
+              highlight={search}
               onOpen={() => onOpenNote(n.id)}
               onDelete={() => del(n.id)}
               onToggleArchive={() => setArchived(n.id, !n.archived)}
@@ -86,7 +95,14 @@ export function NotesGridView({ onOpenNote, archived = false }: Props) {
       )}
       {status !== 'loading' && notes.length === 0 && (
         <div className="notes-grid-empty">
-          {archived ? (
+          {filtering ? (
+            <p>
+              {t('notes.noMatches')} “{search}”.{' '}
+              <button type="button" className="link-button" onClick={() => setSearch('')}>
+                {t('notes.clearSearch')}
+              </button>
+            </p>
+          ) : archived ? (
             <p>No archived notes.</p>
           ) : (
             <p>No notes yet — click <strong>New note</strong> to start.</p>

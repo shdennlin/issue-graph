@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react'
-import { Archive, LayoutGrid, List } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Archive, LayoutGrid, List, X } from 'lucide-react'
 import { useViewStore } from '../../store/viewStore'
 import { useNotesStore } from '../../store/notesStore'
 import { ModalHeader } from '../ModalHeader'
 import { NotesGridView } from './NotesGridView'
 import { NotesListView } from './NotesListView'
 import { NoteEditor } from './NoteEditor'
+import { NotesSearchInput } from './NotesSearchInput'
 import { UndoToast } from './UndoToast'
 import { useT } from '../../i18n'
 
@@ -37,6 +38,7 @@ export function NotesModal() {
   const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode)
   const [showArchived, setShowArchived] = useState(false)
   const t = useT()
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
 
   function updateViewMode(m: ViewMode) {
     setViewMode(m)
@@ -58,13 +60,33 @@ export function NotesModal() {
   // one rule, one keystroke, always closes. To navigate editor → grid use
   // the ← Back button in the editor toolbar. focusedNoteId is intentionally
   // preserved so the next `n` toggle reopens to the same view.
+  //
+  // Cmd/Ctrl+F is context-aware:
+  //   - grid/list view → focus the top-level notes search input
+  //   - editor view    → handled by NoteEditor (opens in-note find bar)
+  // The Esc handler also bails when the in-note find bar is open so the
+  // find bar can dismiss itself first instead of the whole modal closing.
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      e.preventDefault()
-      void flushPending()
-      setNotesOpen(false)
+      if (e.key === 'Escape') {
+        // If the in-note find bar is open, let it handle Esc.
+        if (useViewStore.getState().noteFindOpen) return
+        e.preventDefault()
+        void flushPending()
+        setNotesOpen(false)
+        return
+      }
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
+        // Editor view handles its own Cmd+F; only intercept for the grid/list.
+        if (useViewStore.getState().focusedNoteId !== null) return
+        e.preventDefault()
+        const el = searchInputRef.current
+        if (el) {
+          el.focus()
+          el.select()
+        }
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -103,7 +125,7 @@ export function NotesModal() {
         aria-label={t('notes.workspaceNotesAria')}
       >
         <div className="notes-modal-header-row">
-          <ModalHeader title={headerTitle} onClose={close} />
+          <ModalHeader title={headerTitle} onClose={close} hideClose />
           {focusedNoteId === null && (
             <>
               <button
@@ -138,13 +160,28 @@ export function NotesModal() {
                   <List size={16} />
                 </button>
               </div>
+              <NotesSearchInput ref={searchInputRef} />
             </>
           )}
+          <button
+            type="button"
+            className="icon-only notes-modal-close"
+            onClick={close}
+            title={t('common.closeEsc')}
+            aria-label={t('common.close')}
+          >
+            <X size={16} />
+          </button>
         </div>
         <div className="notes-modal-body">
           {focusedNoteId !== null ? (
             focusedNoteExists ? (
               <NoteEditor
+                // Force a remount when the open note changes (e.g. URL Back/
+                // Forward jumps from note N to M without passing through grid)
+                // so internal state — mode, find bar, debounced save — resets
+                // cleanly instead of carrying over to a different note.
+                key={focusedNoteId}
                 noteId={focusedNoteId}
                 onBack={backToGrid}
                 onCloseModal={close}

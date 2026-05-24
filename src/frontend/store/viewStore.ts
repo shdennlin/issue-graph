@@ -77,6 +77,10 @@ export interface ViewState {
   // null → grid view, number → editor view for that note.
   notesOpen: boolean
   focusedNoteId: number | null
+  /** True while the in-note find bar (Cmd+F inside NoteEditor) is open.
+   *  NotesModal's window-level Esc handler checks this so the find bar
+   *  can swallow Esc first; the modal stays open until find bar dismisses. */
+  noteFindOpen: boolean
   // Monotonic counter — bump to ask GraphCanvas to pan/zoom onto the currently
   // focused issue. Useful when an external producer (e.g. a click on an issue
   // link inside a note) wants the camera to follow the focus change.
@@ -145,6 +149,7 @@ export interface ViewState {
   setShortcutsOpen: (b: boolean) => void
   setNotesOpen: (b: boolean) => void
   setFocusedNoteId: (id: number | null) => void
+  setNoteFindOpen: (b: boolean) => void
   requestPanToFocused: () => void
   setShowRelated: (b: boolean) => void
   setSelection: (s: string[]) => void
@@ -224,6 +229,7 @@ export const useViewStore = create<ViewState>((set) => ({
   shortcutsOpen: false,
   notesOpen: false,
   focusedNoteId: null,
+  noteFindOpen: false,
   panToFocusedSeq: 0,
   showRelated: false,
   selection: [],
@@ -324,7 +330,8 @@ export const useViewStore = create<ViewState>((set) => ({
   // a true toggle that restores the user's last view. Use the in-modal Back
   // button (or Esc-peel) to drop back to the grid explicitly.
   setNotesOpen: (b) => set({ notesOpen: b }),
-  setFocusedNoteId: (id) => set({ focusedNoteId: id }),
+  setFocusedNoteId: (id) => set({ focusedNoteId: id, noteFindOpen: false }),
+  setNoteFindOpen: (b) => set({ noteFindOpen: b }),
   requestPanToFocused: () => set((s) => ({ panToFocusedSeq: s.panToFocusedSeq + 1 })),
   setShowRelated: (b) => set({ showRelated: b }),
   setSelection: (s) => set({ selection: s }),

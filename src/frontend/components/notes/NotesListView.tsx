@@ -1,7 +1,10 @@
 import { Archive, ArchiveRestore, Check, Plus, Trash2 } from 'lucide-react'
 import { useNotesStore } from '../../store/notesStore'
 import { deriveSnippet, deriveTitle } from '../../lib/noteTitle'
+import { matchesNote } from '../../lib/notesMatch'
+import { useT } from '../../i18n'
 import { ConfirmIconButton } from './ConfirmIconButton'
+import { HighlightedText } from './HighlightedText'
 
 interface Props {
   onOpenNote: (id: number) => void
@@ -9,11 +12,16 @@ interface Props {
 }
 
 export function NotesListView({ onOpenNote, archived = false }: Props) {
-  const notes = useNotesStore((s) => (archived ? s.archivedNotes : s.notes))
+  const allNotes = useNotesStore((s) => (archived ? s.archivedNotes : s.notes))
   const status = useNotesStore((s) => s.status)
   const create = useNotesStore((s) => s.create)
   const del = useNotesStore((s) => s.delete)
   const setArchived = useNotesStore((s) => s.setArchived)
+  const search = useNotesStore((s) => s.notesSearch)
+  const setSearch = useNotesStore((s) => s.setNotesSearch)
+  const t = useT()
+  const filtering = search.trim().length > 0
+  const notes = filtering ? allNotes.filter((n) => matchesNote(search, n.body)) : allNotes
 
   async function onCreate() {
     const id = await create()
@@ -22,7 +30,7 @@ export function NotesListView({ onOpenNote, archived = false }: Props) {
 
   return (
     <div className="notes-list">
-      {!archived && (
+      {!archived && !filtering && (
         <button type="button" className="notes-list-new" onClick={onCreate}>
           <Plus size={16} /> New note
         </button>
@@ -32,7 +40,14 @@ export function NotesListView({ onOpenNote, archived = false }: Props) {
       )}
       {status !== 'loading' && notes.length === 0 && (
         <div className="notes-grid-empty">
-          {archived ? <p>No archived notes.</p> : (
+          {filtering ? (
+            <p>
+              {t('notes.noMatches')} “{search}”.{' '}
+              <button type="button" className="link-button" onClick={() => setSearch('')}>
+                {t('notes.clearSearch')}
+              </button>
+            </p>
+          ) : archived ? <p>No archived notes.</p> : (
             <p>No notes yet — click <strong>New note</strong> to start.</p>
           )}
         </div>
@@ -56,8 +71,14 @@ export function NotesListView({ onOpenNote, archived = false }: Props) {
             }}
           >
             <div className="notes-list-row-text">
-              <div className={`notes-list-row-title${isEmpty ? ' empty' : ''}`}>{title}</div>
-              {snippet && <div className="notes-list-row-snippet">{snippet}</div>}
+              <div className={`notes-list-row-title${isEmpty ? ' empty' : ''}`}>
+                <HighlightedText text={title} query={search} />
+              </div>
+              {snippet && (
+                <div className="notes-list-row-snippet">
+                  <HighlightedText text={snippet} query={search} />
+                </div>
+              )}
             </div>
             <ConfirmIconButton
               icon={archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}

@@ -1,9 +1,13 @@
 import { useEffect, useRef } from 'react'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import { highlightTextNodes } from '../../lib/highlightDom'
 
 interface Props {
   body: string
+  /** When non-empty, matches in the rendered text are wrapped in
+   *  <mark class="note-highlight">. */
+  highlight?: string
 }
 
 /**
@@ -12,7 +16,7 @@ interface Props {
  * rest. All inner content is non-interactive so the card itself stays
  * the click target. Content is clipped by CSS overflow + a fade mask.
  */
-export function NoteThumbnail({ body }: Props) {
+export function NoteThumbnail({ body, highlight = '' }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -33,7 +37,10 @@ export function NoteThumbnail({ body }: Props) {
     const safe = DOMPurify.sanitize(html, { ADD_ATTR: ['target', 'rel'] })
     const parsed = new DOMParser().parseFromString(safe, 'text/html')
     el.replaceChildren(...Array.from(parsed.body.childNodes))
-  }, [body])
+    if (highlight.trim().length > 0) {
+      highlightTextNodes(el, highlight, { className: 'note-highlight' })
+    }
+  }, [body, highlight])
 
   return <div ref={containerRef} className="note-card-thumbnail markdown-body" aria-hidden="true" />
 }

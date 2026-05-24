@@ -2068,6 +2068,9 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   flex: 1;
   min-height: 0;
   gap: 10px;
+  /* Anchor the absolutely-positioned find bar to the editor area instead of
+     the page — matches inline-search's top-right corner pattern. */
+  position: relative;
 }
 .note-editor-toolbar {
   display: flex;
@@ -2473,4 +2476,104 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   padding: 6px 10px;
   border-radius: var(--radius-sm);
   font-size: var(--fs-meta);
+}
+
+/* ── Notes search & in-note find ─────────────────────────────────────── */
+
+/* Mirrors .inline-search (the canvas finder) so the two search surfaces
+   feel like siblings — same elevated bg + border + radius. No box-shadow
+   here because the modal already provides its own elevation. */
+.notes-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--bg-elev);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-base);
+}
+.notes-search:focus-within {
+  border-color: var(--accent);
+}
+.notes-search input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--fg);
+  font: inherit;
+  min-width: 0;
+  width: 220px;
+}
+
+/* Push the modal's close X to the far right of the header row. */
+.notes-modal-close {
+  margin-left: auto;
+}
+
+.link-button {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.note-highlight,
+.note-find-match {
+  background: color-mix(in srgb, #ffd54f 75%, transparent);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.note-find-match-active {
+  background: #ff9800;
+  color: #1a1a1a;
+  outline: 1px solid #d97706;
+}
+
+/* In-note find bar — floats in the top-right of the editor area like
+   VSCode's / browser's Cmd+F bar. Visual language matches .inline-search
+   (the canvas finder) so all three search surfaces feel like a family. */
+.note-find-bar {
+  position: absolute;
+  top: 56px;
+  right: 12px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-elev);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 6px 8px;
+  font-size: var(--fs-base);
+}
+.note-find-bar:focus-within {
+  border-color: var(--accent);
+}
+.note-find-bar-input {
+  width: 220px;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--fg);
+  font: inherit;
+  min-width: 0;
+}
+.note-find-bar-position {
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+  min-width: 50px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.note-find-bar-nav:disabled,
+.note-find-bar-close:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }

@@ -10,6 +10,7 @@ import { useGraphStore } from '../../store/graphStore'
 import { useViewStore } from '../../store/viewStore'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import { useLocale } from '../../i18n'
+import { NoteFindBar } from './NoteFindBar'
 import { NotePreview } from './NotePreview'
 import { getNoteScroll, setNoteScroll } from '../../lib/noteScrollMemory'
 
@@ -52,6 +53,15 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
     if (typeof localStorage === 'undefined') return false
     try { return localStorage.getItem(SHOW_REFS_KEY) === '1' } catch { return false }
   })
+  // In-note find state. Open/closed is mirrored into viewStore (noteFindOpen)
+  // so NotesModal's Esc handler can defer to us. matchCount is updated by
+  // NotePreview's highlight pipeline via onMatchCountChange.
+  const [findOpen, setFindOpenLocal] = useState(false)
+  const [findQuery, setFindQuery] = useState('')
+  const [findMatchCount, setFindMatchCount] = useState(0)
+  const [findMatchIndex, setFindMatchIndex] = useState(0)
+  const findInputRef = useRef<HTMLInputElement | null>(null)
+  const setNoteFindOpen = useViewStore((s) => s.setNoteFindOpen)
   const toggleShowRefs = () => {
     setShowRefs((prev) => {
       const next = !prev
@@ -152,6 +162,18 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
     ta.scrollTop = getNoteScroll(noteId, 'edit')
   }, [mode, noteId])
 
+  function onFindQueryChange(q: string) {
+    setFindQuery(q)
+    // Reset active match to the first hit whenever the query mutates.
+    setFindMatchIndex(0)
+  }
+
+  function closeFind() {
+    setFindOpenLocal(false)
+    setNoteFindOpen(false)
+    setFindMatchIndex(0)
+  }
+
   // Cmd+E and Cmd+/ both toggle edit/preview. We accept both because Cmd+E
   // is the conventional binding but gets swallowed by the macOS Edit menu's
   // "Use Selection for Find" accelerator in Chrome PWA windows — the
@@ -161,9 +183,28 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
   // Backspace (the key labeled "delete" on Mac) acts as ← Back when focus
   // is NOT inside a text input — so typing keeps working but pressing
   // Backspace anywhere else navigates one level back to the grid.
+  // Cmd/Ctrl+F opens the in-note find bar (overriding the browser's native
+  // find since the highlight DOM is rebuilt on every render anyway and
+  // wouldn't survive the next preview pass).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey
+      if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        // Inline open-find: auto-switch to preview (highlighting requires
+        // the rendered DOM), then focus the find input on the next frame.
+        setMode((m) => (m === 'edit' ? 'preview' : m))
+        setFindOpenLocal(true)
+        setNoteFindOpen(true)
+        requestAnimationFrame(() => {
+          const el = findInputRef.current
+          if (el) {
+            el.focus()
+            el.select()
+          }
+        })
+        return
+      }
       if (mod && !e.shiftKey && (e.key.toLowerCase() === 'e' || e.key === '/')) {
         e.preventDefault()
         setMode((m) => (m === 'edit' ? 'preview' : 'edit'))
@@ -182,7 +223,13 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onBack])
+  }, [onBack, setNoteFindOpen])
+
+  // Clear the modal-visible find flag if the editor unmounts mid-find so
+  // NotesModal's Esc handler doesn't stay stuck-deferred. Note: switching
+  // between notes ALWAYS unmounts NoteEditor (parent toggles focusedNoteId
+  // through null in between), so the find state is per-note for free.
+  useEffect(() => () => setNoteFindOpen(false), [setNoteFindOpen])
 
   // Flush any pending debounced save on unmount (e.g. user closed the modal
   // mid-edit), so we never lose the latest keystrokes.
@@ -368,6 +415,24 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
           {uploadError}
         </div>
       )}
+      {findOpen && (
+        <NoteFindBar
+          ref={findInputRef}
+          query={findQuery}
+          onQueryChange={onFindQueryChange}
+          matchIndex={findMatchIndex}
+          matchCount={findMatchCount}
+          onNext={() => {
+            if (findMatchCount === 0) return
+            setFindMatchIndex((i) => (i + 1) % findMatchCount)
+          }}
+          onPrev={() => {
+            if (findMatchCount === 0) return
+            setFindMatchIndex((i) => (i - 1 + findMatchCount) % findMatchCount)
+          }}
+          onClose={closeFind}
+        />
+      )}
       {mode === 'edit' ? (
         <textarea
           ref={textareaRef}
@@ -387,6 +452,9 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
           body={note.body}
           onCloseModal={onCloseModal}
           onBodyChange={(next) => updateBody(noteId, next)}
+          highlightQuery={findOpen ? findQuery : ''}
+          activeMatchIndex={findMatchIndex}
+          onMatchCountChange={setFindMatchCount}
         />
       )}
       {hasRefs && (

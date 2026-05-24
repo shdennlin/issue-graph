@@ -3,6 +3,7 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import type { NormalizedIssue } from '@shared/types.js'
 import { toggleChecklistAt } from '../../lib/checklist'
+import { highlightTextNodes } from '../../lib/highlightDom'
 import { decorateIssueLinksWithStatus, linkifyIssueIds } from '../../lib/issueLinks'
 import { useGraphStore } from '../../store/graphStore'
 import { useViewStore } from '../../store/viewStore'
@@ -18,9 +19,25 @@ interface Props {
   /** Optional. When set, rendered task-list checkboxes become interactive
    *  and call this with the updated markdown body on each toggle. */
   onBodyChange?: (next: string) => void
+  /** In-note find: text to highlight. Empty string disables highlighting. */
+  highlightQuery?: string
+  /** In-note find: the active match (0-based). Scrolled into view + given
+   *  the `.note-find-match-active` class. */
+  activeMatchIndex?: number
+  /** Called whenever the highlight pipeline finishes with the new total match
+   *  count. Useful for the find bar's `N / total` counter. */
+  onMatchCountChange?: (count: number) => void
 }
 
-export function NotePreview({ noteId, body, onCloseModal, onBodyChange }: Props) {
+export function NotePreview({
+  noteId,
+  body,
+  onCloseModal,
+  onBodyChange,
+  highlightQuery = '',
+  activeMatchIndex = 0,
+  onMatchCountChange,
+}: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [hover, setHover] = useState<{ issue: NormalizedIssue; rect: DOMRect } | null>(null)
 
@@ -99,11 +116,34 @@ export function NotePreview({ noteId, body, onCloseModal, onBodyChange }: Props)
       if (!s) return null
       return { type: s.type, label: s.name }
     })
-    // Restore the user's last scroll position for this note. The onScroll
-    // handler keeps the stored value current, so re-applying on body changes
-    // (e.g. checklist toggles) is a no-op rather than a jump.
-    el.scrollTop = getNoteScroll(noteId, 'preview')
-  }, [body, onBodyChange, noteId])
+    // In-note find highlighting runs AFTER linkify + decorate so it walks
+    // the final text nodes. Skip the appended status badges so their state
+    // labels aren't searchable.
+    const count = highlightQuery.trim().length > 0
+      ? highlightTextNodes(el, highlightQuery, {
+          className: 'note-find-match',
+          numbered: true,
+          skipSelectors: ['.issue-status-badge'],
+        })
+      : 0
+    if (count > 0) {
+      const clamped = Math.max(0, Math.min(activeMatchIndex, count - 1))
+      const active = el.querySelector<HTMLElement>(`mark[data-match-index="${clamped}"]`)
+      if (active) {
+        active.classList.add('note-find-match-active')
+        active.scrollIntoView({ block: 'center', inline: 'nearest' })
+      }
+    }
+    if (onMatchCountChange) onMatchCountChange(count)
+    // Restore the user's last scroll position for this note when there's no
+    // active find — otherwise scrollIntoView above is the authoritative
+    // scroll. The onScroll handler keeps the stored value current, so
+    // re-applying on body changes (e.g. checklist toggles) is a no-op rather
+    // than a jump.
+    if (count === 0) {
+      el.scrollTop = getNoteScroll(noteId, 'preview')
+    }
+  }, [body, onBodyChange, noteId, highlightQuery, activeMatchIndex, onMatchCountChange])
 
   function onClick(e: React.MouseEvent<HTMLDivElement>) {
     const target = e.target as HTMLElement
