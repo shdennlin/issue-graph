@@ -13,6 +13,7 @@ import {
   ISSUE_DETAIL_QUERY,
   LABELS_QUERY,
   PROJECT_DETAIL_QUERY,
+  RECONCILE_IDENTIFIERS_QUERY,
   VIEWER_QUERY,
   WORKFLOW_STATES_QUERY,
 } from './queries.js'
@@ -32,13 +33,15 @@ interface LinearOptions {
  * the window. Used when the user explicitly checks Canceled / Completed in
  * the state filter so we fetch the data they're asking to see.
  */
-function buildIssueFilter(
+export function buildIssueFilter(
   scope: string,
   teamId?: string,
   extendedDays = 0,
+  updatedAfter?: string,
 ): Record<string, unknown> | undefined {
   const filter: Record<string, unknown> = {}
   if (teamId) filter.team = { id: { eq: teamId } }
+  if (updatedAfter) filter.updatedAt = { gt: updatedAfter }
 
   if (scope === 'all') {
     if (Object.keys(filter).length === 0) return undefined
@@ -145,7 +148,12 @@ export class LinearBackend implements BackendAdapter {
   }
 
   async fetchAllIssues(opts: FetchOpts): Promise<NormalizedIssue[]> {
-    const filter = buildIssueFilter(opts.scope, opts.teamId ?? this.opts.teamId, opts.extendedDays ?? 0)
+    const filter = buildIssueFilter(
+      opts.scope,
+      opts.teamId ?? this.opts.teamId,
+      opts.extendedDays ?? 0,
+      opts.updatedAfter,
+    )
     const out: NormalizedIssue[] = []
     let after: string | null = null
     type IssuesResp = {
@@ -154,6 +162,31 @@ export class LinearBackend implements BackendAdapter {
     for (let page = 0; page < 50; page++) {
       const data: IssuesResp = await this.gql<IssuesResp>(ISSUES_QUERY, { after, filter })
       for (const raw of data.issues.nodes) out.push(normalizeIssue(raw))
+      if (!data.issues.pageInfo.hasNextPage) break
+      after = data.issues.pageInfo.endCursor
+    }
+    return out
+  }
+
+  async fetchIssueIdentifiers(opts: FetchOpts): Promise<string[]> {
+    const filter = buildIssueFilter(
+      opts.scope,
+      opts.teamId ?? this.opts.teamId,
+      opts.extendedDays ?? 0,
+      // Reconcile intentionally does not pass updatedAfter — it needs the
+      // full identifier set to detect deletions.
+    )
+    const out: string[] = []
+    let after: string | null = null
+    type Resp = {
+      issues: {
+        pageInfo: { hasNextPage: boolean; endCursor: string | null }
+        nodes: Array<{ identifier: string }>
+      }
+    }
+    for (let page = 0; page < 50; page++) {
+      const data: Resp = await this.gql<Resp>(RECONCILE_IDENTIFIERS_QUERY, { after, filter })
+      for (const n of data.issues.nodes) out.push(n.identifier)
       if (!data.issues.pageInfo.hasNextPage) break
       after = data.issues.pageInfo.endCursor
     }

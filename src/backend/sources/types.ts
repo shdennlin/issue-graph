@@ -10,6 +10,12 @@ export interface FetchOpts {
    * Set when the user explicitly checks Canceled/Completed in the filter UI.
    */
   extendedDays?: number
+  /**
+   * Incremental-sync cursor (ISO 8601). When set, the adapter ANDs an
+   * `updatedAt > updatedAfter` clause into the base filter so the response
+   * only contains issues changed since the last successful sync.
+   */
+  updatedAfter?: string
 }
 
 export interface IssueDetail extends NormalizedIssue {
@@ -40,6 +46,13 @@ export interface BackendAdapter {
   /** Identifier for sync_log.backend column. */
   readonly name: string
   fetchAllIssues(opts: FetchOpts): Promise<NormalizedIssue[]>
+  /**
+   * Lightweight identifier-only fetch used by the periodic reconcile pass
+   * (sync.ts) to detect issues deleted in the backend. Returns the full set
+   * of issue identifiers within the same scope as `fetchAllIssues` — callers
+   * must NOT pass `updatedAfter` here (reconcile needs the complete list).
+   */
+  fetchIssueIdentifiers?(opts: FetchOpts): Promise<string[]>
   fetchIssueDetail(idOrIdentifier: string): Promise<IssueDetail>
   /**
    * Optional — fetch one project's full detail (state, progress, lead,

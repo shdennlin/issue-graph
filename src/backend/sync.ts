@@ -11,7 +11,13 @@ import {
   writeMeta,
   readMeta,
   readExtendedScopeDays,
-  countCachedIssues,
+  readLastIssueUpdatedAt,
+  writeLastIssueUpdatedAt,
+  readLastSyncScopeKey,
+  writeLastSyncScopeKey,
+  readLastReconcileMs,
+  writeLastReconcileMs,
+  deleteIssuesNotIn,
 } from './cache.js'
 import { getBackend } from './sources/factory.js'
 import { AuthError, RateLimitError } from './sources/types.js'
@@ -51,7 +57,7 @@ export async function syncOnce({ force = false }: { force?: boolean } = {}): Pro
     // Wait for the in-flight one to settle, then run a fresh one.
     await existing.catch(() => undefined)
   }
-  const p = doSync()
+  const p = doSync({ force })
   inflightByWid.set(wid, p)
   try {
     return await p
@@ -65,7 +71,13 @@ export function isSyncInFlight(workspaceId?: string): boolean {
   return inflightByWid.has(wid)
 }
 
-async function doSync(): Promise<SyncResult> {
+const RECONCILE_INTERVAL_MS = 24 * 60 * 60 * 1000
+
+function buildScopeKey(scope: string, teamId: string | undefined, extendedDays: number): string {
+  return `${scope}|${extendedDays}|${teamId ?? ''}`
+}
+
+async function doSync({ force = false }: { force?: boolean } = {}): Promise<SyncResult> {
   const log = getLogger()
   const cfg = loadConfig()
   // Eagerly init DB so the migrations run before we touch any caches.
@@ -97,8 +109,22 @@ async function doSync(): Promise<SyncResult> {
 
   try {
     const extendedDays = readExtendedScopeDays()
+    const scopeKey = buildScopeKey(cfg.ISSUE_SCOPE, cfg.LINEAR_TEAM_ID, extendedDays)
+    const prevScopeKey = readLastSyncScopeKey()
+    const prevCursor = readLastIssueUpdatedAt()
+    const scopeChanged = !!prevScopeKey && prevScopeKey !== scopeKey
+    // Incremental path: skipped on force=true (Cmd+Alt+S), first-ever sync,
+    // and any scope/team/extended-days change so newly-in-scope issues come in.
+    const useIncremental = !force && !scopeChanged && !!prevCursor
+    const updatedAfter = useIncremental ? prevCursor : undefined
+
     const [issues, labels, viewer, workflowStates] = await Promise.all([
-      backend.fetchAllIssues({ scope: cfg.ISSUE_SCOPE, teamId: cfg.LINEAR_TEAM_ID, extendedDays }),
+      backend.fetchAllIssues({
+        scope: cfg.ISSUE_SCOPE,
+        teamId: cfg.LINEAR_TEAM_ID,
+        extendedDays,
+        updatedAfter,
+      }),
       backend.fetchLabels(),
       backend.fetchViewer().catch(() => null),
       // Optional — adapters that don't implement fetchWorkflowStates will skip
@@ -117,22 +143,10 @@ async function doSync(): Promise<SyncResult> {
       return undefined
     })
 
-    // Workspace-switch sniff test: if the cache holds many more issues than
-    // we just fetched, the user likely changed LINEAR_API_KEY to a different
-    // workspace. Issues from the previous workspace stay in cache (the
-    // identifiers don't collide), polluting the graph. We can't detect this
-    // perfectly without storing the workspace ID, so use a generous heuristic:
-    // cached count > 2x fetched count AND fetched > 0 (avoid false positives
-    // on initial sync or rate-limited partial responses).
-    const cachedBefore = countCachedIssues()
-    if (cachedBefore > issues.length * 2 && issues.length > 0) {
-      log.warn(
-        { cachedBefore, syncedNow: issues.length },
-        'Cache holds far more issues than this sync returned. ' +
-          'If you switched LINEAR_API_KEY to a different workspace, ' +
-          'POST /api/reset-cache to clear stale data.',
-      )
-    }
+    // Workspace-switch detection happens precisely below via
+    // viewer.organization.urlKey — the old "cachedBefore > 2x fetched"
+    // heuristic was removed because incremental sync intentionally fetches
+    // small deltas, which would have made that warning fire constantly.
 
     writeIssueCache(issues)
     writeLabelCache(labels)
@@ -160,6 +174,37 @@ async function doSync(): Promise<SyncResult> {
       writeMeta(VIEWER_KEY, JSON.stringify(viewer))
     }
     writeLastSyncMs(Date.now())
+
+    // Advance the incremental-sync high-water mark. When zero issues come
+    // back (steady state), we fall back to the previous cursor so we don't
+    // regress and re-fetch already-seen issues on the next call.
+    const maxUpdatedAt = issues.reduce(
+      (acc, i) => (i.updatedAt && i.updatedAt > acc ? i.updatedAt : acc),
+      prevCursor ?? '',
+    )
+    if (maxUpdatedAt) writeLastIssueUpdatedAt(maxUpdatedAt)
+    writeLastSyncScopeKey(scopeKey)
+
+    // Periodic reconcile to catch deletions and (on scope change) prune
+    // issues no longer in scope. Runs at most once per RECONCILE_INTERVAL_MS,
+    // or immediately when scope changes. Failures are swallowed — the next
+    // sync will retry, and a missed reconcile only delays cleanup.
+    const lastReconcileMs = readLastReconcileMs()
+    const reconcileDue = scopeChanged || Date.now() - lastReconcileMs > RECONCILE_INTERVAL_MS
+    if (reconcileDue && backend.fetchIssueIdentifiers) {
+      try {
+        const keep = await backend.fetchIssueIdentifiers({
+          scope: cfg.ISSUE_SCOPE,
+          teamId: cfg.LINEAR_TEAM_ID,
+          extendedDays,
+        })
+        const removed = deleteIssuesNotIn(keep)
+        writeLastReconcileMs(Date.now())
+        if (removed > 0) log.info({ removed }, 'reconcile pruned stale issues')
+      } catch (e) {
+        log.warn({ err: e }, 'reconcile pass failed; will retry on next sync')
+      }
+    }
 
     // Daily snapshot (PRD §5.8 — written on first successful sync of the day after configured hour).
     maybeWriteSnapshot(issues, labels, designdocs)

@@ -43,6 +43,15 @@ export const ISSUES_QUERY = /* GraphQL */ `
   }
 `
 
+export const RECONCILE_IDENTIFIERS_QUERY = /* GraphQL */ `
+  query ReconcileIdentifiers($after: String, $filter: IssueFilter) {
+    issues(first: 250, after: $after, filter: $filter) {
+      pageInfo { hasNextPage endCursor }
+      nodes { identifier }
+    }
+  }
+`
+
 export const ISSUE_DETAIL_QUERY = /* GraphQL */ `
   query IssueDetail($id: String!) {
     issue(id: $id) {
