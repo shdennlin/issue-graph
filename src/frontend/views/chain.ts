@@ -25,6 +25,12 @@ export interface ChainOptions {
    * blow-up over `related` (which is bidirectional and densely connected
    * in many workspaces). */
   includeRelatedNeighbors?: boolean
+  /** Max upstream hops (blockers) to walk from the nearest root. `null`/
+   * `undefined` = unbounded. 0 = roots only (no blockers). */
+  maxUpstream?: number | null
+  /** Max downstream hops (things the roots block, transitively) to walk from
+   * the nearest root. `null`/`undefined` = unbounded. 0 = roots only. */
+  maxDownstream?: number | null
 }
 
 /** Single-root chain — thin wrapper over {@link computeChains}. */
@@ -61,38 +67,96 @@ export function computeChains(
     }
   }
 
-  // Seed every present root into one BFS queue. Roots outside the cache are
-  // skipped; the union falls out of the shared `members` set.
-  const queue: string[] = []
+  // Seed every present root. Roots outside the cache are skipped; with
+  // multiple roots the union falls out of the shared `members` set.
+  const seeds: string[] = []
   for (const rootId of rootIds) {
     if (!byId.has(rootId)) continue
     if (members.has(rootId)) continue
     members.add(rootId)
-    queue.push(rootId)
+    seeds.push(rootId)
   }
 
-  while (queue.length > 0) {
-    const id = queue.shift()!
-    const node = byId.get(id)
-    if (node) {
-      for (const r of node.relations) {
-        if (r.type !== 'blocks') continue
-        if (!byId.has(r.targetIdentifier)) {
-          // Reference points outside cache — typically an older Done blocker
-          // pruned by the default `active+recent` backend scope.
-          dangling.add(r.targetIdentifier)
-          continue
+  const upLimit = opts.maxUpstream ?? Infinity
+  const downLimit = opts.maxDownstream ?? Infinity
+
+  if (upLimit === Infinity && downLimit === Infinity) {
+    // ── Unbounded: full connected component over `blocks` (both directions).
+    // This is the default and preserves the original behavior exactly: a node
+    // reachable through any mix of blocker/blocked-by edges is included.
+    const queue: string[] = [...seeds]
+    while (queue.length > 0) {
+      const id = queue.shift()!
+      const node = byId.get(id)
+      if (node) {
+        for (const r of node.relations) {
+          if (r.type !== 'blocks') continue
+          if (!byId.has(r.targetIdentifier)) {
+            // Reference points outside cache — typically an older Done blocker
+            // pruned by the default `active+recent` backend scope.
+            dangling.add(r.targetIdentifier)
+            continue
+          }
+          if (!members.has(r.targetIdentifier)) {
+            members.add(r.targetIdentifier)
+            queue.push(r.targetIdentifier)
+          }
         }
-        if (!members.has(r.targetIdentifier)) {
-          members.add(r.targetIdentifier)
-          queue.push(r.targetIdentifier)
+      }
+      for (const upstream of reverse.get(id) ?? []) {
+        if (!members.has(upstream)) {
+          members.add(upstream)
+          queue.push(upstream)
         }
       }
     }
-    for (const upstream of reverse.get(id) ?? []) {
-      if (!members.has(upstream)) {
-        members.add(upstream)
-        queue.push(upstream)
+  } else {
+    // ── Depth-limited: expand blockers and blocked-by independently, each as
+    // a pure-directional BFS seeded at all roots (so depth = hops to nearest
+    // root). Mixed up-then-down sibling paths are intentionally excluded —
+    // "N levels of blockers / dependents" means N directional hops, not
+    // arbitrary connected nodes. FIFO ordering visits each node at its
+    // minimal depth first.
+
+    // Downstream: things the roots block, transitively (forward edges).
+    if (downLimit > 0) {
+      const visited = new Set<string>(seeds)
+      const queue: Array<[string, number]> = seeds.map((id) => [id, 0])
+      while (queue.length > 0) {
+        const [id, depth] = queue.shift()!
+        if (depth >= downLimit) continue
+        const node = byId.get(id)
+        if (!node) continue
+        for (const r of node.relations) {
+          if (r.type !== 'blocks') continue
+          if (!byId.has(r.targetIdentifier)) {
+            dangling.add(r.targetIdentifier)
+            continue
+          }
+          if (!visited.has(r.targetIdentifier)) {
+            visited.add(r.targetIdentifier)
+            members.add(r.targetIdentifier)
+            queue.push([r.targetIdentifier, depth + 1])
+          }
+        }
+      }
+    }
+
+    // Upstream: blockers of the roots, transitively (reverse edges). The
+    // reverse map only holds cached↔cached links, so no dangling arises here.
+    if (upLimit > 0) {
+      const visited = new Set<string>(seeds)
+      const queue: Array<[string, number]> = seeds.map((id) => [id, 0])
+      while (queue.length > 0) {
+        const [id, depth] = queue.shift()!
+        if (depth >= upLimit) continue
+        for (const upstream of reverse.get(id) ?? []) {
+          if (!visited.has(upstream)) {
+            visited.add(upstream)
+            members.add(upstream)
+            queue.push([upstream, depth + 1])
+          }
+        }
       }
     }
   }

@@ -89,6 +89,8 @@ function buildUrl(): string {
   if (s.activeView !== 'dependency') params.set('view', s.activeView)
   if (s.focusedId) params.set('focus', s.focusedId)
   if (s.chainRootIds.length) params.set('chain', s.chainRootIds.join(','))
+  if (s.chainDepthUp !== null) params.set('cdu', String(s.chainDepthUp))
+  if (s.chainDepthDown !== null) params.set('cdd', String(s.chainDepthDown))
   if (s.showRelated) params.set('related', '1')
   if (s.theme !== 'auto') params.set('theme', s.theme)
   if (s.density !== 'default') params.set('density', s.density)
@@ -137,6 +139,8 @@ function significantSignature(): string {
     s.activeView,
     s.focusedId ?? '',
     s.chainRootIds.join(','),
+    s.chainDepthUp === null ? '' : String(s.chainDepthUp),
+    s.chainDepthDown === null ? '' : String(s.chainDepthDown),
     s.showRelated ? '1' : '0',
     s.search,
     f.activeOnly ? '1' : '0',
@@ -200,6 +204,12 @@ function parseUrl(): void {
   set({ focusedId: params.get('focus') })
   const chain = params.get('chain')
   set({ chainRootIds: chain ? chain.split(',').filter(Boolean) : [] })
+  const parseDepth = (raw: string | null): number | null => {
+    if (raw === null) return null
+    const n = parseInt(raw, 10)
+    return Number.isFinite(n) && n >= 0 ? n : null
+  }
+  set({ chainDepthUp: parseDepth(params.get('cdu')), chainDepthDown: parseDepth(params.get('cdd')) })
   set({ showRelated: params.get('related') === '1' })
 
   const theme = params.get('theme') as ThemeMode | null

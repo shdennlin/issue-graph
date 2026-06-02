@@ -11,7 +11,7 @@ export const designdocView: ViewDefinition = {
   id: 'designdoc',
   label: 'Design docs',
   description: 'Issues that have linked design-doc changes. Phase 3.',
-  build({ data, filters, staleDays, myUserName, selection, focusedId, chainRootIds, showRelated, density, search, measuredHeights }) {
+  build({ data, filters, staleDays, myUserName, selection, focusedId, chainRootIds, chainDepthUp, chainDepthDown, showRelated, density, search, measuredHeights }) {
     // Chain isolation: when roots are set, replace user filters with the
     // chain's connected component. The "must have a design doc" constraint
     // below still applies — it's part of the view's identity (a chain
@@ -21,6 +21,8 @@ export const designdocView: ViewDefinition = {
     if (chainRootIds.length > 0) {
       const { members } = computeChains(data.issues, chainRootIds, {
         includeRelatedNeighbors: showRelated,
+        maxUpstream: chainDepthUp,
+        maxDownstream: chainDepthDown,
       })
       baseIssues = data.issues.filter((i) => members.has(i.identifier))
     } else {

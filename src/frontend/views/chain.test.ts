@@ -190,3 +190,58 @@ describe('computeChains (multi-root)', () => {
     expect(r.members).toEqual(new Set(['A', 'B', 'R', 'X', 'Y']))
   })
 })
+
+describe('computeChains depth limits', () => {
+  // A → B → C → D (A blocks B, B blocks C, C blocks D)
+  const linear = [mk('A', ['B']), mk('B', ['C']), mk('C', ['D']), mk('D')]
+
+  it('limits downstream (dependents) depth from the root', () => {
+    expect(computeChains(linear, ['A'], { maxDownstream: 1 }).members).toEqual(new Set(['A', 'B']))
+    expect(computeChains(linear, ['A'], { maxDownstream: 2 }).members).toEqual(new Set(['A', 'B', 'C']))
+  })
+
+  it('limits upstream (blockers) depth from the root', () => {
+    expect(computeChains(linear, ['D'], { maxUpstream: 1 }).members).toEqual(new Set(['D', 'C']))
+    expect(computeChains(linear, ['D'], { maxUpstream: 2 }).members).toEqual(new Set(['D', 'C', 'B']))
+  })
+
+  it('depth 0 in both directions yields only the roots', () => {
+    expect(computeChains(linear, ['B'], { maxUpstream: 0, maxDownstream: 0 }).members).toEqual(
+      new Set(['B']),
+    )
+  })
+
+  it('applies upstream and downstream limits independently', () => {
+    // root C: 1 blocker up (B), 1 dependent down (D)
+    expect(computeChains(linear, ['C'], { maxUpstream: 1, maxDownstream: 1 }).members).toEqual(
+      new Set(['B', 'C', 'D']),
+    )
+  })
+
+  it('excludes sibling-via-ancestor paths once a depth limit is set', () => {
+    // A blocks B and C. Rooted at B with a finite upstream limit, A is a
+    // blocker (1 up) but C is A's *other dependent* — a mixed up-then-down
+    // path — so it stays out. Unbounded, the full component includes C.
+    const fork = [mk('A', ['B', 'C']), mk('B'), mk('C')]
+    expect(computeChains(fork, ['B']).members).toEqual(new Set(['A', 'B', 'C']))
+    expect(computeChains(fork, ['B'], { maxUpstream: 1 }).members).toEqual(new Set(['A', 'B']))
+  })
+
+  it('measures depth from the nearest root with multiple roots', () => {
+    // roots A and D on the linear chain, 1 hop each way:
+    //   A → B (down 1 from A), C → D means C is up 1 from D
+    expect(
+      computeChains(linear, ['A', 'D'], { maxUpstream: 1, maxDownstream: 1 }).members,
+    ).toEqual(new Set(['A', 'B', 'C', 'D']))
+  })
+
+  it('only records dangling refs reachable within the downstream limit', () => {
+    // A → B → GHOST. At depth 1, GHOST (B's blockee) is beyond reach.
+    const issues = [mk('A', ['B']), mk('B', ['GHOST'])]
+    const d1 = computeChains(issues, ['A'], { maxDownstream: 1 })
+    expect(d1.members).toEqual(new Set(['A', 'B']))
+    expect(d1.dangling).toEqual(new Set())
+    const d2 = computeChains(issues, ['A'], { maxDownstream: 2 })
+    expect(d2.dangling).toEqual(new Set(['GHOST']))
+  })
+})

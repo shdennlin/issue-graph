@@ -14,6 +14,10 @@ export interface ViewContext {
   /** Chain-isolation roots — empty means chain mode is off. The view shows the
    *  union of each root's transitive `blocks` component. */
   chainRootIds: string[]
+  /** Chain depth caps (hops from nearest root); `null` = unbounded. Upstream
+   *  limits blockers, downstream limits dependents. */
+  chainDepthUp: number | null
+  chainDepthDown: number | null
   showRelated: boolean
   density: Density
   /** Max issues per row inside a container. Pulled from viewStore; views

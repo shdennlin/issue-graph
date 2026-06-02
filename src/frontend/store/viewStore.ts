@@ -56,6 +56,12 @@ export interface ViewState {
   // chain doesn't fragment. Single-root is the common case (right-click →
   // "Isolate chain"); multi-root comes from isolating a multi-selection.
   chainRootIds: string[]
+  // Chain depth caps (hops from the nearest root). `null` = unbounded, the
+  // default — chain mode shows the full connected component. `chainDepthUp`
+  // limits blockers (upstream); `chainDepthDown` limits things the roots block
+  // (downstream). Only consulted while chainRootIds is non-empty.
+  chainDepthUp: number | null
+  chainDepthDown: number | null
   // Monotonic counter — bump to force a fresh dagre layout pass even when
   // the layout signature (view/density) hasn't changed. Used by
   // "Isolate chain (re-arrange)" so the new chain lays out cleanly instead
@@ -137,6 +143,10 @@ export interface ViewState {
   setChainRootId: (id: string | null) => void
   /** Set the full root set (multi-select → isolate). Empty clears chain mode. */
   setChainRootIds: (ids: string[]) => void
+  /** Set upstream (blockers) chain depth cap. `null` = unbounded. */
+  setChainDepthUp: (depth: number | null) => void
+  /** Set downstream (dependents) chain depth cap. `null` = unbounded. */
+  setChainDepthDown: (depth: number | null) => void
   bumpLayout: () => void
   setTheme: (t: ThemeMode) => void
   setDensity: (d: Density) => void
@@ -204,6 +214,8 @@ export const useViewStore = create<ViewState>((set) => ({
   filters: defaultFilters,
   focusedId: null,
   chainRootIds: [],
+  chainDepthUp: null,
+  chainDepthDown: null,
   layoutBump: 0,
   expandedBuckets: [],
   theme: 'auto',
@@ -299,6 +311,8 @@ export const useViewStore = create<ViewState>((set) => ({
     }),
   setChainRootId: (id) => set({ chainRootIds: id ? [id] : [] }),
   setChainRootIds: (ids) => set({ chainRootIds: ids }),
+  setChainDepthUp: (depth) => set({ chainDepthUp: depth }),
+  setChainDepthDown: (depth) => set({ chainDepthDown: depth }),
   bumpLayout: () => set((s) => ({ layoutBump: s.layoutBump + 1 })),
   setTheme: (t) => set({ theme: t }),
   setDensity: (d) => set({ density: d }),

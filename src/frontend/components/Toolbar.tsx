@@ -33,6 +33,10 @@ const ICON_SIZE = 16
 
 const FULL_HISTORY_DAYS = 365
 
+// Finite chain-depth choices offered in the toolbar selects (0–8 hops). The
+// empty-string option ('') represents unbounded (∞).
+const DEPTH_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8] as const
+
 export function Toolbar() {
   const activeView = useViewStore((s) => s.activeView)
   const setActiveView = useViewStore((s) => s.setActiveView)
@@ -54,6 +58,10 @@ export function Toolbar() {
   const clearSelection = useViewStore((s) => s.clearSelection)
   const chainRootIds = useViewStore((s) => s.chainRootIds)
   const setChainRootId = useViewStore((s) => s.setChainRootId)
+  const chainDepthUp = useViewStore((s) => s.chainDepthUp)
+  const chainDepthDown = useViewStore((s) => s.chainDepthDown)
+  const setChainDepthUp = useViewStore((s) => s.setChainDepthUp)
+  const setChainDepthDown = useViewStore((s) => s.setChainDepthDown)
   const showRelated = useViewStore((s) => s.showRelated)
   const setShowRelated = useViewStore((s) => s.setShowRelated)
   const graph = useGraphStore((s) => s.graph)
@@ -70,9 +78,11 @@ export function Toolbar() {
     if (chainRootIds.length === 0 || !graph) return null
     const { members, dangling } = computeChains(graph.data.issues, chainRootIds, {
       includeRelatedNeighbors: showRelated,
+      maxUpstream: chainDepthUp,
+      maxDownstream: chainDepthDown,
     })
     return { memberCount: members.size, dangling: dangling.size }
-  }, [chainRootIds, graph, showRelated])
+  }, [chainRootIds, graph, showRelated, chainDepthUp, chainDepthDown])
   const chainDangling = chainStats && chainStats.dangling > 0 ? chainStats.dangling : null
 
   // Backend's current extended-scope window (0 = default 30-day Done window).
@@ -214,6 +224,29 @@ export function Toolbar() {
                 ({chainStats.memberCount} {chainStats.memberCount === 1 ? t('toolbar.chainIssue') : t('toolbar.chainIssues')})
               </span>
             )}
+            <span style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-meta)' }}>depth</span>
+            <span title="Levels of blockers (upstream) to include; ∞ = all" style={{ fontSize: 'var(--fs-meta)', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+              ↑
+              <select
+                value={chainDepthUp === null ? '' : String(chainDepthUp)}
+                onChange={(e) => setChainDepthUp(e.target.value === '' ? null : parseInt(e.target.value, 10))}
+                aria-label="Blockers depth"
+              >
+                <option value="">∞</option>
+                {DEPTH_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </span>
+            <span title="Levels of dependents (downstream) to include; ∞ = all" style={{ fontSize: 'var(--fs-meta)', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+              ↓
+              <select
+                value={chainDepthDown === null ? '' : String(chainDepthDown)}
+                onChange={(e) => setChainDepthDown(e.target.value === '' ? null : parseInt(e.target.value, 10))}
+                aria-label="Dependents depth"
+              >
+                <option value="">∞</option>
+                {DEPTH_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </span>
             <button onClick={() => setChainRootId(null)} title={t('toolbar.clearChain')}>×</button>
             {showLoadFullHistory && (
               <button

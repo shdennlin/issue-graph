@@ -31,6 +31,8 @@ interface PerTabView {
   filters: Filters
   focusedId: string | null
   chainRootIds: string[]
+  chainDepthUp: number | null
+  chainDepthDown: number | null
   layoutBump: number
   expandedBuckets: string[]
   search: string
@@ -54,6 +56,8 @@ const defaultView: PerTabView = {
   filters: defaultFilters,
   focusedId: null,
   chainRootIds: [],
+  chainDepthUp: null,
+  chainDepthDown: null,
   layoutBump: 0,
   expandedBuckets: [],
   search: '',
@@ -73,7 +77,8 @@ const snapshots: Map<string, TabSnapshot> = new Map()
 
 const STORAGE_KEY = 'issue-graph-tab-snapshots'
 // v2: PerTabView.chainRootId (string|null) → chainRootIds (string[]).
-const STORAGE_VERSION = 2
+// v3: added chainDepthUp / chainDepthDown.
+const STORAGE_VERSION = 3
 
 interface PersistedSnapshot {
   view: PerTabView
@@ -179,6 +184,8 @@ function captureCurrentView(): PerTabView {
     filters: v.filters,
     focusedId: v.focusedId,
     chainRootIds: v.chainRootIds,
+    chainDepthUp: v.chainDepthUp,
+    chainDepthDown: v.chainDepthDown,
     layoutBump: v.layoutBump,
     expandedBuckets: v.expandedBuckets,
     search: v.search,

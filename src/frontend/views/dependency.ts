@@ -10,7 +10,7 @@ export const dependencyView: ViewDefinition = {
   id: 'dependency',
   label: 'Dependency',
   description: 'Issues + blocks edges. Best for "what should I work on next?".',
-  build({ data, filters, staleDays, myUserName, selection, focusedId, chainRootIds, showRelated, density, search, measuredHeights }) {
+  build({ data, filters, staleDays, myUserName, selection, focusedId, chainRootIds, chainDepthUp, chainDepthDown, showRelated, density, search, measuredHeights }) {
     // Chain isolation: when roots are set, show their connected component over
     // `blocks` edges (both directions, transitive) — bypassing other filters
     // so an off-state blocker doesn't fragment the chain.
@@ -18,6 +18,8 @@ export const dependencyView: ViewDefinition = {
     if (chainRootIds.length > 0) {
       const { members } = computeChains(data.issues, chainRootIds, {
         includeRelatedNeighbors: showRelated,
+        maxUpstream: chainDepthUp,
+        maxDownstream: chainDepthDown,
       })
       issues = data.issues.filter((i) => members.has(i.identifier))
     } else {
