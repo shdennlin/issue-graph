@@ -50,11 +50,12 @@ export interface ViewState {
   activeView: ViewId
   filters: Filters
   focusedId: string | null
-  // When set, the dependency view filters to the connected component over
-  // `blocks` edges (both directions, transitive) rooted at this identifier.
-  // Other filters are bypassed while this is active so the chain doesn't
-  // fragment. Ignored by mix/designdoc views.
-  chainRootId: string | null
+  // When non-empty, the view filters to the connected component over `blocks`
+  // edges (both directions, transitive) rooted at these identifiers — the
+  // UNION of each root's chain. Other filters are bypassed while active so the
+  // chain doesn't fragment. Single-root is the common case (right-click →
+  // "Isolate chain"); multi-root comes from isolating a multi-selection.
+  chainRootIds: string[]
   // Monotonic counter — bump to force a fresh dagre layout pass even when
   // the layout signature (view/density) hasn't changed. Used by
   // "Isolate chain (re-arrange)" so the new chain lays out cleanly instead
@@ -132,7 +133,10 @@ export interface ViewState {
   toggleProject: (id: string) => void
   toggleMilestone: (compositeKey: string) => void
   setFocusedId: (id: string | null) => void
+  /** Convenience for the single-root path: `null` clears, an id sets `[id]`. */
   setChainRootId: (id: string | null) => void
+  /** Set the full root set (multi-select → isolate). Empty clears chain mode. */
+  setChainRootIds: (ids: string[]) => void
   bumpLayout: () => void
   setTheme: (t: ThemeMode) => void
   setDensity: (d: Density) => void
@@ -199,7 +203,7 @@ export const useViewStore = create<ViewState>((set) => ({
   activeView: 'dependency',
   filters: defaultFilters,
   focusedId: null,
-  chainRootId: null,
+  chainRootIds: [],
   layoutBump: 0,
   expandedBuckets: [],
   theme: 'auto',
@@ -293,7 +297,8 @@ export const useViewStore = create<ViewState>((set) => ({
       const projectPanelOpen = detailPanelOpen ? false : s.projectPanelOpen
       return { focusedId: id, detailPanelOpen, projectPanelOpen }
     }),
-  setChainRootId: (id) => set({ chainRootId: id }),
+  setChainRootId: (id) => set({ chainRootIds: id ? [id] : [] }),
+  setChainRootIds: (ids) => set({ chainRootIds: ids }),
   bumpLayout: () => set((s) => ({ layoutBump: s.layoutBump + 1 })),
   setTheme: (t) => set({ theme: t }),
   setDensity: (d) => set({ density: d }),
@@ -389,5 +394,5 @@ export const useViewStore = create<ViewState>((set) => ({
     }),
   clearFocusedMilestone: () => set({ focusedMilestoneId: null }),
   closeProjectPanel: () => set({ projectPanelOpen: false, focusedProjectId: null, focusedMilestoneId: null }),
-  resetFilters: () => set({ filters: defaultFilters, chainRootId: null }),
+  resetFilters: () => set({ filters: defaultFilters, chainRootIds: [] }),
 }))

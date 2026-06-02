@@ -72,8 +72,9 @@ export const milestoneView: ViewDefinition = {
       filters,
       staleDays,
       myUserName,
+      selection,
       focusedId,
-      chainRootId,
+      chainRootIds,
       density,
       maxColsPerRow,
       search,
@@ -81,7 +82,7 @@ export const milestoneView: ViewDefinition = {
     } = ctx
     // Chain mode: container/backdrop layout obscures dependency flow — switch
     // to dagre and keep project identity via a 4px left stripe on each card.
-    if (chainRootId) {
+    if (chainRootIds.length > 0) {
       return buildChainLayout(ctx, (issue) => {
         if (!issue.project?.id) return null
         const color = projectColor(issue.project.id, issue.project.color, FALLBACK_COLOR)
@@ -267,7 +268,8 @@ export const milestoneView: ViewDefinition = {
             data: {
               issue: iss,
               focused: focusedId === id,
-              isChainRoot: chainRootId === id,
+              selected: selection.includes(id),
+              isChainRoot: chainRootIds.includes(id),
               connectivity: conn.get(id),
             },
             parentNode: containerId,

@@ -30,7 +30,7 @@ interface PerTabView {
   activeView: ViewId
   filters: Filters
   focusedId: string | null
-  chainRootId: string | null
+  chainRootIds: string[]
   layoutBump: number
   expandedBuckets: string[]
   search: string
@@ -53,7 +53,7 @@ const defaultView: PerTabView = {
   activeView: 'dependency',
   filters: defaultFilters,
   focusedId: null,
-  chainRootId: null,
+  chainRootIds: [],
   layoutBump: 0,
   expandedBuckets: [],
   search: '',
@@ -72,7 +72,8 @@ const snapshots: Map<string, TabSnapshot> = new Map()
 // hydrate path discards mismatched data instead of trying to migrate.
 
 const STORAGE_KEY = 'issue-graph-tab-snapshots'
-const STORAGE_VERSION = 1
+// v2: PerTabView.chainRootId (string|null) → chainRootIds (string[]).
+const STORAGE_VERSION = 2
 
 interface PersistedSnapshot {
   view: PerTabView
@@ -177,7 +178,7 @@ function captureCurrentView(): PerTabView {
     activeView: v.activeView,
     filters: v.filters,
     focusedId: v.focusedId,
-    chainRootId: v.chainRootId,
+    chainRootIds: v.chainRootIds,
     layoutBump: v.layoutBump,
     expandedBuckets: v.expandedBuckets,
     search: v.search,

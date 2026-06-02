@@ -24,7 +24,7 @@ import { useViewStore } from '../store/viewStore'
 import { views } from '../views'
 import { api } from '../lib/api'
 import { formatShortcut } from '../lib/platform'
-import { computeChain } from '../views/chain'
+import { computeChains } from '../views/chain'
 import { useT, type DictKey } from '../i18n'
 import { QuickSwitcherTrigger } from './quickSwitcher/QuickSwitcherTrigger'
 // Density + theme + search live here; Size moved to Settings → Display.
@@ -52,7 +52,7 @@ export function Toolbar() {
   const toggleDetailPanelAutoOpen = useViewStore((s) => s.toggleDetailPanelAutoOpen)
   const selection = useViewStore((s) => s.selection)
   const clearSelection = useViewStore((s) => s.clearSelection)
-  const chainRootId = useViewStore((s) => s.chainRootId)
+  const chainRootIds = useViewStore((s) => s.chainRootIds)
   const setChainRootId = useViewStore((s) => s.setChainRootId)
   const showRelated = useViewStore((s) => s.showRelated)
   const setShowRelated = useViewStore((s) => s.setShowRelated)
@@ -67,12 +67,12 @@ export function Toolbar() {
   // outside the current cache. If any are found AND the user hasn't already
   // extended the sync window, surface a "Load older history" button.
   const chainStats = useMemo(() => {
-    if (!chainRootId || !graph) return null
-    const { members, dangling } = computeChain(graph.data.issues, chainRootId, {
+    if (chainRootIds.length === 0 || !graph) return null
+    const { members, dangling } = computeChains(graph.data.issues, chainRootIds, {
       includeRelatedNeighbors: showRelated,
     })
     return { memberCount: members.size, dangling: dangling.size }
-  }, [chainRootId, graph, showRelated])
+  }, [chainRootIds, graph, showRelated])
   const chainDangling = chainStats && chainStats.dangling > 0 ? chainStats.dangling : null
 
   // Backend's current extended-scope window (0 = default 30-day Done window).
@@ -86,12 +86,12 @@ export function Toolbar() {
   const closeOverflow = useCallback(() => setOverflowOpen(false), [])
   useClickOutside(overflowRef, overflowOpen, closeOverflow)
   useEffect(() => {
-    if (!chainRootId) return
+    if (chainRootIds.length === 0) return
     if (scopeDays !== null) return
     api.getSyncScope().then((r) => setScopeDays(r.days)).catch(() => setScopeDays(0))
-  }, [chainRootId, scopeDays])
+  }, [chainRootIds, scopeDays])
 
-  const showLoadFullHistory = chainRootId && chainDangling && (scopeDays ?? 0) < FULL_HISTORY_DAYS
+  const showLoadFullHistory = chainRootIds.length > 0 && chainDangling && (scopeDays ?? 0) < FULL_HISTORY_DAYS
 
   const loadFullHistory = async () => {
     await extendScope(FULL_HISTORY_DAYS)
@@ -176,7 +176,7 @@ export function Toolbar() {
           <button onClick={() => setSearch('')} title={t('toolbar.clearSearch')}>×</button>
         )}
       </div>
-      {(activeView === 'dependency' || chainRootId !== null) && (
+      {(activeView === 'dependency' || chainRootIds.length > 0) && (
         <>
           <div className="sep" />
           <div className="group">
@@ -201,12 +201,14 @@ export function Toolbar() {
           <option value="verbose">{t('toolbar.densityVerbose')}</option>
         </select>
       </div>
-      {chainRootId && (
+      {chainRootIds.length > 0 && (
         <>
           <div className="sep" />
-          <div className="group" title={t('toolbar.chainTitle')}>
+          <div className="group" title={chainRootIds.length > 1 ? chainRootIds.join(', ') : t('toolbar.chainTitle')}>
             <span style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-meta)' }}>{t('toolbar.chainLabel')}</span>
-            <span style={{ fontSize: 'var(--fs-meta)', fontWeight: 600 }}>{chainRootId}</span>
+            <span style={{ fontSize: 'var(--fs-meta)', fontWeight: 600 }}>
+              {chainRootIds.length === 1 ? chainRootIds[0] : `${chainRootIds[0]} +${chainRootIds.length - 1}`}
+            </span>
             {chainStats && (
               <span style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-meta)' }}>
                 ({chainStats.memberCount} {chainStats.memberCount === 1 ? t('toolbar.chainIssue') : t('toolbar.chainIssues')})

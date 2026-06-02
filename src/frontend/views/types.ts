@@ -11,7 +11,9 @@ export interface ViewContext {
   myUserName: string | null
   selection: string[]
   focusedId: string | null
-  chainRootId: string | null
+  /** Chain-isolation roots — empty means chain mode is off. The view shows the
+   *  union of each root's transitive `blocks` component. */
+  chainRootIds: string[]
   showRelated: boolean
   density: Density
   /** Max issues per row inside a container. Pulled from viewStore; views

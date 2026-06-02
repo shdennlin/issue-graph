@@ -88,7 +88,7 @@ function buildUrl(): string {
   if (ws.currentWorkspaceId) params.set('w', ws.currentWorkspaceId)
   if (s.activeView !== 'dependency') params.set('view', s.activeView)
   if (s.focusedId) params.set('focus', s.focusedId)
-  if (s.chainRootId) params.set('chain', s.chainRootId)
+  if (s.chainRootIds.length) params.set('chain', s.chainRootIds.join(','))
   if (s.showRelated) params.set('related', '1')
   if (s.theme !== 'auto') params.set('theme', s.theme)
   if (s.density !== 'default') params.set('density', s.density)
@@ -136,7 +136,7 @@ function significantSignature(): string {
     ws.currentWorkspaceId ?? '',
     s.activeView,
     s.focusedId ?? '',
-    s.chainRootId ?? '',
+    s.chainRootIds.join(','),
     s.showRelated ? '1' : '0',
     s.search,
     f.activeOnly ? '1' : '0',
@@ -198,7 +198,8 @@ function parseUrl(): void {
   set({ activeView: view ?? 'dependency' })
 
   set({ focusedId: params.get('focus') })
-  set({ chainRootId: params.get('chain') })
+  const chain = params.get('chain')
+  set({ chainRootIds: chain ? chain.split(',').filter(Boolean) : [] })
   set({ showRelated: params.get('related') === '1' })
 
   const theme = params.get('theme') as ThemeMode | null

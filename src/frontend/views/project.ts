@@ -32,11 +32,11 @@ export const projectView: ViewDefinition = {
   label: 'Project',
   description: 'Linear projects as containers + issues inside. Cross-project edges highlighted.',
   build(ctx) {
-    const { data, filters, staleDays, myUserName, focusedId, chainRootId, density, maxColsPerRow, search, measuredHeights } = ctx
+    const { data, filters, staleDays, myUserName, selection, focusedId, chainRootIds, density, maxColsPerRow, search, measuredHeights } = ctx
     // Chain mode: dissolve project containers and switch to dagre — project
     // membership is preserved as a 4px left stripe on each card so the user
     // still sees which project each chain member belongs to.
-    if (chainRootId) {
+    if (chainRootIds.length > 0) {
       return buildChainLayout(ctx, (issue) => {
         if (!issue.project?.id) return null
         const color = projectColor(issue.project.id, issue.project.color, FALLBACK_COLOR)
@@ -119,7 +119,8 @@ export const projectView: ViewDefinition = {
           data: {
             issue: iss,
             focused: focusedId === id,
-            isChainRoot: chainRootId === id,
+            selected: selection.includes(id),
+            isChainRoot: chainRootIds.includes(id),
             connectivity: conn.get(id),
           },
           parentNode: containerId,

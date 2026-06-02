@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeChain } from './chain'
+import { computeChain, computeChains } from './chain'
 import type { NormalizedIssue } from '@shared/types.js'
 
 function mk(id: string, blocks: string[] = []): NormalizedIssue {
@@ -128,5 +128,65 @@ describe('computeChain', () => {
     const r = computeChain(issues, 'A')
     expect(r.members).toEqual(new Set(['A']))
     expect(r.dangling).toEqual(new Set())
+  })
+})
+
+describe('computeChains (multi-root)', () => {
+  it('returns empty result for no roots', () => {
+    const issues = [mk('A', ['B']), mk('B')]
+    const r = computeChains(issues, [])
+    expect(r.members).toEqual(new Set())
+    expect(r.dangling).toEqual(new Set())
+  })
+
+  it('matches computeChain for a single root', () => {
+    const issues = [mk('A', ['B']), mk('B', ['C']), mk('C'), mk('Z')]
+    expect(computeChains(issues, ['B'])).toEqual(computeChain(issues, 'B'))
+  })
+
+  it('unions the chains of two disjoint components', () => {
+    const issues = [
+      mk('A', ['B']),
+      mk('B'),
+      mk('X', ['Y']),
+      mk('Y'),
+      mk('Z'),
+    ]
+    const r = computeChains(issues, ['A', 'X'])
+    expect(r.members).toEqual(new Set(['A', 'B', 'X', 'Y']))
+    expect(r.dangling).toEqual(new Set())
+  })
+
+  it('de-duplicates overlapping chains (roots in the same component)', () => {
+    // A → B → C → D ; rooting on B and D yields the same single component once.
+    const issues = [mk('A', ['B']), mk('B', ['C']), mk('C', ['D']), mk('D')]
+    const r = computeChains(issues, ['B', 'D'])
+    expect(r.members).toEqual(new Set(['A', 'B', 'C', 'D']))
+  })
+
+  it('skips roots not present in the issue set but keeps the rest', () => {
+    const issues = [mk('A', ['B']), mk('B')]
+    const r = computeChains(issues, ['A', 'NOPE'])
+    expect(r.members).toEqual(new Set(['A', 'B']))
+    expect(r.dangling).toEqual(new Set())
+  })
+
+  it('accumulates dangling refs across all roots', () => {
+    const issues = [mk('A', ['GHOST1']), mk('X', ['GHOST2'])]
+    const r = computeChains(issues, ['A', 'X'])
+    expect(r.members).toEqual(new Set(['A', 'X']))
+    expect(r.dangling).toEqual(new Set(['GHOST1', 'GHOST2']))
+  })
+
+  it('applies includeRelatedNeighbors across roots', () => {
+    const issues: NormalizedIssue[] = [
+      mk('A', ['B']),
+      { ...mk('B'), relations: [{ type: 'related', targetIdentifier: 'R' }] },
+      mk('R'),
+      mk('X', ['Y']),
+      mk('Y'),
+    ]
+    const r = computeChains(issues, ['A', 'X'], { includeRelatedNeighbors: true })
+    expect(r.members).toEqual(new Set(['A', 'B', 'R', 'X', 'Y']))
   })
 })

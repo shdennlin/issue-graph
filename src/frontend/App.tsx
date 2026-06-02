@@ -278,6 +278,7 @@ export function App() {
 
   const openInlineSearch = useViewStore((s) => s.openInlineSearch)
   const setChainRootId = useViewStore((s) => s.setChainRootId)
+  const setChainRootIds = useViewStore((s) => s.setChainRootIds)
   const bumpLayout = useViewStore((s) => s.bumpLayout)
 
   // Hybrid Cmd+F:
@@ -332,7 +333,7 @@ export function App() {
           s.closeProjectPanel()
           return
         }
-        if (s.chainRootId) {
+        if (s.chainRootIds.length) {
           setChainRootId(null)
           return
         }
@@ -377,21 +378,23 @@ export function App() {
         s.setDetailPanelOpen(true)
         return
       }
-      // 'c' / 'C' — isolate chain on the currently focused issue. 'C' (shift)
-      // additionally bumps layout, matching the "auto-layout" context-menu
-      // entry. Only fires when no modifier is held, no input is focused,
-      // and an issue is actually focused. Works in all views: chain
-      // isolation re-filters the visible set to the connected blocks
-      // component regardless of view.
+      // 'c' / 'C' — isolate chain. When a multi-selection exists (Cmd/Ctrl+
+      // click), isolate the union of all selected issues' chains; otherwise
+      // fall back to the single focused issue. 'C' (shift) additionally bumps
+      // layout, matching the "auto-layout" context-menu entry. Only fires when
+      // no modifier is held, no input is focused, and there's something to
+      // isolate. Works in all views: chain isolation re-filters the visible
+      // set to the connected blocks component regardless of view.
       if (e.key === 'c' || e.key === 'C') {
         if (e.metaKey || e.ctrlKey || e.altKey) return
         const target = e.target as HTMLElement | null
         const tag = target?.tagName?.toLowerCase()
         if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
         const s = useViewStore.getState()
-        if (!s.focusedId) return
+        const roots = s.selection.length > 0 ? s.selection : s.focusedId ? [s.focusedId] : []
+        if (roots.length === 0) return
         e.preventDefault()
-        setChainRootId(s.focusedId)
+        setChainRootIds(roots)
         if (e.key === 'C') bumpLayout()
         return
       }
@@ -471,7 +474,7 @@ export function App() {
         const tag = target?.tagName?.toLowerCase()
         if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
         const s = useViewStore.getState()
-        if (s.activeView !== 'dependency' && s.chainRootId === null) return
+        if (s.activeView !== 'dependency' && s.chainRootIds.length === 0) return
         e.preventDefault()
         s.setShowRelated(!s.showRelated)
         return
@@ -560,7 +563,7 @@ export function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [openInlineSearch, setChainRootId, bumpLayout])
+  }, [openInlineSearch, setChainRootId, setChainRootIds, bumpLayout])
 
   const onQuickSwitcherActivate = (c: Candidate, openInNewTab: boolean) => {
     if (c.kind === 'tab') {

@@ -1,9 +1,11 @@
 // Compute the connected component of issues over `blocks` edges (both
-// directions, transitive) starting from a single root identifier.
+// directions, transitive) starting from one or more root identifiers.
 //
-// Used by the dependency view's "Isolate chain" mode: right-click an issue,
-// pick "Isolate chain", and the view collapses to the full transitive set of
-// blockers + things-it-blocks for that issue.
+// Used by the "Isolate chain" mode: right-click an issue (or multi-select a
+// set of issues) and the view collapses to the full transitive set of
+// blockers + things-they-block. With multiple roots the result is the UNION
+// of each root's component — computed in a single BFS by seeding every root
+// into the same queue, so overlapping components de-dupe for free.
 
 import type { NormalizedIssue } from '@shared/types.js'
 
@@ -25,16 +27,24 @@ export interface ChainOptions {
   includeRelatedNeighbors?: boolean
 }
 
+/** Single-root chain — thin wrapper over {@link computeChains}. */
 export function computeChain(
   issues: NormalizedIssue[],
   rootId: string,
+  opts: ChainOptions = {},
+): ChainResult {
+  return computeChains(issues, [rootId], opts)
+}
+
+export function computeChains(
+  issues: NormalizedIssue[],
+  rootIds: string[],
   opts: ChainOptions = {},
 ): ChainResult {
   const members = new Set<string>()
   const dangling = new Set<string>()
   const byId = new Map<string, NormalizedIssue>()
   for (const i of issues) byId.set(i.identifier, i)
-  if (!byId.has(rootId)) return { members, dangling }
 
   // Forward: i.relations[type=blocks].targetIdentifier (i blocks target).
   // Reverse: build the inverse so we can walk "blocked by" upstream too.
@@ -51,8 +61,16 @@ export function computeChain(
     }
   }
 
-  const queue: string[] = [rootId]
-  members.add(rootId)
+  // Seed every present root into one BFS queue. Roots outside the cache are
+  // skipped; the union falls out of the shared `members` set.
+  const queue: string[] = []
+  for (const rootId of rootIds) {
+    if (!byId.has(rootId)) continue
+    if (members.has(rootId)) continue
+    members.add(rootId)
+    queue.push(rootId)
+  }
+
   while (queue.length > 0) {
     const id = queue.shift()!
     const node = byId.get(id)

@@ -3,20 +3,20 @@ import type { ViewDefinition } from './types'
 import { issueNodeHeight } from './types'
 import { runDagre } from '../lib/layout'
 import { applyFilters } from './filters'
-import { computeChain } from './chain'
+import { computeChains } from './chain'
 import { computeConnectivity } from './connectivity'
 
 export const dependencyView: ViewDefinition = {
   id: 'dependency',
   label: 'Dependency',
   description: 'Issues + blocks edges. Best for "what should I work on next?".',
-  build({ data, filters, staleDays, myUserName, focusedId, chainRootId, showRelated, density, search, measuredHeights }) {
-    // Chain isolation: when a root is set, show its connected component over
+  build({ data, filters, staleDays, myUserName, selection, focusedId, chainRootIds, showRelated, density, search, measuredHeights }) {
+    // Chain isolation: when roots are set, show their connected component over
     // `blocks` edges (both directions, transitive) — bypassing other filters
     // so an off-state blocker doesn't fragment the chain.
     let issues
-    if (chainRootId) {
-      const { members } = computeChain(data.issues, chainRootId, {
+    if (chainRootIds.length > 0) {
+      const { members } = computeChains(data.issues, chainRootIds, {
         includeRelatedNeighbors: showRelated,
       })
       issues = data.issues.filter((i) => members.has(i.identifier))
@@ -96,10 +96,11 @@ export const dependencyView: ViewDefinition = {
       data: {
         issue: i,
         focused: focusedId === i.identifier,
-        // Marks the root issue when chain isolation is active so IssueNode
+        selected: selection.includes(i.identifier),
+        // Marks the root issue(s) when chain isolation is active so IssueNode
         // can render a ring/star accent — useful when you've drilled into a
-        // chain and need to see at a glance which issue you started from.
-        isChainRoot: chainRootId === i.identifier,
+        // chain and need to see at a glance which issue(s) you started from.
+        isChainRoot: chainRootIds.includes(i.identifier),
         connectivity: conn.get(i.identifier),
         visibleConnectivity: visibleConn.get(i.identifier),
       },

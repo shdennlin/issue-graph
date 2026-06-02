@@ -2,7 +2,7 @@ import type { Edge, Node } from 'reactflow'
 import type { ViewDefinition } from './types'
 import { issueNodeHeight } from './types'
 import { applyFilters } from './filters'
-import { computeChain } from './chain'
+import { computeChains } from './chain'
 import { getDesignDocsForIssue } from '../lib/labelSchema'
 import { runDagre } from '../lib/layout'
 import { computeConnectivity } from './connectivity'
@@ -11,15 +11,15 @@ export const designdocView: ViewDefinition = {
   id: 'designdoc',
   label: 'Design docs',
   description: 'Issues that have linked design-doc changes. Phase 3.',
-  build({ data, filters, staleDays, myUserName, focusedId, chainRootId, showRelated, density, search, measuredHeights }) {
-    // Chain isolation: when a root is set, replace user filters with the
+  build({ data, filters, staleDays, myUserName, selection, focusedId, chainRootIds, showRelated, density, search, measuredHeights }) {
+    // Chain isolation: when roots are set, replace user filters with the
     // chain's connected component. The "must have a design doc" constraint
     // below still applies — it's part of the view's identity (a chain
     // member without docs simply isn't visible here; switch views to see
     // the whole chain).
     let baseIssues
-    if (chainRootId) {
-      const { members } = computeChain(data.issues, chainRootId, {
+    if (chainRootIds.length > 0) {
+      const { members } = computeChains(data.issues, chainRootIds, {
         includeRelatedNeighbors: showRelated,
       })
       baseIssues = data.issues.filter((i) => members.has(i.identifier))
@@ -38,7 +38,8 @@ export const designdocView: ViewDefinition = {
       data: {
         issue: i,
         focused: focusedId === i.identifier,
-        isChainRoot: chainRootId === i.identifier,
+        selected: selection.includes(i.identifier),
+        isChainRoot: chainRootIds.includes(i.identifier),
         connectivity: conn.get(i.identifier),
       },
       position: { x: 0, y: 0 },

@@ -27,6 +27,11 @@ function formatDueDate(iso: string): string {
 interface IssueNodeData {
   issue: NormalizedIssue
   focused?: boolean
+  /** Set when this issue is part of the multi-selection (Cmd/Ctrl+click).
+   * Renders a dashed accent outline so batch operations (open all, isolate
+   * chain of selection) have visible scope. Distinct from `focused` (the
+   * single sticky cursor) and `isChainRoot` (the chain's origin). */
+  selected?: boolean
   /** Set by the dependency view when chain isolation is active and this is
    * the root the chain was rooted at. Renders a star + accent ring so the
    * user can see at a glance where the chain started from. */
@@ -62,7 +67,7 @@ function truncate(s: string, n: number): string {
 const EMPTY_ANNOTATIONS: AnnotationDTO[] = []
 
 function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
-  const { issue, focused, isChainRoot, connectivity, visibleConnectivity, projectStripe } = data
+  const { issue, focused, selected, isChainRoot, connectivity, visibleConnectivity, projectStripe } = data
   const { schema, typeIcons } = useSchemaStore()
   const density = useViewStore((s) => s.density)
   const annotations = useGraphStore((s) => s.graph?.data.annotations ?? EMPTY_ANNOTATIONS)
@@ -82,7 +87,7 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
 
   return (
     <div
-      className={`issue-node${focused ? ' focused' : ''}${isChainRoot ? ' chain-root' : ''}`}
+      className={`issue-node${focused ? ' focused' : ''}${selected ? ' selected' : ''}${isChainRoot ? ' chain-root' : ''}`}
       style={{
         // position: relative so absolutely-positioned children (chain-root
         // star, connectivity badge) anchor to this card.

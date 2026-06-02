@@ -1045,6 +1045,11 @@ a:hover { text-decoration: underline; }
   color: var(--fg);
 }
 .issue-node.focused { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+/* Multi-select marker (Cmd/Ctrl+click). Dashed outline in a distinct violet
+   so it reads differently from the solid `focused` border and the chain-root
+   accent ring — and stacks with `focused`'s box-shadow when a node is both.
+   chain-root sets an inline solid outline that intentionally wins over this. */
+.issue-node.selected { outline: 2px dashed #8b5cf6; outline-offset: 2px; }
 /* Container-view chain-mode stripe: 4px color band hugging the card's left
    edge, preserving project/bucket identity once the container chrome is
    dissolved by chain-mode auto-expand. Sits inside the card padding so

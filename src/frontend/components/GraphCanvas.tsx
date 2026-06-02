@@ -41,7 +41,7 @@ function CanvasInner() {
   const activeView = useViewStore((s) => s.activeView)
   const filters = useViewStore((s) => s.filters)
   const focusedId = useViewStore((s) => s.focusedId)
-  const chainRootId = useViewStore((s) => s.chainRootId)
+  const chainRootIds = useViewStore((s) => s.chainRootIds)
   const showRelated = useViewStore((s) => s.showRelated)
   const setChainRootId = useViewStore((s) => s.setChainRootId)
   const layoutBump = useViewStore((s) => s.layoutBump)
@@ -57,6 +57,8 @@ function CanvasInner() {
   const selection = useViewStore((s) => s.selection)
   const setFocusedId = useViewStore((s) => s.setFocusedId)
   const toggleSelection = useViewStore((s) => s.toggleSelection)
+  const setSelection = useViewStore((s) => s.setSelection)
+  const clearSelection = useViewStore((s) => s.clearSelection)
   const setContextMenu = useViewStore((s) => s.setContextMenu)
   const highlightedEdgeId = useViewStore((s) => s.highlightedEdgeId)
   const setHighlightedEdgeId = useViewStore((s) => s.setHighlightedEdgeId)
@@ -84,14 +86,14 @@ function CanvasInner() {
       myUserName,
       selection,
       focusedId,
-      chainRootId,
+      chainRootIds,
       showRelated,
       density,
       maxColsPerRow,
       search,
       measuredHeights: measuredHeights ?? undefined,
     })
-  }, [graph, schema, activeView, filters, staleDays, focusedId, chainRootId, showRelated, selection, myUserId, myUserName, density, maxColsPerRow, search, measuredHeights])
+  }, [graph, schema, activeView, filters, staleDays, focusedId, chainRootIds, showRelated, selection, myUserId, myUserName, density, maxColsPerRow, search, measuredHeights])
 
   // Local node state so user drags persist between renders within the same
   // layout-equivalent context. Anything that changes node sizes (density) or
@@ -358,7 +360,7 @@ function CanvasInner() {
         //   - lastLayoutBumpRef: align with the restored layoutBump so
         //     Producer 3 doesn't fire a re-layout in the new tab just
         //     because the previous tab had a different bump count.
-        //   - prevChainRef: align with the restored chainRootId so the
+        //   - prevChainRef: align with the restored chainRootIds so the
         //     auto-bump-on-chain-clear effect doesn't trigger when the
         //     previous tab had a chain set and the new one doesn't.
         const s = useViewStore.getState()
@@ -367,7 +369,7 @@ function CanvasInner() {
           pendingFitViewRef.current = { padding: 0.1, preserveFocus: true }
         }
         lastLayoutBumpRef.current = s.layoutBump
-        prevChainRef.current = s.chainRootId
+        prevChainRef.current = s.chainRootIds
       },
     )
   }, [rf])
@@ -600,8 +602,8 @@ function CanvasInner() {
     }
   }, [panToFocusedSeq, focusedId, rf, storeApi])
 
-  // Auto-bump layout when chain isolation is *cleared* (chainRootId goes
-  // non-null → null). Without this, exiting chain mode keeps the chain
+  // Auto-bump layout when chain isolation is *cleared* (chainRootIds goes
+  // non-empty → empty). Without this, exiting chain mode keeps the chain
   // members' tightly-packed positions and the previously-hidden nodes get
   // fresh dagre positions inserted around them — they overlap. We don't bump
   // when entering chain mode: plain "Isolate chain" deliberately preserves
@@ -614,17 +616,17 @@ function CanvasInner() {
   // (null → non-null) and queue a restore on exit. The consumer at
   // `pendingViewportRestoreRef` runs *before* fitView, so the saved
   // viewport wins.
-  const prevChainRef = useRef<string | null>(chainRootId)
+  const prevChainRef = useRef<string[]>(chainRootIds)
   const chainEntryViewportRef = useRef<Viewport | null>(null)
   useEffect(() => {
-    const wasSet = prevChainRef.current !== null
-    const isSet = chainRootId !== null
-    const isCleared = chainRootId === null
-    // react-hooks/immutability: tracking the previous chainRootId via a
-    // ref so we can detect non-null ↔ null transitions. Canonical
+    const wasSet = prevChainRef.current.length > 0
+    const isSet = chainRootIds.length > 0
+    const isCleared = chainRootIds.length === 0
+    // react-hooks/immutability: tracking the previous chainRootIds via a
+    // ref so we can detect empty ↔ non-empty transitions. Canonical
     // "useEffect with previous value" pattern.
     // eslint-disable-next-line react-hooks/immutability
-    prevChainRef.current = chainRootId
+    prevChainRef.current = chainRootIds
     if (!wasSet && isSet) {
       // Entering chain mode — snapshot viewport so we can restore on exit.
       chainEntryViewportRef.current = rf.getViewport()
@@ -637,7 +639,7 @@ function CanvasInner() {
         chainEntryViewportRef.current = null
       }
     }
-  }, [chainRootId, bumpLayout, rf])
+  }, [chainRootIds, bumpLayout, rf])
 
   // Manual re-layout button handler. Bumps layoutBump → measured cache
   // clears → dagre re-runs from scratch (ignores user-dragged positions) →
@@ -768,11 +770,21 @@ function CanvasInner() {
 
   const onNodeClick: NodeMouseHandler = (event, node) => {
     if (event.metaKey || event.ctrlKey) {
-      toggleSelection(node.id)
+      // Multi-select. Seed from the current focus so "click A, then Cmd+click
+      // B" selects BOTH — the plain click on A established it as the anchor.
+      // Once a selection already exists, Cmd+click just toggles membership.
+      if (selection.length === 0 && focusedId && focusedId !== node.id) {
+        setSelection([focusedId, node.id])
+      } else {
+        toggleSelection(node.id)
+      }
       return
     }
     if (node.type === 'issue') {
       setFocusedId(node.id)
+      // A plain click starts fresh — drop any multi-selection so its dashed
+      // outlines don't linger as confusing stale state next to the new focus.
+      if (selection.length > 0) clearSelection()
       // Toggle node-spotlight: same node clears, different node replaces.
       if (highlightedEdgeId) setHighlightedEdgeId(null)
       setHighlightedNodeId(highlightedNodeId === node.id ? null : node.id)
@@ -876,7 +888,7 @@ function CanvasInner() {
   return (
     <div className="canvas" ref={rfRef} style={{ position: 'relative' }}>
       <InlineSearch />
-      {chainRootId && activeView === 'dependency' && built.nodes.length === 0 && (
+      {chainRootIds.length > 0 && activeView === 'dependency' && built.nodes.length === 0 && (
         <div
           style={{
             position: 'absolute',
@@ -896,7 +908,7 @@ function CanvasInner() {
             alignItems: 'center',
           }}
         >
-          <div>Chain root <strong>{chainRootId}</strong> not found in current data.</div>
+          <div>Chain root{chainRootIds.length === 1 ? ' ' : 's '}<strong>{chainRootIds.join(', ')}</strong> not found in current data.</div>
           <button onClick={() => setChainRootId(null)}>Clear chain</button>
         </div>
       )}

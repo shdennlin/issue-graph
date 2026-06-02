@@ -8,6 +8,8 @@ export function ContextMenu() {
   const close = () => useViewStore.getState().setContextMenu(null)
   const setFocusedId = useViewStore((s) => s.setFocusedId)
   const setChainRootId = useViewStore((s) => s.setChainRootId)
+  const setChainRootIds = useViewStore((s) => s.setChainRootIds)
+  const selection = useViewStore((s) => s.selection)
   const bumpLayout = useViewStore((s) => s.bumpLayout)
   const graph = useGraphStore((s) => s.graph)
 
@@ -63,6 +65,27 @@ export function ContextMenu() {
         <Workflow size={14} /> Isolate chain (auto-layout)
         <span className="context-menu-hint">⇧C</span>
       </button>
+      {selection.length > 1 && (
+        <>
+          <div className="context-menu-sep" role="separator" />
+          <button
+            role="menuitem"
+            onClick={() => { setChainRootIds(selection); close() }}
+            title="Isolate the combined chains of all selected issues"
+          >
+            <GitBranch size={14} /> Isolate chain of {selection.length} selected
+            <span className="context-menu-hint">c</span>
+          </button>
+          <button
+            role="menuitem"
+            onClick={() => { setChainRootIds(selection); bumpLayout(); close() }}
+            title="Isolate the combined chains of all selected issues (auto-layout)"
+          >
+            <Workflow size={14} /> Isolate selected chains (auto-layout)
+            <span className="context-menu-hint">⇧C</span>
+          </button>
+        </>
+      )}
     </div>
   )
 }

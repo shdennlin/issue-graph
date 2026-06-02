@@ -32,11 +32,11 @@ export const mixView: ViewDefinition = {
   label: 'Mix',
   description: 'Buckets as containers + issues inside. Cross-bucket edges highlighted.',
   build(ctx) {
-    const { data, schema, filters, staleDays, myUserName, focusedId, chainRootId, density, maxColsPerRow, search, measuredHeights } = ctx
+    const { data, schema, filters, staleDays, myUserName, selection, focusedId, chainRootIds, density, maxColsPerRow, search, measuredHeights } = ctx
     // Chain mode: container layout fights dependency flow — drop the buckets
     // and use dagre, decorating each card with its primary-label color stripe
     // so bucket identity isn't lost. See chainLayout.ts for the rationale.
-    if (chainRootId) {
+    if (chainRootIds.length > 0) {
       return buildChainLayout(ctx, (issue) => {
         const lab = getPrimaryLabel(issue, schema)
         if (!lab?.color) return null
@@ -113,7 +113,8 @@ export const mixView: ViewDefinition = {
           data: {
             issue: iss,
             focused: focusedId === id,
-            isChainRoot: chainRootId === id,
+            selected: selection.includes(id),
+            isChainRoot: chainRootIds.includes(id),
             connectivity: conn.get(id),
           },
           parentNode: containerId,
