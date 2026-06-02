@@ -300,12 +300,19 @@ export function App() {
         //                               chain mode / find / connectivity
         //                               highlights still work on the
         //                               focused issue)
-        //   4. focusedId             — clears the focus
-        //   5. Chain isolation       — clears chain
+        //   4. Chain isolation       — exits chain, KEEPING the focused
+        //                               issue so the full graph recenters
+        //                               on it (GraphCanvas chain-clear
+        //                               bump → preserveFocus path) instead
+        //                               of snapping back to the pre-chain
+        //                               viewport
+        //   5. focusedId             — clears the focus
         //
-        // Two-step Esc for DetailPanel: first Esc closes the panel
-        // without losing the focused issue (graph-first workflow), second
-        // Esc unfocuses. Most apps with a side detail panel work this way.
+        // Two-step Esc, DetailPanel-style: each layer peels without losing
+        // the focused issue until the final step. In chain mode the first
+        // Esc exits the chain (focus retained → camera recenters on the
+        // issue you were on, no jump), the next Esc unfocuses. Chain is
+        // peeled BEFORE focus precisely so the recenter has a focus target.
         const s = useViewStore.getState()
         const modalOpen = s.settingsOpen || s.syncHistoryOpen || s.coverageOpen || s.shortcutsOpen || s.notesOpen
         if (modalOpen) return
@@ -325,12 +332,12 @@ export function App() {
           s.closeProjectPanel()
           return
         }
-        if (s.focusedId) {
-          s.setFocusedId(null)
-          return
-        }
         if (s.chainRootId) {
           setChainRootId(null)
+          return
+        }
+        if (s.focusedId) {
+          s.setFocusedId(null)
           return
         }
       }
