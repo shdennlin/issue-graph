@@ -287,7 +287,10 @@ function parseUrl(): void {
     return Number.isFinite(n) && n >= 0 ? n : null
   }
   set({ chainDepthUp: parseDepth(params.get('cdu')), chainDepthDown: parseDepth(params.get('cdd')) })
-  set({ showRelated: params.get('related') === '1' })
+  // `showRelated` is a sticky per-browser preference (localStorage), not
+  // filter state — only let the URL override it when `related` is explicitly
+  // present, so a deep link that omits it inherits the user's last toggle.
+  if (params.has('related')) set({ showRelated: params.get('related') === '1' })
 
   const theme = params.get('theme') as ThemeMode | null
   if (theme === 'light' || theme === 'dark' || theme === 'auto') set({ theme })

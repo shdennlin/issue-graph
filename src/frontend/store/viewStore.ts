@@ -247,7 +247,12 @@ export const useViewStore = create<ViewState>((set) => ({
   focusedNoteId: null,
   noteFindOpen: false,
   panToFocusedSeq: 0,
-  showRelated: false,
+  // Whether chain/dependency views include "related" (non-blocking) edges.
+  // Sticky per-browser via localStorage so it survives reloads and deep links
+  // (e.g. a Raycast chain link that doesn't specify `related`) — flip the
+  // toolbar toggle once and it's remembered. Default: OFF.
+  showRelated:
+    typeof window !== 'undefined' && window.localStorage?.getItem('ig-show-related') === '1' ? true : false,
   selection: [],
   highlightedEdgeId: null,
   highlightedNodeId: null,
@@ -352,7 +357,10 @@ export const useViewStore = create<ViewState>((set) => ({
   setFocusedNoteId: (id) => set({ focusedNoteId: id, noteFindOpen: false }),
   setNoteFindOpen: (b) => set({ noteFindOpen: b }),
   requestPanToFocused: () => set((s) => ({ panToFocusedSeq: s.panToFocusedSeq + 1 })),
-  setShowRelated: (b) => set({ showRelated: b }),
+  setShowRelated: (b) => {
+    if (typeof window !== 'undefined') window.localStorage?.setItem('ig-show-related', b ? '1' : '0')
+    set({ showRelated: b })
+  },
   setSelection: (s) => set({ selection: s }),
   toggleSelection: (id) => set((s) => ({ selection: toggle(s.selection, id) })),
   clearSelection: () => set({ selection: [] }),
