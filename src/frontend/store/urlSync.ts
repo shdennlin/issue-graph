@@ -271,7 +271,16 @@ function parseUrl(): void {
   // driven explicitly here.
   set({ focusedId: focus, detailPanelOpen: focus !== null && params.get('detail') === '1' })
   const chain = params.get('chain')
-  set({ chainRootIds: chain ? chain.split(',').filter(Boolean) : [] })
+  const nextChainRootIds = chain ? chain.split(',').filter(Boolean) : []
+  // Entering/switching/leaving a chain must re-run dagre so the chain
+  // auto-arranges. The UI path (ContextMenu/keyboard) calls bumpLayout()
+  // alongside setChainRootId; a deep link / popstate sets chainRootIds here, so
+  // bump too — otherwise layoutSig is unchanged and the canvas keeps the old
+  // (un-rearranged) node positions.
+  const chainChanged =
+    nextChainRootIds.join(',') !== useViewStore.getState().chainRootIds.join(',')
+  set({ chainRootIds: nextChainRootIds })
+  if (chainChanged) set((s) => ({ layoutBump: s.layoutBump + 1 }))
   const parseDepth = (raw: string | null): number | null => {
     if (raw === null) return null
     const n = parseInt(raw, 10)
