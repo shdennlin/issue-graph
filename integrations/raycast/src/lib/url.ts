@@ -19,9 +19,14 @@ export function normalizeBaseUrl(raw: string | undefined): string {
  * the `web+issuegraph` protocol_handler. Opened with no `application` so macOS
  * routes the scheme to its registered handler.
  */
-export function protocolUrl(identifier: string, workspaceId?: string): string {
+export function protocolUrl(
+  identifier: string,
+  workspaceId?: string,
+  mode?: "chain",
+): string {
   const host = workspaceId ? `${workspaceId}/` : "";
-  return `web+issuegraph://${host}${identifier}`;
+  const query = mode ? `?mode=${mode}` : "";
+  return `web+issuegraph://${host}${identifier}${query}`;
 }
 
 export function workspacesEndpoint(baseUrl: string): string {

@@ -100,6 +100,11 @@ function IssueItem({
   opener?: Application;
 }) {
   const protoLink = protocolUrl(issue.identifier, issue.workspaceId);
+  const protoChainLink = protocolUrl(
+    issue.identifier,
+    issue.workspaceId,
+    "chain",
+  );
   const graphLink = focusUrl(baseUrl, issue.identifier, issue.workspaceId);
   const chainLink = chainUrl(baseUrl, issue.identifier, issue.workspaceId);
   // Label the browser-routed actions with the chosen app so the panel reads
@@ -148,11 +153,19 @@ function IssueItem({
             shortcut={{ modifiers: ["opt"], key: "enter" }}
           />
           <Action.Open
-            title={`Open in Chain Mode${suffix}`}
+            title="Open in Chain Mode (PWA)"
+            target={protoChainLink}
+            icon={Icon.Link}
+            shortcut={{ modifiers: ["cmd", "shift"], key: "enter" }}
+          />
+          {/* Browser fallbacks so the extension works even with no PWA
+              installed (the web+issuegraph:// scheme has no handler then). */}
+          <Action.Open
+            title={`Open Chain in Browser${suffix}`}
             target={chainLink}
             application={opener}
             icon={Icon.Link}
-            shortcut={{ modifiers: ["cmd", "shift"], key: "enter" }}
+            shortcut={{ modifiers: ["opt", "cmd"], key: "enter" }}
           />
           {issue.url ? (
             <Action.Open

@@ -23,6 +23,15 @@ describe('translateProtocol', () => {
     expect(p?.get('focus')).toBe('ENG-9')
   })
 
+  it('opens chain mode with ?mode=chain', () => {
+    const p = translateProtocol('web+issuegraph://onelegion/ONE-230?mode=chain')
+    expect(p?.get('chain')).toBe('ONE-230')
+    expect(p?.get('focus')).toBeNull()
+    expect(p?.get('detail')).toBeNull()
+    expect(p?.get('w')).toBe('onelegion')
+    expect(p?.get('state')).toBe(all)
+  })
+
   it('handles a bare identifier with no workspace', () => {
     const p = translateProtocol('web+issuegraph://ONE-1')
     expect(p?.get('w')).toBeNull()

@@ -196,24 +196,39 @@ function schedulePush(): void {
   }, 200)
 }
 
-// Translate a `web+issuegraph://<workspace>/<identifier>` protocol-handler
-// payload into the equivalent focus query params. Returns null when the
-// payload isn't a recognizable protocol URL. The `active=0` + full state list
-// mirror focusUrl so any issue (incl. completed/canceled) is reachable.
+// Translate a `web+issuegraph://<workspace>/<identifier>[?mode=chain]`
+// protocol-handler payload into the equivalent query params. Returns null when
+// the payload isn't a recognizable protocol URL. `mode=chain` opens the issue's
+// dependency chain; otherwise it focuses the issue + opens its detail panel. The
+// `active=0` + full state list mirror focusUrl so any issue (incl.
+// completed/canceled) is reachable.
 export function translateProtocol(raw: string): URLSearchParams | null {
   const m = raw.match(/^web\+issuegraph:(?:\/\/)?(.*)$/i)
   if (!m) return null
-  const segs = (m[1] ?? '')
+  let body = m[1] ?? ''
+  let query = ''
+  const qi = body.indexOf('?')
+  if (qi >= 0) {
+    query = body.slice(qi + 1)
+    body = body.slice(0, qi)
+  }
+  const segs = body
     .split('/')
     .map((s) => s.trim())
     .filter(Boolean)
   const identifier = segs[segs.length - 1]
   if (!identifier) return null
   const workspace = segs.length > 1 ? segs[segs.length - 2] : null
+  const mode = new URLSearchParams(query).get('mode')
+
   const p = new URLSearchParams()
   if (workspace) p.set('w', workspace.toLowerCase())
-  p.set('focus', identifier)
-  p.set('detail', '1')
+  if (mode === 'chain') {
+    p.set('chain', identifier)
+  } else {
+    p.set('focus', identifier)
+    p.set('detail', '1')
+  }
   p.set('active', '0')
   p.set('state', 'backlog,unstarted,started,triage,completed,canceled')
   return p
