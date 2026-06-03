@@ -88,6 +88,9 @@ function buildUrl(): string {
   if (ws.currentWorkspaceId) params.set('w', ws.currentWorkspaceId)
   if (s.activeView !== 'dependency') params.set('view', s.activeView)
   if (s.focusedId) params.set('focus', s.focusedId)
+  // `detail=1` reflects (and, when arriving via a deep link, drives) the
+  // open detail panel. Only meaningful alongside a focused issue.
+  if (s.focusedId && s.detailPanelOpen) params.set('detail', '1')
   if (s.chainRootIds.length) params.set('chain', s.chainRootIds.join(','))
   if (s.chainDepthUp !== null) params.set('cdu', String(s.chainDepthUp))
   if (s.chainDepthDown !== null) params.set('cdd', String(s.chainDepthDown))
@@ -125,6 +128,11 @@ function buildUrl(): string {
 let pending: number | undefined
 let lastPushedUrl: string | null = null
 let lastSnapshot: { url: string; signature: string } | null = null
+// The `location.search` last applied to the stores — by parseUrl (inbound) or
+// schedulePush (our own writes). Used to detect an external navigation that
+// changed the URL without firing popstate (e.g. a PWA `navigate-existing`
+// launch from the Raycast extension), so we can re-apply it on window focus.
+let lastAppliedSearch = ''
 
 // "Significant" parts of the URL — when these change, push a new history
 // entry so Cmd+[ navigates back to the prior step. Preferences (theme,
@@ -176,17 +184,20 @@ function schedulePush(): void {
       maxSeq = nextSeq
       window.history.pushState({ seq: nextSeq }, '', url)
       lastSnapshot = { url, signature: sig }
+      lastAppliedSearch = window.location.search
       notifyListeners()
     } else {
       // Same step, preferences-only change — patch the URL in place.
       const prev = (window.history.state as HistoryEntryState | null) ?? { seq: currentSeq }
       window.history.replaceState({ ...prev, seq: prev.seq }, '', url)
       lastSnapshot = { url, signature: sig }
+      lastAppliedSearch = window.location.search
     }
   }, 200)
 }
 
 function parseUrl(): void {
+  lastAppliedSearch = window.location.search
   const params = new URLSearchParams(window.location.search)
   const set = useViewStore.setState
 
@@ -201,7 +212,12 @@ function parseUrl(): void {
   const view = params.get('view') as ViewId | null
   set({ activeView: view ?? 'dependency' })
 
-  set({ focusedId: params.get('focus') })
+  const focus = params.get('focus')
+  // `detail=1` (only honored with a focus) opens the detail panel on arrival —
+  // e.g. a deep link from the Raycast extension. parseUrl sets focusedId
+  // directly (bypassing setFocusedId's auto-open heuristic), so the panel is
+  // driven explicitly here.
+  set({ focusedId: focus, detailPanelOpen: focus !== null && params.get('detail') === '1' })
   const chain = params.get('chain')
   set({ chainRootIds: chain ? chain.split(',').filter(Boolean) : [] })
   const parseDepth = (raw: string | null): number | null => {
@@ -317,10 +333,30 @@ export function useUrlSync(): void {
     }
     window.addEventListener('popstate', onPopState)
 
+    // External-navigation catch-up. A PWA `navigate-existing` launch (and some
+    // other OS-driven navigations) can change location.search WITHOUT a full
+    // reload or a popstate — so parseUrl never runs and the focus/detail in the
+    // launch URL is ignored. When the window regains focus/visibility, re-apply
+    // the URL if it changed out from under us.
+    const onExternalNav = () => {
+      // Re-apply whenever the URL changed out from under us, regardless of
+      // visibility — re-parsing is idempotent and the search-equality guard
+      // already makes this a no-op for ordinary focus/visibility flips.
+      if (window.location.search === lastAppliedSearch) return
+      parseUrl()
+      lastPushedUrl = buildUrl()
+      lastSnapshot = { url: lastPushedUrl, signature: significantSignature() }
+      notifyListeners()
+    }
+    window.addEventListener('focus', onExternalNav)
+    document.addEventListener('visibilitychange', onExternalNav)
+
     return () => {
       unsubView()
       unsubWorkspace()
       window.removeEventListener('popstate', onPopState)
+      window.removeEventListener('focus', onExternalNav)
+      document.removeEventListener('visibilitychange', onExternalNav)
     }
   }, [])
 }

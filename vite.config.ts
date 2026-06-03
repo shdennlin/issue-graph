@@ -58,6 +58,12 @@ export default defineConfig(({ mode }) => {
           display: 'standalone',
           start_url: '/',
           scope: '/',
+          // Reuse the existing PWA window instead of spawning a new one on every
+          // external launch (e.g. deep links from the Raycast extension). Chrome
+          // focuses the open client and navigates it to the launch URL; the
+          // SPA's urlSync then reacts to the new ?focus=/?chain= params. Without
+          // this, each `open -a "Issue Graph" <url>` opens a fresh window.
+          launch_handler: { client_mode: 'navigate-existing' },
           icons: [
             { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
             { src: 'icon-maskable.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
