@@ -11,7 +11,7 @@ import { useCachedPromise } from "@raycast/utils";
 import { useState } from "react";
 import { priorityIcon, stateColor } from "./lib/display";
 import { loadEverything, type IssueRow } from "./lib/issues";
-import { chainUrl, focusUrl, normalizeBaseUrl } from "./lib/url";
+import { chainUrl, focusUrl, normalizeBaseUrl, protocolUrl } from "./lib/url";
 
 interface Preferences {
   baseUrl?: string;
@@ -99,10 +99,11 @@ function IssueItem({
   baseUrl: string;
   opener?: Application;
 }) {
+  const protoLink = protocolUrl(issue.identifier, issue.workspaceId);
   const graphLink = focusUrl(baseUrl, issue.identifier, issue.workspaceId);
   const chainLink = chainUrl(baseUrl, issue.identifier, issue.workspaceId);
-  // Label the open actions with the chosen app so the panel reads
-  // "Open in Issue Graph (Chrome)" etc. when an opener is set.
+  // Label the browser-routed actions with the chosen app so the panel reads
+  // "Open in Browser (Chrome)" etc. when an opener is set.
   const suffix = opener ? ` (${opener.name})` : "";
 
   // No workspace tag: the identifier prefix (ONE-/VER-) already conveys it.
@@ -131,11 +132,20 @@ function IssueItem({
       accessories={accessories}
       actions={
         <ActionPanel>
+          {/* Primary: custom scheme → OS routes straight to the installed PWA
+              (requires the PWA reinstalled with the web+issuegraph handler).
+              No `application` so macOS uses the scheme's registered handler. */}
           <Action.Open
-            title={`Open in Issue Graph${suffix}`}
+            title="Open in Issue Graph (PWA)"
+            target={protoLink}
+            icon={Icon.Network}
+          />
+          <Action.Open
+            title={`Open in Browser${suffix}`}
             target={graphLink}
             application={opener}
-            icon={Icon.Network}
+            icon={Icon.Globe}
+            shortcut={{ modifiers: ["opt"], key: "enter" }}
           />
           <Action.Open
             title={`Open in Chain Mode${suffix}`}

@@ -13,6 +13,17 @@ export function normalizeBaseUrl(raw: string | undefined): string {
   return trimmed.replace(/\/+$/, "");
 }
 
+/**
+ * Custom-scheme deep link the OS routes straight to the installed PWA (the PWA
+ * equivalent of Linear's `linear://`). Requires the PWA to be (re)installed with
+ * the `web+issuegraph` protocol_handler. Opened with no `application` so macOS
+ * routes the scheme to its registered handler.
+ */
+export function protocolUrl(identifier: string, workspaceId?: string): string {
+  const host = workspaceId ? `${workspaceId}/` : "";
+  return `web+issuegraph://${host}${identifier}`;
+}
+
 export function workspacesEndpoint(baseUrl: string): string {
   return `${baseUrl}/api/workspaces`;
 }

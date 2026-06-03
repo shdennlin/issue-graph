@@ -64,6 +64,13 @@ export default defineConfig(({ mode }) => {
           // SPA's urlSync then reacts to the new ?focus=/?chain= params. Without
           // this, each `open -a "Issue Graph" <url>` opens a fresh window.
           launch_handler: { client_mode: 'navigate-existing' },
+          // Custom URL scheme so external tools (the Raycast extension) can
+          // deep-link straight into the installed PWA — the PWA equivalent of
+          // Linear's `linear://`. `open "web+issuegraph://<workspace>/<id>"`
+          // routes to the PWA, which lands on `/?proto=<encoded-url>`; urlSync
+          // translates `proto` into the normal focus/detail state. The `web+`
+          // prefix is mandated by the spec for site-registered schemes.
+          protocol_handlers: [{ protocol: 'web+issuegraph', url: '/?proto=%s' }],
           icons: [
             { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
             { src: 'icon-maskable.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },

@@ -196,9 +196,46 @@ function schedulePush(): void {
   }, 200)
 }
 
+// Translate a `web+issuegraph://<workspace>/<identifier>` protocol-handler
+// payload into the equivalent focus query params. Returns null when the
+// payload isn't a recognizable protocol URL. The `active=0` + full state list
+// mirror focusUrl so any issue (incl. completed/canceled) is reachable.
+export function translateProtocol(raw: string): URLSearchParams | null {
+  const m = raw.match(/^web\+issuegraph:(?:\/\/)?(.*)$/i)
+  if (!m) return null
+  const segs = (m[1] ?? '')
+    .split('/')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const identifier = segs[segs.length - 1]
+  if (!identifier) return null
+  const workspace = segs.length > 1 ? segs[segs.length - 2] : null
+  const p = new URLSearchParams()
+  if (workspace) p.set('w', workspace.toLowerCase())
+  p.set('focus', identifier)
+  p.set('detail', '1')
+  p.set('active', '0')
+  p.set('state', 'backlog,unstarted,started,triage,completed,canceled')
+  return p
+}
+
 function parseUrl(): void {
   lastAppliedSearch = window.location.search
-  const params = new URLSearchParams(window.location.search)
+  let params = new URLSearchParams(window.location.search)
+
+  // Protocol-handler entry point: `/?proto=web+issuegraph://...`. Translate it
+  // into canonical focus params and rewrite the address bar so buildUrl and the
+  // rest of parseUrl operate on the normal query (the `proto` param never sticks).
+  const proto = params.get('proto')
+  if (proto) {
+    const translated = translateProtocol(proto)
+    if (translated) {
+      window.history.replaceState(window.history.state, '', `?${translated.toString()}`)
+      lastAppliedSearch = window.location.search
+      params = translated
+    }
+  }
+
   const set = useViewStore.setState
 
   // Apply the URL fully — including resetting fields back to defaults

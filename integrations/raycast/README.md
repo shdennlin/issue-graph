@@ -14,15 +14,26 @@ and jump straight to one — either focused inside the graph or in Linear.
 
 | Action | Shortcut | What it does |
 | --- | --- | --- |
-| Open in Issue Graph | `↵` | Opens `…/?focus=<id>&active=0&state=<all>` so the issue is centered + highlighted **regardless of its status** |
+| Open in Issue Graph (PWA) | `↵` | Opens `web+issuegraph://<workspace>/<id>` — the OS routes it **straight into the installed PWA** (like Linear's `linear://`) and the app focuses the issue + opens its detail panel |
+| Open in Browser | `⌥↵` | Opens `…/?focus=<id>&detail=1&active=0&state=<all>` in a browser — centered + highlighted + detail panel, **regardless of status** |
 | Open in Chain Mode | `⌘⇧↵` | Opens `…/?chain=<id>&…` — isolates the issue's combined upstream/downstream dependency chain |
 | Open in Linear | `⌘↵` | Opens the issue's Linear URL |
 | Copy Identifier | `⌘.` | Copies e.g. `ENG-123` |
-| Copy Issue Graph Link | `⌘⇧C` | Copies the deep link |
+| Copy Issue Graph Link | `⌘⇧C` | Copies the http deep link |
 
-All deep links pin `?w=<workspace>` to the issue's origin workspace — required,
-or the graph resolves the id against the wrong workspace's cache and shows
-nothing.
+All deep links pin the issue's origin workspace (`?w=` or the protocol host) —
+required, or the graph resolves the id against the wrong workspace's cache and
+shows nothing.
+
+### Direct-to-PWA (`web+issuegraph://`)
+
+The primary action uses a custom URL scheme that issue-graph's PWA registers via
+its manifest `protocol_handlers`. This is the PWA equivalent of Linear's
+`linear://` — macOS routes it directly to the installed app, no browser detour.
+
+**Requires the PWA reinstalled** with the scheme registered (the manifest must
+include `protocol_handlers`). If it isn't installed/registered, the OS can't
+route the scheme — use **Open in Browser** (`⌥↵`) instead.
 
 ## Cross-workspace search
 
