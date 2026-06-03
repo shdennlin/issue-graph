@@ -98,8 +98,10 @@ export const api = {
     http<{ data: import('@shared/types.js').NormalizedIssue & { description: string | null; comments: import('@shared/types.js').IssueComment[] } }>(
       `/api/issues/${encodeURIComponent(identifier)}`,
     ),
-  fetchProjectDetail: (projectId: string) =>
-    http<{ data: ProjectDetail }>(`/api/projects/${encodeURIComponent(projectId)}`),
+  fetchProjectDetail: (projectId: string, opts?: { fresh?: boolean }) =>
+    http<{ data: ProjectDetail }>(
+      `/api/projects/${encodeURIComponent(projectId)}${opts?.fresh ? '?fresh=1' : ''}`,
+    ),
   fetchLabels: () => http<LabelsResponse>('/api/labels'),
   fetchHealth: () => http<{ ok: boolean }>('/api/health'),
   fetchMe: () => http<{ viewer: Viewer | null; issuesCached: number }>('/api/me'),

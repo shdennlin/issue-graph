@@ -93,18 +93,44 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
     set({ syncing: false })
     await get().load()
+    // Project + milestone detail rides a separate lazy-fetch path with its own
+    // backend + frontend caches that the issue sync doesn't touch. Re-fetch any
+    // project whose detail is currently displayed so an explicit sync reflects
+    // the newest milestones/progress instead of a stale cached copy. Skip
+    // 'loading' (a fetch is already in flight — forcing would duplicate it) and
+    // 'error' (nothing is displayed; the panel's retry handles recovery).
+    const details = get().projectDetails
+    const openedIds = Object.keys(details).filter((id) => {
+      const d = details[id]
+      return d && d !== 'loading' && d !== 'error'
+    })
+    await Promise.all(openedIds.map((id) => get().loadProjectDetail(id, { force: true })))
   },
   projectDetails: {},
   async loadProjectDetail(projectId, opts) {
     if (!projectId) return
     const current = get().projectDetails[projectId]
     if (!opts?.force && current && current !== 'error') return
-    set((s) => ({ projectDetails: { ...s.projectDetails, [projectId]: 'loading' } }))
+    // Stale-while-revalidate: when we already have real data on screen (a forced
+    // post-sync refresh of an open panel), keep showing it instead of blinking
+    // the 'loading' skeleton. The 'loading' sentinel is only for a first open or
+    // a retry after error, where there is nothing valid to display yet.
+    const hasData = current && current !== 'loading' && current !== 'error'
+    if (!hasData) {
+      set((s) => ({ projectDetails: { ...s.projectDetails, [projectId]: 'loading' } }))
+    }
     try {
-      const res = await api.fetchProjectDetail(projectId)
+      // A forced reload (panel retry, or post-sync refresh) must also bypass the
+      // backend's 10-min TTL cache — otherwise the "fresh" fetch could be served
+      // a stale copy. Normal lazy opens keep using the cache.
+      const res = await api.fetchProjectDetail(projectId, { fresh: opts?.force === true })
       set((s) => ({ projectDetails: { ...s.projectDetails, [projectId]: res.data } }))
     } catch {
-      set((s) => ({ projectDetails: { ...s.projectDetails, [projectId]: 'error' } }))
+      // Don't replace good data with an error state on a silent revalidation —
+      // a failed background refresh should leave the existing detail untouched.
+      if (!hasData) {
+        set((s) => ({ projectDetails: { ...s.projectDetails, [projectId]: 'error' } }))
+      }
     }
   },
   async extendScope(days) {

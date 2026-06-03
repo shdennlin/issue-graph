@@ -13,8 +13,11 @@ projectRoutes.get('/api/projects/:id', async (c) => {
     return c.json({ error: { code: 'bad_request', message: 'Missing project id' } }, 400)
   }
 
+  // `?fresh=1` bypasses the TTL cache — sent after an explicit sync so newly
+  // changed milestones/progress are reflected instead of a cached copy.
+  const fresh = c.req.query('fresh') === '1'
   const cached = detailCache.get(id)
-  if (cached && Date.now() - cached.ts < TTL_MS) {
+  if (!fresh && cached && Date.now() - cached.ts < TTL_MS) {
     return c.json({ data: cached.detail })
   }
 
