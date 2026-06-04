@@ -168,6 +168,24 @@ http://localhost:31415/?w=team_a&view=project&bucket=svc1,svc2&priority=1,2&focu
 > 裝置上基本功能仍可用（點擊聚焦／釘選、捏合縮放、拖曳平移、工具列／詳情面板），
 > 但快速 hover 掃視的流程無法轉移。
 
+## Raycast 擴充套件
+
+[`integrations/raycast/`](integrations/raycast/) 內附一個 [Raycast](https://raycast.com) 擴充套件 — **跨所有工作區**模糊搜尋已快取的議題，不用先開應用程式就能直接跳到某個議題。
+
+- **Search Issues** — 輸入即可依 id、標題、負責人或工作區名稱篩選。結果會依狀態分組（Triage → In Progress → Todo → Backlog → Completed → Canceled），最常開的議題會浮到上面（frecency）。
+- **行內詳情**（`⌘D`）— 狀態、優先級、負責人、截止日（逾期標紅）、標籤、專案、里程碑、相依關係、子議題、留言數 — 全部讀自本地快取，不發額外請求。
+- **直接開進 PWA** — 透過 `web+issuegraph://` URL scheme,作業系統會把它導進已安裝的 PWA,並聚焦該議題、開啟詳情面板（就是 Linear `linear://` 的 PWA 版）。沒裝 PWA 時用瀏覽器 fallback（`⌥↵`）也能用。
+
+安裝（需要 Raycast 應用程式）：
+
+```bash
+cd integrations/raycast
+bun install
+bun run dev        # = ray develop — 把指令匯入 Raycast
+```
+
+`ray develop` 跑一次就完成匯入；即使之後停掉 dev 程序,擴充套件仍會留在 Raycast 裡可用。若你的主機不是 `http://localhost:31415`,請把 **Issue Graph URL** 指向你的主機。完整的動作清單、`web+issuegraph://` scheme,以及如何讓連結落在 PWA 視窗,請見 [`integrations/raycast/README.md`](integrations/raycast/README.md)。
+
 ## 開發
 
 ```bash

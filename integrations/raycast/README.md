@@ -10,16 +10,30 @@ and jump straight to one — either focused inside the graph or in Linear.
   the dropdown (shown when more than one workspace is configured) to narrow to a
   single workspace. Each result is tagged with its origin workspace.
 
+### List & detail
+
+- **Grouped by state** — sections ordered for action priority: Triage → In
+  Progress → Todo → Backlog → Completed → Canceled, each with a count.
+- **Frecency** — issues you open most often (and most recently) float to the top
+  within their section.
+- **Due dates** — shown as an accessory; overdue open issues flag red.
+- **Inline detail** (`⌘D`) — a metadata panel (status, priority, assignee, due,
+  estimate, project, milestone, cycle, team, labels, relations, sub-issues,
+  comments, timestamps) rendered from the already-loaded cache — no extra calls.
+
 ### Actions
 
 | Action | Shortcut | What it does |
 | --- | --- | --- |
 | Open in Issue Graph (PWA) | `↵` | Opens `web+issuegraph://<workspace>/<id>` — the OS routes it **straight into the installed PWA** (like Linear's `linear://`) and the app focuses the issue + opens its detail panel |
 | Open in Browser | `⌥↵` | Opens `…/?focus=<id>&detail=1&active=0&state=<all>` in a browser — centered + highlighted + detail panel, **regardless of status** |
-| Open in Chain Mode | `⌘⇧↵` | Opens `…/?chain=<id>&…` — isolates the issue's combined upstream/downstream dependency chain |
+| Open in Chain Mode (PWA) | `⌘⇧↵` | Opens `web+issuegraph://…?mode=chain` — isolates the issue's combined upstream/downstream dependency chain in the PWA |
+| Open Chain in Browser | `⌥⌘↵` | Same chain view, but `…/?chain=<id>&…` in a browser (fallback when no PWA) |
 | Open in Linear | `⌘↵` | Opens the issue's Linear URL |
+| Show / Hide Details | `⌘D` | Toggles the inline detail panel |
 | Copy Identifier | `⌘.` | Copies e.g. `ENG-123` |
 | Copy Issue Graph Link | `⌘⇧C` | Copies the http deep link |
+| Copy Markdown Link | `⌘⇧M` | Copies `[ENG-123](…)` for notes / PRs |
 
 All deep links pin the issue's origin workspace (`?w=` or the protocol host) —
 required, or the graph resolves the id against the wrong workspace's cache and

@@ -158,6 +158,24 @@ Press `?` in the app for the full cheat sheet. Highlights:
 > [!NOTE]
 > **Desktop-first.** Hover-highlight and the keyboard shortcuts above assume a real keyboard + pointer. On touch devices the basics still work (click to focus / pin, pinch to zoom, drag to pan, the toolbar / detail panel) but the fast hover-to-scan flow doesn't translate.
 
+## Raycast extension
+
+A [Raycast](https://raycast.com) extension lives in [`integrations/raycast/`](integrations/raycast/) — fuzzy-search every cached issue **across all workspaces** and jump straight to one, without opening the app first.
+
+- **Search Issues** — type to filter by id, title, assignee, or workspace. Results are grouped by state (Triage → In Progress → Todo → Backlog → Completed → Canceled) and the issues you open most often float to the top (frecency).
+- **Inline detail** (`⌘D`) — status, priority, assignee, due date (overdue flagged red), labels, project, milestone, relations, sub-issues, comments — read from the local cache, no extra calls.
+- **Open straight into the PWA** via the `web+issuegraph://` URL scheme — the OS routes it into the installed app, which focuses the issue and opens its detail panel (the PWA equivalent of Linear's `linear://`). Browser fallbacks (`⌥↵`) work with no PWA installed.
+
+Install (needs the Raycast app):
+
+```bash
+cd integrations/raycast
+bun install
+bun run dev        # = ray develop — imports the command into Raycast
+```
+
+Running `ray develop` once imports the extension; it stays available in Raycast even after you stop the dev process. Point **Issue Graph URL** at your host if it isn't `http://localhost:31415`. See [`integrations/raycast/README.md`](integrations/raycast/README.md) for the full action list, the `web+issuegraph://` scheme, and how to land links in the PWA window.
+
 ## Development
 
 ```bash
