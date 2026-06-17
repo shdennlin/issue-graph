@@ -6,20 +6,24 @@ import {
   getPreferenceValues,
   Icon,
   List,
+  showToast,
+  Toast,
 } from "@raycast/api";
 import { useCachedPromise, useFrecencySorting } from "@raycast/utils";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   dueAccessory,
   formatShortDate,
   priorityIcon,
   priorityName,
   relationsByType,
+  relativeTime,
   stateColor,
   stateRank,
   stateSectionTitle,
 } from "./lib/display";
 import { loadEverything, type IssueRow } from "./lib/issues";
+import { syncWorkspaces } from "./lib/sync";
 import { chainUrl, focusUrl, normalizeBaseUrl, protocolUrl } from "./lib/url";
 
 interface Preferences {
@@ -36,16 +40,29 @@ export default function Command() {
 
   // One fan-out load: workspace list + every workspace's issues, merged and
   // tagged by origin. "All Workspaces" is the default so search spans them all.
-  const { data, isLoading } = useCachedPromise(loadEverything, [baseUrl], {
-    keepPreviousData: true,
-    failureToastOptions: {
-      title: "Couldn't reach Issue Graph",
-      message: baseUrl,
+  const { data, isLoading, revalidate } = useCachedPromise(
+    loadEverything,
+    [baseUrl],
+    {
+      keepPreviousData: true,
+      failureToastOptions: {
+        title: "Couldn't reach Issue Graph",
+        message: baseUrl,
+      },
     },
-  });
+  );
 
   const profiles = data?.profiles ?? [];
   const rows = data?.rows ?? [];
+  const syncs = data?.syncs ?? [];
+
+  // Re-render every 30s so the relative "Synced 3m ago" label in the title
+  // bar stays current while the panel sits open. No re-fetch — just a ticker.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   // Frecency: issues you open most often (and most recently) float to the top.
   // `visitItem` is recorded in the open actions below, keyed by the globally
@@ -67,8 +84,74 @@ export default function Command() {
   // Completed → Canceled), preserving the frecency order within each section.
   const sections = groupByState(visible);
 
+  // Force a fresh pull from the upstream backend, then revalidate so the list
+  // reflects it. Scope follows the workspace dropdown: "All" syncs every
+  // profile, a pinned workspace syncs just that one, legacy mode the default.
+  async function handleSync() {
+    const targets: Array<string | undefined> =
+      profiles.length === 0
+        ? [undefined]
+        : workspaceFilter === ALL
+          ? profiles.map((p) => p.id)
+          : [workspaceFilter];
+
+    const toast = await showToast({
+      style: Toast.Style.Animated,
+      title:
+        targets.length > 1
+          ? `Syncing ${targets.length} workspaces…`
+          : "Syncing Issue Graph…",
+    });
+    try {
+      const summary = await syncWorkspaces(baseUrl, targets);
+      await revalidate();
+      if (summary.failedCount === 0) {
+        toast.style = Toast.Style.Success;
+        toast.title = `Synced ${summary.issues} issue${summary.issues === 1 ? "" : "s"}`;
+      } else {
+        toast.style = Toast.Style.Failure;
+        toast.title = `Sync failed (${summary.failedCount}/${targets.length})`;
+        toast.message = summary.firstError;
+      }
+    } catch (err) {
+      toast.style = Toast.Style.Failure;
+      toast.title = "Sync failed";
+      toast.message = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  // Title-bar freshness. With "All" selected, show the OLDEST workspace sync —
+  // everything on screen is at least that fresh; the newest would mask a stale
+  // workspace. Pinned to one workspace → that workspace's own sync time.
+  const relevantSyncs =
+    workspaceFilter === ALL
+      ? syncs
+      : syncs.filter((s) => s.workspaceId === workspaceFilter);
+  const oldestSync = relevantSyncs.reduce<number | null>(
+    (min, s) =>
+      s.fetchedAt > 0
+        ? min === null
+          ? s.fetchedAt
+          : Math.min(min, s.fetchedAt)
+        : min,
+    null,
+  );
+  const syncedLabel = relativeTime(oldestSync);
+  const pinnedName =
+    workspaceFilter === ALL
+      ? null
+      : (profiles.find((p) => p.id === workspaceFilter)?.name ?? null);
+  const navigationTitle = [
+    "Search Issues",
+    pinnedName,
+    syncedLabel ? `Synced ${syncedLabel}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <List
+      navigationTitle={navigationTitle}
       isLoading={isLoading}
       isShowingDetail={showDetail && visible.length > 0}
       searchBarPlaceholder="Search by id, title, assignee, or workspace…"
@@ -97,7 +180,21 @@ export default function Command() {
         <List.EmptyView
           icon={Icon.MagnifyingGlass}
           title="No issues"
-          description={isLoading ? "Loading…" : `Synced from ${baseUrl}`}
+          description={
+            isLoading
+              ? "Loading…"
+              : `${baseUrl}${syncedLabel ? ` · synced ${syncedLabel}` : ""}`
+          }
+          actions={
+            <ActionPanel>
+              <Action
+                title="Sync Issue Graph"
+                icon={Icon.ArrowClockwise}
+                shortcut={{ modifiers: ["cmd"], key: "r" }}
+                onAction={handleSync}
+              />
+            </ActionPanel>
+          }
         />
       ) : (
         sections.map((section) => (
@@ -115,6 +212,7 @@ export default function Command() {
                 showDetail={showDetail}
                 onToggleDetail={() => setShowDetail((v) => !v)}
                 onVisit={() => visitItem(issue)}
+                onSync={handleSync}
               />
             ))}
           </List.Section>
@@ -155,6 +253,7 @@ function IssueItem({
   showDetail,
   onToggleDetail,
   onVisit,
+  onSync,
 }: {
   issue: IssueRow;
   baseUrl: string;
@@ -162,6 +261,7 @@ function IssueItem({
   showDetail: boolean;
   onToggleDetail: () => void;
   onVisit: () => void;
+  onSync: () => void;
 }) {
   const protoLink = protocolUrl(issue.identifier, issue.workspaceId);
   const protoChainLink = protocolUrl(
@@ -270,6 +370,14 @@ function IssueItem({
               title="Copy Markdown Link"
               content={`[${issue.identifier}](${graphLink})`}
               shortcut={{ modifiers: ["cmd", "shift"], key: "m" }}
+            />
+          </ActionPanel.Section>
+          <ActionPanel.Section>
+            <Action
+              title="Sync Issue Graph"
+              icon={Icon.ArrowClockwise}
+              shortcut={{ modifiers: ["cmd"], key: "r" }}
+              onAction={onSync}
             />
           </ActionPanel.Section>
         </ActionPanel>

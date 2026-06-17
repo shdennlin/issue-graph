@@ -20,9 +20,18 @@ export interface IssueRow extends NormalizedIssue {
   workspaceName: string;
 }
 
+/** Last successful sync for one workspace (epoch ms from the graph payload). */
+export interface WorkspaceSync {
+  /** undefined in legacy (single-workspace) mode. */
+  workspaceId?: string;
+  fetchedAt: number;
+}
+
 export interface LoadResult {
   profiles: WorkspaceProfile[];
   rows: IssueRow[];
+  /** Per-workspace last-sync times, for the freshness indicator. */
+  syncs: WorkspaceSync[];
 }
 
 async function getJson<T>(url: string): Promise<T> {
@@ -36,15 +45,16 @@ async function getJson<T>(url: string): Promise<T> {
 async function loadWorkspaceIssues(
   baseUrl: string,
   profile: WorkspaceProfile,
-): Promise<IssueRow[]> {
+): Promise<{ rows: IssueRow[]; fetchedAt: number }> {
   const graph = await getJson<GraphResponse>(
     graphEndpoint(baseUrl, profile.id),
   );
-  return graph.data.issues.map((issue: NormalizedIssue) => ({
+  const rows = graph.data.issues.map((issue: NormalizedIssue) => ({
     ...issue,
     workspaceId: profile.id,
     workspaceName: profile.name,
   }));
+  return { rows, fetchedAt: graph.fetchedAt };
 }
 
 /** Loads the workspace list, then every workspace's issues in parallel. */
@@ -60,11 +70,18 @@ export async function loadEverything(baseUrl: string): Promise<LoadResult> {
       ...issue,
       workspaceName: "default",
     }));
-    return { profiles, rows };
+    return { profiles, rows, syncs: [{ fetchedAt: graph.fetchedAt }] };
   }
 
   const perWorkspace = await Promise.all(
     profiles.map((p) => loadWorkspaceIssues(baseUrl, p)),
   );
-  return { profiles, rows: perWorkspace.flat() };
+  return {
+    profiles,
+    rows: perWorkspace.flatMap((w) => w.rows),
+    syncs: perWorkspace.map((w, i) => ({
+      workspaceId: profiles[i]?.id,
+      fetchedAt: w.fetchedAt,
+    })),
+  };
 }

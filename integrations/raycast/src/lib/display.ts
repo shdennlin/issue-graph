@@ -118,6 +118,25 @@ export function formatShortDate(iso?: string | null): string | null {
   });
 }
 
+/**
+ * Compact "time ago" for a past epoch-ms timestamp: "just now", "3m ago",
+ * "2h ago", "5d ago", falling back to a short absolute date past a week.
+ * Returns null for a missing/zero/future timestamp (nothing sensible to show).
+ */
+export function relativeTime(ms: number | null | undefined): string | null {
+  if (!ms || ms <= 0) return null;
+  const diff = Date.now() - ms;
+  if (diff < 0) return null;
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days <= 7) return `${days}d ago`;
+  return formatShortDate(new Date(ms).toISOString());
+}
+
 /** Friendly relative due text + whether it should read as overdue. */
 export function dueText(
   dueDate: string,

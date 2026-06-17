@@ -40,6 +40,17 @@ export function graphEndpoint(baseUrl: string, workspaceId?: string): string {
 }
 
 /**
+ * `POST` target that forces a fresh pull from the upstream backend for one
+ * workspace. Workspace-scoped via the same `?w=` middleware as the graph —
+ * omit `workspaceId` only in legacy (single-workspace) mode.
+ */
+export function syncEndpoint(baseUrl: string, workspaceId?: string): string {
+  const u = new URL(`${baseUrl}/api/sync`);
+  if (workspaceId) u.searchParams.set("w", workspaceId);
+  return u.toString();
+}
+
+/**
  * Deep link that pans to + highlights `identifier` (regardless of its status)
  * and opens its detail panel (`detail=1`).
  */

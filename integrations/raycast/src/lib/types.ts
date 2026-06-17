@@ -61,6 +61,8 @@ export interface NormalizedIssue {
 
 export interface GraphResponse {
   data: { issues: NormalizedIssue[] };
+  /** Epoch ms of this workspace's last successful sync (0 if never synced). */
+  fetchedAt: number;
 }
 
 export interface WorkspaceProfile {

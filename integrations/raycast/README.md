@@ -17,6 +17,9 @@ and jump straight to one — either focused inside the graph or in Linear.
 - **Frecency** — issues you open most often (and most recently) float to the top
   within their section.
 - **Due dates** — shown as an accessory; overdue open issues flag red.
+- **Freshness** — the title bar shows when the data was last synced (e.g. *Search
+  Issues · Synced 3m ago*). Across workspaces it reports the **oldest** sync, so
+  the figure never hides a stale workspace; pin one workspace to see just its time.
 - **Inline detail** (`⌘D`) — a metadata panel (status, priority, assignee, due,
   estimate, project, milestone, cycle, team, labels, relations, sub-issues,
   comments, timestamps) rendered from the already-loaded cache — no extra calls.
@@ -34,6 +37,7 @@ and jump straight to one — either focused inside the graph or in Linear.
 | Copy Identifier | `⌘.` | Copies e.g. `ENG-123` |
 | Copy Issue Graph Link | `⌘⇧C` | Copies the http deep link |
 | Copy Markdown Link | `⌘⇧M` | Copies `[ENG-123](…)` for notes / PRs |
+| Sync Issue Graph | `⌘R` | Forces a fresh pull from the backend (`POST /api/sync`), then reloads the list. Scope follows the workspace dropdown — **All** syncs every workspace, a pinned one syncs just that |
 
 All deep links pin the issue's origin workspace (`?w=` or the protocol host) —
 required, or the graph resolves the id against the wrong workspace's cache and
