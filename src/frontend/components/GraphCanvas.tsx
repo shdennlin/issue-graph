@@ -48,6 +48,10 @@ function CanvasInner() {
   const setChainRootId = useViewStore((s) => s.setChainRootId)
   const layoutBump = useViewStore((s) => s.layoutBump)
   const bumpLayout = useViewStore((s) => s.bumpLayout)
+  const focusArrivalSeq = useViewStore((s) => s.focusArrivalSeq)
+  const deepLinkFocusFallbackArmed = useViewStore((s) => s.deepLinkFocusFallbackArmed)
+  const clearDeepLinkFocusFallback = useViewStore((s) => s.clearDeepLinkFocusFallback)
+  const setActiveView = useViewStore((s) => s.setActiveView)
   const staleDays = useViewStore((s) => s.staleDays)
   const density = useViewStore((s) => s.density)
   const maxColsPerRow = useViewStore((s) => s.maxColsPerRow)
@@ -434,6 +438,23 @@ function CanvasInner() {
       // PREVIOUS view's coordinates after a view switch.
       const sourceNodes = built.nodes
       const node = sourceNodes.find((n) => n.id === focusedId)
+
+      // Deep-link safety net: we arrived via ?focus= and KEPT the user's view
+      // (Raycast / shared link), but the focused issue has no node here — e.g.
+      // focusing a project-less issue while in Milestone view. Fall back to
+      // dependency, which shows every issue, so the camera has a real target.
+      // Producer 2 (activeView change) re-queues a preserve-focus fit, and this
+      // effect re-runs with the node present. One-shot — clear so it can't loop.
+      if (deepLinkFocusFallbackArmed) {
+        clearDeepLinkFocusFallback()
+        if (!node && activeView !== 'dependency') {
+          pendingFitViewRef.current = null
+          pendingViewportRestoreRef.current = null
+          setActiveView('dependency')
+          return
+        }
+      }
+
       const issueCount = sourceNodes.filter((n) => n.type === 'issue').length
       // Small-view heuristic: when the visible issue count is low
       // (typical of Design-docs view, or a narrow chain isolation),
@@ -486,7 +507,7 @@ function CanvasInner() {
       pendingFitViewRef.current = null
       fitToBuiltBounds({ padding: fitReq.padding, duration: 600, densityFit: true })
     }
-  }, [measuredHeights, rf, focusedId, built, fitToBuiltBounds])
+  }, [measuredHeights, rf, focusedId, built, fitToBuiltBounds, activeView, deepLinkFocusFallbackArmed, clearDeepLinkFocusFallback, setActiveView])
 
   // Producer 1: first non-empty load. preserveFocus so that F5 / cold
   // start with a focusedId in the URL (or restored from tabStateStore)
@@ -534,6 +555,19 @@ function CanvasInner() {
     pendingFitViewRef.current = { padding: 0.15, preserveFocus: true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layoutBump])
+
+  // Producer 5: view-preserving focus deep link (Raycast / shared URL). The
+  // view didn't switch, so Producers 1–3 don't fire — but the user just asked
+  // to see a specific issue. Queue a preserve-focus fit so the main fit effect
+  // centers on it (and runs the dependency fallback if it isn't in this view).
+  const lastFocusArrivalRef = useRef(focusArrivalSeq)
+  useEffect(() => {
+    if (lastFocusArrivalRef.current === focusArrivalSeq) return
+    lastFocusArrivalRef.current = focusArrivalSeq
+    if (nodes.length === 0) return
+    pendingFitViewRef.current = { padding: 0.1, preserveFocus: true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusArrivalSeq])
 
   // Producer 4: explicit pan-to-focused request. Bumped from external surfaces
   // (e.g. an issue-id link clicked inside a workspace note) so the camera

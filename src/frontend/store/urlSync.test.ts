@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { translateProtocol } from './urlSync'
+import { resolveActiveView, translateProtocol } from './urlSync'
 
 // `translateProtocol` turns a `web+issuegraph://` protocol-handler payload into
 // the canonical focus query params. The OS routing into the PWA can't be tested
@@ -52,5 +52,28 @@ describe('translateProtocol', () => {
   it('rejects an empty payload', () => {
     expect(translateProtocol('web+issuegraph://')).toBeNull()
     expect(translateProtocol('web+issuegraph://onelegion/')).not.toBeNull()
+  })
+})
+
+// View resolution for a deep link. The interesting case is a focus link with no
+// ?view= (what Raycast emits): on arrival we keep the user's current view, but
+// on Back/Forward (popstate) we still reset so history stays consistent.
+describe('resolveActiveView', () => {
+  it('honors an explicit ?view= regardless of focus/mode', () => {
+    expect(resolveActiveView('milestone', false, 'dependency', true)).toBe('milestone')
+    expect(resolveActiveView('project', true, 'mix', false)).toBe('project')
+  })
+
+  it('keeps the current view for a focus deep link arriving (preserve on)', () => {
+    expect(resolveActiveView(null, true, 'milestone', true)).toBe('milestone')
+    expect(resolveActiveView(null, true, 'mix', true)).toBe('mix')
+  })
+
+  it('resets to dependency on popstate even with a focus (preserve off)', () => {
+    expect(resolveActiveView(null, true, 'milestone', false)).toBe('dependency')
+  })
+
+  it('resets to dependency when no focus is present', () => {
+    expect(resolveActiveView(null, false, 'milestone', true)).toBe('dependency')
   })
 })

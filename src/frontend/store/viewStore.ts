@@ -92,6 +92,17 @@ export interface ViewState {
   // focused issue. Useful when an external producer (e.g. a click on an issue
   // link inside a note) wants the camera to follow the focus change.
   panToFocusedSeq: number
+  // Monotonic counter — bumped when a focus deep link arrives (Raycast / direct
+  // URL) and we KEEP the current view instead of resetting to dependency. The
+  // camera no longer moves as a side effect of a view switch, so GraphCanvas
+  // listens to this to queue a preserve-focus fit onto the arriving issue.
+  focusArrivalSeq: number
+  // True between a view-preserving focus deep link and the moment GraphCanvas
+  // confirms the issue actually has a node in the kept view. If it doesn't
+  // (e.g. focusing a project-less issue while in Milestone view), GraphCanvas
+  // falls back to dependency — which shows every issue — so the camera never
+  // lands on emptiness. One-shot: cleared as soon as it's resolved.
+  deepLinkFocusFallbackArmed: boolean
   // When true, dependency view also draws `related` relations as dashed
   // edges (in addition to the always-on `blocks` edges). Off by default so
   // the dependency view stays focused on the dependency signal — turn on
@@ -165,6 +176,10 @@ export interface ViewState {
   setFocusedNoteId: (id: number | null) => void
   setNoteFindOpen: (b: boolean) => void
   requestPanToFocused: () => void
+  /** Signal a view-preserving focus deep link: bump focusArrivalSeq so the
+   *  camera follows, and arm the fallback when we kept a non-dependency view. */
+  notifyDeepLinkFocus: (armed: boolean) => void
+  clearDeepLinkFocusFallback: () => void
   setShowRelated: (b: boolean) => void
   setSelection: (s: string[]) => void
   toggleSelection: (id: string) => void
@@ -247,6 +262,8 @@ export const useViewStore = create<ViewState>((set) => ({
   focusedNoteId: null,
   noteFindOpen: false,
   panToFocusedSeq: 0,
+  focusArrivalSeq: 0,
+  deepLinkFocusFallbackArmed: false,
   // Whether chain/dependency views include "related" (non-blocking) edges.
   // Sticky per-browser via localStorage so it survives reloads and deep links
   // (e.g. a Raycast chain link that doesn't specify `related`) — flip the
@@ -357,6 +374,9 @@ export const useViewStore = create<ViewState>((set) => ({
   setFocusedNoteId: (id) => set({ focusedNoteId: id, noteFindOpen: false }),
   setNoteFindOpen: (b) => set({ noteFindOpen: b }),
   requestPanToFocused: () => set((s) => ({ panToFocusedSeq: s.panToFocusedSeq + 1 })),
+  notifyDeepLinkFocus: (armed) =>
+    set((s) => ({ focusArrivalSeq: s.focusArrivalSeq + 1, deepLinkFocusFallbackArmed: armed })),
+  clearDeepLinkFocusFallback: () => set({ deepLinkFocusFallbackArmed: false }),
   setShowRelated: (b) => {
     if (typeof window !== 'undefined') window.localStorage?.setItem('ig-show-related', b ? '1' : '0')
     set({ showRelated: b })

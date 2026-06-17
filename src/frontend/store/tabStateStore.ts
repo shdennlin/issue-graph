@@ -284,6 +284,18 @@ export function restoreViewportOnly(tabId: string): void {
   }
 }
 
+/**
+ * Read a tab's last active view WITHOUT applying the rest of its snapshot.
+ * Used on a fresh focus-deep-link load (Raycast / shared URL): the URL pins the
+ * issue but carries no `?view=`, so we restore the view the user was last in
+ * while the URL stays authoritative for focus/filters. Returns null when the
+ * tab has no snapshot yet. Mirrors restoreViewportOnly's "URL wins, but this one
+ * piece isn't in the URL" rationale — just for the view instead of the viewport.
+ */
+export function peekTabView(tabId: string): ViewId | null {
+  return snapshots.get(tabId)?.view.activeView ?? null
+}
+
 /** Forget a tab's snapshot (called on tab close). */
 export function forgetTab(tabId: string): void {
   snapshots.delete(tabId)

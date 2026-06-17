@@ -234,7 +234,26 @@ export function translateProtocol(raw: string): URLSearchParams | null {
   return p
 }
 
-function parseUrl(): void {
+/**
+ * Decide the active view from the URL. An explicit `?view=` always wins. When
+ * it's absent we normally fall back to dependency — EXCEPT for a focus deep
+ * link (Raycast / direct URL) arriving outside of Back/Forward: there we keep
+ * the user's current view so opening an issue doesn't yank them out of, say,
+ * the milestone view they were in. popstate passes preserveOnFocus=false so
+ * Cmd+[ / Cmd+] still reset view-when-absent (the history model depends on it).
+ */
+export function resolveActiveView(
+  viewParam: string | null,
+  hasFocus: boolean,
+  currentView: ViewId,
+  preserveOnFocus: boolean,
+): ViewId {
+  if (viewParam) return viewParam as ViewId
+  if (preserveOnFocus && hasFocus) return currentView
+  return 'dependency'
+}
+
+function parseUrl({ preserveViewOnFocus = false }: { preserveViewOnFocus?: boolean } = {}): void {
   lastAppliedSearch = window.location.search
   let params = new URLSearchParams(window.location.search)
 
@@ -261,15 +280,26 @@ function parseUrl(): void {
   const w = params.get('w')
   if (w) useWorkspaceStore.getState().setCurrentWorkspaceId(w.toLowerCase())
 
-  const view = params.get('view') as ViewId | null
-  set({ activeView: view ?? 'dependency' })
-
+  const viewParam = params.get('view')
   const focus = params.get('focus')
+  const currentView = useViewStore.getState().activeView
+  const nextView = resolveActiveView(viewParam, focus !== null, currentView, preserveViewOnFocus)
+  set({ activeView: nextView })
+
   // `detail=1` (only honored with a focus) opens the detail panel on arrival —
   // e.g. a deep link from the Raycast extension. parseUrl sets focusedId
   // directly (bypassing setFocusedId's auto-open heuristic), so the panel is
   // driven explicitly here.
   set({ focusedId: focus, detailPanelOpen: focus !== null && params.get('detail') === '1' })
+
+  // View-preserving focus deep link: the view didn't switch, so nothing else
+  // would move the camera onto the issue — tell GraphCanvas to fit onto it.
+  // Arm the dependency fallback only when we kept a non-dependency view AND the
+  // URL didn't pin one explicitly (an explicit ?view= is the user's choice).
+  if (preserveViewOnFocus && focus !== null) {
+    const armed = !viewParam && nextView !== 'dependency'
+    useViewStore.getState().notifyDeepLinkFocus(armed)
+  }
   const chain = params.get('chain')
   const nextChainRootIds = chain ? chain.split(',').filter(Boolean) : []
   // Entering/switching/leaving a chain must re-run dagre so the chain
@@ -359,7 +389,9 @@ export function registerHistoryViewportSink(sink: (vp: Viewport) => void): () =>
 
 export function useUrlSync(): void {
   useEffect(() => {
-    parseUrl()
+    // Initial load may be a focus deep link (PWA launch / shared URL); preserve
+    // the view it lands in rather than forcing dependency.
+    parseUrl({ preserveViewOnFocus: true })
     // Seed the first history entry with seq=0 so we have a sentinel for
     // "no app step yet" — Cmd+[ from here goes to whatever was loaded
     // before our SPA (or no-op at the start of session history).
@@ -407,9 +439,17 @@ export function useUrlSync(): void {
       // visibility — re-parsing is idempotent and the search-equality guard
       // already makes this a no-op for ordinary focus/visibility flips.
       if (window.location.search === lastAppliedSearch) return
-      parseUrl()
-      lastPushedUrl = buildUrl()
-      lastSnapshot = { url: lastPushedUrl, signature: significantSignature() }
+      // A Raycast focus link carries no ?view=, but parseUrl now KEEPS the
+      // current view instead of resetting to dependency. Preserve it here too.
+      parseUrl({ preserveViewOnFocus: true })
+      // The externally-applied search (e.g. `?w=…&focus=…`) omits the view we
+      // just preserved, so the address bar would disagree with the store and a
+      // reload/share would drop the view. Rewrite it to the canonical URL.
+      const canonical = buildUrl()
+      window.history.replaceState(window.history.state, '', canonical)
+      lastAppliedSearch = window.location.search
+      lastPushedUrl = canonical
+      lastSnapshot = { url: canonical, signature: significantSignature() }
       notifyListeners()
     }
     window.addEventListener('focus', onExternalNav)

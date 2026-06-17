@@ -4,7 +4,7 @@ import { useNotesStore } from './store/notesStore'
 import { useSchemaStore } from './store/schemaStore'
 import { useViewStore } from './store/viewStore'
 import { makeTabId, useWorkspaceStore } from './store/workspaceStore'
-import { loadTab, restoreViewportOnly, snapshotTab } from './store/tabStateStore'
+import { loadTab, peekTabView, restoreViewportOnly, snapshotTab } from './store/tabStateStore'
 import { useUrlSync } from './store/urlSync'
 import { useTheme } from './hooks/useTheme'
 import { useFontSize } from './hooks/useFontSize'
@@ -167,6 +167,23 @@ export function App() {
     if (prev !== null && prev !== activeTabId && activeTabId) {
       // Tab switched: snapshot/restore the new tab's view state.
       restored = loadTab(activeTabId)
+    } else if (prev === null && activeTabId) {
+      // First mount. A focus deep link that triggered a FULL page load (Raycast
+      // protocol launch, shared URL) lands here with a cold store: parseUrl set
+      // focusedId from the URL but, with no ?view=, defaulted activeView to
+      // dependency. That exact fingerprint — focused issue + dependency — means
+      // "restore the view this tab was last in" (the soft-nav path keeps it via
+      // onExternalNav; this is the reload counterpart). URL stays authoritative
+      // for focus/filters; we only adopt the remembered view, then re-arm the
+      // same fallback so an issue absent from that view still drops to dependency.
+      const vs = useViewStore.getState()
+      if (vs.focusedId && vs.activeView === 'dependency') {
+        const lastView = peekTabView(activeTabId)
+        if (lastView && lastView !== 'dependency') {
+          vs.setActiveView(lastView)
+          vs.notifyDeepLinkFocus(true)
+        }
+      }
     }
     prevTabIdRef.current = activeTabId
     // Re-fetch on tab switch OR same-tab workspace change (the SyncBanner
