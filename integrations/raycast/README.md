@@ -13,7 +13,9 @@ and jump straight to one — either focused inside the graph or in Linear.
 ### List & detail
 
 - **Grouped by state** — sections ordered for action priority: Triage → In
-  Progress → Todo → Backlog → Completed → Canceled, each with a count.
+  Progress → Todo → Backlog → Completed → Canceled, each with a count. The order
+  is pinned while you type too, so completed and canceled work never outranks
+  what's still open, however well its title matches.
 - **Frecency** — issues you open most often (and most recently) float to the top
   within their section.
 - **Due dates** — shown as an accessory; overdue open issues flag red.

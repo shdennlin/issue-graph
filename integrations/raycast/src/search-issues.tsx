@@ -152,6 +152,12 @@ export default function Command() {
   return (
     <List
       navigationTitle={navigationTitle}
+      // Raycast's built-in filtering re-ranks by match score once you type, and
+      // by default that ranking can reorder whole sections — a Completed issue
+      // whose title matches exactly would drag its section above In Progress.
+      // keepSectionOrder pins the STATE_ORDER grouping so done work always
+      // stays at the bottom; ranking still applies within each section.
+      filtering={{ keepSectionOrder: true }}
       isLoading={isLoading}
       isShowingDetail={showDetail && visible.length > 0}
       searchBarPlaceholder="Search by id, title, assignee, or workspace…"
