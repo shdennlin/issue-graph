@@ -15,6 +15,10 @@
      project. Distinct from cross-bucket-edge (cross-project, more severe).
      Orange = "watch this, possible sequencing problem" without screaming red. */
   --edge-cross-milestone: #f77f00;
+  /* Sub-issue (parent/child) links. Violet because red and orange already
+     mean "problem" in this palette and hierarchy is structure, not a fault;
+     blue is taken by --accent (focus/selection) and would read as "selected". */
+  --edge-hierarchy: #7c3aed;
   --accent: #0a84ff;
   --accent-fg: #ffffff;
   --danger: #d62828;
@@ -95,6 +99,7 @@
   --edge: #94a3b8;
   --edge-cross-bucket: #ff8a8a;
   --edge-cross-milestone: #fcae5a;
+  --edge-hierarchy: #a78bfa;
   --accent: #6ea8fb;
   --accent-fg: #1c1f26;
   --danger: #ff8a8a;

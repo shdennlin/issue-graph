@@ -496,6 +496,20 @@ export function App() {
         s.setShowRelated(!s.showRelated)
         return
       }
+      // 'h' — toggle the sub-issue hierarchy overlay. Same applicability
+      // guard as 'r': hierarchy edges only exist in the dependency view and
+      // in chain mode, so elsewhere the key falls through untouched.
+      if (e.key === 'h') {
+        if (e.metaKey || e.ctrlKey || e.altKey) return
+        const target = e.target as HTMLElement | null
+        const tag = target?.tagName?.toLowerCase()
+        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        const s = useViewStore.getState()
+        if (s.activeView !== 'dependency' && s.chainRootIds.length === 0) return
+        e.preventDefault()
+        s.setShowHierarchy(!s.showHierarchy)
+        return
+      }
       // 'R' (Shift+R) — re-layout. Bumps layoutBump → dagre re-runs from
       // scratch (discards user-dragged positions) → camera follows. Works
       // in any view, doesn't require a focused issue.

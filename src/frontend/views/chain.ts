@@ -25,6 +25,13 @@ export interface ChainOptions {
    * blow-up over `related` (which is bidirectional and densely connected
    * in many workspaces). */
   includeRelatedNeighbors?: boolean
+  /** When true, additionally include the 1-hop parent and children of any
+   * chain member. Deliberately NOT part of the blocks BFS: hierarchy is a
+   * structural axis orthogonal to dependency, so it has no meaningful reading
+   * under maxUpstream/maxDownstream, and walking it transitively would defeat
+   * chain isolation — one sub-issue would drag in its parent, every sibling,
+   * and each sibling's own blocks component. */
+  includeHierarchyNeighbors?: boolean
   /** Max upstream hops (blockers) to walk from the nearest root. `null`/
    * `undefined` = unbounded. 0 = roots only (no blockers). */
   maxUpstream?: number | null
@@ -161,12 +168,17 @@ export function computeChains(
     }
   }
 
-  // 1-hop `related` expansion (opt-in). Done after the blocks BFS so the
-  // dangling set above only counts blocks-dangling — that's what the UI's
-  // "Load full history" button uses, and we don't want related-only
+  // Both opt-in expansions below run after the blocks BFS, so the dangling
+  // set above only counts blocks-dangling — that's what the UI's "Load full
+  // history" button uses, and we don't want related-only or hierarchy-only
   // references inflating that count.
+  //
+  // They share one snapshot of the blocks-only membership so each is exactly
+  // 1 hop from the dependency chain, never 1 hop from the other's additions.
+  const blocksMembers =
+    opts.includeRelatedNeighbors || opts.includeHierarchyNeighbors ? Array.from(members) : []
+
   if (opts.includeRelatedNeighbors) {
-    const blocksMembers = Array.from(members)
     for (const id of blocksMembers) {
       const node = byId.get(id)
       if (!node) continue
@@ -174,6 +186,21 @@ export function computeChains(
         if (r.type !== 'related') continue
         if (!byId.has(r.targetIdentifier)) continue
         members.add(r.targetIdentifier)
+      }
+    }
+  }
+
+  // 1-hop hierarchy expansion (opt-in). Non-recursive by the same reasoning
+  // as `related`: we want the context of "this chain item is part of a larger
+  // breakdown", not the whole tree. Siblings are therefore excluded — reaching
+  // one needs a second hop (member → parent → parent's other children).
+  if (opts.includeHierarchyNeighbors) {
+    for (const id of blocksMembers) {
+      const node = byId.get(id)
+      if (!node) continue
+      if (node.parent && byId.has(node.parent)) members.add(node.parent)
+      for (const c of node.children) {
+        if (byId.has(c)) members.add(c)
       }
     }
   }

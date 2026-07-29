@@ -85,3 +85,31 @@ describe('viewStore.openProjectPanel / closeProjectPanel — panel mutex', () =>
     expect(s.focusedProjectId).toBeNull()
   })
 })
+
+describe('viewStore overlay toggles — localStorage stickiness', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+    useViewStore.setState({ showRelated: false, showHierarchy: false })
+  })
+
+  // These setters are the only writers of their localStorage keys, and no
+  // other test reads them — a typo in the key name would silently stop the
+  // preference from surviving a reload, with nothing failing.
+  it('setShowHierarchy persists under ig-show-hierarchy', () => {
+    useViewStore.getState().setShowHierarchy(true)
+    expect(window.localStorage.getItem('ig-show-hierarchy')).toBe('1')
+    useViewStore.getState().setShowHierarchy(false)
+    expect(window.localStorage.getItem('ig-show-hierarchy')).toBe('0')
+  })
+
+  it('setShowRelated persists under ig-show-related', () => {
+    useViewStore.getState().setShowRelated(true)
+    expect(window.localStorage.getItem('ig-show-related')).toBe('1')
+  })
+
+  it('the two toggles do not share a key', () => {
+    useViewStore.getState().setShowHierarchy(true)
+    expect(window.localStorage.getItem('ig-show-related')).toBeNull()
+    expect(useViewStore.getState().showRelated).toBe(false)
+  })
+})

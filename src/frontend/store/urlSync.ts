@@ -95,6 +95,7 @@ function buildUrl(): string {
   if (s.chainDepthUp !== null) params.set('cdu', String(s.chainDepthUp))
   if (s.chainDepthDown !== null) params.set('cdd', String(s.chainDepthDown))
   if (s.showRelated) params.set('related', '1')
+  if (s.showHierarchy) params.set('hier', '1')
   if (s.theme !== 'auto') params.set('theme', s.theme)
   if (s.density !== 'default') params.set('density', s.density)
 
@@ -150,6 +151,7 @@ function significantSignature(): string {
     s.chainDepthUp === null ? '' : String(s.chainDepthUp),
     s.chainDepthDown === null ? '' : String(s.chainDepthDown),
     s.showRelated ? '1' : '0',
+    s.showHierarchy ? '1' : '0',
     s.search,
     f.activeOnly ? '1' : '0',
     f.myIssuesOnly ? '1' : '0',
@@ -321,6 +323,8 @@ function parseUrl({ preserveViewOnFocus = false }: { preserveViewOnFocus?: boole
   // filter state — only let the URL override it when `related` is explicitly
   // present, so a deep link that omits it inherits the user's last toggle.
   if (params.has('related')) set({ showRelated: params.get('related') === '1' })
+  // Same sticky carve-out as `related`.
+  if (params.has('hier')) set({ showHierarchy: params.get('hier') === '1' })
 
   const theme = params.get('theme') as ThemeMode | null
   if (theme === 'light' || theme === 'dark' || theme === 'auto') set({ theme })

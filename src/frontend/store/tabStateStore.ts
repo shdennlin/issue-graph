@@ -37,6 +37,7 @@ interface PerTabView {
   expandedBuckets: string[]
   search: string
   showRelated: boolean
+  showHierarchy: boolean
   selection: string[]
   highlightedEdgeId: string | null
   highlightedNodeId: string | null
@@ -62,6 +63,7 @@ const defaultView: PerTabView = {
   expandedBuckets: [],
   search: '',
   showRelated: false,
+  showHierarchy: false,
   selection: [],
   highlightedEdgeId: null,
   highlightedNodeId: null,
@@ -190,6 +192,7 @@ function captureCurrentView(): PerTabView {
     expandedBuckets: v.expandedBuckets,
     search: v.search,
     showRelated: v.showRelated,
+    showHierarchy: v.showHierarchy,
     selection: v.selection,
     highlightedEdgeId: v.highlightedEdgeId,
     highlightedNodeId: v.highlightedNodeId,

@@ -6,6 +6,7 @@ import {
   EyeOff,
   FileText,
   Keyboard,
+  ListTree,
   Loader2,
   Monitor,
   Moon,
@@ -64,6 +65,8 @@ export function Toolbar() {
   const setChainDepthDown = useViewStore((s) => s.setChainDepthDown)
   const showRelated = useViewStore((s) => s.showRelated)
   const setShowRelated = useViewStore((s) => s.setShowRelated)
+  const showHierarchy = useViewStore((s) => s.showHierarchy)
+  const setShowHierarchy = useViewStore((s) => s.setShowHierarchy)
   const graph = useGraphStore((s) => s.graph)
   const extendScope = useGraphStore((s) => s.extendScope)
   const syncing = useGraphStore((s) => s.syncing)
@@ -78,11 +81,12 @@ export function Toolbar() {
     if (chainRootIds.length === 0 || !graph) return null
     const { members, dangling } = computeChains(graph.data.issues, chainRootIds, {
       includeRelatedNeighbors: showRelated,
+      includeHierarchyNeighbors: showHierarchy,
       maxUpstream: chainDepthUp,
       maxDownstream: chainDepthDown,
     })
     return { memberCount: members.size, dangling: dangling.size }
-  }, [chainRootIds, graph, showRelated, chainDepthUp, chainDepthDown])
+  }, [chainRootIds, graph, showRelated, showHierarchy, chainDepthUp, chainDepthDown])
   const chainDangling = chainStats && chainStats.dangling > 0 ? chainStats.dangling : null
 
   // Backend's current extended-scope window (0 = default 30-day Done window).
@@ -198,6 +202,15 @@ export function Toolbar() {
             >
               {showRelated ? <Eye size={ICON_SIZE} /> : <EyeOff size={ICON_SIZE} />}
               {t('toolbar.related')}
+            </button>
+            <button
+              onClick={() => setShowHierarchy(!showHierarchy)}
+              className={`icon-text ${showHierarchy ? 'active' : ''}`}
+              title={showHierarchy ? t('toolbar.hierarchyHide') : t('toolbar.hierarchyShow')}
+              aria-pressed={showHierarchy}
+            >
+              <ListTree size={ICON_SIZE} />
+              {t('toolbar.hierarchy')}
             </button>
           </div>
         </>

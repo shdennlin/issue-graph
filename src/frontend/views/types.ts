@@ -19,6 +19,8 @@ export interface ViewContext {
   chainDepthUp: number | null
   chainDepthDown: number | null
   showRelated: boolean
+  /** When true, draw parent/child links and expand chains by 1-hop hierarchy. */
+  showHierarchy: boolean
   density: Density
   /** Max issues per row inside a container. Pulled from viewStore; views
    *  pass this to chooseColumnCount so it stays user-tunable. */

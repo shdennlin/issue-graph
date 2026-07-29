@@ -12,6 +12,7 @@ Self-hosted, read-only graph viewer for issue dependencies. Fetches from Linear,
 - **Mix view** — issues grouped into buckets by a configurable Linear label group (`service`, `module`, `team`, `area` — auto-detected); cross-bucket `blocks` edges highlighted in red.
 - **Project view** — issues grouped by their Linear project. Each project becomes a container; cross-project `blocks` edges highlighted.
 - **Design-doc view** — issues with linked design-doc changes only.
+- **Sub-issue hierarchy** — Linear's parent/sub-issue links, shown as violet edges in the dependency view (toggle with `h`, off by default) and as a `3/7 done` progress badge on every parent card. The detail panel lists the parent and each sub-issue.
 
 ## Five-minute setup
 
@@ -148,6 +149,7 @@ Press `?` in the app for the full cheat sheet. Highlights:
 - `Cmd/Ctrl + 1..9` — switch to the Nth tab in the tab bar (each tab keeps its own filters / view / viewport)
 - `c` / `Shift + C` — isolate chain on focused issue (preserve / auto-layout)
 - `r` — toggle Related-edges overlay
+- `h` — toggle sub-issue hierarchy overlay (violet edges; also pulls 1-hop parent/children into chain isolation)
 - `Shift + R` — re-layout (re-run dagre, recenters on focused issue)
 - `Esc` — peel one layer: Find → context menu → focused issue → chain isolation
 - `Cmd/Ctrl + click` on a node — multi-select

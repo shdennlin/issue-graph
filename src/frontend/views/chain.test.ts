@@ -120,6 +120,58 @@ describe('computeChain', () => {
     expect(r.dangling).toEqual(new Set(['GHOST']))
   })
 
+  it('opt-in: 1-hop parent expands members, siblings stay out', () => {
+    // A blocks B (chain). B's parent is P; P also has child S. With
+    // includeHierarchyNeighbors, P joins. S does NOT — reaching a sibling
+    // needs a second hop (member → parent → parent's other children).
+    const issues: NormalizedIssue[] = [
+      mk('A', ['B']),
+      { ...mk('B'), parent: 'P' },
+      { ...mk('P'), children: ['B', 'S'] },
+      mk('S'),
+    ]
+    expect(computeChain(issues, 'A').members).toEqual(new Set(['A', 'B']))
+    const expanded = computeChain(issues, 'A', { includeHierarchyNeighbors: true })
+    expect(expanded.members).toEqual(new Set(['A', 'B', 'P']))
+  })
+
+  it('pulls in children of chain members, not just parents', () => {
+    const issues: NormalizedIssue[] = [
+      mk('A', ['B']),
+      { ...mk('B'), children: ['C1', 'C2'] },
+      mk('C1'),
+      mk('C2'),
+    ]
+    expect(
+      computeChain(issues, 'A', { includeHierarchyNeighbors: true }).members,
+    ).toEqual(new Set(['A', 'B', 'C1', 'C2']))
+  })
+
+  it('hierarchy expansion is only 1 hop (grandchildren stay out)', () => {
+    const issues: NormalizedIssue[] = [
+      mk('A', ['B']),
+      { ...mk('B'), children: ['C'] },
+      { ...mk('C'), children: ['G'] },
+      mk('G'),
+    ]
+    expect(
+      computeChain(issues, 'A', { includeHierarchyNeighbors: true }).members,
+    ).toEqual(new Set(['A', 'B', 'C']))
+  })
+
+  it('hierarchy expansion does not affect dangling count (blocks-only)', () => {
+    // A blocks B (cached) + GHOST (not cached). B has an uncached child.
+    // Dangling must stay { GHOST } — it drives the "load full history"
+    // prompt, which is about missing blockers, not missing sub-issues.
+    const issues: NormalizedIssue[] = [
+      mk('A', ['B', 'GHOST']),
+      { ...mk('B'), children: ['MISSING'] },
+    ]
+    const r = computeChain(issues, 'A', { includeHierarchyNeighbors: true })
+    expect(r.members).toEqual(new Set(['A', 'B']))
+    expect(r.dangling).toEqual(new Set(['GHOST']))
+  })
+
   it('ignores non-blocks relation types', () => {
     const issues: NormalizedIssue[] = [
       { ...mk('A'), relations: [{ type: 'related', targetIdentifier: 'B' }] },

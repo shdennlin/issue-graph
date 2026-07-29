@@ -108,6 +108,11 @@ export interface ViewState {
   // the dependency view stays focused on the dependency signal — turn on
   // when you want the wider context of "what's related but not blocking".
   showRelated: boolean
+  // When true, dependency view draws Linear's parent/child links as edges and
+  // chain mode pulls each member's 1-hop parent/children in. Off by default:
+  // most workspaces use sub-issues lightly, and hierarchy is not a dependency
+  // — mixing it into the default view dilutes "an arrow means it blocks you".
+  showHierarchy: boolean
   selection: string[] // multi-select identifiers
   highlightedEdgeId: string | null // when set, the edge + its endpoints stay opaque, others dim
   highlightedNodeId: string | null // when set, the node + its connected edges/neighbors stay opaque
@@ -181,6 +186,7 @@ export interface ViewState {
   notifyDeepLinkFocus: (armed: boolean) => void
   clearDeepLinkFocusFallback: () => void
   setShowRelated: (b: boolean) => void
+  setShowHierarchy: (b: boolean) => void
   setSelection: (s: string[]) => void
   toggleSelection: (id: string) => void
   clearSelection: () => void
@@ -270,6 +276,9 @@ export const useViewStore = create<ViewState>((set) => ({
   // toolbar toggle once and it's remembered. Default: OFF.
   showRelated:
     typeof window !== 'undefined' && window.localStorage?.getItem('ig-show-related') === '1' ? true : false,
+  // Same sticky-per-browser treatment as showRelated. Default: OFF.
+  showHierarchy:
+    typeof window !== 'undefined' && window.localStorage?.getItem('ig-show-hierarchy') === '1' ? true : false,
   selection: [],
   highlightedEdgeId: null,
   highlightedNodeId: null,
@@ -380,6 +389,10 @@ export const useViewStore = create<ViewState>((set) => ({
   setShowRelated: (b) => {
     if (typeof window !== 'undefined') window.localStorage?.setItem('ig-show-related', b ? '1' : '0')
     set({ showRelated: b })
+  },
+  setShowHierarchy: (b) => {
+    if (typeof window !== 'undefined') window.localStorage?.setItem('ig-show-hierarchy', b ? '1' : '0')
+    set({ showHierarchy: b })
   },
   setSelection: (s) => set({ selection: s }),
   toggleSelection: (id) => set((s) => ({ selection: toggle(s.selection, id) })),

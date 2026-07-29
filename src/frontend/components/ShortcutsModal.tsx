@@ -44,6 +44,7 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ['Shift', 'C'], descriptionKey: 'shortcuts.items.chainAuto', group: 'Chain isolation' },
 
   { keys: ['r'], descriptionKey: 'shortcuts.items.relatedToggle', group: 'Layout' },
+  { keys: ['h'], descriptionKey: 'shortcuts.items.hierarchyToggle', group: 'Layout' },
   { keys: ['Shift', 'R'], descriptionKey: 'shortcuts.items.relayout', group: 'Layout' },
 
   { keys: ['Cmd', 'Alt', 'S'], descriptionKey: 'shortcuts.items.refresh', group: 'Other' },
