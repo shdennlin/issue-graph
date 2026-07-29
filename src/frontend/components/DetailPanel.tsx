@@ -11,6 +11,7 @@ import { priorityLabelFor, stateColorVar, stateIcon, stateLabelFor } from '../li
 import { getDesignDocsForIssue } from '../lib/labelSchema'
 import { isOverdueIssue } from '../lib/dueDate'
 import { milestoneFilterKey } from '../views/filters'
+import { resolveHierarchy } from '../views/hierarchy'
 import { renderMarkdownHtml } from '../lib/markdown'
 import { MarkdownBody } from './MarkdownBody'
 import { translate, useLocale, useT } from '../i18n'
@@ -293,6 +294,11 @@ export function DetailPanel() {
     .map((id) => allIssues.find((i) => i.identifier === id))
     .filter((i): i is NormalizedIssue => i !== undefined)
 
+  // Sub-issue hierarchy. Indexed rather than `.find`-per-child: a parent can
+  // carry up to 20 children and each lookup would otherwise scan every issue.
+  const byId = new Map(allIssues.map((i) => [i.identifier, i]))
+  const hierarchy = resolveHierarchy(issue, byId)
+
   return (
     <aside
       className={[
@@ -534,6 +540,62 @@ export function DetailPanel() {
               <div style={{ color: 'var(--fg-muted)', fontSize: 11 }}>{d.filePath}</div>
             </details>
           ))}
+        </div>
+      )}
+
+      {(hierarchy.parent || hierarchy.children.length > 0) && (
+        // Hierarchy — Linear's parent/children, which live outside `relations`
+        // and so never appear as edges. Section is omitted entirely when the
+        // issue has neither: most issues don't use sub-issues, and an empty
+        // heading would be noise on every card.
+        <div className="section">
+          <h3>{t('detailPanel.hierarchy')}</h3>
+          {hierarchy.parent && (
+            <div>
+              <div style={{ color: 'var(--fg-muted)', fontSize: 11 }}>{t('detailPanel.parentIssue')}</div>
+              <div>
+                <a href="#" onClick={(e) => { e.preventDefault(); useViewStore.getState().setFocusedId(hierarchy.parent!.identifier) }}>
+                  ↑ {hierarchy.parent.identifier} {hierarchy.parent.issue?.title ?? ''}
+                </a>
+              </div>
+            </div>
+          )}
+          {hierarchy.children.length > 0 && (
+            <div style={{ marginTop: hierarchy.parent ? 6 : 0 }}>
+              <div
+                style={{ color: 'var(--fg-muted)', fontSize: 11 }}
+                title={[
+                  hierarchy.unresolved > 0
+                    ? t('detailPanel.subIssuesUnresolved', { count: hierarchy.unresolved })
+                    : '',
+                  hierarchy.truncated ? t('detailPanel.subIssuesTruncated') : '',
+                ].filter(Boolean).join('\n')}
+              >
+                {t('detailPanel.subIssues')} —{' '}
+                {t('detailPanel.subIssuesProgress', {
+                  done: hierarchy.done,
+                  total: hierarchy.truncated ? `${hierarchy.total}+` : hierarchy.total,
+                })}
+              </div>
+              {hierarchy.children.map((c) => (
+                <div key={c.identifier}>
+                  {c.issue ? (
+                    <a href="#" onClick={(e) => { e.preventDefault(); useViewStore.getState().setFocusedId(c.identifier) }}>
+                      ↳ {c.identifier} {c.issue.title}
+                    </a>
+                  ) : (
+                    // Unlike `related` (which hides uncached targets), an
+                    // uncached child still represents outstanding work — it
+                    // counts toward the progress denominator, so hiding the
+                    // row would make the number unexplainable.
+                    <span style={{ color: 'var(--fg-muted)' }} title={t('detailPanel.subIssueNotCached')}>
+                      ↳ {c.identifier}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

@@ -6,6 +6,7 @@ import { computeChains } from './chain'
 import { getDesignDocsForIssue } from '../lib/labelSchema'
 import { runDagre } from '../lib/layout'
 import { computeConnectivity } from './connectivity'
+import { computeHierarchyCounts } from './hierarchy'
 
 export const designdocView: ViewDefinition = {
   id: 'designdoc',
@@ -34,6 +35,7 @@ export const designdocView: ViewDefinition = {
     })
     const NODE_H = issueNodeHeight(density)
     const conn = computeConnectivity(data.issues)
+    const hier = computeHierarchyCounts(data.issues)
     const nodes: Node[] = visible.map((i) => ({
       id: i.identifier,
       type: 'issue',
@@ -43,6 +45,7 @@ export const designdocView: ViewDefinition = {
         selected: selection.includes(i.identifier),
         isChainRoot: chainRootIds.includes(i.identifier),
         connectivity: conn.get(i.identifier),
+        hierarchy: hier.get(i.identifier),
       },
       position: { x: 0, y: 0 },
       width: 320,

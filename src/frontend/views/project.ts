@@ -3,6 +3,7 @@ import type { ViewDefinition } from './types'
 import { issueNodeHeight } from './types'
 import { applyFilters } from './filters'
 import { computeConnectivity } from './connectivity'
+import { computeHierarchyCounts } from './hierarchy'
 import { chooseColumnCount, packIntoColumns } from './containerLayout'
 import { projectColor } from '../lib/projectColor'
 import { buildChainLayout } from './chainLayout'
@@ -47,6 +48,7 @@ export const projectView: ViewDefinition = {
     const NODE_H = issueNodeHeight(density)
     const issues = applyFilters(data.issues, filters, staleDays, myUserName, search)
     const conn = computeConnectivity(data.issues)
+    const hier = computeHierarchyCounts(data.issues)
     const heightFor = (id: string): number => measuredHeights?.get(id) ?? NODE_H
 
     const buckets = new Map<string, { name: string; color: string; issues: typeof issues }>()
@@ -122,6 +124,7 @@ export const projectView: ViewDefinition = {
             selected: selection.includes(id),
             isChainRoot: chainRootIds.includes(id),
             connectivity: conn.get(id),
+              hierarchy: hier.get(id),
           },
           parentNode: containerId,
           // Intentionally NOT setting `extent: 'parent'` — issues should be

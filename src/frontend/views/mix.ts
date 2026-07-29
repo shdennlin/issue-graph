@@ -4,6 +4,7 @@ import { issueNodeHeight } from './types'
 import { applyFilters } from './filters'
 import { getPrimaryLabel } from '../lib/labelSchema'
 import { computeConnectivity } from './connectivity'
+import { computeHierarchyCounts } from './hierarchy'
 import { chooseColumnCount, packIntoColumns } from './containerLayout'
 import { buildChainLayout } from './chainLayout'
 import { fanOutCurvatures } from './edgeStyle'
@@ -46,6 +47,7 @@ export const mixView: ViewDefinition = {
     const NODE_H = issueNodeHeight(density)
     const issues = applyFilters(data.issues, filters, staleDays, myUserName, search)
     const conn = computeConnectivity(data.issues)
+    const hier = computeHierarchyCounts(data.issues)
     // Per-issue height resolver — measured value when available (post-paint
     // re-layout pass), density estimate otherwise. Same mechanism as the
     // dependency view; without this, tall cards (long titles + many chips)
@@ -116,6 +118,7 @@ export const mixView: ViewDefinition = {
             selected: selection.includes(id),
             isChainRoot: chainRootIds.includes(id),
             connectivity: conn.get(id),
+              hierarchy: hier.get(id),
           },
           parentNode: containerId,
           extent: 'parent',

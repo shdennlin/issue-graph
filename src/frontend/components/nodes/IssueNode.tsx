@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { AlertTriangle, ArrowLeft, ArrowRight, MessageSquare, Minus, Star } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, ArrowRight, ListTree, MessageSquare, Minus, Star } from 'lucide-react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import type { AnnotationDTO, NormalizedIssue } from '@shared/types.js'
 import { useSchemaStore } from '../../store/schemaStore'
@@ -15,6 +15,7 @@ import {
 } from '../../lib/labelSchema'
 import { priorityClass, priorityLabel, stateColorVar, stateIcon, stateLabel } from '../../lib/colors'
 import { isOverdueIssue } from '../../lib/dueDate'
+import type { HierarchyCounts } from '../../views/hierarchy'
 import { useT } from '../../i18n'
 
 function formatDueDate(iso: string): string {
@@ -45,6 +46,15 @@ interface IssueNodeData {
    * by the badge tooltip to clarify "X visible / Y total" so the user
    * understands why the badge shows 5 but only 2 edges are drawn. */
   visibleConnectivity?: { out: number; in: number; related: number }
+  /** Cache-wide sub-issue progress for the badge's "⊞ 3/7" segment. Linear
+   * models hierarchy outside `relations`, so this rides alongside
+   * `connectivity` rather than inside it. Absent when the issue has no
+   * children — the segment should not render at all. */
+  hierarchy?: HierarchyCounts
+  /** How many children are actually drawn in the current view. Same purpose
+   * as `visibleConnectivity`: chain isolation can hide most of them, and the
+   * tooltip discloses the gap. */
+  visibleChildren?: number
   /** Container-view chain-mode stripe. When a container view (mix/project/
    * milestone) falls through to dagre layout because chain mode is active,
    * each card carries this color band on its left edge so the user still
@@ -67,7 +77,7 @@ function truncate(s: string, n: number): string {
 const EMPTY_ANNOTATIONS: AnnotationDTO[] = []
 
 function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
-  const { issue, focused, selected, isChainRoot, connectivity, visibleConnectivity, projectStripe } = data
+  const { issue, focused, selected, isChainRoot, connectivity, visibleConnectivity, hierarchy, visibleChildren, projectStripe } = data
   const { schema, typeIcons } = useSchemaStore()
   const density = useViewStore((s) => s.density)
   const annotations = useGraphStore((s) => s.graph?.data.annotations ?? EMPTY_ANNOTATIONS)
@@ -84,6 +94,14 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
 
   const isCompact = density === 'compact'
   const isVerbose = density === 'verbose'
+
+  // The badge renders when there is anything at all to report — edge counts
+  // OR sub-issues. An issue can have children without touching a single
+  // blocks/related edge, and that card still deserves the "⊞ 3/7" summary.
+  const hasEdgeCounts =
+    !!connectivity && (connectivity.out > 0 || connectivity.in > 0 || connectivity.related > 0)
+  const hasSubIssues = !!hierarchy && hierarchy.total > 0
+  const subIssueTotal = hierarchy?.truncated ? `${hierarchy.total}+` : hierarchy?.total ?? 0
 
   return (
     <div
@@ -131,28 +149,53 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
           <Star size={11} fill="currentColor" />
         </span>
       )}
-      {connectivity && !isCompact && (connectivity.out > 0 || connectivity.in > 0 || connectivity.related > 0) && (
-        // Connectivity badge — global blocks/blocked-by/related counts so the
-        // user can spot hubs without tracing edges. Hidden in compact density
-        // (cards are too short) and when all counts are zero. Position is
-        // anchored relative to the card so it survives node drag/zoom.
+      {!isCompact && (hasEdgeCounts || hasSubIssues) && (
+        // Relationship badge — global blocks/blocked-by/related counts plus
+        // sub-issue progress, so the user can spot hubs and unfinished
+        // breakdowns without tracing edges or opening the panel. Hidden in
+        // compact density (cards are too short) and when there is nothing to
+        // report. Position is anchored relative to the card so it survives
+        // node drag/zoom.
         <span
           title={(() => {
+            const parts: string[] = []
+            if (hasEdgeCounts && connectivity) {
+              parts.push(t('issueNode.badgeBlocks', { count: connectivity.out }))
+              parts.push(t('issueNode.badgeBlockedBy', { count: connectivity.in }))
+              if (connectivity.related > 0) {
+                parts.push(t('issueNode.badgeRelated', { count: connectivity.related }))
+              }
+            }
+            if (hasSubIssues && hierarchy) {
+              parts.push(
+                t('issueNode.badgeSubIssues', { done: hierarchy.done, total: subIssueTotal }),
+              )
+            }
+            const base = parts.join(' • ')
+
+            // Disclose the cache-wide vs. view-bound gap. Chain isolation and
+            // filters can hide most connections/children, and without this the
+            // badge reads as a lie ("says 5, I count 2 lines").
             const v = visibleConnectivity
-            const c = connectivity
-            const hidden =
-              v &&
-              (v.out !== c.out || v.in !== c.in || v.related !== c.related)
-            const base =
-              `Blocks ${c.out} • Blocked by ${c.in}` +
-              (c.related > 0 ? ` • Related ${c.related}` : '')
-            if (!hidden) return base
+            const connHidden =
+              !!v &&
+              !!connectivity &&
+              (v.out !== connectivity.out ||
+                v.in !== connectivity.in ||
+                v.related !== connectivity.related)
+            const childrenHidden =
+              hasSubIssues && visibleChildren !== undefined && visibleChildren !== hierarchy!.total
+            if (!connHidden && !childrenHidden) return base
+
+            const visible: string[] = []
+            if (connHidden) {
+              visible.push(`→ ${v!.out}`, `← ${v!.in}`)
+              if (v!.related > 0 || connectivity!.related > 0) visible.push(`↔ ${v!.related}`)
+            }
+            if (childrenHidden) visible.push(`⊞ ${visibleChildren}`)
             return (
-              base +
-              `\n\nVisible in current view: → ${v!.out} • ← ${v!.in}` +
-              (v!.related > 0 || c.related > 0 ? ` • ↔ ${v!.related}` : '') +
-              `\n(Counts above are cache-wide; some connections are hidden ` +
-              `by chain isolation or filters.)`
+              `${base}\n\n${t('issueNode.badgeVisible')} ${visible.join(' • ')}` +
+              `\n${t('issueNode.badgeCacheWideNote')}`
             )
           })()}
           style={{
@@ -180,22 +223,31 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
               dashed-bar that some platforms rendered as just a dash).
               Minus stays as the "non-directional connection" cue,
               echoing the dashed related-edge style on the canvas. */}
-          {connectivity.out > 0 && (
+          {connectivity && connectivity.out > 0 && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
               <ArrowRight size={13} strokeWidth={2.5} aria-hidden />
               {connectivity.out}
             </span>
           )}
-          {connectivity.in > 0 && (
+          {connectivity && connectivity.in > 0 && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
               <ArrowLeft size={13} strokeWidth={2.5} aria-hidden />
               {connectivity.in}
             </span>
           )}
-          {connectivity.related > 0 && (
+          {connectivity && connectivity.related > 0 && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
               <Minus size={13} strokeWidth={3} aria-hidden />
               {connectivity.related}
+            </span>
+          )}
+          {hasSubIssues && hierarchy && (
+            // ListTree reads as "structure", deliberately unlike the arrows
+            // (which mean dependency direction) and the Minus (non-directional
+            // link) — hierarchy is neither.
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+              <ListTree size={13} strokeWidth={2.5} aria-hidden />
+              {hierarchy.done}/{subIssueTotal}
             </span>
           )}
         </span>

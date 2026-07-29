@@ -335,6 +335,13 @@ export const en = {
     blockedBy: 'Blocked by',
     blocksOut: 'Blocks',
     related: 'Related ({count})',
+    hierarchy: 'Hierarchy',
+    parentIssue: 'Parent',
+    subIssues: 'Sub-issues',
+    subIssuesProgress: '{done} / {total} done',
+    subIssueNotCached: 'Not in cache — outside the current sync scope',
+    subIssuesUnresolved: '{count} sub-issue(s) are outside the sync scope, so progress may be understated.',
+    subIssuesTruncated: 'Linear returns at most 20 sub-issues per issue; there may be more.',
     annotations: 'Annotations ({count})',
     addAnnotationPlaceholder: 'Add annotation (markdown)…',
     addAnnotation: 'Add annotation',
@@ -351,6 +358,17 @@ export const en = {
     hoursAgo: '{count}h ago',
     daysAgo: '{count}d ago',
     unassignedShort: 'unassigned',
+  },
+  issueNode: {
+    // Connectivity / hierarchy badge tooltip. Assembled from these parts so
+    // the ' • ' separators stay outside the translated strings.
+    badgeBlocks: 'Blocks {count}',
+    badgeBlockedBy: 'Blocked by {count}',
+    badgeRelated: 'Related {count}',
+    badgeSubIssues: 'Sub-issues {done}/{total}',
+    badgeVisible: 'Visible in current view:',
+    badgeCacheWideNote:
+      '(Counts above are cache-wide; some connections are hidden by chain isolation or filters.)',
   },
   states: {
     started: 'In Progress',

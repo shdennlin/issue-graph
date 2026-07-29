@@ -5,6 +5,7 @@ import { runDagre } from '../lib/layout'
 import { applyFilters } from './filters'
 import { computeChains } from './chain'
 import { computeConnectivity } from './connectivity'
+import { computeHierarchyCounts, countVisibleChildren } from './hierarchy'
 
 export const dependencyView: ViewDefinition = {
   id: 'dependency',
@@ -32,6 +33,9 @@ export const dependencyView: ViewDefinition = {
     // set so the badge says "this is a hub" globally, even when chain mode
     // hides some of the connections from view.
     const conn = computeConnectivity(data.issues)
+    // Sub-issue progress, also cache-wide for the same reason: "this card has
+    // 7 things under it" is a property of the issue, not of the current view.
+    const hier = computeHierarchyCounts(data.issues)
 
     // Build edges first so we can compute view-bound connectivity counts
     // (what's actually rendered) before constructing node data. Two passes
@@ -105,6 +109,8 @@ export const dependencyView: ViewDefinition = {
         isChainRoot: chainRootIds.includes(i.identifier),
         connectivity: conn.get(i.identifier),
         visibleConnectivity: visibleConn.get(i.identifier),
+        hierarchy: hier.get(i.identifier),
+        visibleChildren: countVisibleChildren(i, ids),
       },
       position: { x: 0, y: 0 },
       width: 320,
