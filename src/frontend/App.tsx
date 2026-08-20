@@ -279,6 +279,19 @@ export function App() {
       }
       refetchSilent()
     })
+    // A Linear webhook triggered a sync on the server. Same workspace-tag
+    // filtering as designdoc-changed: a tab viewing another workspace must
+    // not refetch because someone edited an issue elsewhere.
+    es.addEventListener('issues-changed', (e) => {
+      try {
+        const data = JSON.parse((e as MessageEvent).data) as { workspaceId?: string }
+        const cur = useWorkspaceStore.getState().currentWorkspaceId
+        if (data.workspaceId && cur && data.workspaceId !== cur) return
+      } catch {
+        // Malformed payload — refetch anyway; a spurious fetch beats a miss.
+      }
+      refetchSilent()
+    })
     es.addEventListener('default-workspace-changed', (e) => {
       try {
         const data = JSON.parse((e as MessageEvent).data) as { activeId?: string }

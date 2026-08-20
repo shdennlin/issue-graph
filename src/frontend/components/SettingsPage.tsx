@@ -420,6 +420,44 @@ export function SettingsPage() {
         </div>
 
         </div>
+        <h4>{t('settings.webhook')}</h4>
+        <div style={{ color: 'var(--fg-muted)', fontSize: 12, marginBottom: 6 }}>
+          {t('settings.webhookHelp')}
+        </div>
+        <label>
+          {t('settings.webhookSecret')}{' '}
+          <input
+            type="password"
+            autoComplete="off"
+            placeholder={
+              data?.webhook?.secret_set ? t('settings.webhookSecretSet') : t('settings.webhookSecretUnset')
+            }
+            onChange={(e) => setDraft({ ...draft, linear_webhook_secret: e.target.value })}
+          />
+        </label>
+        <div style={{ color: 'var(--fg-muted)', fontSize: 12, marginTop: 6 }}>
+          {/* Status matters more than it looks: a webhook that stops arriving
+              fails silently — the graph just quietly goes stale. These counters
+              are the only way to notice. */}
+          {data?.webhook ? (
+            <>
+              {t('settings.webhookAccepted', {
+                count: data.webhook.ok_count,
+                when: data.webhook.last_ok_ms
+                  ? new Date(data.webhook.last_ok_ms).toLocaleString()
+                  : t('settings.webhookNever'),
+              })}
+              <br />
+              {t('settings.webhookRejected', {
+                count: data.webhook.reject_count,
+                reason: data.webhook.last_reject_reason ?? '—',
+              })}
+            </>
+          ) : (
+            t('settings.webhookNever')
+          )}
+        </div>
+
         <div className="settings-footer">
           <button onClick={() => close(false)}>{t('common.cancel')}</button>
           <button className="primary" onClick={save}>{t('common.save')}</button>

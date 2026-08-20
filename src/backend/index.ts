@@ -19,6 +19,7 @@ import { settingsRoutes } from './routes/settings.js'
 import { snapshotRoutes } from './routes/snapshots.js'
 import { exportRoutes } from './routes/exportRoutes.js'
 import { coverageRoutes } from './routes/coverage.js'
+import { webhookRoutes } from './routes/webhooks.js'
 import { eventsRoutes } from './routes/events.js'
 import { workspaceRoutes } from './routes/workspaces.js'
 import { startDesignDocWatcher } from './designdoc/watcher.js'
@@ -79,6 +80,7 @@ export function createApp(): Hono {
   app.route('/', exportRoutes)
   app.route('/', coverageRoutes)
   app.route('/', eventsRoutes)
+  app.route('/', webhookRoutes)
   app.route('/', workspaceRoutes)
 
   // File watcher for design-doc files. Pushes 'designdoc-changed' events to

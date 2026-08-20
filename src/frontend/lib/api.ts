@@ -54,6 +54,16 @@ export interface SettingsResponse {
     active: WorkspaceProfile | null
     profiles: WorkspaceProfile[]
   }
+  /** Inbound-webhook health. The secret itself is never sent — this endpoint
+   *  has no auth, so only the fact that one is set crosses the wire. */
+  webhook?: {
+    secret_set: boolean
+    last_ok_ms: number | null
+    ok_count: number
+    last_reject_ms: number | null
+    reject_count: number
+    last_reject_reason: string | null
+  }
 }
 
 export interface WorkspaceProfile {

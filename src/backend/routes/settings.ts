@@ -1,6 +1,15 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { getDb } from '../db.js'
+import { readMeta, writeMeta } from '../cache.js'
+import {
+  WEBHOOK_SECRET_KEY,
+  WEBHOOK_STAT_LAST_OK,
+  WEBHOOK_STAT_OK_COUNT,
+  WEBHOOK_STAT_LAST_REJECT,
+  WEBHOOK_STAT_REJECT_COUNT,
+  WEBHOOK_STAT_LAST_REASON,
+} from './webhooks.js'
 import { getWorkspaceInfo, loadConfig } from '../lib/env.js'
 import { loadLabelSchemaFile } from '../schema/yamlLoader.js'
 import { readViewerCached } from '../sync.js'
@@ -37,7 +46,29 @@ const PatchSchema = z.object({
   snapshot_retention_days: z.number().int().min(1).max(3650).optional(),
   daily_snapshot_hour: z.number().int().min(0).max(23).optional(),
   cache_ttl_seconds: z.number().int().min(10).max(24 * 3600).optional(),
+  // Write-only. Never echoed back by GET — see webhookSummary(). An empty
+  // string clears it, which disables the webhook route (it then rejects
+  // everything, indistinguishably from a wrong signature).
+  linear_webhook_secret: z.string().max(200).optional(),
 })
+
+/** What the UI is allowed to know about the webhook: whether a secret exists
+ *  and how the endpoint has been behaving. Never the secret itself — this
+ *  response is served without auth. */
+function webhookSummary() {
+  const num = (k: string): number => {
+    const n = Number(readMeta(k) ?? '0')
+    return Number.isFinite(n) ? n : 0
+  }
+  return {
+    secret_set: Boolean(readMeta(WEBHOOK_SECRET_KEY)),
+    last_ok_ms: num(WEBHOOK_STAT_LAST_OK) || null,
+    ok_count: num(WEBHOOK_STAT_OK_COUNT),
+    last_reject_ms: num(WEBHOOK_STAT_LAST_REJECT) || null,
+    reject_count: num(WEBHOOK_STAT_REJECT_COUNT),
+    last_reject_reason: readMeta(WEBHOOK_STAT_LAST_REASON),
+  }
+}
 
 export const settingsRoutes = new Hono()
 
@@ -73,6 +104,7 @@ settingsRoutes.get('/api/settings', (c) => {
     stored,
     viewer,
     workspace,
+    webhook: webhookSummary(),
   })
 })
 
@@ -86,7 +118,12 @@ settingsRoutes.patch('/api/settings', async (c) => {
   const txn = getDb().transaction((entries: Array<[string, string]>) => {
     for (const [k, v] of entries) stmt.run(k, v)
   })
-  const entries: Array<[string, string]> = Object.entries(parsed.data).map(([k, v]) => [
+  // The secret goes to cache_meta, not `setting`: readAllSettings() returns
+  // the whole setting table and this route ships it verbatim, so a row there
+  // would be readable by anyone who can reach the UI.
+  const { linear_webhook_secret: secret, ...rest } = parsed.data
+  if (secret !== undefined) writeMeta(WEBHOOK_SECRET_KEY, secret.trim())
+  const entries: Array<[string, string]> = Object.entries(rest).map(([k, v]) => [
     k,
     typeof v === 'boolean' ? (v ? '1' : '0') : String(v),
   ])
