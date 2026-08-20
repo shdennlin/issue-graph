@@ -1,6 +1,7 @@
 import type { GraphData, NormalizedIssue, NormalizedLabel, AnnotationDTO, WorkflowState } from '@shared/types.js'
 import { getDb } from './db.js'
 import { loadConfig } from './lib/env.js'
+import { settingInt } from './lib/settings.js'
 
 const META_LAST_SYNC = 'last_sync_ms'
 const META_HAS_DESIGNDOC = 'has_designdoc'
@@ -150,20 +151,10 @@ export function isCacheFresh(): boolean {
   const cfg = loadConfig()
   const last = readLastSyncMs()
   if (!last) return false
-  // User-overridable via Settings → Backend; falls back to env, then default.
-  // Setting precedence: setting table > env > schema default. Bounds [10, 86400]
-  // mirror the API's PatchSchema validation in routes/settings.ts.
-  const ttlSeconds = readCacheTtlSeconds(cfg.CACHE_TTL_SECONDS)
+  // User-overridable via Settings → Backend. Precedence and bounds live in
+  // lib/settingSpecs.ts, which every setting now shares.
+  const ttlSeconds = settingInt('cache_ttl_seconds', cfg.CACHE_TTL_SECONDS)
   return Date.now() - last < ttlSeconds * 1000
-}
-
-function readCacheTtlSeconds(envFallback: number): number {
-  const row = getDb()
-    .prepare('SELECT value FROM setting WHERE key = ?')
-    .get('cache_ttl_seconds') as { value: string } | undefined
-  if (!row) return envFallback
-  const n = Number(row.value)
-  return Number.isFinite(n) && n >= 10 && n <= 86400 ? n : envFallback
 }
 
 export function writeIssueCache(issues: NormalizedIssue[]): void {

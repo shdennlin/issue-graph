@@ -4,22 +4,15 @@ import { getDb } from '../db.js'
 import { writeMeta } from '../cache.js'
 import { WEBHOOK_SECRET_KEY, readWebhookStats } from './webhooks.js'
 import { getWorkspaceInfo, loadConfig } from '../lib/env.js'
+import { SETTING_SPECS, type IntSettingKey, type SettingKey } from '../lib/settingSpecs.js'
 import { loadLabelSchemaFile } from '../schema/yamlLoader.js'
 import { readViewerCached } from '../sync.js'
 
-const SettingsKeys = [
-  'default_view',
-  'default_theme',
-  'node_density',
-  'show_active_only_default',
-  'show_my_issues_default',
-  'stale_days_threshold',
-  'snapshot_retention_days',
-  'daily_snapshot_hour',
-  'cache_ttl_seconds',
-] as const
-
-type SettingKey = (typeof SettingsKeys)[number]
+// Derived from the registry rather than restated. node_density,
+// show_active_only_default and show_my_issues_default used to sit in this list;
+// all three were accepted, validated and stored, and then read by nothing on
+// either side of the wire, so they are gone rather than wired up on spec.
+const SettingsKeys = Object.keys(SETTING_SPECS) as SettingKey[]
 
 function readAllSettings(): Record<SettingKey, string | undefined> {
   const out: Record<string, string | undefined> = {}
@@ -29,16 +22,21 @@ function readAllSettings(): Record<SettingKey, string | undefined> {
   return out as Record<SettingKey, string | undefined>
 }
 
+/** Bounds come from the registry, never restated here. The previous version
+ *  wrote them out a second time and had already drifted from the reader that
+ *  trusted them. */
+function intField(key: IntSettingKey) {
+  const spec = SETTING_SPECS[key]
+  return z.number().int().min(spec.min).max(spec.max).optional()
+}
+
 const PatchSchema = z.object({
-  default_view: z.enum(['dependency', 'bucket', 'mix']).optional(),
-  default_theme: z.enum(['light', 'dark', 'auto']).optional(),
-  node_density: z.enum(['compact', 'default', 'verbose']).optional(),
-  show_active_only_default: z.boolean().optional(),
-  show_my_issues_default: z.boolean().optional(),
-  stale_days_threshold: z.number().int().min(1).max(365).optional(),
-  snapshot_retention_days: z.number().int().min(1).max(3650).optional(),
-  daily_snapshot_hour: z.number().int().min(0).max(23).optional(),
-  cache_ttl_seconds: z.number().int().min(10).max(24 * 3600).optional(),
+  default_view: z.enum(SETTING_SPECS.default_view.values).optional(),
+  default_theme: z.enum(SETTING_SPECS.default_theme.values).optional(),
+  stale_days_threshold: intField('stale_days_threshold'),
+  snapshot_retention_days: intField('snapshot_retention_days'),
+  daily_snapshot_hour: intField('daily_snapshot_hour'),
+  cache_ttl_seconds: intField('cache_ttl_seconds'),
   // Write-only. Never echoed back by GET — see webhookSummary(). An empty
   // string clears it, which disables the webhook route (it then rejects
   // everything, indistinguishably from a wrong signature).
