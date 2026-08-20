@@ -8,7 +8,7 @@ import { useResizable } from '../hooks/useResizable'
 import { api } from '../lib/api'
 import { sortCommentsOldestFirst } from '../lib/comments'
 import { priorityLabelFor, stateColorVar, stateIcon, stateLabelFor } from '../lib/colors'
-import { getDesignDocsForIssue } from '../lib/labelSchema'
+import { getDesignDocsForIssue, groupIssueLabels, shortPrefixDisplay, type LabelSection } from '../lib/labelSchema'
 import { isOverdueIssue } from '../lib/dueDate'
 import { milestoneFilterKey } from '../views/filters'
 import { resolveHierarchy } from '../views/hierarchy'
@@ -245,6 +245,21 @@ export function DetailPanel() {
     (a) => a.targetType === 'issue' && a.targetId === issue.identifier,
   )
   const docs = getDesignDocsForIssue(issue, graph?.data.designdocs)
+  const labelSections = groupIssueLabels(issue, schema)
+
+  // Each section maps to the filter dimension that section's labels live in.
+  // Selecting *just* the clicked value mirrors the state / priority /
+  // assignee chips above — a chip is "show me only this", not a toggle.
+  const applyLabelFilter = (sec: LabelSection, id: string): void => {
+    const f = useViewStore.getState().filters
+    switch (sec.kind) {
+      case 'primary': setFilter('primaryValues', [id]); break
+      case 'type': setFilter('typeValues', [id]); break
+      case 'prefix': setFilter('prefixSelections', { ...f.prefixSelections, [sec.key]: [id] }); break
+      case 'group': setFilter('groupSelections', { ...f.groupSelections, [sec.key]: [id] }); break
+      case 'orphan': setFilter('orphanValues', [id]); break
+    }
+  }
 
   const submitAnnotation = async () => {
     const body = annotationDraft.trim()
@@ -496,26 +511,39 @@ export function DetailPanel() {
         )}
         <div className="row"><span className="k">{t('detailPanel.created')}</span><span>{timeAgo(issue.createdAt, locale)}</span></div>
         <div className="row"><span className="k">{t('detailPanel.updated')}</span><span>{timeAgo(issue.updatedAt, locale)}</span></div>
-        {schema.primaryGroup && (() => {
-          const primary = issue.labels.find((l) => l.group?.name === schema.primaryGroup)
-          return (
-            <div className="row">
-              <span className="k">{schema.primaryGroup}</span>
-              {primary ? (
+        {/* Every label on the issue, one row per schema section. Driven by
+            groupIssueLabels rather than by looking up the groups the schema
+            named, so a label from a group autodetection has not classified
+            (or has not seen yet) still surfaces under "Labels" instead of
+            vanishing. Chips filter the dimension they belong to, matching the
+            state/priority/assignee rows above. */}
+        {labelSections.map((sec) => (
+          <div className="row" key={`${sec.kind}:${sec.key}`}>
+            <span className="k">
+              {sec.kind === 'prefix' ? `${sec.key}:` : sec.kind === 'orphan' ? t('detailPanel.labels') : sec.key}
+            </span>
+            <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {sec.labels.map((l) => (
                 <button
+                  key={l.id}
                   type="button"
                   className="detail-filter-link"
-                  onClick={() => { setFilter('primaryValues', [primary.id]); setDetailPanelOpen(false) }}
-                  title={t('detailPanel.filterByGroup', { group: schema.primaryGroup, value: primary.name })}
+                  onClick={() => { applyLabelFilter(sec, l.id); setDetailPanelOpen(false) }}
+                  title={
+                    sec.kind === 'orphan'
+                      ? t('detailPanel.filterByLabel', { value: l.name })
+                      : t('detailPanel.filterByGroup', {
+                          group: sec.kind === 'prefix' ? `${sec.key}:` : sec.key,
+                          value: l.name,
+                        })
+                  }
                 >
-                  {primary.name}
+                  {sec.kind === 'prefix' ? shortPrefixDisplay(l.name, sec.key) : l.name}
                 </button>
-              ) : (
-                <span style={{ color: 'var(--fg-muted)' }}>—</span>
-              )}
-            </div>
-          )
-        })()}
+              ))}
+            </span>
+          </div>
+        ))}
       </div>
 
       {docs.length > 0 && (

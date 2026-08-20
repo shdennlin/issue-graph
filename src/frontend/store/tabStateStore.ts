@@ -28,6 +28,7 @@ import { defaultFilters, useViewStore, type Filters, type ViewId } from './viewS
 
 interface PerTabView {
   activeView: ViewId
+  mixGroupBy: string | null
   filters: Filters
   focusedId: string | null
   chainRootIds: string[]
@@ -54,6 +55,7 @@ interface TabSnapshot {
 
 const defaultView: PerTabView = {
   activeView: 'dependency',
+  mixGroupBy: null,
   filters: defaultFilters,
   focusedId: null,
   chainRootIds: [],
@@ -128,7 +130,19 @@ function hydrate(): void {
       // Defensive: ensure required shape — drop entries that look corrupt.
       if (typeof snap.view !== 'object' || snap.view === null) continue
       snapshots.set(id, {
-        view: snap.view,
+        // Merge over defaults rather than trusting the stored shape: filter
+        // fields added after a payload was written would otherwise restore as
+        // undefined and blow up the FilterPanel's `filters.x[key]` reads. A
+        // STORAGE_VERSION bump would also fix it, but at the cost of wiping
+        // every tab's state for a purely additive change.
+        // restoreTab does useViewStore.setState(view), a shallow merge — a key
+        // missing from an older payload would leave the *current* tab's value
+        // in place, leaking one tab's grouping into another. Default it here.
+        view: {
+          ...snap.view,
+          mixGroupBy: snap.view.mixGroupBy ?? null,
+          filters: { ...defaultFilters, ...snap.view.filters },
+        },
         viewport: snap.viewport ?? null,
         graph: null, // graph is always re-fetched, never restored from disk
       })
@@ -183,6 +197,7 @@ function captureCurrentView(): PerTabView {
   const v = useViewStore.getState()
   return {
     activeView: v.activeView,
+    mixGroupBy: v.mixGroupBy,
     filters: v.filters,
     focusedId: v.focusedId,
     chainRootIds: v.chainRootIds,

@@ -22,6 +22,16 @@ export interface Filters {
   priorities: number[]
   assignees: string[]       // assignee display names
   prefixSelections: Record<string, string[]>  // token → label ids
+  // Label groups that autodetect did not promote to primary/type
+  // (DetectedSchema.otherGroups), keyed by group name → label ids. Same
+  // OR-within / AND-across semantics as prefixSelections; kept as a separate
+  // map because group names and prefix tokens live in different namespaces
+  // and a label can legitimately appear in both.
+  groupSelections: Record<string, string[]>
+  // Ungrouped labels with no prefix pattern (DetectedSchema.orphans), plus
+  // anything else the schema failed to classify. Flat id list — there is no
+  // group name to key on.
+  orphanValues: string[]
   tagIds: string[]
   designdocFilter: 'all' | 'has' | 'missing'
   // Due-date filter:
@@ -74,6 +84,10 @@ export interface ViewState {
   /** Max issues per row inside a container. localStorage-backed so each
    *  user can tune for their screen (Stage Manager → 4, ultrawide → 6+). */
   maxColsPerRow: number
+  // Which label dimension the Mix view buckets by. null = auto (the detected
+  // primary group), which is the historical behavior. Encoding and the
+  // stale-key fallback live in lib/mixGrouping.ts.
+  mixGroupBy: string | null
   search: string                 // toolbar filter search (narrows visible set)
   inlineSearch: { open: boolean; query: string; activeIdx: number }
   settingsOpen: boolean
@@ -152,6 +166,8 @@ export interface ViewState {
   togglePriority: (p: number) => void
   toggleAssignee: (name: string) => void
   togglePrefix: (token: string, id: string) => void
+  toggleGroupLabel: (group: string, id: string) => void
+  toggleOrphan: (id: string) => void
   toggleProject: (id: string) => void
   toggleMilestone: (compositeKey: string) => void
   setFocusedId: (id: string | null) => void
@@ -168,6 +184,7 @@ export interface ViewState {
   setDensity: (d: Density) => void
   setFontSize: (f: FontSize) => void
   setMaxColsPerRow: (n: number) => void
+  setMixGroupBy: (key: string | null) => void
   setSearch: (q: string) => void
   openInlineSearch: () => void
   closeInlineSearch: () => void
@@ -219,6 +236,8 @@ export const defaultFilters: Filters = {
   priorities: [],
   assignees: [],
   prefixSelections: {},
+  groupSelections: {},
+  orphanValues: [],
   tagIds: [],
   designdocFilter: 'all',
   dueFilter: 'any',
@@ -241,6 +260,7 @@ export const useViewStore = create<ViewState>((set) => ({
   expandedBuckets: [],
   theme: 'auto',
   density: 'default',
+  mixGroupBy: null,
   fontSize: (() => {
     if (typeof window === 'undefined') return 'md' as FontSize
     const raw = window.localStorage?.getItem('ig-font-size')
@@ -328,6 +348,17 @@ export const useViewStore = create<ViewState>((set) => ({
         },
       }
     }),
+  toggleGroupLabel: (group, id) =>
+    set((s) => {
+      const cur = s.filters.groupSelections[group] ?? []
+      return {
+        filters: {
+          ...s.filters,
+          groupSelections: { ...s.filters.groupSelections, [group]: toggle(cur, id) },
+        },
+      }
+    }),
+  toggleOrphan: (id) => set((s) => ({ filters: { ...s.filters, orphanValues: toggle(s.filters.orphanValues, id) } })),
   toggleProject: (id) => set((s) => ({ filters: { ...s.filters, projectIds: toggle(s.filters.projectIds, id) } })),
   toggleMilestone: (key) =>
     set((s) => ({ filters: { ...s.filters, milestoneIds: toggle(s.filters.milestoneIds, key) } })),
@@ -347,6 +378,7 @@ export const useViewStore = create<ViewState>((set) => ({
   bumpLayout: () => set((s) => ({ layoutBump: s.layoutBump + 1 })),
   setTheme: (t) => set({ theme: t }),
   setDensity: (d) => set({ density: d }),
+  setMixGroupBy: (key) => set({ mixGroupBy: key }),
   setFontSize: (f) => {
     if (typeof window !== 'undefined') {
       window.localStorage?.setItem('ig-font-size', String(f))

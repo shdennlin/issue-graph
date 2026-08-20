@@ -8,7 +8,7 @@ import { useGraphStore } from '../../store/graphStore'
 import {
   getPrimaryLabel,
   getTypeLabel,
-  getPrefixLabels,
+  groupIssueLabels,
   getDesignDocsForIssue,
   unionProgress,
   shortPrefixDisplay,
@@ -87,7 +87,10 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
   const primary = getPrimaryLabel(issue, schema)
   const type = getTypeLabel(issue, schema)
   const typeIcon = type ? typeIcons[type.name] ?? type.name.charAt(0).toUpperCase() : null
-  const prefixes = getPrefixLabels(issue, schema)
+  // Prefix + group + orphan sections; primary/type are rendered separately.
+  const chipSections = groupIssueLabels(issue, schema).filter(
+    (sec) => sec.kind === 'prefix' || sec.kind === 'group' || sec.kind === 'orphan',
+  )
   const docs = getDesignDocsForIssue(issue, designdocs)
   const progress = unionProgress(docs)
   const annCount = annotations.filter((a) => a.targetType === 'issue' && a.targetId === issue.identifier).length
@@ -379,17 +382,22 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
           </div>
         </>
       )}
-      {!isCompact && prefixes.length > 0 && (
+      {/* Chips for every label the header doesn't already show. Primary and
+          type render above (as the accent chip and the type glyph), so this
+          row covers prefix, other groups, and unclassified labels — the card
+          used to drop the last two entirely. Driven by the same helper as the
+          detail panel so a label reads the same in both places. */}
+      {!isCompact && chipSections.length > 0 && (
         <div className="chips">
-          {prefixes.flatMap(({ token, labels }) =>
-            labels.map((l) => (
+          {chipSections.flatMap((sec) =>
+            sec.labels.map((l) => (
               <span
                 key={l.id}
                 className="chip"
                 style={l.color ? ({ ['--chip-tint' as string]: l.color } as React.CSSProperties) : undefined}
-                title={l.name}
+                title={sec.kind === 'orphan' ? l.name : `${sec.key}: ${l.name}`}
               >
-                {token}: {shortPrefixDisplay(l.name, token)}
+                {sec.kind === 'prefix' ? `${sec.key}: ${shortPrefixDisplay(l.name, sec.key)}` : l.name}
               </span>
             )),
           )}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { NormalizedIssue } from '@shared/types.js'
 import type { Filters } from '../store/viewStore'
-import { applyFilters } from './filters'
+import { applyFilters, applyFiltersExcluding } from './filters'
 
 function baseFilters(overrides: Partial<Filters> = {}): Filters {
   return {
@@ -15,6 +15,8 @@ function baseFilters(overrides: Partial<Filters> = {}): Filters {
     priorities: [],
     assignees: [],
     prefixSelections: {},
+    groupSelections: {},
+    orphanValues: [],
     tagIds: [],
     designdocFilter: 'all',
     dueFilter: 'any',
@@ -106,5 +108,108 @@ describe('applyFilters · dueFilter', () => {
     const soon7 = new Set(applyFilters(all, baseFilters({ dueFilter: 'soon7' }), 365, null).map((i) => i.identifier))
     for (const id of overdue) expect(soon7.has(id)).toBe(false)
     expect(soon7.has('C')).toBe(true)
+  })
+})
+
+describe('applyFilters · label group selections', () => {
+  const label = (id: string, name: string, group?: string) => ({
+    id,
+    name,
+    color: '#000',
+    group: group ? { id: `g-${group}`, name: group, exclusive: true } : null,
+  })
+  const ios = label('1', 'iOS', 'Platform')
+  const android = label('2', 'Android', 'Platform')
+  const triage = label('3', 'needs-triage')
+  const flaky = label('4', 'flaky')
+
+  const all = [
+    makeIssue({ identifier: 'A', labels: [ios, triage] }),
+    makeIssue({ identifier: 'B', labels: [android] }),
+    makeIssue({ identifier: 'C', labels: [ios, flaky] }),
+    makeIssue({ identifier: 'D', labels: [] }),
+  ]
+  const ids = (out: NormalizedIssue[]) => out.map((i) => i.identifier)
+
+  it('keeps issues carrying any selected label within a group (OR)', () => {
+    const out = applyFilters(all, baseFilters({ groupSelections: { Platform: ['1', '2'] } }), 365, null)
+    expect(ids(out)).toEqual(['A', 'B', 'C'])
+  })
+
+  it('requires a match in every group that has a selection (AND)', () => {
+    const out = applyFilters(
+      all,
+      baseFilters({ groupSelections: { Platform: ['1'], Severity: ['99'] } }),
+      365,
+      null,
+    )
+    expect(ids(out)).toEqual([])
+  })
+
+  it('ignores a group whose selection is empty', () => {
+    const out = applyFilters(all, baseFilters({ groupSelections: { Platform: [] } }), 365, null)
+    expect(ids(out)).toEqual(['A', 'B', 'C', 'D'])
+  })
+
+  it('filters by orphan label ids', () => {
+    const out = applyFilters(all, baseFilters({ orphanValues: ['3', '4'] }), 365, null)
+    expect(ids(out)).toEqual(['A', 'C'])
+  })
+
+  it('ANDs orphan selection with group selection', () => {
+    const out = applyFilters(
+      all,
+      baseFilters({ groupSelections: { Platform: ['1'] }, orphanValues: ['4'] }),
+      365,
+      null,
+    )
+    expect(ids(out)).toEqual(['C'])
+  })
+
+  it('tolerates snapshots persisted before these filters existed', () => {
+    const legacy = baseFilters()
+    delete (legacy as Partial<Filters>).groupSelections
+    delete (legacy as Partial<Filters>).orphanValues
+    expect(ids(applyFilters(all, legacy, 365, null))).toEqual(['A', 'B', 'C', 'D'])
+  })
+})
+
+// The filter panel counts every label from ONE leave-one-out pass, so that
+// pass has to drop all five label dimensions at once. Dropping only 'primary'
+// (as it used to) makes an exclusive group unusable: picking "iOS" drives the
+// count next to "Android" to 0, hiding the option the user wants to switch to.
+describe("applyFiltersExcluding · 'label'", () => {
+  const label = (id: string, name: string, group?: string) => ({
+    id,
+    name,
+    color: '#000',
+    group: group ? { id: `g-${group}`, name: group, exclusive: true } : null,
+  })
+  const ios = label('1', 'iOS', 'Platform')
+  const android = label('2', 'Android', 'Platform')
+  const bug = label('3', 'Bug', 'Type')
+  const triage = label('4', 'needs-triage')
+
+  const all = [
+    makeIssue({ identifier: 'A', labels: [ios, bug] }),
+    makeIssue({ identifier: 'B', labels: [android, triage] }),
+  ]
+  const ids = (out: NormalizedIssue[]) => out.map((i) => i.identifier)
+
+  it('clears group, orphan, primary, type and prefix selections together', () => {
+    const f = baseFilters({
+      groupSelections: { Platform: ['1'] },
+      orphanValues: ['4'],
+      primaryValues: ['1'],
+      typeValues: ['3'],
+      prefixSelections: { env: ['99'] },
+    })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual([])
+    expect(ids(applyFiltersExcluding(all, f, 365, null, undefined, 'label'))).toEqual(['A', 'B'])
+  })
+
+  it('leaves non-label dimensions applied', () => {
+    const f = baseFilters({ groupSelections: { Platform: ['1'] }, assignees: ['nobody'] })
+    expect(ids(applyFiltersExcluding(all, f, 365, null, undefined, 'label'))).toEqual([])
   })
 })

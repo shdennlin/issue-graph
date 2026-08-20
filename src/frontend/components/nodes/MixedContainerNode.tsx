@@ -3,6 +3,7 @@ import type { CSSProperties, MouseEvent, PointerEvent } from 'react'
 import type { NodeProps } from 'reactflow'
 import { useViewStore } from '../../store/viewStore'
 import { useT } from '../../i18n'
+import { UNCLASSIFIED_BUCKET } from '../../views/mix'
 
 interface MixedContainerData {
   bucket: {
@@ -49,6 +50,9 @@ function MixedContainerImpl({ data }: NodeProps<MixedContainerData>) {
   const openProjectPanel = useViewStore((s) => s.openProjectPanel)
   const t = useT()
   const canOpen = Boolean(b.projectId)
+  // Mix view can't translate its own bucket names (views have no `t`), so the
+  // catch-all bucket travels as a sentinel and is localized here.
+  const name = b.name === UNCLASSIFIED_BUCKET ? t('views.mix.unclassified') : b.name
 
   // React Flow attaches its drag listener on the dragHandle's pointerdown.
   // Stop the button's pointerdown from bubbling so clicking the name doesn't
@@ -74,10 +78,10 @@ function MixedContainerImpl({ data }: NodeProps<MixedContainerData>) {
             onPointerDown={stopPointer}
             title={t('projectPanel.openDetail')}
           >
-            {b.name}
+            {name}
           </button>
         ) : (
-          <span className="mixed-container-name" style={{ color: tint }}>{b.name}</span>
+          <span className="mixed-container-name" style={{ color: tint }}>{name}</span>
         )}
         <span className="mixed-container-count">{countLabel}</span>
         {date && (

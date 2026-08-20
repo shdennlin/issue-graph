@@ -56,6 +56,7 @@ function CanvasInner() {
   const staleDays = useViewStore((s) => s.staleDays)
   const density = useViewStore((s) => s.density)
   const maxColsPerRow = useViewStore((s) => s.maxColsPerRow)
+  const mixGroupBy = useViewStore((s) => s.mixGroupBy)
   const search = useViewStore((s) => s.search)
   const theme = useViewStore((s) => s.theme)
   const colorMode = theme === 'auto'
@@ -101,9 +102,10 @@ function CanvasInner() {
       density,
       maxColsPerRow,
       search,
+      mixGroupBy,
       measuredHeights: measuredHeights ?? undefined,
     })
-  }, [graph, schema, activeView, filters, staleDays, focusedId, chainRootIds, chainDepthUp, chainDepthDown, showRelated, showHierarchy, selection, myUserId, myUserName, density, maxColsPerRow, search, measuredHeights])
+  }, [graph, schema, activeView, filters, staleDays, focusedId, chainRootIds, chainDepthUp, chainDepthDown, showRelated, showHierarchy, selection, myUserId, myUserName, density, maxColsPerRow, search, mixGroupBy, measuredHeights])
 
   // Local node state so user drags persist between renders within the same
   // layout-equivalent context. Anything that changes node sizes (density) or
@@ -113,7 +115,10 @@ function CanvasInner() {
   // Include `measuredHeights ? 'm' : 'e'` so the post-measure re-layout pass is
   // treated as a sig change — that forces the freshly-laid-out positions in,
   // instead of preserving the pre-measure (overlapping) positions.
-  const layoutSig = `${activeView}|${density}|${measuredHeights ? 'm' : 'e'}|${layoutBump}`
+  // mixGroupBy belongs here for the same reason activeView does: regrouping
+  // reparents every issue node, so preserved drag positions would place cards
+  // at coordinates that belonged to a different container.
+  const layoutSig = `${activeView}|${density}|${mixGroupBy ?? ''}|${measuredHeights ? 'm' : 'e'}|${layoutBump}`
   const lastSigRef = useRef(layoutSig)
   useEffect(() => {
     const sigChanged = lastSigRef.current !== layoutSig

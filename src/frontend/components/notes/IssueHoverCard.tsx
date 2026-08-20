@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { NormalizedIssue } from '@shared/types.js'
 import { priorityClass, priorityLabel, stateColorVar, stateIcon } from '../../lib/colors'
-import { getPrimaryLabel, getTypeLabel } from '../../lib/labelSchema'
+import { getPrimaryLabel, getTypeLabel, groupIssueLabels, shortPrefixDisplay } from '../../lib/labelSchema'
 import { useSchemaStore } from '../../store/schemaStore'
 
 interface Props {
@@ -48,6 +48,10 @@ export function IssueHoverCard({ issue, anchorRect }: Props) {
   const primary = getPrimaryLabel(issue, schema)
   const type = getTypeLabel(issue, schema)
   const typeIcon = type ? typeIcons[type.name] ?? type.name.charAt(0).toUpperCase() : null
+  // Same chip coverage as IssueNode: everything the header doesn't show.
+  const chipSections = groupIssueLabels(issue, schema).filter(
+    (sec) => sec.kind === 'prefix' || sec.kind === 'group' || sec.kind === 'orphan',
+  )
 
   return createPortal(
     <div
@@ -95,6 +99,18 @@ export function IssueHoverCard({ issue, anchorRect }: Props) {
           >
             {primary.name}
           </span>
+        )}
+        {chipSections.flatMap((sec) =>
+          sec.labels.map((l) => (
+            <span
+              key={l.id}
+              className="chip"
+              style={l.color ? ({ ['--chip-tint' as string]: l.color } as React.CSSProperties) : undefined}
+              title={sec.kind === 'orphan' ? l.name : `${sec.key}: ${l.name}`}
+            >
+              {sec.kind === 'prefix' ? `${sec.key}: ${shortPrefixDisplay(l.name, sec.key)}` : l.name}
+            </span>
+          )),
         )}
       </div>
     </div>,

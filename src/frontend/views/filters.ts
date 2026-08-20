@@ -18,6 +18,13 @@ export type FilterDimension =
   | 'primary'
   | 'type'
   | 'prefix'
+  | 'group'
+  | 'orphan'
+  // Every label dimension at once. The filter panel derives all label counts
+  // from a single pass, and each label section needs to see the alternatives
+  // it could switch to — an exclusive group whose siblings all count 0 is a
+  // dead end.
+  | 'label'
   | 'project'
   | 'due'
 
@@ -55,6 +62,19 @@ export function applyFiltersExcluding(
       break
     case 'prefix':
       f.prefixSelections = {}
+      break
+    case 'group':
+      f.groupSelections = {}
+      break
+    case 'orphan':
+      f.orphanValues = []
+      break
+    case 'label':
+      f.primaryValues = []
+      f.typeValues = []
+      f.prefixSelections = {}
+      f.groupSelections = {}
+      f.orphanValues = []
       break
     case 'project':
       // Project and milestone are the same hierarchical dimension. Clearing
@@ -128,6 +148,19 @@ export function applyFilters(
     for (const [, ids] of Object.entries(filters.prefixSelections)) {
       if (ids.length === 0) continue
       const hit = i.labels.some((l) => ids.includes(l.id))
+      if (!hit) return false
+    }
+    // `?? {}` / `?? []`: filters are restored verbatim from localStorage tab
+    // snapshots, so a payload written before these fields existed reaches
+    // here with them undefined. Cheaper than a migration and keeps the
+    // filter pure — see tabStateStore's STORAGE_VERSION note.
+    for (const [, ids] of Object.entries(filters.groupSelections ?? {})) {
+      if (ids.length === 0) continue
+      const hit = i.labels.some((l) => ids.includes(l.id))
+      if (!hit) return false
+    }
+    if ((filters.orphanValues ?? []).length > 0) {
+      const hit = i.labels.some((l) => filters.orphanValues.includes(l.id))
       if (!hit) return false
     }
     switch (filters.dueFilter) {

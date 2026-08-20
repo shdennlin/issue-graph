@@ -1,12 +1,13 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight, HelpCircle, X } from 'lucide-react'
-import type { IssueStateType } from '@shared/types.js'
+import type { IssueStateType, NormalizedLabel } from '@shared/types.js'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { useSchemaStore } from '../store/schemaStore'
 import { useResizable } from '../hooks/useResizable'
 import { stateColorVar, stateIcon, stateLabelFor } from '../lib/colors'
 import { applyFiltersExcluding, milestoneFilterKey, NO_MILESTONE_TOKEN } from '../views/filters'
+import { groupLabels } from '../lib/labelSchema'
 import { projectColor } from '../lib/projectColor'
 import { Tooltip } from './Tooltip'
 import { useLocale, useT, type DictKey } from '../i18n'
@@ -116,6 +117,8 @@ export function FilterPanel() {
   const togglePriority = useViewStore((s) => s.togglePriority)
   const toggleAssignee = useViewStore((s) => s.toggleAssignee)
   const togglePrefix = useViewStore((s) => s.togglePrefix)
+  const toggleGroupLabel = useViewStore((s) => s.toggleGroupLabel)
+  const toggleOrphan = useViewStore((s) => s.toggleOrphan)
   const toggleStateName = useViewStore((s) => s.toggleStateName)
   const toggleProject = useViewStore((s) => s.toggleProject)
   const toggleMilestone = useViewStore((s) => s.toggleMilestone)
@@ -163,13 +166,12 @@ export function FilterPanel() {
       const a = i.assignee?.displayName ?? '(unassigned)'
       byAssignee.set(a, (byAssignee.get(a) ?? 0) + 1)
     }
-    // Label counts: primary, type, prefix all live in i.labels. Use the
-    // strictest leave-one-out (drop only the relevant label dimension) but
-    // since all label-based filters share a key into i.labels, we count all
-    // three from each respective leave-one-out set. For simplicity, count
-    // labels from the base "all-but-prefix" pass; primary/type users will
-    // see counts that respect prefix filters too. Acceptable approximation.
-    const labelSet = applyFiltersExcluding(issues, filters, staleDays, myUserName, search, 'primary')
+    // Label counts: primary, type, prefix, group and orphan all key into
+    // i.labels, so one leave-one-out pass with every label dimension dropped
+    // serves all five sections. Dropping only the section's own dimension
+    // would be stricter, but in an exclusive group it zeroes every sibling
+    // the moment one is picked — leaving no visible way to switch.
+    const labelSet = applyFiltersExcluding(issues, filters, staleDays, myUserName, search, 'label')
     for (const i of labelSet) {
       for (const l of i.labels) byLabel.set(l.id, (byLabel.get(l.id) ?? 0) + 1)
     }
@@ -273,6 +275,21 @@ export function FilterPanel() {
     }
     return [...map.values()].sort((a, b) => a.name.localeCompare(b.name))
   }, [schema.typeGroup, issues])
+
+  // Label sections beyond primary/type/prefix. Classified by the same helper
+  // the detail panel uses, over the labels actually present in the current
+  // issue set — so a label can never be filterable here yet unnamed there,
+  // and vice versa. The 'orphan' bucket is a subtraction (everything no
+  // earlier bucket claimed), which is what makes a label the schema has not
+  // seen yet still reachable instead of silently unfilterable.
+  const presentLabels = new Map<string, NormalizedLabel>()
+  for (const i of issues) for (const l of i.labels) presentLabels.set(l.id, l)
+  const otherLabelSections = groupLabels([...presentLabels.values()], schema)
+    .filter((sec) => sec.kind === 'group' || sec.kind === 'orphan')
+    .map((sec) => ({
+      ...sec,
+      labels: [...sec.labels].sort((a, b) => a.name.localeCompare(b.name)),
+    }))
 
   const assignees = useMemo(() => {
     return [...counts.byAssignee.entries()].sort((a, b) => b[1] - a[1])
@@ -644,6 +661,36 @@ export function FilterPanel() {
           ))}
         </CollapsibleSection>
       ))}
+
+      {otherLabelSections.map((sec) => {
+        const isOrphan = sec.kind === 'orphan'
+        const selected = isOrphan ? filters.orphanValues : (filters.groupSelections[sec.key] ?? [])
+        return (
+          <CollapsibleSection
+            key={`${sec.kind}:${sec.key}`}
+            id={`${sec.kind}:${sec.key}`}
+            title={isOrphan ? t('filterPanel.otherLabels') : sec.key}
+            activeCount={selected.length}
+            onClear={() =>
+              isOrphan
+                ? setFilter('orphanValues', [])
+                : setFilter('groupSelections', { ...filters.groupSelections, [sec.key]: [] })
+            }
+          >
+            {sec.labels.map((l) => (
+              <label key={l.id}>
+                <input
+                  type="checkbox"
+                  checked={selected.includes(l.id)}
+                  onChange={() => (isOrphan ? toggleOrphan(l.id) : toggleGroupLabel(sec.key, l.id))}
+                />
+                {l.name}
+                <span className="count">{counts.byLabel.get(l.id) ?? 0}</span>
+              </label>
+            ))}
+          </CollapsibleSection>
+        )
+      })}
 
       {showDesigndocFilter && (
         <CollapsibleSection

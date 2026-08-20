@@ -2,7 +2,7 @@ import type { Edge, Node } from 'reactflow'
 import type { ViewDefinition } from './types'
 import { issueNodeHeight } from './types'
 import { applyFilters } from './filters'
-import { getPrimaryLabel } from '../lib/labelSchema'
+import { labelForDimension } from '../lib/mixGrouping'
 import { computeConnectivity } from './connectivity'
 import { computeHierarchyCounts } from './hierarchy'
 import { chooseColumnCount, packIntoColumns } from './containerLayout'
@@ -28,18 +28,20 @@ function computeContainerWidth(cols: number): number {
 // got used to the previous behavior.
 const MAX_ROW_WIDTH = computeContainerWidth(1) * 4 + GAP_X * 3
 
+export const UNCLASSIFIED_BUCKET = '__unclassified'
+
 export const mixView: ViewDefinition = {
   id: 'mix',
   label: 'Mix',
   description: 'Buckets as containers + issues inside. Cross-bucket edges highlighted.',
   build(ctx) {
-    const { data, schema, filters, staleDays, myUserName, selection, focusedId, chainRootIds, density, maxColsPerRow, search, measuredHeights } = ctx
+    const { data, schema, filters, staleDays, myUserName, selection, focusedId, chainRootIds, density, maxColsPerRow, search, mixGroupBy, measuredHeights } = ctx
     // Chain mode: container layout fights dependency flow — drop the buckets
     // and use dagre, decorating each card with its primary-label color stripe
     // so bucket identity isn't lost. See chainLayout.ts for the rationale.
     if (chainRootIds.length > 0) {
       return buildChainLayout(ctx, (issue) => {
-        const lab = getPrimaryLabel(issue, schema)
+        const lab = labelForDimension(issue, schema, mixGroupBy)
         if (!lab?.color) return null
         return { color: lab.color, label: lab.name }
       })
@@ -56,9 +58,11 @@ export const mixView: ViewDefinition = {
 
     const buckets = new Map<string, { name: string; color: string; issues: typeof issues }>()
     for (const i of issues) {
-      const lab = getPrimaryLabel(i, schema)
-      const key = lab?.id ?? '__unclassified'
-      const name = lab?.name ?? 'Unclassified'
+      const lab = labelForDimension(i, schema, mixGroupBy)
+      const key = lab?.id ?? UNCLASSIFIED_BUCKET
+      // Sentinel rather than an English literal: MixedContainerNode swaps it
+      // for the translated string at render time (views have no `t`).
+      const name = lab?.name ?? UNCLASSIFIED_BUCKET
       const color = lab?.color ?? '#888'
       if (!buckets.has(key)) buckets.set(key, { name, color, issues: [] })
       buckets.get(key)!.issues.push(i)

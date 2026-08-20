@@ -21,6 +21,7 @@ import {
 import { useClickOutside } from '../hooks/useClickOutside'
 import { useGraphStore } from '../store/graphStore'
 import { useSchemaStore } from '../store/schemaStore'
+import { mixDimensions } from '../lib/mixGrouping'
 import { useViewStore } from '../store/viewStore'
 import { views } from '../views'
 import { api } from '../lib/api'
@@ -71,6 +72,9 @@ export function Toolbar() {
   const extendScope = useGraphStore((s) => s.extendScope)
   const syncing = useGraphStore((s) => s.syncing)
   const primaryGroup = useSchemaStore((s) => s.schema.primaryGroup)
+  const schema = useSchemaStore((s) => s.schema)
+  const mixGroupBy = useViewStore((s) => s.mixGroupBy)
+  const setMixGroupBy = useViewStore((s) => s.setMixGroupBy)
   const t = useT()
 
   // Chain-mode dangling-ref check: when chain isolation is active, we
@@ -140,11 +144,20 @@ export function Toolbar() {
   // the user can tell what the buckets are based on without opening the
   // filter panel. Source ("auto-detected" / "PRIMARY_GROUP" / yaml) lives
   // in Settings → Backend; we just name the group here to stay terse.
+  // Dimensions that actually bucket something in the current issue set. The
+  // auto entry is rendered separately and unconditionally, so a default with
+  // zero coverage (the failure this picker exists for) stays visible instead
+  // of silently dropping out of its own dropdown.
+  const mixOptions = mixDimensions(graph?.data.issues ?? [], schema)
+
   const viewTooltip = (id: string): string => {
     const base = t(viewDescKey(id))
     if (id !== 'mix') return base
-    const suffix = primaryGroup
-      ? t('views.mix.groupedBy', { group: primaryGroup })
+    const effective = mixGroupBy
+      ? (mixOptions.find((o) => o.key === mixGroupBy)?.title ?? primaryGroup)
+      : primaryGroup
+    const suffix = effective
+      ? t('views.mix.groupedBy', { group: effective })
       : t('views.mix.groupedByUnknown')
     return `${base}\n\n${suffix}`
   }
@@ -176,6 +189,34 @@ export function Toolbar() {
           </button>
         ))}
       </div>
+      {activeView === 'mix' && (
+        <>
+          <div className="sep" />
+          <div className="group">
+            <label htmlFor="toolbar-mix-groupby" className="toolbar-inline-label">
+              {t('views.mix.groupBy')}
+            </label>
+            <select
+              id="toolbar-mix-groupby"
+              aria-label={t('views.mix.groupByAria')}
+              title={t('views.mix.groupByMultiHint')}
+              value={mixGroupBy ?? ''}
+              onChange={(e) => setMixGroupBy(e.target.value || null)}
+            >
+              <option value="">
+                {primaryGroup
+                  ? t('views.mix.groupByAuto', { group: primaryGroup })
+                  : t('views.mix.groupByAutoNone')}
+              </option>
+              {mixOptions.map((o) => (
+                <option key={o.key} value={o.key}>
+                  {t('views.mix.groupByOption', { title: o.title, count: o.coverage })}
+                </option>
+              ))}
+            </select>
+          </div>
+        </>
+      )}
       <div className="sep" />
       <div className="group">
         <input

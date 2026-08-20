@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useViewStore } from './viewStore'
+import { defaultFilters, useViewStore } from './viewStore'
 
 describe('viewStore.setFocusedId — detailPanelOpen behavior', () => {
   beforeEach(() => {
@@ -111,5 +111,38 @@ describe('viewStore overlay toggles — localStorage stickiness', () => {
     useViewStore.getState().setShowHierarchy(true)
     expect(window.localStorage.getItem('ig-show-related')).toBeNull()
     expect(useViewStore.getState().showRelated).toBe(false)
+  })
+})
+
+describe('viewStore — label group / orphan filter toggles', () => {
+  beforeEach(() => {
+    useViewStore.setState({ filters: { ...defaultFilters } })
+  })
+
+  it('toggleGroupLabel adds an id under its group name', () => {
+    useViewStore.getState().toggleGroupLabel('Platform', 'l1')
+    expect(useViewStore.getState().filters.groupSelections).toEqual({ Platform: ['l1'] })
+  })
+
+  it('toggleGroupLabel removes an already-selected id', () => {
+    useViewStore.getState().toggleGroupLabel('Platform', 'l1')
+    useViewStore.getState().toggleGroupLabel('Platform', 'l1')
+    expect(useViewStore.getState().filters.groupSelections).toEqual({ Platform: [] })
+  })
+
+  it('toggleGroupLabel leaves other groups untouched', () => {
+    useViewStore.getState().toggleGroupLabel('Platform', 'l1')
+    useViewStore.getState().toggleGroupLabel('Severity', 'l2')
+    expect(useViewStore.getState().filters.groupSelections).toEqual({
+      Platform: ['l1'],
+      Severity: ['l2'],
+    })
+  })
+
+  it('toggleOrphan flips an id in the flat orphan list', () => {
+    useViewStore.getState().toggleOrphan('l9')
+    expect(useViewStore.getState().filters.orphanValues).toEqual(['l9'])
+    useViewStore.getState().toggleOrphan('l9')
+    expect(useViewStore.getState().filters.orphanValues).toEqual([])
   })
 })

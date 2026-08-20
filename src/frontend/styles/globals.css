@@ -507,6 +507,30 @@ a:hover { text-decoration: underline; }
 .toolbar .group button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 .toolbar .sep { width: 1px; height: 20px; background: var(--node-border); margin: 0 6px; }
 
+/* Mix view's group-by picker. The label is muted and small so the select
+   itself reads as the control; both sit inside a normal .group so they
+   inherit the toolbar's alignment. */
+.toolbar .toolbar-inline-label {
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+.toolbar select {
+  font: inherit;
+  font-size: var(--fs-base);
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  max-width: 200px;
+}
+.toolbar select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
 /* Toolbar overflow menu — collapses low-frequency actions (screenshot,
    coverage, shortcuts, theme cycle) behind a single MoreHorizontal
    trigger so the top bar stays scannable. */
