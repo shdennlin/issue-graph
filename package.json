@@ -16,7 +16,8 @@
     "start": "bun run build/backend/index.js",
     "typecheck": "tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.web.json",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:smoke": "bun run scripts/smoke-control-db.ts"
   },
   "dependencies": {
     "@dagrejs/dagre": "^1.1.4",
