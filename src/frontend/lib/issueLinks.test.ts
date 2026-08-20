@@ -147,3 +147,28 @@ describe('decorateIssueLinksWithStatus', () => {
     expect(root.querySelectorAll('.issue-status-badge').length).toBe(0)
   })
 })
+
+// The design-doc scanner (src/backend/designdoc/scanner.ts) matches team keys
+// containing digits — Linear allows them. These tests pin the frontend to the
+// same shape, so an id the scanner links from a spec is also linkable in a
+// note or description instead of staying plain text.
+describe('issue id shape matches the design-doc scanner', () => {
+  it('accepts a team key containing digits', () => {
+    expect(isIssueId('A1-7')).toBe(true)
+    expect(isIssueId('X2-15')).toBe(true)
+    expect(isIssueId('AB1-3')).toBe(true)
+  })
+
+  it('still requires the key to start with a letter', () => {
+    expect(isIssueId('1A-7')).toBe(false)
+    expect(isIssueId('12-7')).toBe(false)
+  })
+
+  it('still rejects a single-character key', () => {
+    expect(isIssueId('A-1')).toBe(false)
+  })
+
+  it('finds digit-bearing keys in prose', () => {
+    expect(findIssueIds('blocked by A1-7 and X2-15')).toEqual(['A1-7', 'X2-15'])
+  })
+})
