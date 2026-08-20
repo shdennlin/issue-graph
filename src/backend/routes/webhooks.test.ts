@@ -18,11 +18,31 @@ vi.mock('../lib/eventBus.js', () => ({
   BUS_EVENT: { ISSUES_CHANGED: 'issues-changed' },
 }))
 
-import { webhookRoutes, WEBHOOK_SECRET_KEY, WEBHOOK_STAT_OK_COUNT, WEBHOOK_STAT_REJECT_COUNT } from './webhooks.js'
+import { webhookRoutes, WEBHOOK_STAT_OK_COUNT, WEBHOOK_STAT_REJECT_COUNT } from './webhooks.js'
 import { __resetDebounceForTests } from '../lib/webhookDebounce.js'
 import { __resetRateLimitForTests } from '../lib/rateLimit.js'
+import { setRosterSource } from '../lib/env.js'
+import type { WorkspaceRow } from '../controlStore.js'
 
 const SECRET = 'lin_wh_secret'
+
+// The secret lives on the workspace row now, not in cache_meta, so these cases
+// drive the real injection seam instead of mocking a second store. An empty
+// roster is a genuine state (nothing configured yet), which is what the
+// unconfigured case below exercises.
+function useRoster(webhookSecret: string | null): void {
+  const row: WorkspaceRow = {
+    id: 'ws1',
+    name: 'Workspace One',
+    backend: 'linear',
+    apiKey: 'lin_api_x',
+    webhookSecret,
+    teamId: null,
+    sortOrder: 0,
+    createdAt: 0,
+  }
+  setRosterSource({ rows: () => [row], readActive: () => 'ws1', clearActive: () => undefined })
+}
 
 function body(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
@@ -51,7 +71,7 @@ function sign(raw: string, secret = SECRET): string {
 describe('POST /api/webhooks/linear', () => {
   beforeEach(() => {
     meta.clear()
-    meta.set(WEBHOOK_SECRET_KEY, SECRET)
+    useRoster(SECRET)
     syncOnce.mockClear()
     publish.mockClear()
     __resetDebounceForTests()
@@ -93,7 +113,7 @@ describe('POST /api/webhooks/linear', () => {
   // The endpoint is public. A distinct status or message for "no secret here"
   // would tell an unauthenticated caller about this instance's configuration.
   it('rejects with a plain 401 when no secret is configured', async () => {
-    meta.delete(WEBHOOK_SECRET_KEY)
+    useRoster(null)
     const raw = body()
     const res = await post(raw, sign(raw))
     expect(res.status).toBe(401)
@@ -148,7 +168,7 @@ describe('POST /api/webhooks/linear', () => {
 describe('POST /api/webhooks/linear — abuse bounds', () => {
   beforeEach(() => {
     meta.clear()
-    meta.set(WEBHOOK_SECRET_KEY, SECRET)
+    useRoster(SECRET)
     syncOnce.mockClear()
     __resetDebounceForTests()
     __resetRateLimitForTests()

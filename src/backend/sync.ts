@@ -1,6 +1,6 @@
 import { getLogger } from './lib/log.js'
 import { loadConfig, isAuthConfigured, getDefaultWorkspaceId } from './lib/env.js'
-import { getCurrentWorkspaceId, LEGACY_WORKSPACE_ID } from './lib/workspaceContext.js'
+import { getCurrentWorkspaceId, UNCONFIGURED_WORKSPACE_ID } from './lib/workspaceContext.js'
 import { settingInt } from './lib/settings.js'
 import { getDb } from './db.js'
 import {
@@ -43,7 +43,7 @@ const VIEWER_KEY = 'viewer_json'
 const SNAPSHOT_DATE_KEY = 'last_snapshot_yyyymmdd'
 
 function currentWid(): string {
-  return getCurrentWorkspaceId() ?? getDefaultWorkspaceId() ?? LEGACY_WORKSPACE_ID
+  return getCurrentWorkspaceId() ?? getDefaultWorkspaceId() ?? UNCONFIGURED_WORKSPACE_ID
 }
 
 function ymd(d: Date): string {

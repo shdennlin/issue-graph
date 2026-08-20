@@ -1,8 +1,10 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { getDb } from '../db.js'
-import { writeMeta } from '../cache.js'
-import { WEBHOOK_SECRET_KEY, readWebhookStats } from './webhooks.js'
+import { readWebhookStats } from './webhooks.js'
+import { readWorkspaceRows, upsertWorkspace } from '../controlDb.js'
+import { getCurrentWorkspaceId } from '../lib/workspaceContext.js'
+import { getDefaultWorkspaceId } from '../lib/env.js'
 import { getWorkspaceInfo, loadConfig } from '../lib/env.js'
 import { SETTING_SPECS, type IntSettingKey, type SettingKey } from '../lib/settingSpecs.js'
 import { loadLabelSchemaFile } from '../schema/yamlLoader.js'
@@ -91,11 +93,22 @@ settingsRoutes.patch('/api/settings', async (c) => {
   const txn = getDb().transaction((entries: Array<[string, string]>) => {
     for (const [k, v] of entries) stmt.run(k, v)
   })
-  // The secret goes to cache_meta, not `setting`: readAllSettings() returns
-  // the whole setting table and this route ships it verbatim, so a row there
-  // would be readable by anyone who can reach the UI.
+  // The secret goes to the control plane, not `setting`: readAllSettings()
+  // returns the whole setting table and this route ships it verbatim, so a row
+  // there would be readable by anyone who can reach the UI. It also must not
+  // live in the per-workspace graph.db, which is a rebuildable cache.
   const { linear_webhook_secret: secret, ...rest } = parsed.data
-  if (secret !== undefined) writeMeta(WEBHOOK_SECRET_KEY, secret.trim())
+  if (secret !== undefined) {
+    const wid = getCurrentWorkspaceId() ?? getDefaultWorkspaceId()
+    const existing = readWorkspaceRows().find((r) => r.id === wid)
+    if (!existing) {
+      return c.json(
+        { error: { code: 'unconfigured', message: 'Add a workspace before setting a webhook secret.' } },
+        400,
+      )
+    }
+    upsertWorkspace({ id: wid, name: existing.name, webhookSecret: secret.trim() })
+  }
   const entries: Array<[string, string]> = Object.entries(rest).map(([k, v]) => [
     k,
     typeof v === 'boolean' ? (v ? '1' : '0') : String(v),

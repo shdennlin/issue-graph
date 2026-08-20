@@ -12,10 +12,16 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 const storage = new AsyncLocalStorage<string>()
 
 /**
- * Sentinel id used when no `WORKSPACE_*` profiles are configured (legacy
- * single-workspace mode). All caches still keyed by id, just one entry.
+ * Sentinel id used when the workspace roster is empty — nothing has been set
+ * up yet and the onboarding screen is what the user sees. All caches stay
+ * keyed by id, this one just has no credentials behind it.
+ *
+ * Previously named UNCONFIGURED_WORKSPACE_ID, for the single-workspace mode that
+ * existed when profiles came from `WORKSPACE_*` env vars. That mode is gone:
+ * an empty roster no longer means "one implicit workspace from LINEAR_API_KEY",
+ * it means "not configured".
  */
-export const LEGACY_WORKSPACE_ID = '__legacy__'
+export const UNCONFIGURED_WORKSPACE_ID = '__unconfigured__'
 
 export function runWithWorkspace<T>(workspaceId: string, fn: () => T): T {
   return storage.run(workspaceId, fn)

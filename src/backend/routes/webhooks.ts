@@ -20,16 +20,19 @@ import { Hono } from 'hono'
 import { readMeta, writeMeta } from '../cache.js'
 import { publish, BUS_EVENT } from '../lib/eventBus.js'
 import { getLogger } from '../lib/log.js'
-import { getCurrentWorkspaceId, LEGACY_WORKSPACE_ID, runWithWorkspace } from '../lib/workspaceContext.js'
+import { getCurrentWorkspaceId, runWithWorkspace } from '../lib/workspaceContext.js'
+import { getDefaultWorkspaceId, getWorkspaceSecret } from '../lib/env.js'
 import { isFreshTimestamp, verifyLinearSignature } from '../lib/webhookAuth.js'
 import { scheduleWorkspaceSync } from '../lib/webhookDebounce.js'
 import { allowRequest } from '../lib/rateLimit.js'
 import { syncOnce } from '../sync.js'
 
-/** cache_meta keys. Deliberately not `setting` rows: readAllSettings() returns
- *  the whole table and GET /api/settings ships it verbatim, so a secret stored
- *  there would be readable by anything that can reach the UI. */
-export const WEBHOOK_SECRET_KEY = 'linear_webhook_secret'
+/** cache_meta keys for the delivery counters. The secret itself is NOT here:
+ *  it moved to the control plane, because cache_meta lives in the
+ *  per-workspace graph.db, and that file is a rebuildable cache. Deleting it
+ *  to force a re-sync is normal troubleshooting, and it used to take the
+ *  webhook secret with it — every delivery would then 401 as 'unconfigured'
+ *  with nothing on screen to explain why. */
 export const WEBHOOK_STAT_LAST_OK = 'linear_webhook_last_ok_ms'
 export const WEBHOOK_STAT_OK_COUNT = 'linear_webhook_ok_count'
 export const WEBHOOK_STAT_LAST_REJECT = 'linear_webhook_last_reject_ms'
@@ -101,7 +104,7 @@ export function readWebhookStats(): {
     return Number.isFinite(n) ? n : 0
   }
   return {
-    secret_set: Boolean(readMeta(WEBHOOK_SECRET_KEY)),
+    secret_set: Boolean(getWorkspaceSecret(getCurrentWorkspaceId() ?? getDefaultWorkspaceId())),
     last_ok_ms: num(WEBHOOK_STAT_LAST_OK) || null,
     ok_count: num(WEBHOOK_STAT_OK_COUNT),
     last_reject_ms: rejects.lastMs || num(WEBHOOK_STAT_LAST_REJECT) || null,
@@ -138,7 +141,10 @@ webhookRoutes.post('/api/webhooks/linear', async (c) => {
     reject('too-large')
     return c.json({ error: 'payload too large' }, 413)
   }
-  const secret = readMeta(WEBHOOK_SECRET_KEY) ?? ''
+  // Bound early: the same id is used for the secret lookup and for the sync
+  // below, so a roster change mid-request cannot split them.
+  const wid = getCurrentWorkspaceId() ?? getDefaultWorkspaceId()
+  const secret = getWorkspaceSecret(wid) ?? ''
 
   if (!verifyLinearSignature(rawBody, c.req.header('linear-signature'), secret)) {
     reject(secret ? 'bad-signature' : 'unconfigured')
@@ -172,10 +178,9 @@ webhookRoutes.post('/api/webhooks/linear', async (c) => {
     'linear webhook accepted',
   )
 
-  // Capture the workspace now. The debounce timer fires after this request's
+  // `wid` was captured above. The debounce timer fires after this request's
   // AsyncLocalStorage scope has closed, and it can be re-armed by a later
   // request, so the job must carry its own scope rather than inherit one.
-  const wid = getCurrentWorkspaceId() ?? LEGACY_WORKSPACE_ID
   scheduleWorkspaceSync(wid, async () => {
     await runWithWorkspace(wid, async () => {
       // force: true — a plain sync returns the in-flight promise, which would

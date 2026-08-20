@@ -1,13 +1,12 @@
 import { z } from 'zod'
 import {
   buildWorkspaceConfig,
-  clearActiveWorkspaceOverride,
-  listWorkspaceProfiles,
-  readActiveWorkspaceOverride,
   resolveProfileValuesById,
+  webhookSecretFor,
   type WorkspaceProfile,
-} from '../workspaces.js'
-import { getCurrentWorkspaceId, LEGACY_WORKSPACE_ID } from './workspaceContext.js'
+  type WorkspaceRow,
+} from '../controlStore.js'
+import { getCurrentWorkspaceId, UNCONFIGURED_WORKSPACE_ID } from './workspaceContext.js'
 
 // Load .env from CWD if present (no-op in production where env comes from Docker).
 // Uses Node's built-in loader (≥20.12) — avoids the dotenv dependency.
@@ -105,24 +104,67 @@ export type ActiveWorkspaceInfo = {
   profiles: WorkspaceProfile[]
 }
 
-// Per-workspace Config cache. Keyed by workspace id (or LEGACY_WORKSPACE_ID
-// when no profiles are defined). Built lazily on first loadConfig() call for
-// each id. Invariants:
+// Per-workspace Config cache. Keyed by workspace id (or
+// UNCONFIGURED_WORKSPACE_ID when the roster is empty). Built lazily on first
+// loadConfig() call for each id. Invariants:
 //   - Same id → same Config object (downstream Map<id, T> caches stay coherent).
 //   - Different ids → independent Configs, no cross-talk.
 const configByWorkspaceId: Map<string, Config> = new Map()
 
 // Cached default workspace id — the one used when no AsyncLocalStorage
 // context is set (background tasks, server bootstrap) or when a request
-// arrives without `?w=`. Re-derived from active-workspace.json + env.
-// `bustDefaultWorkspaceCache()` clears this when the override file changes.
+// arrives without `?w=`. Re-derived from the roster + stored active id.
+// `bustDefaultWorkspaceCache()` clears this when the selection changes.
 let cachedDefaultWid: string | null = null
 let cachedWorkspaceInfo: ActiveWorkspaceInfo | null = null
 
-// Base (pre-profile) SQLITE_PATH — needed for active-workspace.json location.
-// The override file lives next to the BASE path, NOT next to a profile-resolved
-// path (which would route the override into a per-workspace subdir).
+// Base (pre-profile) SQLITE_PATH. The control plane lives next to the BASE
+// path, NOT next to a profile-resolved path (which would route it into a
+// per-workspace subdir the loader never reads from).
 let cachedBaseSqlitePath: string | null = null
+
+// ---------------------------------------------------------------------------
+// Roster source.
+//
+// The workspace roster lives in controlDb.ts, which imports `bun:sqlite` — a
+// specifier vitest (Node) cannot resolve. Importing it here would break every
+// test that transitively reaches loadConfig(), which is most of them via
+// getLogger(). So the roster is injected instead, and this module keeps no
+// database import at all.
+//
+// index.ts MUST call setRosterSource() before anything touches loadConfig(),
+// or the default workspace caches as "unconfigured" and stays that way.
+// ---------------------------------------------------------------------------
+
+export interface RosterSource {
+  rows: () => WorkspaceRow[]
+  readActive: () => string | null
+  clearActive: () => void
+}
+
+const EMPTY_ROSTER: RosterSource = {
+  rows: () => [],
+  readActive: () => null,
+  clearActive: () => undefined,
+}
+
+let roster: RosterSource = EMPTY_ROSTER
+let rosterWired = false
+
+export function setRosterSource(source: RosterSource): void {
+  roster = source
+  rosterWired = true
+  // Anything resolved against the empty default is now wrong.
+  cachedDefaultWid = null
+  cachedWorkspaceInfo = null
+  configByWorkspaceId.clear()
+}
+
+/** True once index.ts has wired the real roster. Lets callers tell "no
+ *  workspaces configured" apart from "asked too early". */
+export function isRosterWired(): boolean {
+  return rosterWired
+}
 
 // Base (pre-profile) config — env-only, identical across workspace ids.
 // Cached so resolving N workspace configs doesn't re-run Zod parse N times
@@ -144,62 +186,59 @@ function resolveDefaultWid(): string {
   const base = parseBaseConfig()
   cachedBaseSqlitePath = base.SQLITE_PATH
   const workspace = buildWorkspaceConfig({
-    env: process.env as Record<string, string | undefined>,
-    activeOverride: readActiveWorkspaceOverride(base.SQLITE_PATH),
+    rows: roster.rows(),
+    activeOverride: roster.readActive(),
     defaultSqlitePath: base.SQLITE_PATH,
   })
   if (workspace.staleOverride) {
-    clearActiveWorkspaceOverride(base.SQLITE_PATH)
+    roster.clearActive()
   }
   cachedWorkspaceInfo = {
     active: workspace.activeProfile,
     profiles: workspace.profiles,
   }
-  cachedDefaultWid = workspace.activeProfile?.id ?? LEGACY_WORKSPACE_ID
+  // No workspace configured yet: the sentinel keeps getDb()/getBackend() keyed
+  // consistently while the onboarding screen is what the user actually sees.
+  cachedDefaultWid = workspace.activeProfile?.id ?? UNCONFIGURED_WORKSPACE_ID
   return cachedDefaultWid
+}
+
+function warnIfRelativeRepoPath(repoPath: string | undefined): void {
+  if (!repoPath || repoPath.startsWith('/')) return
+  console.warn(
+    `[issue-graph] REPO_PATH="${repoPath}" is not absolute. ` +
+      `This works for local dev but will break under Docker (bind mounts require absolute paths). ` +
+      `Recommended: use an absolute path.`,
+  )
 }
 
 function buildConfigForWid(wid: string): Config {
   const base = parseBaseConfig()
   cachedBaseSqlitePath = base.SQLITE_PATH
+  warnIfRelativeRepoPath(base.REPO_PATH)
 
-  if (wid === LEGACY_WORKSPACE_ID) {
-    if (base.REPO_PATH && !base.REPO_PATH.startsWith('/')) {
-      console.warn(
-        `[issue-graph] REPO_PATH="${base.REPO_PATH}" is not absolute. ` +
-          `This works for local dev but will break under Docker (bind mounts require absolute paths). ` +
-          `Recommended: use an absolute path.`,
-      )
-    }
-    return base
+  if (wid === UNCONFIGURED_WORKSPACE_ID) {
+    // Nothing is set up yet. LINEAR_API_KEY is blanked rather than read from
+    // env: credentials come from the control plane now, and leaving the env
+    // path alive would mean an instance could look configured with no roster
+    // entry behind it — exactly the state the onboarding screen exists to
+    // resolve.
+    return { ...base, LINEAR_API_KEY: undefined, LINEAR_TEAM_ID: undefined }
   }
 
-  const values = resolveProfileValuesById(
-    process.env as Record<string, string | undefined>,
-    base.SQLITE_PATH,
-    wid,
-  )
+  const values = resolveProfileValuesById(roster.rows(), base.SQLITE_PATH, wid)
   if (!values) {
-    // Unknown wid — fall back to base config rather than throwing. The route
-    // layer should have validated wid before reaching here, but a defensive
-    // fallback keeps the server alive if it slips through.
-    return base
+    // Unknown wid. Returning base would hand back a config with no credentials
+    // pointing at the base DB path, which is the unconfigured state — safer
+    // than throwing, and the route layer should have validated wid already.
+    return { ...base, LINEAR_API_KEY: undefined, LINEAR_TEAM_ID: undefined }
   }
-  const parsed: Config = {
+  return {
     ...base,
-    LINEAR_API_KEY: values.LINEAR_API_KEY ?? base.LINEAR_API_KEY,
-    LINEAR_TEAM_ID: values.LINEAR_TEAM_ID ?? base.LINEAR_TEAM_ID,
-    REPO_PATH: values.REPO_PATH ?? base.REPO_PATH,
+    LINEAR_API_KEY: values.LINEAR_API_KEY,
+    LINEAR_TEAM_ID: values.LINEAR_TEAM_ID,
     SQLITE_PATH: values.SQLITE_PATH,
   }
-  if (parsed.REPO_PATH && !parsed.REPO_PATH.startsWith('/')) {
-    console.warn(
-      `[issue-graph] REPO_PATH="${parsed.REPO_PATH}" is not absolute. ` +
-        `This works for local dev but will break under Docker (bind mounts require absolute paths). ` +
-        `Recommended: use an absolute path.`,
-    )
-  }
-  return parsed
 }
 
 /**
@@ -222,17 +261,14 @@ export function isAuthConfigured(cfg: Config): boolean {
 }
 
 /**
- * Server's notion of the "default" workspace — what new tabs land on when
- * they have no `?w=` query, and what the watcher follows. Read from
- * active-workspace.json (with WORKSPACE_ACTIVE env / first-profile fallback).
- * Reflects the latest state across the whole process.
+ * Server's notion of the "default" workspace — what new tabs land on when they
+ * have no `?w=` query, and what the watcher follows. Resolved from the roster
+ * plus the stored active id, falling back to the first workspace. Reflects the
+ * latest state across the whole process.
  */
 export function getWorkspaceInfo(): ActiveWorkspaceInfo {
   if (!cachedWorkspaceInfo) resolveDefaultWid()
-  return cachedWorkspaceInfo ?? {
-    active: null,
-    profiles: listWorkspaceProfiles(process.env as Record<string, string | undefined>),
-  }
+  return cachedWorkspaceInfo ?? { active: null, profiles: [] }
 }
 
 export function getDefaultWorkspaceId(): string {
@@ -240,12 +276,37 @@ export function getDefaultWorkspaceId(): string {
 }
 
 /**
+ * One workspace's webhook secret, read off the roster.
+ *
+ * Lives here rather than in the webhook route so that route keeps its distance
+ * from controlDb.ts: routes/webhooks.ts is covered by a real test suite, and a
+ * `bun:sqlite` import anywhere in its graph would break that suite at import
+ * time. The secret is a column on a row the roster already holds, so this is a
+ * lookup rather than a second store.
+ */
+export function getWorkspaceSecret(wid: string): string | null {
+  return webhookSecretFor(roster.rows(), wid)
+}
+
+/**
  * Bust the default-wid cache so the next loadConfig() / getDefaultWorkspaceId()
- * re-reads active-workspace.json. Called after POST /api/workspaces/active
- * writes a new default. Per-wid Config caches stay valid (their values are
- * keyed by wid, which is independent of which one is the default).
+ * re-reads the stored active id. Called after POST /api/workspaces/active.
+ * Per-wid Config caches stay valid: their values are keyed by wid, which is
+ * independent of which one is the default.
  */
 export function bustDefaultWorkspaceCache(): void {
+  cachedDefaultWid = null
+  cachedWorkspaceInfo = null
+}
+
+/**
+ * Drop one workspace's cached Config so the next loadConfig() re-reads it from
+ * the roster. Required after an edit to that workspace's credentials —
+ * bustDefaultWorkspaceCache() deliberately does NOT clear configByWorkspaceId,
+ * so without this a changed API key would not take effect until restart.
+ */
+export function invalidateWorkspaceConfig(wid: string): void {
+  configByWorkspaceId.delete(wid)
   cachedDefaultWid = null
   cachedWorkspaceInfo = null
 }
