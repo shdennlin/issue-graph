@@ -37,7 +37,6 @@ export function App() {
   useTheme()
   useFontSize()
   useUrlSync()
-  const graph = useGraphStore((s) => s.graph)
   const status = useGraphStore((s) => s.status)
   const error = useGraphStore((s) => s.error)
   const loadGraph = useGraphStore((s) => s.load)
@@ -75,10 +74,10 @@ export function App() {
         if (cancelled) return
         const store = useWorkspaceStore.getState()
         store.setProfiles(ws.profiles)
-        store.setLegacyMode(ws.legacyMode)
+        store.setUnconfigured(ws.unconfigured)
         store.setDefaultWorkspaceId(ws.active?.id ?? null)
 
-        if (ws.legacyMode || ws.profiles.length === 0) {
+        if (ws.unconfigured || ws.profiles.length === 0) {
           store.setTabs([], null)
         } else {
           const fromUrl = store.currentWorkspaceId
@@ -156,6 +155,7 @@ export function App() {
   // we intentionally skip restore so URL-encoded view state (filters,
   // focus from the URL bar) survives the first render.
   const initialized = useWorkspaceStore((s) => s.initialized)
+  const unconfigured = useWorkspaceStore((s) => s.unconfigured)
   const activeTabId = useWorkspaceStore((s) => s.activeTabId)
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
   const refetchSilent = useGraphStore((s) => s.refetchSilent)
@@ -382,7 +382,7 @@ export function App() {
         const tag = target?.tagName?.toLowerCase()
         if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
         const ws = useWorkspaceStore.getState()
-        if (ws.legacyMode || ws.tabs.length === 0) return
+        if (ws.unconfigured || ws.tabs.length === 0) return
         const idx = parseInt(e.key, 10) - 1
         const targetTab = ws.tabs[idx]
         if (!targetTab) return
@@ -654,12 +654,15 @@ export function App() {
     }
   }
 
-  // Onboarding when backend unconfigured AND no cached data.
-  if (graph?.authError && (graph?.data.issues.length ?? 0) === 0) {
+  // Onboarding when the roster is empty. This keys off /api/workspaces rather
+  // than the graph's authError: the roster is known one request earlier (the
+  // bootstrap awaits it before /api/graph), and "no workspaces exist" is the
+  // state the form actually resolves. A workspace that exists but has a bad key
+  // is a different problem, and the normal UI plus the sync banner reports it
+  // better than a setup screen would.
+  if (unconfigured) {
     return (
       <div className="app-shell">
-        <SyncBanner />
-        <TabBar />
         <Onboarding />
       </div>
     )

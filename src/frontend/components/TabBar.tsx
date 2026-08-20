@@ -7,7 +7,7 @@
 //   [tabs … ] [+]   …spacer…   [picker?] [last sync] [N issues · M docs] [↻]
 //
 // Modes:
-//   - Multi-workspace (profiles.length >= 1, !legacyMode):
+//   - Multi-workspace (profiles.length >= 1, roster non-empty):
 //       Tabs render on the left. The workspace-picker (repoint-this-tab)
 //       only appears when profiles.length >= 2 — with a single profile it
 //       would be a no-op duplicate of the tab label.
@@ -49,7 +49,7 @@ function formatAge(age: number): string {
 export function TabBar() {
   // workspace store
   const profiles = useWorkspaceStore((s) => s.profiles)
-  const legacyMode = useWorkspaceStore((s) => s.legacyMode)
+  const unconfigured = useWorkspaceStore((s) => s.unconfigured)
   const tabs = useWorkspaceStore((s) => s.tabs)
   const activeTabId = useWorkspaceStore((s) => s.activeTabId)
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
@@ -174,7 +174,7 @@ export function TabBar() {
   // it via the SSE 'default-workspace-changed' broadcast (App.tsx).
   const firstTabWorkspaceId = tabs[0]?.workspaceId ?? null
   useEffect(() => {
-    if (!initialized || legacyMode) return
+    if (!initialized || unconfigured) return
     if (!firstTabWorkspaceId) return
     if (firstTabWorkspaceId === defaultWorkspaceId) return
     let cancelled = false
@@ -191,7 +191,7 @@ export function TabBar() {
     return () => {
       cancelled = true
     }
-  }, [firstTabWorkspaceId, defaultWorkspaceId, initialized, legacyMode, setDefaultWorkspaceIdInStore])
+  }, [firstTabWorkspaceId, defaultWorkspaceId, initialized, unconfigured, setDefaultWorkspaceIdInStore])
 
   if (!initialized) return null
 
@@ -285,8 +285,8 @@ export function TabBar() {
 
   const profileById = new Map(profiles.map((p) => [p.id, p]))
   const canClose = tabs.length > 1
-  const showTabs = !legacyMode && profiles.length > 0
-  const showPicker = !legacyMode && profiles.length >= 2
+  const showTabs = !unconfigured && profiles.length > 0
+  const showPicker = !unconfigured && profiles.length >= 2
 
   const last = graph?.fetchedAt ?? 0
   const ageMinutes = last ? Math.floor((now - last) / 60_000) : Infinity
