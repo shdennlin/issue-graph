@@ -24,7 +24,7 @@ bun x vitest run -t "overdue partition"   # by test name
 
 `bun run typecheck` is two separate `tsc` invocations because server (`src/backend`, `src/shared`) and web (`src/frontend`, `src/shared`) have different lib/target needs. When changes span both layers, expect to see both run.
 
-Docker for production-shaped runs: `cp .env.example .env` → set `LINEAR_API_KEY` → `docker compose up -d --build`. CI (`.github/workflows/ci.yml`) installs with `bun install --frozen-lockfile` and runs typecheck → lint → test → build → docker build.
+Docker for production-shaped runs: `docker compose up -d --build`, then open the app and add a workspace through the setup form. `.env` is optional now — it carries only the settings the server needs before it can open a database (see `.env.example`), and `docker-compose.yml` already pins `PORT` and `SQLITE_PATH`. CI (`.github/workflows/ci.yml`) installs with `bun install --frozen-lockfile` and runs typecheck → lint → test → build → docker build.
 
 ## Architecture in one screen
 
@@ -45,6 +45,10 @@ src/
     sync.ts, cache.ts     Pull-from-Linear → normalize → SQLite cache.
     db.ts                 bun:sqlite Database + inline MIGRATIONS array. Adding a column
                           means appending a CREATE TABLE / ALTER TABLE statement here.
+    controlStore.ts       PURE roster logic (rows in, resolved config out). Tested.
+    controlDb.ts          The bun:sqlite half: data/workspaces.db. Untestable under
+                          vitest by construction — keep it thin, no logic. Covered by
+                          controlDb.smoke.ts via `bun run test:smoke`.
   frontend/               React 18 + Vite + React Flow + dagre, no SSR.
     App.tsx               Lazy-loads heavy modals (DetailPanel, Notes, SettingsPage, …).
     store/                Zustand stores split by concern:
@@ -79,7 +83,13 @@ Path aliases (`@shared/*`, `@backend/*`, `@frontend/*`) are defined in the root 
 
 ### Workspace isolation
 
-Single-binary multi-tenant. `src/backend/lib/workspaceContext.ts` exposes an AsyncLocalStorage scope; the `/api/*` middleware in `index.ts` resolves `?w=<id>` (or the default) and runs the rest of the handler chain inside `runWithWorkspace(wid, …)`. Downstream `loadConfig()`, `getDb()`, `getBackend()`, `runDesignDocScan()` all call `getCurrentWorkspaceId()` — there is no per-route plumbing. Each workspace gets its own SQLite file under `data/workspaces/<id>/graph.db`. The sentinel `LEGACY_WORKSPACE_ID` keeps single-workspace deployments working with no profile config.
+Single-binary multi-tenant. `src/backend/lib/workspaceContext.ts` exposes an AsyncLocalStorage scope; the `/api/*` middleware in `index.ts` resolves `?w=<id>` (or the default) and runs the rest of the handler chain inside `runWithWorkspace(wid, …)`. Downstream `loadConfig()`, `getDb()`, `getBackend()`, `runDesignDocScan()` all call `getCurrentWorkspaceId()` — there is no per-route plumbing. Each workspace gets its own SQLite file under `data/workspaces/<id>/graph.db`. When the roster is empty, `UNCONFIGURED_WORKSPACE_ID` keeps every cache keyed consistently while the frontend shows the onboarding form.
+
+**Two SQLite stores, and the difference matters.** `data/workspaces.db` (the control plane) holds the roster: names, API keys, webhook secrets, and the active selection. `data/workspaces/<id>/graph.db` is a *rebuildable cache* — deleting one and re-syncing is a normal troubleshooting step. **Credentials therefore never go in `graph.db`.** The workspace id is a slug that derives the cache path, so re-adding a previously removed id re-adopts its data; that slug reaches the filesystem, so `isValidWorkspaceId()` in `controlStore.ts` is a traversal guard, not a formatting preference.
+
+**`lib/env.ts` must never import `controlDb.ts`.** The roster is injected via `setRosterSource()`, wired as the first statement of `createApp()`. Two reasons: `controlDb.ts` imports `bun:sqlite`, which would break every test that transitively reaches `getLogger()`; and `loadConfig()` caches on first use, so resolving once before the roster is wired pins the process to "unconfigured" for its lifetime.
+
+**After changing a workspace's credentials**, call `invalidateWorkspaceConfig(wid)` *and* `resetBackendCache(wid)` (see `applyWorkspaceEdit` in `routes/workspaces.ts`). `bustDefaultWorkspaceCache()` deliberately does not clear `configByWorkspaceId`, so without both the change does not take effect until restart.
 
 ### URL is the source of truth
 
@@ -99,7 +109,8 @@ Do **not** add manual `useMemo` / `useCallback`. The compiler memoizes for us. M
 ## Conventions
 
 - Tests are co-located beside source as `*.test.ts` / `*.test.tsx`. Grep for the existing nearest test before adding a new one.
-- Migrations are append-only entries in the `MIGRATIONS` array in `src/backend/db.ts`. Never edit a past entry — write a new ALTER.
+- Migrations are append-only entries in the `MIGRATIONS` array in `src/backend/db.ts` (per-workspace schema) or `CONTROL_MIGRATIONS` in `src/backend/controlDb.ts` (the roster). Never edit a past entry — write a new ALTER.
+- User-overridable settings go in `SETTING_SPECS` (`src/backend/lib/settingSpecs.ts`), which owns the bounds *and* the `stored > env > default` precedence; read them via `settingInt()`. Do not hand-wire a reader against the `setting` table — that pattern is how eight of nine settings ended up accepted, validated, stored, and then ignored. A setting with no consumer should not be in the registry at all.
 - The shared type module is the contract: changing `src/shared/types.ts` will propagate type errors to both sides; that's the intended signal.
 - Auth is intentionally absent — this is a localhost-only / Tailscale-style tool. Don't add CSRF/JWT/etc. unless the user explicitly asks; see the warning block in `README.md`.
 - No animations on programmatic scroll/pan unless the user asks. Direct `scrollTop = X` and `rf.setCenter(x, y, { zoom, duration: 0 })` are the house style.

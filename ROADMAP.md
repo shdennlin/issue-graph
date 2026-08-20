@@ -215,6 +215,14 @@ Direction, not commitment. Issues and PRs welcome on anything below.
 
 ## v1.5 — next
 
+- [x] **Workspaces move out of `.env`** — the roster (names, API keys, webhook
+      secrets) lives in `data/workspaces.db` and is managed from a setup form
+      and Settings, so a remote deployment no longer needs shell access to add
+      a Linear workspace. Replaces the `WORKSPACE_<ID>_*` env schema and its
+      single-key legacy mode listed under v1.3.
+      **Breaking:** per-workspace `REPO_PATH` is gone; `REPO_PATH` is now one
+      server-wide value. Existing deployments start with an empty roster and
+      re-enter their workspaces — re-using the same id reconnects the cached data.
 - [ ] Optional auth (basic-auth or token gate) for non-localhost deployments
 - [ ] Migrate the remaining v7 hook-rule violations (`set-state-in-effect`, `purity`) — currently suppressed per-call-site
 - [ ] Document the JSON shape of `/api/export` so users can build their own tools on top

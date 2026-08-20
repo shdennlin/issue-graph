@@ -1737,6 +1737,22 @@ body[data-detail-wide='1'] .inline-search { display: none; }
 .onboarding h1 { margin: 0 0 12px; }
 .onboarding pre { background: var(--chip-bg); padding: 8px; border-radius: var(--radius-sm); overflow-x: auto; }
 
+.workspace-list { list-style: none; margin: 0 0 10px; padding: 0; }
+.workspace-list > li { padding: 6px 0; border-bottom: 1px solid var(--node-border); }
+.workspace-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.workspace-name { font-weight: 600; }
+.workspace-id {
+  background: var(--chip-bg);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+.workspace-row-actions { margin-left: auto; display: flex; gap: 6px; }
+.workspace-edit { display: flex; gap: 6px; margin: 6px 0 2px; }
+.workspace-edit input { flex: 1; }
+.workspace-add { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.workspace-add label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+
 .sync-banner-error {
   background: var(--danger, #b91c1c);
   color: #fff;

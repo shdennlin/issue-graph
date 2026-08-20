@@ -199,6 +199,14 @@
 
 ## v1.5 — 接下來
 
+- [x] **工作區設定移出 `.env`** — 名冊（名稱、API 金鑰、webhook secret）改存在
+      `data/workspaces.db`，並透過設定畫面與設定頁管理，遠端部署不再需要 shell
+      權限才能新增 Linear 工作區。取代 v1.3 的 `WORKSPACE_<ID>_*` 環境變數結構
+      與單一金鑰的相容模式。
+      **破壞性變更：** 不再支援每個工作區各自的 `REPO_PATH`，改為單一伺服器層級
+      設定。既有部署啟動時名冊是空的，需要重新輸入工作區 — 使用相同代號即可接回
+      原本的快取資料。
+
 - [ ] 非 localhost 部署的選用驗證（basic-auth 或 token gate）
 - [ ] 把剩下的 v7 hook-rule 違規（`set-state-in-effect`、`purity`）遷移完，目前是逐個呼叫點壓抑警告
 - [ ] 把 `/api/export` 的 JSON 結構文件化，讓使用者能在上面建自己的工具

@@ -19,14 +19,19 @@ Self-hosted, read-only graph viewer for issue dependencies. Fetches from Linear,
 ```bash
 git clone https://github.com/<owner>/issue-graph
 cd issue-graph
-cp .env.example .env
-# edit .env, set LINEAR_API_KEY
 mkdir -p data
 docker compose up -d --build
 open http://localhost:31415
 ```
 
-When the page loads, the backend pulls active+recent issues from Linear, scans the optional repo at `REPO_PATH` for design docs, and renders the dependency graph.
+The app opens on a setup form. Give your workspace a name, paste a Linear
+personal API key (Linear → Settings → API → Create Personal API Key), and save.
+The backend then pulls active+recent issues, scans the optional repo at
+`REPO_PATH` for design docs, and renders the dependency graph.
+
+No `.env` is required. Your API key is stored server-side in
+`data/workspaces.db` and is never sent back to the browser — the API only ever
+reports whether one is set.
 
 > [!WARNING]
 > **Do not expose this port to a LAN or the internet without auth.**
@@ -36,48 +41,46 @@ When the page loads, the backend pulls active+recent issues from Linear, scans t
 > `localhost`-only use, but if you need remote access put it behind a reverse proxy
 > with auth (Tailscale, Cloudflare Access, basic-auth nginx, etc.).
 
-### Required env vars
+### Configuration
 
-| Var | Purpose |
-|---|---|
-| `LINEAR_API_KEY` | Personal API key — Linear → Settings → API → Create Personal API Key |
+There is nothing you must put in `.env`. Workspaces are managed in the app;
+`.env` carries only the handful of settings the server needs *before* it can
+open a database — where the data lives, which port to bind, log level — and all
+of them have defaults. See [`.env.example`](.env.example).
 
-Everything else has a sane default. `.env.example` is intentionally minimal;
-advanced workspace profile details live in [Advanced workspace profiles](docs/advanced-workspaces.md).
+One value is deliberately not configurable anywhere: the Linear API endpoint.
+Anyone who could change it could point the app at their own host and receive
+your API key in the next sync's `Authorization` header, so it is fixed in the
+source.
 
 ### Multiple Linear workspaces
 
-For the default single-workspace setup, keep using `LINEAR_API_KEY`. If you
-regularly switch between Linear workspaces, define named profiles in `.env`
-instead:
+Add as many as you like from **Settings → Workspaces**. Each one needs a short
+id (a slug like `client-a`) alongside its name; that id appears in the URL as
+`?w=client-a` and names the folder its cached data lives in, so re-adding an id
+you used before reconnects that workspace's existing cache instead of
+re-syncing from scratch.
 
-```env
-WORKSPACE_ACTIVE=personal
-
-WORKSPACE_PERSONAL_NAME=Personal
-WORKSPACE_PERSONAL_LINEAR_API_KEY=lin_api_xxx
-WORKSPACE_PERSONAL_LINEAR_TEAM_ID=
-WORKSPACE_PERSONAL_REPO_PATH=/path/to/personal/repo
-
-WORKSPACE_CLIENT_A_NAME=Client A
-WORKSPACE_CLIENT_A_LINEAR_API_KEY=lin_api_yyy
-WORKSPACE_CLIENT_A_LINEAR_TEAM_ID=
-WORKSPACE_CLIENT_A_REPO_PATH=/path/to/client-a/repo
-```
-
-The top-left becomes a **tab bar** when profiles are configured. Each tab
+The top-left becomes a **tab bar** once you have a workspace. Each tab
 holds its own workspace + filters + view + viewport, so you can keep two
 workspaces (or two views of the same workspace) open side-by-side and
 flip between them without losing context. Drag tabs left/right to reorder,
 `Cmd/Ctrl + 1..9` to jump to the Nth tab. Switching tabs (or workspaces)
-does not require a backend restart. API keys remain in `.env`.
+does not require a backend restart, and neither does changing an API key.
 
-Each profile gets isolated local data:
+Each workspace gets isolated local data:
 
 ```text
-data/workspaces/personal/graph.db
-data/workspaces/client_a/graph.db
+data/workspaces.db              <- the roster: names, API keys, webhook secrets
+data/workspaces/personal/graph.db   <- cached issues; safe to delete and re-sync
+data/workspaces/client-a/graph.db
 ```
+
+Only the first of those is worth backing up: it is small, holds your
+credentials, and cannot be rebuilt. The `graph.db` files are a cache.
+
+Removing a workspace deletes its roster entry and leaves its data directory
+alone, so nothing is destroyed behind a delete button.
 
 `Reset current workspace data` only clears the active profile's cache. Other
 workspace databases are left untouched.

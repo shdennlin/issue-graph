@@ -19,14 +19,18 @@
 ```bash
 git clone https://github.com/<owner>/issue-graph
 cd issue-graph
-cp .env.example .env
-# 編輯 .env，設定 LINEAR_API_KEY
 mkdir -p data
 docker compose up -d --build
 open http://localhost:31415
 ```
 
-頁面載入時，後端會從 Linear 拉取進行中與最近的議題、掃描 `REPO_PATH` 下的設計文件（選用），然後渲染相依圖。
+開啟後會看到設定畫面。輸入工作區名稱、貼上 Linear 個人 API 金鑰
+（Linear → Settings → API → Create Personal API Key）後儲存即可。接著後端會從
+Linear 拉取進行中與最近的議題、掃描 `REPO_PATH` 下的設計文件（選用），然後渲染
+相依圖。
+
+不需要 `.env`。API 金鑰儲存在伺服器端的 `data/workspaces.db`，永遠不會回傳到
+瀏覽器 — API 只會回報「是否已設定」。
 
 > [!WARNING]
 > **請勿在沒有驗證的情況下將此 port 暴露到 LAN 或網際網路。**
@@ -36,45 +40,40 @@ open http://localhost:31415
 > `localhost` 沒問題；如果需要遠端存取，請放在反向代理之後並加上身份驗證
 > （Tailscale、Cloudflare Access、basic-auth nginx 等）。
 
-### 必要環境變數
+### 設定
 
-| 變數 | 用途 |
-|---|---|
-| `LINEAR_API_KEY` | 個人 API 金鑰 — Linear → Settings → API → Create Personal API Key |
+`.env` 沒有任何必填項目。工作區直接在應用程式內管理；`.env` 只承載伺服器在
+「能打開資料庫之前」就需要知道的少數設定 — 資料放哪、綁哪個 port、log 等級 —
+而且全部都有預設值。詳見 [`.env.example`](.env.example)。
 
-其他都有合理預設值。`.env.example` 刻意精簡；
-進階的工作區設定檔細節請見 [Advanced workspace profiles](docs/advanced-workspaces.zh-TW.md)。
+有一項刻意不開放設定：Linear API endpoint。能改這個值的人就能把應用程式指向
+自己的主機，並在下一次同步時收到你的 API 金鑰（在 `Authorization` 標頭裡），
+因此它固定寫在原始碼中。
 
 ### 多個 Linear 工作區
 
-預設單工作區設定請繼續使用 `LINEAR_API_KEY`。如果你經常在多個 Linear 工作區之間
-切換，請在 `.env` 中改用具名的設定檔：
+在 **設定 → Workspaces** 中想加幾個就加幾個。每個工作區除了名稱之外還需要一個
+簡短代號（像 `client-a` 這樣的 slug）；這個代號會出現在網址的 `?w=client-a`，
+同時也是它快取資料夾的名稱 — 所以重新輸入用過的代號會接回原本的快取，而不必
+從頭重新同步。
 
-```env
-WORKSPACE_ACTIVE=personal
-
-WORKSPACE_PERSONAL_NAME=Personal
-WORKSPACE_PERSONAL_LINEAR_API_KEY=lin_api_xxx
-WORKSPACE_PERSONAL_LINEAR_TEAM_ID=
-WORKSPACE_PERSONAL_REPO_PATH=/path/to/personal/repo
-
-WORKSPACE_CLIENT_A_NAME=Client A
-WORKSPACE_CLIENT_A_LINEAR_API_KEY=lin_api_yyy
-WORKSPACE_CLIENT_A_LINEAR_TEAM_ID=
-WORKSPACE_CLIENT_A_REPO_PATH=/path/to/client-a/repo
-```
-
-設定多個設定檔後，左上角會變成 **分頁列**。每個分頁都有自己的工作區、篩選、檢視
+建立工作區後，左上角會變成 **分頁列**。每個分頁都有自己的工作區、篩選、檢視
 與視窗位置，因此你可以同時開兩個工作區（或同一工作區的兩個檢視）並在中間切換而
 不失去脈絡。拖曳分頁可重新排序，`Cmd/Ctrl + 1..9` 跳到第 N 個分頁。切換分頁
-（或工作區）不需要重新啟動後端。API 金鑰仍放在 `.env` 中。
+（或工作區）不需要重新啟動後端，更換 API 金鑰同樣不需要。
 
-每個設定檔擁有獨立的本地資料：
+每個工作區擁有獨立的本地資料：
 
 ```text
-data/workspaces/personal/graph.db
-data/workspaces/client_a/graph.db
+data/workspaces.db              <- 名冊：名稱、API 金鑰、webhook secret
+data/workspaces/personal/graph.db   <- 議題快取；刪掉重新同步即可
+data/workspaces/client-a/graph.db
 ```
+
+其中只有第一個值得備份：它很小、存放你的憑證，而且無法重建。`graph.db` 只是快取。
+
+移除工作區只會刪掉名冊中的那一筆，資料夾會原封不動保留 — 不會有東西在按下刪除
+之後被銷毀。
 
 `重設目前工作區資料` 只會清除目前作用中的設定檔快取。其他工作區資料庫不會被動到。
 

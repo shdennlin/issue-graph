@@ -3,6 +3,7 @@ import { useViewStore } from '../store/viewStore'
 import { useSchemaStore } from '../store/schemaStore'
 import { api, type SettingsResponse } from '../lib/api'
 import { ModalHeader } from './ModalHeader'
+import { WorkspaceSettings } from './WorkspaceSettings'
 import { LOCALES, useLocale, useSetLocale, useT, type Locale } from '../i18n'
 
 export function SettingsPage() {
@@ -409,6 +410,9 @@ export function SettingsPage() {
             {t('settings.resetHelp')}
           </div>
         </div>
+
+        <h4>{t('settings.workspaces')}</h4>
+        <WorkspaceSettings />
 
         <h4>{t('settings.annotations')}</h4>
         <button onClick={exportAnnotations}>{t('settings.exportJson')}</button>{' '}

@@ -1,68 +1,71 @@
-[English](advanced-workspaces.md) | **繁體中文**
+[English](advanced-workspaces.md) · [繁體中文](advanced-workspaces.zh-TW.md)
 
-# 進階工作區設定檔
+# 工作區（Workspaces）
 
-預設情況下還是用一支 `LINEAR_API_KEY`。工作區設定檔是給經常在多個 Linear 工作區之間切換、希望各自保留獨立快取資料的人用的。
+工作區直接在應用程式中管理 — **設定 → Workspaces**，或全新安裝時看到的設定畫面。
+已經沒有 `WORKSPACE_*` 環境變數設定；名冊存放在 `data/workspaces.db`。
 
-## 設定檔 id 與名稱
+## 代號（id）
 
-設定檔 id 來自環境變數名稱中間那一段：
+每個工作區除了顯示名稱之外都有一個簡短代號。應用程式會依名稱建議一個
+（`Client A` → `client-a`），你也可以自行修改。
 
-```env
-WORKSPACE_CLIENT_A_NAME=Client A
-WORKSPACE_CLIENT_A_LINEAR_API_KEY=lin_api_xxx
-```
+這個代號不只是裝飾：
 
-這定義了設定檔 id `client_a`。`NAME` 只是 UI 上顯示的標籤。
+- 它會出現在網址的 `?w=client-a`，因此連結可以指定工作區分享
+- 它是該工作區議題快取資料夾的名稱，
+  `data/workspaces/client-a/graph.db`
 
-預設情況下，設定檔資料儲存在：
+因為代號決定資料路徑，**重新輸入用過的代號會接回原本的快取**，不需要從頭同步。
+這也是為什麼這個欄位是可見且可編輯的，而不是隱藏的自動產生值。
+
+代號只能使用小寫英文、數字與連字號，且必須以英文或數字開頭。由於代號會變成
+資料夾名稱，伺服器會自行驗證，而不是信任表單。
+
+## 什麼東西存在哪裡
 
 ```text
-data/workspaces/<profile-id>/graph.db
+data/workspaces.db                   名冊：名稱、API 金鑰、webhook secret，
+                                     以及哪一個是預設工作區
+data/workspaces/<id>/graph.db        該工作區的議題、標籤、註記、筆記與快照快取
 ```
 
-例如：
+`workspaces.db` 很小、存放你的憑證，而且無法重建 — 這才是值得備份的檔案。
+`graph.db` 只是快取；刪掉重新同步是修復壞掉快取的正常手段，代價只有一次同步。
 
-```text
-data/workspaces/client_a/graph.db
-```
+憑證刻意**不**放在 `graph.db`，原因正是如此。
 
-只在你有特定理由時才覆寫路徑：
+## 移除工作區
+
+刪除工作區只會移除名冊中的那一筆，`data/workspaces/<id>/` 會原封不動留在磁碟上。
+不會有東西在按下刪除之後被銷毀；若你確定要清掉資料，請自行刪除該資料夾。
+
+API 金鑰與 webhook secret 會跟著名冊那筆一起消失，所以重新加入相同代號時要重新
+輸入憑證 — 快取的議題會回來，機密不會。
+
+## 更換憑證
+
+編輯工作區的 API 金鑰會在下一次同步生效，不需要重新啟動。
+
+## 設計文件與 `REPO_PATH`
+
+> [!NOTE]
+> **不再支援每個工作區各自的 repo 路徑。** `REPO_PATH` 是單一的伺服器層級環境
+> 變數，設計文件監看器會跟著目前的預設工作區。
+>
+> 這是刻意的取捨。若把路徑存在每個工作區上，它就必須能從設定表單編輯，而一個
+> 「把檔案掃描器指向任意絕對路徑」的表單欄位，在一個沒有身份驗證的應用程式裡
+> 等同於任意檔案讀取。如果你需要多個 repo 的設計文件進度，請一個 repo 跑一個
+> 執行個體。
+
+在 `.env` 中設定：
 
 ```env
-WORKSPACE_CLIENT_A_SQLITE_PATH=/app/data/client-a.db
+REPO_PATH=/Users/you/workspace/proj-a
 ```
 
-## 作用中的工作區
-
-`WORKSPACE_ACTIVE` 選擇初始作用中的設定檔：
-
-```env
-WORKSPACE_ACTIVE=client_a
-```
-
-當你從 UI 切換時，`issue-graph` 會在本地記住選擇，下次載入頁面時開的就是同一個工作區。這個 runtime 狀態存在 `data/` 底下，由 app 自行管理。
-
-如果 app 開的工作區不是你預期的，用左上角標籤的選擇器切回去。
-
-## Docker 與多個 repo 路徑
-
-SQLite 資料用預設的 Compose volume 就行：
-
-```yaml
-volumes:
-  - ./data:/app/data
-```
-
-設計文件掃描則不一樣：Docker 只能讀到 mount 進容器的 host 路徑。如果不同設定檔用了不同的 `WORKSPACE_<ID>_REPO_PATH`，每個 repo 路徑都要 mount。
-
-複製範例 override：
-
-```bash
-cp docker-compose.override.example.yml docker-compose.override.yml
-```
-
-然後編輯路徑：
+在 Docker 下，這個路徑也必須掛載進容器，並且兩邊使用相同的絕對路徑，這樣同一份
+`.env` 才能同時適用於 `bun run dev` 與 Compose：
 
 ```yaml
 services:
@@ -70,25 +73,14 @@ services:
     volumes:
       - ./data:/app/data
       - /Users/you/workspace/proj-a:/Users/you/workspace/proj-a:ro
-      - /Users/you/workspace/proj-b:/Users/you/workspace/proj-b:ro
 ```
 
-如果想要同一份 `.env` 同時適用於本機開發與 Docker，左右兩邊請用同樣的絕對路徑：
+不設定 `REPO_PATH` 就會完全停用設計文件掃描 — 在沒有 checkout repo 的遠端伺服器
+上，這正是正確的選擇。
 
-```env
-WORKSPACE_PROJ_A_REPO_PATH=/Users/you/workspace/proj-a
-WORKSPACE_PROJ_B_REPO_PATH=/Users/you/workspace/proj-b
-```
+### 修改沒有反映出來時
 
-如果只跑 Docker，可以把 repo mount 在容器內專用的前綴底下，例如 `/repos/proj-a`，但這樣本機 `bun run dev` 就看不到那些路徑，除非 host 上也有這些路徑存在。
-
-## 即時設計文件更新的疑難排解
-
-即時設計文件更新只監看作用中設定檔的 `REPO_PATH`。
-
-如果編輯 `tasks.md` 或 `proposal.md` 沒有更新圖：
-
-1. 確認左上角的工作區選擇器指向你正在編輯 repo 的設定檔。
-2. 確認 spec 目錄存在於 `WORKSPACE_<ID>_REPO_PATH` 底下 — OpenSpec 專案是 `openspec/`，Spectra 專案則是 `spec_dir` 解析到的位置（預設 `docs/specs/`；見 `.spectra.yaml`）。
-3. 在 Docker 下，確認 repo 路徑有 mount 進容器。
-4. 編輯完 `.env` 後重啟後端；UI 切換工作區本身不需要重啟。
+1. 確認 `REPO_PATH` 底下有 spec 目錄 — OpenSpec 專案是 `openspec/`，Spectra 專案
+   則是 `spec_dir` 解析出來的目錄（預設 `docs/specs/`，見 `.spectra.yaml`）。
+2. 在 Docker 下，確認 repo 已掛載進容器。
+3. 修改 `REPO_PATH` 後要重新啟動後端。在 UI 切換工作區不需要重啟，改 `.env` 需要。
