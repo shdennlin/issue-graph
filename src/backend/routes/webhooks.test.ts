@@ -18,8 +18,9 @@ vi.mock('../lib/eventBus.js', () => ({
   BUS_EVENT: { ISSUES_CHANGED: 'issues-changed' },
 }))
 
-import { webhookRoutes, WEBHOOK_SECRET_KEY, WEBHOOK_STAT_OK_COUNT, WEBHOOK_STAT_LAST_REASON } from './webhooks.js'
+import { webhookRoutes, WEBHOOK_SECRET_KEY, WEBHOOK_STAT_OK_COUNT, WEBHOOK_STAT_REJECT_COUNT } from './webhooks.js'
 import { __resetDebounceForTests } from '../lib/webhookDebounce.js'
+import { __resetRateLimitForTests } from '../lib/rateLimit.js'
 
 const SECRET = 'lin_wh_secret'
 
@@ -54,6 +55,7 @@ describe('POST /api/webhooks/linear', () => {
     syncOnce.mockClear()
     publish.mockClear()
     __resetDebounceForTests()
+    __resetRateLimitForTests()
     vi.useFakeTimers({ shouldAdvanceTime: true })
   })
   afterEach(() => {
@@ -96,7 +98,11 @@ describe('POST /api/webhooks/linear', () => {
     const res = await post(raw, sign(raw))
     expect(res.status).toBe(401)
     expect(await res.json()).toEqual({ error: 'unauthorized' })
-    expect(meta.get(WEBHOOK_STAT_LAST_REASON)).toBe('unconfigured')
+    // Asserted through the public accessor, not the store: rejections are
+    // counted in memory and flushed sparsely, so the store is deliberately
+    // stale between flushes.
+    const { readWebhookStats } = await import('./webhooks.js')
+    expect(readWebhookStats().last_reject_reason).toBe('unconfigured')
   })
 
   it('never syncs on a rejected request', async () => {
@@ -133,5 +139,55 @@ describe('POST /api/webhooks/linear', () => {
       await post(raw, sign(raw))
     }
     expect(meta.get(WEBHOOK_STAT_OK_COUNT)).toBe('3')
+  })
+})
+
+// Everything below bounds what an unauthenticated caller can cost us. The
+// endpoint is publicly reachable and its hostname is discoverable via
+// Certificate Transparency, so "rejecting is cheap" is not the same as free.
+describe('POST /api/webhooks/linear — abuse bounds', () => {
+  beforeEach(() => {
+    meta.clear()
+    meta.set(WEBHOOK_SECRET_KEY, SECRET)
+    syncOnce.mockClear()
+    __resetDebounceForTests()
+    __resetRateLimitForTests()
+  })
+
+  it('refuses an oversized body before reading or verifying it', async () => {
+    const res = await webhookRoutes.request('/api/webhooks/linear', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'content-length': String(4 * 1024 * 1024) },
+      body: body(),
+    })
+    expect(res.status).toBe(413)
+  })
+
+  it('accepts a normal-sized signed payload', async () => {
+    const raw = body()
+    const res = await post(raw, sign(raw))
+    expect(res.status).toBe(200)
+  })
+
+  it('answers 429 once the burst allowance is spent', async () => {
+    const codes: number[] = []
+    for (let i = 0; i < 40; i++) {
+      codes.push((await post(body({ n: i }))).status)
+    }
+    expect(codes).toContain(429)
+  })
+
+  // Persisting a counter per rejected request is a disk write an unauthorized
+  // caller controls. Rejections are counted in memory and flushed sparsely.
+  it('does not write to the store on every rejection', async () => {
+    for (let i = 0; i < 15; i++) await post(body({ n: i }))
+    const reject = Number(meta.get(WEBHOOK_STAT_REJECT_COUNT) ?? '0')
+    expect(reject).toBeLessThan(15)
+  })
+
+  it('still surfaces rejections in the settings summary', async () => {
+    await post(body())
+    const { readWebhookStats } = await import('./webhooks.js')
+    expect(readWebhookStats().reject_count).toBeGreaterThan(0)
   })
 })

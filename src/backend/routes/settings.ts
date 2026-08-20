@@ -1,15 +1,8 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { getDb } from '../db.js'
-import { readMeta, writeMeta } from '../cache.js'
-import {
-  WEBHOOK_SECRET_KEY,
-  WEBHOOK_STAT_LAST_OK,
-  WEBHOOK_STAT_OK_COUNT,
-  WEBHOOK_STAT_LAST_REJECT,
-  WEBHOOK_STAT_REJECT_COUNT,
-  WEBHOOK_STAT_LAST_REASON,
-} from './webhooks.js'
+import { writeMeta } from '../cache.js'
+import { WEBHOOK_SECRET_KEY, readWebhookStats } from './webhooks.js'
 import { getWorkspaceInfo, loadConfig } from '../lib/env.js'
 import { loadLabelSchemaFile } from '../schema/yamlLoader.js'
 import { readViewerCached } from '../sync.js'
@@ -52,24 +45,6 @@ const PatchSchema = z.object({
   linear_webhook_secret: z.string().max(200).optional(),
 })
 
-/** What the UI is allowed to know about the webhook: whether a secret exists
- *  and how the endpoint has been behaving. Never the secret itself — this
- *  response is served without auth. */
-function webhookSummary() {
-  const num = (k: string): number => {
-    const n = Number(readMeta(k) ?? '0')
-    return Number.isFinite(n) ? n : 0
-  }
-  return {
-    secret_set: Boolean(readMeta(WEBHOOK_SECRET_KEY)),
-    last_ok_ms: num(WEBHOOK_STAT_LAST_OK) || null,
-    ok_count: num(WEBHOOK_STAT_OK_COUNT),
-    last_reject_ms: num(WEBHOOK_STAT_LAST_REJECT) || null,
-    reject_count: num(WEBHOOK_STAT_REJECT_COUNT),
-    last_reject_reason: readMeta(WEBHOOK_STAT_LAST_REASON),
-  }
-}
-
 export const settingsRoutes = new Hono()
 
 settingsRoutes.get('/api/settings', (c) => {
@@ -104,7 +79,7 @@ settingsRoutes.get('/api/settings', (c) => {
     stored,
     viewer,
     workspace,
-    webhook: webhookSummary(),
+    webhook: readWebhookStats(),
   })
 })
 
