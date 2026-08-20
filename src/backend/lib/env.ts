@@ -50,14 +50,12 @@ const ConfigSchema = z.object({
   // Linear
   LINEAR_API_KEY: optStr,
   LINEAR_API_ENDPOINT: strDefault('https://api.linear.app/graphql'),
-  LINEAR_WORKSPACE: optStr,
   LINEAR_TEAM_ID: optStr,
 
   // Server
   PORT: portSchema,
   INSTANCE_LABEL: strDefault('personal-local'),
   LOG_LEVEL: strDefault('info'),
-  LOG_TO_FILE: z.string().optional().default('false').transform((v) => truthyBool.parse(v)),
 
   // Server static-serving toggle. Default true (production / docker behavior:
   // backend serves built dist/ at the root). Dev script sets this to false so
@@ -85,11 +83,9 @@ const ConfigSchema = z.object({
   CACHE_TTL_SECONDS: intDefault(900),
   DAILY_SNAPSHOT_HOUR: intDefault(2),
   SNAPSHOT_RETENTION_DAYS: intDefault(365),
-  SYNC_LOG_RETENTION: strDefault('forever'),
 
   // Design-doc
   DESIGNDOC_ADAPTER: strDefault('auto'),
-  DESIGNDOC_REQUIRED: z.string().optional().default('false').transform((v) => truthyBool.parse(v)),
 
   // UI defaults
   STALE_DAYS: intDefault(14),

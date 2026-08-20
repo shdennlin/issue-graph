@@ -93,7 +93,7 @@ Do **not** add manual `useMemo` / `useCallback`. The compiler memoizes for us. M
 
 - `bun:sqlite` is required — `better-sqlite3` was removed (Bun refuses to load its N-API binding; see `src/backend/db.ts` header). The previous `Dockerfile.node` no longer works against this code path. Backend code only runs on Bun now; the surface of the API stays Node-compatible via `@hono/node-server`.
 - TypeScript is strict with `noUncheckedIndexedAccess`. Destructuring `parts[0]` from a `string[]` is `string | undefined`. Plan for that.
-- Vitest runs in Node (not Bun) under the configured environment. Most suites use `happy-dom`; pure logic tests run in node. No `bun:test`.
+- Vitest runs in Node (not Bun). `vitest.config.ts` sets `environment: 'node'` for **every** suite — there is no per-suite override, and `happy-dom` is an installed but unconfigured devDependency. No `bun:test`. Consequence: `src/backend/db.ts` imports `bun:sqlite`, a specifier Node cannot resolve, so **no test can transitively import `db.ts`**. That is why `routes/webhooks.test.ts` mocks `../cache.js` — the mock exists to sever that import edge, not to simplify the test. Any new module that touches SQLite needs the same treatment: keep the `bun:sqlite` layer thin and put the logic in a pure module that takes rows.
 - `eslint-plugin-react-hooks` v7's full preset is enabled (not just `rules-of-hooks` + `exhaustive-deps`) — it will flag set-state-in-effect, ref purity, etc. Treat its warnings as real.
 
 ## Conventions
