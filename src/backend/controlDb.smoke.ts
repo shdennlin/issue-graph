@@ -12,6 +12,11 @@
 // migrations apply, the patch-style upsert does not clobber stored secrets,
 // and resolution works end to end against a real file.
 //
+// Lives under src/backend/ rather than scripts/ so tsconfig.server.json
+// typechecks it — the dynamic imports below carry literal paths, so tsc
+// verifies both the module resolution and every call signature. A copy in
+// scripts/ would rot silently.
+//
 //   bun run test:smoke
 
 import { mkdtempSync } from 'node:fs'
@@ -22,8 +27,8 @@ const dir = mkdtempSync(join(tmpdir(), 'ig-ctl-'))
 process.env.SQLITE_PATH = join(dir, 'graph.db')
 for (const k of Object.keys(process.env)) if (k.startsWith('WORKSPACE_')) delete process.env[k]
 
-const C = await import('../src/backend/controlDb.ts')
-const S = await import('../src/backend/controlStore.ts')
+const C = await import('./controlDb.js')
+const S = await import('./controlStore.js')
 
 let fails = 0
 const check = (label: string, got: unknown, want: unknown) => {
