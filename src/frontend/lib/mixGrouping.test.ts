@@ -7,7 +7,7 @@ function lab(id: string, name: string, group?: string): NormalizedLabel {
     id,
     name,
     color: '#000',
-    group: group ? { id: `g-${group}`, name: group, exclusive: true } : null,
+    group: group ? { id: `g-${group}`, name: group } : null,
   }
 }
 

@@ -72,7 +72,6 @@ describe('normalizeLabel', () => {
   it('flattens parent into group', () => {
     const lab = normalizeLabel({ id: '1', name: 'foo', color: '#fff', parent: { id: 'p1', name: 'service' } })
     expect(lab.group?.name).toBe('service')
-    expect(lab.group?.exclusive).toBe(true)
   })
 
   it('returns null group when no parent', () => {

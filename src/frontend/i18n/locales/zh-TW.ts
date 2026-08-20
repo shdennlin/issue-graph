@@ -273,6 +273,7 @@ export const zhTW: Dict = {
   },
   filterPanel: {
     otherLabels: '其他標籤',
+    exclusiveHint: '單選——這個 workspace 沒有任何議題同時掛這個群組的兩個標籤。再點一次已選的項目可清除。',
     sectionClear: '清除此區段的篩選',
     quick: '快速',
     activeOnly: '只看進行中',

@@ -4,7 +4,11 @@ import type { DetectedSchema, NormalizedIssue, NormalizedLabel } from '@shared/t
 
 const PRIMARY_GROUP_RE = /^(service|component|owner|module|team|area|domain)$/i
 const TYPE_GROUP_RE = /^(type|kind|category)$/i
-const PREFIX_RE = /^([a-z][a-z0-9-]+):\s*/
+// Case-insensitive to match PRIMARY_GROUP_RE / TYPE_GROUP_RE. The detected
+// token is lowercased so `Risk:` and `risk:` collapse into one family rather
+// than two half-populated ones — Linear does not normalize label casing, and
+// which variant a person types is not a distinction worth modelling.
+const PREFIX_RE = /^([a-z][a-z0-9-]+):\s*/i
 
 export interface AutodetectInput {
   labels: NormalizedLabel[]
@@ -74,7 +78,7 @@ export function detectSchema(input: AutodetectInput): DetectedSchema {
   for (const lab of labels) {
     const m = lab.name.match(PREFIX_RE)
     if (!m || !m[1]) continue
-    const token = m[1]
+    const token = m[1].toLowerCase()
     const arr = prefixCounts.get(token) ?? []
     arr.push(lab)
     prefixCounts.set(token, arr)

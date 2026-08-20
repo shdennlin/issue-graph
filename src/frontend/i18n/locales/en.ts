@@ -273,6 +273,7 @@ export const en = {
   },
   filterPanel: {
     otherLabels: 'Other labels',
+    exclusiveHint: 'Single choice — no issue in this workspace carries two labels from this group. Click the selected one to clear it.',
     sectionClear: 'Clear filters in this section',
     quick: 'Quick',
     activeOnly: 'Active only',

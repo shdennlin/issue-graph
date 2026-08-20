@@ -116,7 +116,7 @@ describe('applyFilters · label group selections', () => {
     id,
     name,
     color: '#000',
-    group: group ? { id: `g-${group}`, name: group, exclusive: true } : null,
+    group: group ? { id: `g-${group}`, name: group } : null,
   })
   const ios = label('1', 'iOS', 'Platform')
   const android = label('2', 'Android', 'Platform')
@@ -183,7 +183,7 @@ describe("applyFiltersExcluding · 'label'", () => {
     id,
     name,
     color: '#000',
-    group: group ? { id: `g-${group}`, name: group, exclusive: true } : null,
+    group: group ? { id: `g-${group}`, name: group } : null,
   })
   const ios = label('1', 'iOS', 'Platform')
   const android = label('2', 'Android', 'Platform')

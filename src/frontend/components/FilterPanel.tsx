@@ -7,7 +7,7 @@ import { useSchemaStore } from '../store/schemaStore'
 import { useResizable } from '../hooks/useResizable'
 import { stateColorVar, stateIcon, stateLabelFor } from '../lib/colors'
 import { applyFiltersExcluding, milestoneFilterKey, NO_MILESTONE_TOKEN } from '../views/filters'
-import { groupLabels } from '../lib/labelSchema'
+import { groupLabels, shortPrefixDisplay } from '../lib/labelSchema'
 import { projectColor } from '../lib/projectColor'
 import { Tooltip } from './Tooltip'
 import { useLocale, useT, type DictKey } from '../i18n'
@@ -655,7 +655,7 @@ export function FilterPanel() {
                 checked={(filters.prefixSelections[g.token] ?? []).includes(l.id)}
                 onChange={() => togglePrefix(g.token, l.id)}
               />
-              {l.name.replace(`${g.token}:`, '').trim()}
+              {shortPrefixDisplay(l.name, g.token)}
               <span className="count">{counts.byLabel.get(l.id) ?? 0}</span>
             </label>
           ))}
@@ -665,6 +665,13 @@ export function FilterPanel() {
       {otherLabelSections.map((sec) => {
         const isOrphan = sec.kind === 'orphan'
         const selected = isOrphan ? filters.orphanValues : (filters.groupSelections[sec.key] ?? [])
+        // autodetect measures exclusivity empirically — a group is exclusive
+        // when no issue in the cache carries two of its labels. Picking two
+        // would then always yield the same result as picking one, so the
+        // control is a radio. Clicking the active one clears it (a radio
+        // fires no change event in that case, hence onClick).
+        const exclusive =
+          !isOrphan && (schema.otherGroups.find((g) => g.name === sec.key)?.exclusive ?? false)
         return (
           <CollapsibleSection
             key={`${sec.kind}:${sec.key}`}
@@ -678,11 +685,23 @@ export function FilterPanel() {
             }
           >
             {sec.labels.map((l) => (
-              <label key={l.id}>
+              <label key={l.id} title={exclusive ? t('filterPanel.exclusiveHint') : undefined}>
                 <input
-                  type="checkbox"
+                  type={exclusive ? 'radio' : 'checkbox'}
+                  name={exclusive ? `filter-group-${sec.key}` : undefined}
                   checked={selected.includes(l.id)}
-                  onChange={() => (isOrphan ? toggleOrphan(l.id) : toggleGroupLabel(sec.key, l.id))}
+                  onChange={() => {
+                    if (exclusive) return
+                    if (isOrphan) toggleOrphan(l.id)
+                    else toggleGroupLabel(sec.key, l.id)
+                  }}
+                  onClick={() => {
+                    if (!exclusive) return
+                    setFilter('groupSelections', {
+                      ...filters.groupSelections,
+                      [sec.key]: selected.includes(l.id) ? [] : [l.id],
+                    })
+                  }}
                 />
                 {l.name}
                 <span className="count">{counts.byLabel.get(l.id) ?? 0}</span>

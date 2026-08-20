@@ -42,8 +42,11 @@ export type RelationType = 'blocks' | 'duplicate' | 'related'
 export interface NormalizedLabelGroup {
   id: string
   name: string
-  exclusive: boolean
 }
+// Exclusivity deliberately lives on DetectedSchema.otherGroups, not here.
+// Linear's API does not expose it, so it can only be measured across the whole
+// issue set (see schema/autodetect.ts) — a per-label copy could only ever be a
+// hardcoded placeholder, which is what it used to be.
 
 export interface NormalizedLabel {
   id: string

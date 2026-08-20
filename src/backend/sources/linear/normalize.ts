@@ -64,8 +64,6 @@ export function normalizeLabel(raw: any): NormalizedLabel {
       ? {
           id: String(raw.parent.id),
           name: String(raw.parent.name ?? ''),
-          // Exclusivity is observed empirically (PRD §5.3); default true and corrected in autodetect.
-          exclusive: true,
         }
       : null,
   }

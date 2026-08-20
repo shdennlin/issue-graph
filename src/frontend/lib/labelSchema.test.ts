@@ -3,7 +3,7 @@ import type { DetectedSchema, NormalizedIssue, NormalizedLabel } from '@shared/t
 import { groupIssueLabels } from './labelSchema'
 
 function lab(id: string, name: string, group?: string): NormalizedLabel {
-  return { id, name, color: '#000', group: group ? { id: `g-${group}`, name: group, exclusive: true } : null }
+  return { id, name, color: '#000', group: group ? { id: `g-${group}`, name: group } : null }
 }
 
 function issueWith(labels: NormalizedLabel[]): NormalizedIssue {
