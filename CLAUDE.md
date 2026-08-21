@@ -95,9 +95,20 @@ Single-binary multi-tenant. `src/backend/lib/workspaceContext.ts` exposes an Asy
 
 `urlSync.ts` (see header comment for the two-mode history strategy) encodes view, every filter, focus, chain, search, and workspace into the URL. "Significant" changes push a history entry (Cmd+[/Cmd+] navigate them); preference changes (theme, density, expanded buckets) only replace. When adding a new filter or view-level piece of state that users should be able to share via link, extend three things in `urlSync.ts`: the serializer, the deserializer, and the `significantSignature` (so Back/Forward treats it as a step).
 
-### React Compiler is on
+### Memoization is manual — React Compiler is NOT enabled
 
-Do **not** add manual `useMemo` / `useCallback`. The compiler memoizes for us. Manual memo here is noise and usually wrong.
+An earlier version of this file claimed the compiler was on and that manual
+`useMemo` / `useCallback` should never be added. That was wrong, and acting on it
+would strip real memoization from hot paths. Verified: `babel-plugin-react-compiler`
+appears in neither `package.json` nor `bun.lock`, `vite.config.ts` calls `react()`
+with no options, and no `react-compiler` ESLint rule is configured. The ~36 manual
+memos across `src/frontend/components/` are all load-bearing.
+
+So: memoize by hand where it pays — `GraphCanvas.tsx` (node/edge derivation runs on
+every hover and pan) and `FilterPanel.tsx` (counts over every issue) are the ones
+that matter. Keep dependency arrays honest; `eslint-plugin-react-hooks` is enabled
+and its `exhaustive-deps` warnings are real in both directions, including a
+*spurious* dep that makes a memo recompute for nothing.
 
 ## Stack notes that bite
 

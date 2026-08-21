@@ -282,14 +282,20 @@ export function FilterPanel() {
   // and vice versa. The 'orphan' bucket is a subtraction (everything no
   // earlier bucket claimed), which is what makes a label the schema has not
   // seen yet still reachable instead of silently unfilterable.
-  const presentLabels = new Map<string, NormalizedLabel>()
-  for (const i of issues) for (const l of i.labels) presentLabels.set(l.id, l)
-  const otherLabelSections = groupLabels([...presentLabels.values()], schema)
-    .filter((sec) => sec.kind === 'group' || sec.kind === 'orphan')
-    .map((sec) => ({
-      ...sec,
-      labels: [...sec.labels].sort((a, b) => a.name.localeCompare(b.name)),
-    }))
+  //
+  // Memoized: this walks every issue's every label, and FilterPanel re-renders
+  // on each filter toggle. (It was briefly written unmemoized on the strength
+  // of a CLAUDE.md claim that React Compiler was enabled — it is not.)
+  const otherLabelSections = useMemo(() => {
+    const presentLabels = new Map<string, NormalizedLabel>()
+    for (const i of issues) for (const l of i.labels) presentLabels.set(l.id, l)
+    return groupLabels([...presentLabels.values()], schema)
+      .filter((sec) => sec.kind === 'group' || sec.kind === 'orphan')
+      .map((sec) => ({
+        ...sec,
+        labels: [...sec.labels].sort((a, b) => a.name.localeCompare(b.name)),
+      }))
+  }, [issues, schema])
 
   const assignees = useMemo(() => {
     return [...counts.byAssignee.entries()].sort((a, b) => b[1] - a[1])
