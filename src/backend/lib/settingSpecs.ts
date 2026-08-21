@@ -8,13 +8,22 @@
 // straight off the env config by sync.ts — so changing them in Settings
 // silently did nothing. Three further keys had no reader on either side.
 //
+// Only genuinely server-side settings belong here: ones that change what the
+// backend fetches or retains, so every browser looking at this instance must
+// agree on them. Per-person display preferences live in the browser instead
+// (src/frontend/lib/preferences.ts) — server-side, they let two people sharing
+// an instance overwrite each other.
+//
 // Pure by construction: no `bun:sqlite` import, no db.js, no cache.js. Callers
 // pass the stored string in. That keeps this module testable under vitest,
 // which runs on Node and cannot resolve `bun:sqlite` (see CLAUDE.md).
 
-export type SettingSpec =
-  | { kind: 'int'; min: number; max: number }
-  | { kind: 'enum'; values: readonly string[] }
+/** Every setting is currently an integer with bounds. If a non-numeric one is
+ *  ever needed, widen this into a union then — not in advance. */
+export interface SettingSpec {
+  min: number
+  max: number
+}
 
 /**
  * Bounds live here and nowhere else. They previously existed twice — once in
@@ -22,19 +31,15 @@ export type SettingSpec =
  * and the two copies had already drifted apart.
  */
 export const SETTING_SPECS = {
-  default_view: { kind: 'enum', values: ['dependency', 'bucket', 'mix'] },
-  default_theme: { kind: 'enum', values: ['light', 'dark', 'auto'] },
-  stale_days_threshold: { kind: 'int', min: 1, max: 365 },
-  snapshot_retention_days: { kind: 'int', min: 1, max: 3650 },
-  daily_snapshot_hour: { kind: 'int', min: 0, max: 23 },
-  cache_ttl_seconds: { kind: 'int', min: 10, max: 24 * 3600 },
+  snapshot_retention_days: { min: 1, max: 3650 },
+  daily_snapshot_hour: { min: 0, max: 23 },
+  cache_ttl_seconds: { min: 10, max: 24 * 3600 },
 } as const satisfies Record<string, SettingSpec>
 
 export type SettingKey = keyof typeof SETTING_SPECS
-
-export type IntSettingKey = {
-  [K in SettingKey]: (typeof SETTING_SPECS)[K]['kind'] extends 'int' ? K : never
-}[SettingKey]
+/** Retained as a distinct name because call sites read better with it, and it
+ *  is the thing that must change first if a non-integer setting appears. */
+export type IntSettingKey = SettingKey
 
 /**
  * Resolve one integer setting: the stored value if it parses and satisfies the

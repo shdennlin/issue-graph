@@ -86,16 +86,6 @@ const ConfigSchema = z.object({
   // Design-doc
   DESIGNDOC_ADAPTER: strDefault('auto'),
 
-  // UI defaults
-  STALE_DAYS: intDefault(14),
-  DEFAULT_VIEW: strDefault('dependency'),
-  DEFAULT_THEME: strDefault('auto'),
-  NODE_DENSITY: strDefault('default'),
-  SHOW_ACTIVE_ONLY_DEFAULT: z
-    .string()
-    .optional()
-    .default('true')
-    .transform((v) => truthyBool.parse(v)),
 })
 
 export type Config = z.infer<typeof ConfigSchema>

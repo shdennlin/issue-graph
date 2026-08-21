@@ -18,6 +18,7 @@ import { useEffect, useSyncExternalStore } from 'react'
 import type { Viewport } from 'reactflow'
 import { useViewStore, type ViewId, type ThemeMode, type Density } from './viewStore'
 import { useWorkspaceStore } from './workspaceStore'
+import { DEFAULT_VIEW, readDefaultView } from '../lib/preferences'
 import type { IssueStateType } from '@shared/types.js'
 
 const STATE_TYPES: IssueStateType[] = ['backlog', 'unstarted', 'started', 'completed', 'canceled', 'triage']
@@ -86,7 +87,8 @@ function buildUrl(): string {
   // `?w=<id>` is *first* so the most operationally-relevant context (which
   // workspace this tab is viewing) is visible at the front of the URL bar.
   if (ws.currentWorkspaceId) params.set('w', ws.currentWorkspaceId)
-  if (s.activeView !== 'dependency') params.set('view', s.activeView)
+  // Omitted only for the user's default view — see resolveActiveView.
+  if (s.activeView !== readDefaultView()) params.set('view', s.activeView)
   if (s.focusedId) params.set('focus', s.focusedId)
   // `detail=1` reflects (and, when arriving via a deep link, drives) the
   // open detail panel. Only meaningful alongside a focused issue.
@@ -257,10 +259,14 @@ export function resolveActiveView(
   hasFocus: boolean,
   currentView: ViewId,
   preserveOnFocus: boolean,
+  defaultView: ViewId = DEFAULT_VIEW,
 ): ViewId {
   if (viewParam) return viewParam as ViewId
   if (preserveOnFocus && hasFocus) return currentView
-  return 'dependency'
+  // Must be the same value buildUrl omits `?view=` for. If the two disagree, a
+  // bare URL means one view to the writer and another to the reader, and
+  // Back/Forward flips the view under the user.
+  return defaultView
 }
 
 function parseUrl({ preserveViewOnFocus = false }: { preserveViewOnFocus?: boolean } = {}): void {
@@ -293,7 +299,13 @@ function parseUrl({ preserveViewOnFocus = false }: { preserveViewOnFocus?: boole
   const viewParam = params.get('view')
   const focus = params.get('focus')
   const currentView = useViewStore.getState().activeView
-  const nextView = resolveActiveView(viewParam, focus !== null, currentView, preserveViewOnFocus)
+  const nextView = resolveActiveView(
+    viewParam,
+    focus !== null,
+    currentView,
+    preserveViewOnFocus,
+    readDefaultView(),
+  )
   set({ activeView: nextView })
 
   // `detail=1` (only honored with a focus) opens the detail panel on arrival —

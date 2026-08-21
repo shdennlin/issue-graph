@@ -4,12 +4,17 @@ import { useSchemaStore } from '../store/schemaStore'
 import { api, type SettingsResponse } from '../lib/api'
 import { ModalHeader } from './ModalHeader'
 import { WorkspaceSettings } from './WorkspaceSettings'
+import { readDefaultView, writeDefaultView } from '../lib/preferences'
+import type { ThemeMode, ViewId } from '../store/viewStore'
 import { LOCALES, useLocale, useSetLocale, useT, type Locale } from '../i18n'
 
 export function SettingsPage() {
   const open = useViewStore((s) => s.settingsOpen)
   const close = useViewStore((s) => s.setSettingsOpen)
   const setStaleDays = useViewStore((s) => s.setStaleDays)
+  const staleDays = useViewStore((s) => s.staleDays)
+  const theme = useViewStore((s) => s.theme)
+  const setTheme = useViewStore((s) => s.setTheme)
   const fontSize = useViewStore((s) => s.fontSize)
   const setFontSize = useViewStore((s) => s.setFontSize)
   const maxColsPerRow = useViewStore((s) => s.maxColsPerRow)
@@ -96,12 +101,9 @@ export function SettingsPage() {
       return
     }
     await api.patchSettings(draft)
-    if (typeof draft.stale_days_threshold === 'number') setStaleDays(draft.stale_days_threshold)
     close(false)
   }
 
-  const storedStale = stored.stale_days_threshold ? Number(stored.stale_days_threshold) : undefined
-  const stale = (draft.stale_days_threshold ?? storedStale ?? env.stale_days) as number
   const storedTtl = stored.cache_ttl_seconds ? Number(stored.cache_ttl_seconds) : undefined
   const cacheTtl = (draft.cache_ttl_seconds ?? storedTtl ?? env.cache_ttl_seconds) as number
 
@@ -183,11 +185,15 @@ export function SettingsPage() {
         <div className="settings-body">
 
         <h4>{t('settings.display')}</h4>
+        {/* These three apply immediately to this browser rather than going
+            through draft -> PATCH. They are personal preferences, and as server
+            settings they both clobbered other people on a shared instance and
+            silently reverted on reload because nothing applied them at boot. */}
         <label style={{ display: 'block', marginBottom: 8 }}>
           {t('settings.defaultView')}{' '}
           <select
-            defaultValue={(stored.default_view as string) ?? (env.default_view as string)}
-            onChange={(e) => setDraft({ ...draft, default_view: e.target.value })}
+            defaultValue={readDefaultView()}
+            onChange={(e) => writeDefaultView(e.target.value as ViewId)}
           >
             <option value="dependency">{t('views.dependency.label')}</option>
             <option value="mix">{t('views.mix.label')}</option>
@@ -199,8 +205,8 @@ export function SettingsPage() {
         <label style={{ display: 'block', marginBottom: 8 }}>
           {t('settings.defaultTheme')}{' '}
           <select
-            defaultValue={(stored.default_theme as string) ?? (env.default_theme as string)}
-            onChange={(e) => setDraft({ ...draft, default_theme: e.target.value })}
+            defaultValue={theme}
+            onChange={(e) => setTheme(e.target.value as ThemeMode)}
           >
             <option value="auto">{t('settings.themeAuto')}</option>
             <option value="light">{t('settings.themeLight')}</option>
@@ -213,8 +219,11 @@ export function SettingsPage() {
             type="number"
             min={1}
             max={365}
-            defaultValue={stale}
-            onChange={(e) => setDraft({ ...draft, stale_days_threshold: Number(e.target.value) })}
+            defaultValue={staleDays}
+            onChange={(e) => {
+              const n = Number(e.target.value)
+              if (Number.isInteger(n) && n >= 1 && n <= 365) setStaleDays(n)
+            }}
           />
         </label>
         <div style={{ marginBottom: 8 }}>

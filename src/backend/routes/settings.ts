@@ -33,9 +33,6 @@ function intField(key: IntSettingKey) {
 }
 
 const PatchSchema = z.object({
-  default_view: z.enum(SETTING_SPECS.default_view.values).optional(),
-  default_theme: z.enum(SETTING_SPECS.default_theme.values).optional(),
-  stale_days_threshold: intField('stale_days_threshold'),
   snapshot_retention_days: intField('snapshot_retention_days'),
   daily_snapshot_hour: intField('daily_snapshot_hour'),
   cache_ttl_seconds: intField('cache_ttl_seconds'),
@@ -63,14 +60,9 @@ settingsRoutes.get('/api/settings', (c) => {
       issue_scope: cfg.ISSUE_SCOPE,
       linear_team_id: cfg.LINEAR_TEAM_ID ?? null,
       linear_api_key_set: Boolean(cfg.LINEAR_API_KEY),
-      stale_days: cfg.STALE_DAYS,
-      default_view: cfg.DEFAULT_VIEW,
-      default_theme: cfg.DEFAULT_THEME,
-      node_density: cfg.NODE_DENSITY,
       cache_ttl_seconds: cfg.CACHE_TTL_SECONDS,
       daily_snapshot_hour: cfg.DAILY_SNAPSHOT_HOUR,
       snapshot_retention_days: cfg.SNAPSHOT_RETENTION_DAYS,
-      show_active_only_default: cfg.SHOW_ACTIVE_ONLY_DEFAULT,
       primary_group_override: cfg.PRIMARY_GROUP ?? null,
       type_group_override: cfg.TYPE_GROUP ?? null,
       label_schema_path: cfg.LABEL_SCHEMA_PATH,

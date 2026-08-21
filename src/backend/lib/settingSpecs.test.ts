@@ -54,34 +54,28 @@ describe('SETTING_SPECS', () => {
   // The bounds used to be written twice — once in the PatchSchema that admits
   // a value and once in the reader that trusts it — and the two disagreed.
   // Whatever consumes this registry, there must only be one copy of them.
-  it('carries coherent bounds for every int setting', () => {
+  it('carries coherent bounds for every setting', () => {
     for (const [key, spec] of Object.entries(SETTING_SPECS)) {
-      if (spec.kind !== 'int') continue
       expect(spec.min, `${key}.min`).toBeLessThan(spec.max)
       expect(Number.isInteger(spec.min), `${key}.min is an integer`).toBe(true)
       expect(Number.isInteger(spec.max), `${key}.max is an integer`).toBe(true)
     }
   })
 
-  it('gives every enum setting at least two choices', () => {
-    for (const [key, spec] of Object.entries(SETTING_SPECS)) {
-      if (spec.kind !== 'enum') continue
-      expect(spec.values.length, `${key}.values`).toBeGreaterThan(1)
-    }
-  })
-
-  // The three keys dropped here — node_density, show_active_only_default and
-  // show_my_issues_default — had no reader anywhere on either side of the wire
-  // and no UI control that wrote them. Re-adding one means giving it a consumer
-  // in the same change, not just a row in the registry.
-  it('does not carry settings that nothing reads', () => {
+  // Only settings that are genuinely server-side belong here: they affect what
+  // the backend fetches or retains, so every browser looking at this instance
+  // must agree on them.
+  //
+  // default_view, default_theme and stale_days_threshold were dropped — they
+  // are per-person display preferences, and storing them server-side meant two
+  // people sharing an instance overwrote each other. They live in localStorage
+  // now (lib/preferences.ts). Re-adding one means giving it a consumer in the
+  // same change, not just a row in the registry.
+  it('carries only server-side settings, not display preferences', () => {
     expect(Object.keys(SETTING_SPECS).sort()).toEqual([
       'cache_ttl_seconds',
       'daily_snapshot_hour',
-      'default_theme',
-      'default_view',
       'snapshot_retention_days',
-      'stale_days_threshold',
     ])
   })
 })

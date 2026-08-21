@@ -169,9 +169,9 @@ export function TabBar() {
 
   // Keep server-default workspace in sync with the leftmost tab. Fires
   // whenever tabs[0]'s workspace changes (drag-reorder, tab close, add).
-  // The backend persists this to active-workspace.json and restarts the
-  // design-doc watcher on the new REPO_PATH; other open browser tabs see
-  // it via the SSE 'default-workspace-changed' broadcast (App.tsx).
+  // The backend persists this to the control plane and restarts the
+  // design-doc watcher; other open browser tabs see it via the SSE
+  // 'default-workspace-changed' broadcast (App.tsx).
   const firstTabWorkspaceId = tabs[0]?.workspaceId ?? null
   useEffect(() => {
     if (!initialized || unconfigured) return
