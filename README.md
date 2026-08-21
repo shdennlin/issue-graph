@@ -34,12 +34,20 @@ No `.env` is required. Your API key is stored server-side in
 reports whether one is set.
 
 > [!WARNING]
-> **Do not expose this port to a LAN or the internet without auth.**
-> `issue-graph` ships with **no authentication**. The write endpoints (`POST /api/sync`,
-> `POST/DELETE /api/annotations`, `POST /api/settings`) are open to anyone who can reach
-> the port. The default Docker compose binds `31415` on all interfaces — fine for
-> `localhost`-only use, but if you need remote access put it behind a reverse proxy
-> with auth (Tailscale, Cloudflare Access, basic-auth nginx, etc.).
+> **This app ships with no authentication.** Anyone who can reach the port can read every
+> workspace's issue data and call the write endpoints (`POST /api/sync`, `POST/DELETE
+> /api/annotations`, `PATCH /api/settings`, and the workspace routes, which accept API keys).
+>
+> Docker compose therefore publishes on `127.0.0.1` only. For remote access put a layer
+> with auth in front rather than widening the bind — on a Tailscale host,
+> `tailscale serve --bg 31415` reaches the loopback bind and terminates HTTPS, which the
+> PWA needs anyway (service workers require a secure context, so a plain
+> `http://<tailnet-ip>:31415` silently loses offline support). Cloudflare Access or an
+> auth-ing nginx work equally well.
+>
+> The one exception is `POST /api/webhooks/linear`, which is designed to be published and
+> is HMAC-authenticated. Expose that path alone — e.g. `tailscale funnel --bg
+> --set-path=/linear-hook http://localhost:31415/api/webhooks/linear` — never the whole port.
 
 ### Configuration
 

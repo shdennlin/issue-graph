@@ -33,12 +33,19 @@ Linear 拉取進行中與最近的議題、掃描 `REPO_PATH` 下的設計文件
 瀏覽器 — API 只會回報「是否已設定」。
 
 > [!WARNING]
-> **請勿在沒有驗證的情況下將此 port 暴露到 LAN 或網際網路。**
-> `issue-graph` **沒有內建身份驗證**。寫入端點（`POST /api/sync`、
-> `POST/DELETE /api/annotations`、`POST /api/settings`）對任何能連到該 port
-> 的人都是開放的。預設的 Docker compose 將 `31415` 綁在所有介面 — 自用
-> `localhost` 沒問題；如果需要遠端存取，請放在反向代理之後並加上身份驗證
-> （Tailscale、Cloudflare Access、basic-auth nginx 等）。
+> **這個應用程式沒有內建身份驗證。** 任何能連到該 port 的人都能讀取所有工作區的議題
+> 資料，並呼叫寫入端點（`POST /api/sync`、`POST/DELETE /api/annotations`、
+> `PATCH /api/settings`，以及會接收 API 金鑰的工作區路由）。
+>
+> 因此 Docker compose 只綁在 `127.0.0.1`。需要遠端存取時，請在前面加一層有驗證的入口，
+> 而不是把綁定範圍放寬 — 在 Tailscale 主機上，`tailscale serve --bg 31415` 能連到
+> loopback 綁定並提供 HTTPS，而 PWA 本來就需要它（service worker 需要 secure context，
+> 直接用 `http://<tailnet-ip>:31415` 會靜默失去離線支援）。Cloudflare Access 或加了
+> 驗證的 nginx 也同樣可行。
+>
+> 唯一的例外是 `POST /api/webhooks/linear`，它本來就設計成要公開，並且有 HMAC 驗證。
+> 只暴露那一條路徑 — 例如 `tailscale funnel --bg --set-path=/linear-hook
+> http://localhost:31415/api/webhooks/linear` — 絕對不要整個 port。
 
 ### 設定
 
