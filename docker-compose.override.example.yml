@@ -1,10 +1,20 @@
-# Copy this file to docker-compose.override.yml when workspace profiles use
-# different WORKSPACE_<ID>_REPO_PATH values and you want design-doc scanning
-# to work for each one under Docker.
+# Copy this file to docker-compose.override.yml when you need the design-doc
+# scanner to reach a repo on the host. Compose merges
+# docker-compose.override.yml with docker-compose.yml automatically.
 #
-# Compose automatically merges docker-compose.override.yml with
-# docker-compose.yml. Keep paths absolute so the same REPO_PATH value works
-# inside and outside the container.
+# REPO_PATH is a single server-wide setting — there is no per-workspace repo
+# path. (A path stored per workspace would have to be editable from the setup
+# form, and a form field aiming a filesystem scanner at any absolute path is a
+# file-read primitive in an app with no authentication.) So there is exactly
+# one repo to mount, and it must be at the SAME absolute path inside the
+# container as on the host, so one REPO_PATH value works for both
+# `bun run dev` and Compose.
+#
+# Leave REPO_PATH unset and skip this file entirely to disable design-doc
+# scanning — the right choice on a server where the repo is not checked out.
+#
+# Example .env:
+#   REPO_PATH=/Users/you/workspace/proj-a
 
 services:
   app:
@@ -12,9 +22,5 @@ services:
       # Keep the base data volume from docker-compose.yml.
       - ./data:/app/data
 
-      # Mount each profile repo at the same absolute path used in .env.
-      # Example .env:
-      # WORKSPACE_ONELEGION_REPO_PATH=/Users/you/workspace/onelegion
-      # WORKSPACE_CLIENT_A_REPO_PATH=/Users/you/workspace/client-a
-      - /Users/you/workspace/proj-A:/Users/you/workspace/proj-A:ro
-      - /Users/you/workspace/proj-B:/Users/you/workspace/proj-B:ro
+      # Same path on both sides. Read-only: the scanner never writes.
+      - /Users/you/workspace/proj-a:/Users/you/workspace/proj-a:ro

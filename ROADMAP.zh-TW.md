@@ -199,6 +199,11 @@
 
 ## v1.5 — 接下來
 
+- [x] **Linear push 式更新** — `POST /api/webhooks/linear` 接收 Linear 的 HMAC 簽章推播，
+      把一串連續事件收斂成一次同步，再透過既有的 SSE channel 廣播 `issues-changed`，
+      議題編輯不必等快取 TTL 就會出現。只要對外公開那一條路徑（例如 path-scoped 的
+      Tailscale funnel）；它是唯一設計成可以從外部連到的路由。
+
 - [x] **工作區設定移出 `.env`** — 名冊（名稱、API 金鑰、webhook secret）改存在
       `data/workspaces.db`，並透過設定畫面與設定頁管理，遠端部署不再需要 shell
       權限才能新增 Linear 工作區。取代 v1.3 的 `WORKSPACE_<ID>_*` 環境變數結構
@@ -221,7 +226,6 @@
   - 縮放感知的 bucket 摘要（縮小時把卡片換成狀態計數 chip 例如 `backend ◯3 ⏳2 ✓1`）
   - 拖曳重新排序 bucket
 - [ ] Timeline view — 把每日 snapshot 資料展現出來（已經有持久化；只缺 UI）
-- [ ] Linear push 式更新 — 擴充 SSE channel 廣播 Linear webhooks，這樣議題變化（不只是設計文件編輯）也能不靠輪詢就出現
 
 ## 也許 — 不承諾
 

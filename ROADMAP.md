@@ -214,6 +214,11 @@ Direction, not commitment. Issues and PRs welcome on anything below.
 - Opt-in bundle-composition report via `rollup-plugin-visualizer`
 
 ## v1.5 — next
+- [x] **Linear push-style updates** — `POST /api/webhooks/linear` accepts Linear's
+      HMAC-signed deliveries, debounces a burst into one sync, and broadcasts
+      `issues-changed` over the existing SSE channel, so issue edits land without
+      waiting for the cache TTL. Publish that path alone (e.g. a path-scoped
+      Tailscale funnel); it is the only route meant to be reachable from outside.
 
 - [x] **Workspaces move out of `.env`** — the roster (names, API keys, webhook
       secrets) lives in `data/workspaces.db` and is managed from a setup form
@@ -237,7 +242,6 @@ Direction, not commitment. Issues and PRs welcome on anything below.
   - Zoom-aware bucket summary (when zoomed out, replace cards with a state-count chip like `backend ◯3 ⏳2 ✓1`)
   - Drag to reorder buckets
 - [ ] Timeline view — surface the daily snapshot data (already persisted; needs a UI)
-- [ ] Linear push-style updates — extend the SSE channel to broadcast Linear webhooks so issue changes (not just design-doc edits) appear without polling
 
 ## Maybe — no commitment
 
