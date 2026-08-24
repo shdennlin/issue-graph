@@ -66,8 +66,12 @@ export function createApp(): Hono {
   const cfg = loadConfig()
   const log = getLogger()
 
-  // Eagerly init the default workspace's DB so schema migrations run at startup.
-  getDb()
+  // Eagerly init the default workspace's DB so schema migrations run at startup
+  // — but only once there IS a workspace. On a fresh install the roster is
+  // empty, and migrating the unconfigured sentinel just leaves a stray empty
+  // graph.db sitting next to workspaces.db for the user to wonder about. The
+  // first real workspace gets its DB built on its first request anyway.
+  if (getWorkspaceInfo().profiles.length > 0) getDb()
 
   // Per-request workspace middleware: resolve `?w=<id>` (or fall back to the
   // current default) and run the rest of the handler chain under that
