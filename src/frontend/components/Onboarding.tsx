@@ -1,10 +1,13 @@
 import { useState } from 'react'
 import { api } from '../lib/api'
+import { apiErrorMessage } from '../lib/apiErrorMessage'
 import { isValidWorkspaceId, slugifyWorkspaceName } from '../lib/workspaceSlug'
-import { useT } from '../i18n'
+import { LOCALES, useLocale, useSetLocale, useT, type Locale } from '../i18n'
 
 export function Onboarding() {
   const t = useT()
+  const locale = useLocale()
+  const setLocale = useSetLocale()
   const [name, setName] = useState('')
   const [id, setId] = useState('')
   const [idTouched, setIdTouched] = useState(false)
@@ -46,13 +49,31 @@ export function Onboarding() {
       // once-per-install path.
       window.location.reload()
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(apiErrorMessage(err, t))
       setPhase('idle')
     }
   }
 
   return (
     <div className="onboarding">
+      {/* The locale picker normally lives in Settings, which is unreachable
+          from here — this screen renders alone, with no toolbar. The default
+          is English and navigator.language is deliberately not consulted, so
+          without this control a non-English user has no way to switch until
+          they have already created a workspace. */}
+      <div className="onboarding-locale">
+        <select
+          aria-label={t('settings.language')}
+          value={locale}
+          onChange={(e) => setLocale(e.target.value as Locale)}
+        >
+          {LOCALES.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.label}
+            </option>
+          ))}
+        </select>
+      </div>
       <h1>{t('onboarding.title')}</h1>
       <p>{t('onboarding.notConfigured')}</p>
 

@@ -1763,6 +1763,16 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   font-size: 13px;
 }
 
+.onboarding-locale { display: flex; justify-content: flex-end; margin-bottom: 4px; }
+.onboarding-locale select {
+  background: var(--bg);
+  color: var(--fg-muted);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  font-size: 12px;
+}
+
 .onboarding-form { display: flex; flex-direction: column; gap: 4px; margin-top: 20px; }
 .onboarding-form label {
   display: flex;

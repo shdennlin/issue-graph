@@ -223,6 +223,17 @@ export const en = {
       quickSwitcherOpenInNewTab: 'Open selected issue in a new tab',
     },
   },
+  apiError: {
+    invalid: 'That request was not valid.',
+    invalidId: 'Use lowercase letters, digits and dashes; the id must start with a letter or digit.',
+    exists: 'A workspace with that id already exists.',
+    keyRejected: 'Linear rejected this API key. Check for a typo, or that it has not been revoked.',
+    keyRejectedUnchanged: 'Linear rejected this API key. The previous one is unchanged.',
+    notFound: 'That workspace no longer exists.',
+    unconfigured: 'Add a workspace first.',
+    switchInProgress: 'Another workspace change is already running. Try again in a moment.',
+    switchFailed: 'Could not change the default workspace. Check the server logs.',
+  },
   onboarding: {
     submitting: 'Checking the key…',
     syncing: 'Fetching your issues…',

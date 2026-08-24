@@ -7,6 +7,7 @@
 
 import { useState } from 'react'
 import { api } from '../lib/api'
+import { apiErrorMessage } from '../lib/apiErrorMessage'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { isValidWorkspaceId, slugifyWorkspaceName } from '../lib/workspaceSlug'
 import { useT } from '../i18n'
@@ -40,7 +41,7 @@ export function WorkspaceSettings() {
       await fn()
       reload()
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(apiErrorMessage(err, t))
       setBusy(false)
     }
   }

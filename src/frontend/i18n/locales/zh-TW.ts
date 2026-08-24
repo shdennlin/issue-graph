@@ -223,6 +223,17 @@ export const zhTW: Dict = {
       quickSwitcherOpenInNewTab: '在新分頁中開啟選取的議題',
     },
   },
+  apiError: {
+    invalid: '這個請求不合法。',
+    invalidId: '只能使用小寫英文、數字與連字號，代號必須以英文或數字開頭。',
+    exists: '已經有相同代號的工作區了。',
+    keyRejected: 'Linear 拒絕了這把 API 金鑰。請檢查是否打錯，或金鑰是否已被撤銷。',
+    keyRejectedUnchanged: 'Linear 拒絕了這把 API 金鑰，原本的金鑰未被更動。',
+    notFound: '這個工作區已經不存在了。',
+    unconfigured: '請先新增一個工作區。',
+    switchInProgress: '另一個工作區變更正在進行中，請稍候再試。',
+    switchFailed: '無法變更預設工作區，請查看伺服器 log。',
+  },
   onboarding: {
     submitting: '驗證金鑰中…',
     syncing: '正在取得議題…',

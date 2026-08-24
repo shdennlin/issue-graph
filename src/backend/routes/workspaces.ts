@@ -184,7 +184,7 @@ workspaceRoutes.patch('/api/workspaces/:id', async (c) => {
       return c.json(
         {
           error: {
-            code: 'key_rejected',
+            code: 'key_rejected_unchanged',
             message: 'Linear rejected this API key. The previous one is unchanged.',
           },
         },
