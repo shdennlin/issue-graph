@@ -29,8 +29,8 @@ open http://localhost:31415
 Linear 拉取進行中與最近的議題、掃描 `REPO_PATH` 下的設計文件（選用），然後渲染
 相依圖。
 
-不需要 `.env`。API 金鑰儲存在伺服器端的 `data/workspaces.db`，永遠不會回傳到
-瀏覽器 — API 只會回報「是否已設定」。
+不需要 `.env` — `docker compose` 沒有這個檔案也跑得起來。API 金鑰儲存在伺服器端的
+`data/workspaces.db`，永遠不會回傳到瀏覽器 — API 只會回報「是否已設定」。
 
 > [!WARNING]
 > **這個應用程式沒有內建身份驗證。** 任何能連到該 port 的人都能讀取所有工作區的議題

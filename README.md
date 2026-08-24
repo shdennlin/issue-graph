@@ -29,9 +29,9 @@ personal API key (Linear → Settings → API → Create Personal API Key), and 
 The backend then pulls active+recent issues, scans the optional repo at
 `REPO_PATH` for design docs, and renders the dependency graph.
 
-No `.env` is required. Your API key is stored server-side in
-`data/workspaces.db` and is never sent back to the browser — the API only ever
-reports whether one is set.
+No `.env` is required — `docker compose` runs without one. Your API key is
+stored server-side in `data/workspaces.db` and is never sent back to the
+browser; the API only ever reports whether one is set.
 
 > [!WARNING]
 > **This app ships with no authentication.** Anyone who can reach the port can read every

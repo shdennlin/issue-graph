@@ -4,7 +4,13 @@ services:
     image: issue-graph:latest
     container_name: issue-graph
     restart: unless-stopped
-    env_file: .env
+    # required: false — a fresh clone has no .env, and it no longer needs one:
+    # workspaces are configured in the app, and everything that must be set
+    # before a database can be opened is either pinned below or has a default.
+    # Without this, `docker compose up` fails outright on a clean deploy.
+    env_file:
+      - path: .env
+        required: false
     environment:
       PORT: 31415  # pinned; overrides any PORT in .env
       # Snapshot scheduling uses local time (`now.getHours()` in sync.ts), and
