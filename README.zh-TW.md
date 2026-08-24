@@ -141,6 +141,56 @@ Service worker 只會預先快取 app shell（HTML / CSS / JS / icons）。Linea
 串流都只走網路，所以工作區資料永遠不會被舊快取覆蓋。解除安裝會反向清除兩者 — 不會
 在磁碟上留下殘餘。
 
+## 部署到伺服器
+
+上面那段就是完整的安裝流程 —— 伺服器也是同樣三個指令。差別在於連線方式、時區，
+以及**不該帶過去的東西**。
+
+```bash
+git clone https://github.com/shdennlin/issue-graph
+cd issue-graph && mkdir -p data
+docker compose up -d --build
+```
+
+**不要把筆電上的 `.env` 複製過去。** 全新伺服器根本不需要它，而裡面過期的
+`REPO_PATH` 會讓 Compose 在主機上建出一個空目錄 —— 設計文件掃描器接著就會對著
+空的掃。除非有明確理由，直接不要放 `.env`。
+
+**設定時區。** `docker-compose.yml` 釘的是 `TZ: Asia/Taipei`，請改成你的。容器
+預設 UTC，而每日快照是照本地時間觸發，時區設錯就只是快照在奇怪的時間跑。
+
+**決定怎麼連進去。** 這個應用程式沒有身份驗證，所以 Compose 只綁 `127.0.0.1`，
+前面必須有一層帶驗證的入口。在 Tailscale 主機上就一行：
+
+```bash
+tailscale serve --bg 31415
+```
+
+它連得到 loopback 綁定，同時提供 HTTPS —— 而你本來就需要 HTTPS：這個 PWA 會註冊
+service worker，而 service worker 需要 secure context，直接用
+`http://<tailnet-ip>:31415` 會靜默失去離線支援。Cloudflare Access 或加了驗證的
+nginx 也一樣可行。**不要**為了省事把綁定放寬成 `0.0.0.0` —— 那等於把所有工作區的
+議題資料、以及會接收 API 金鑰的那些路由，公開給任何連得到這台主機的人。
+
+**設計文件功能會是關閉的**，因為 repo 沒有 checkout 在那台機器上。對伺服器來說這
+正是預期狀態；需要的話請見[工作區](docs/advanced-workspaces.zh-TW.md)。
+
+接著開啟網址，用設定表單加入工作區，跟本機完全一樣。**沒有任何設定需要透過 SSH。**
+
+### 更新
+
+```bash
+git pull && docker compose up -d --build
+```
+
+`data/` 是 bind mount，會保留下來。schema migration 會在啟動時自動執行。名冊、
+金鑰、快取的議題更新後都還在。
+
+### 搬移執行個體
+
+複製 `data/workspaces.db` —— 名冊和憑證都在裡面。`data/workspaces/<id>/` 是快取，
+想保留快照歷史就一起帶，不然留著讓第一次同步從 Linear 重新填也可以。
+
 ## 客製化
 
 `issue-graph` 會自動偵測常見的 Linear 標籤群組名稱（分組用：

@@ -148,6 +148,63 @@ See **[Design-doc integration](docs/design-doc-integration.md)** for the full se
 
 The service worker pre-caches only the app shell (HTML / CSS / JS / icons). Linear data and the SSE event stream stay network-only, so workspace data is never served stale. Uninstalling reverses both — no leftover state on disk.
 
+## Running on a server
+
+The setup above is the whole install — a server is the same three commands.
+What differs is access, timezone, and what you must *not* bring with you.
+
+```bash
+git clone https://github.com/shdennlin/issue-graph
+cd issue-graph && mkdir -p data
+docker compose up -d --build
+```
+
+**Do not copy your laptop's `.env` across.** A fresh server does not need one,
+and a stale `REPO_PATH` in it makes Compose create that directory empty on the
+host — the design-doc scanner then happily scans nothing. Leave `.env` out
+entirely unless you have a reason.
+
+**Set the timezone.** `docker-compose.yml` pins `TZ: Asia/Taipei`; change it to
+yours. Containers default to UTC, and the daily snapshot fires on local time, so
+the wrong `TZ` just means snapshots at a surprising hour.
+
+**Decide how you will reach it.** The app has no authentication, so Compose
+publishes on `127.0.0.1` only and something with auth has to sit in front. On a
+Tailscale host that is one command:
+
+```bash
+tailscale serve --bg 31415
+```
+
+That reaches the loopback bind and terminates HTTPS, which you want regardless:
+the PWA installs a service worker, and service workers need a secure context, so
+a plain `http://<tailnet-ip>:31415` silently loses offline support. Cloudflare
+Access or an authenticating nginx work equally well. Do not widen the bind to
+`0.0.0.0` and call it done — that publishes every workspace's issue data, and
+the routes that accept API keys, to anything that can route to the host.
+
+**Design docs will be off**, since the repo is not checked out there. That is
+the intended state for a server; see [Workspaces](docs/advanced-workspaces.md)
+if you need them.
+
+Then open the URL and add your workspaces through the setup form, exactly as
+you would locally. Nothing is configured over SSH.
+
+### Updating
+
+```bash
+git pull && docker compose up -d --build
+```
+
+`data/` is a bind mount, so it survives. Schema migrations run at startup.
+Your roster, keys and cached issues are all still there afterwards.
+
+### Moving an instance
+
+Copy `data/workspaces.db` — that is the roster and the credentials. The
+`data/workspaces/<id>/` directories are caches; bring them if you want the
+snapshot history, or leave them and let the first sync refill from Linear.
+
 ## Customization
 
 `issue-graph` autodetects common Linear label group names (`service|component|owner|module|team|area|domain` for buckets, `type|kind|category` for icons). For different naming conventions or full control via `label-schema.yaml`, see **[Customizing labels and icons](docs/configuration.md)**.
