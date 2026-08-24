@@ -62,6 +62,7 @@ export function getControlDb(): Database {
 
   const versionRow = next.prepare('PRAGMA user_version').get() as { user_version: number }
   let version = versionRow.user_version
+  const applied: number[] = []
   for (let i = version; i < CONTROL_MIGRATIONS.length; i++) {
     const sql = CONTROL_MIGRATIONS[i]
     if (!sql) continue
@@ -70,10 +71,22 @@ export function getControlDb(): Database {
     // PRAGMA takes no bound parameters; `version` is a bounded integer derived
     // from the array length, so interpolation is safe here.
     next.run('PRAGMA user_version = ' + String(version))
-    getLogger().info({ migration: i }, 'applied control-plane migration')
+    applied.push(i)
   }
 
+  // Cache the handle BEFORE logging, and log only after the loop.
+  //
+  // getLogger() -> loadConfig() -> resolveDefaultWid() -> roster.rows() ->
+  // readWorkspaceRows() -> getControlDb(). Logging from inside the loop
+  // re-entered this function while `db` was still null, so a second Database
+  // was opened on the same file and leaked, and the migration loop ran twice.
+  // That was survivable only because every statement here is CREATE TABLE IF
+  // NOT EXISTS; the first ALTER TABLE added to CONTROL_MIGRATIONS would have
+  // thrown "duplicate column" on the second pass and taken boot down with it.
   db = next
+  if (applied.length > 0) {
+    getLogger().info({ migrations: applied }, 'applied control-plane migrations')
+  }
   return db
 }
 

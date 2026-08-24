@@ -38,6 +38,19 @@ const check = (label: string, got: unknown, want: unknown) => {
 }
 
 check('control db lands beside the base path', C.controlDbPath(), join(dir, 'workspaces.db'))
+
+// Regression guard. getControlDb() used to log from inside its migration loop,
+// and getLogger() -> loadConfig() -> readWorkspaceRows() re-entered it before
+// the handle was cached — so a second Database was opened on the same file and
+// the loop ran twice. Every statement being CREATE TABLE IF NOT EXISTS is the
+// only reason that was survivable; the first ALTER TABLE would have thrown
+// "duplicate column" on the second pass. A double run leaves user_version
+// correct, so assert the handle identity too: one file, one Database.
+check('migrations reach the final version exactly once', (() => {
+  const sqlite = C.getControlDb()
+  return (sqlite.prepare('PRAGMA user_version').get() as { user_version: number }).user_version
+})(), 2)
+check('repeated calls return the one cached handle', C.getControlDb() === C.getControlDb(), true)
 check('empty roster to start', C.readWorkspaceRows(), [])
 
 C.upsertWorkspace({ id: 'onelegion', name: 'OneLegion', apiKey: 'lin_api_A', teamId: 'T1' })
