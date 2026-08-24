@@ -24,12 +24,34 @@ export function SyncBanner() {
   const t = useT()
   const warning = graph?.workspaceWarning ?? null
   const authError = graph?.authError ?? false
+  const syncFailure = graph?.syncFailure ?? null
 
+  // No key configured at all.
   if (authError) {
     return (
       <div className="sync-banner-error">
         <span style={{ fontWeight: 600 }}>{t('syncBanner.authError')}</span>
         <span style={{ opacity: 0.9 }}>{t('syncBanner.authErrorHelp')}</span>
+        <button onClick={() => setSettingsOpen(true)} title={t('syncBanner.openSettingsTitle')}>
+          {t('syncBanner.openSettings')}
+        </button>
+      </div>
+    )
+  }
+
+  // A key IS configured but the last sync failed. The auth case is the one a
+  // first-time user hits by typing the key wrong, and it used to show as an
+  // empty graph with no explanation anywhere except the sync-history modal.
+  if (syncFailure) {
+    const isAuth = syncFailure.kind === 'auth'
+    return (
+      <div className="sync-banner-error">
+        <span style={{ fontWeight: 600 }}>
+          {isAuth ? t('syncBanner.syncAuthFailed') : t('syncBanner.syncFailed')}
+        </span>
+        <span style={{ opacity: 0.9 }}>
+          {isAuth ? t('syncBanner.syncAuthFailedHelp') : (syncFailure.message ?? '')}
+        </span>
         <button onClick={() => setSettingsOpen(true)} title={t('syncBanner.openSettingsTitle')}>
           {t('syncBanner.openSettings')}
         </button>

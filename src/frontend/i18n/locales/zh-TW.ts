@@ -245,6 +245,9 @@ export const zhTW: Dict = {
     otherBackends: '其他後端的設定請參閱 README。',
   },
   syncBanner: {
+    syncAuthFailed: '⚠ Linear 拒絕了這個工作區的 API 金鑰。',
+    syncAuthFailedHelp: '在更換之前無法同步。請檢查是否打錯，或金鑰是否已被撤銷。',
+    syncFailed: '⚠ 上一次同步失敗。',
     authError: '⚠ Linear 拒絕了這組憑證。',
     authErrorHelp: '同步已暫停，請到設定確認這個 workspace 的 API 金鑰。',
     workspaceChanged: '⚠ 工作區已變更：',

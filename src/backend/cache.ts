@@ -157,6 +157,14 @@ export function isCacheFresh(): boolean {
   return Date.now() - last < ttlSeconds * 1000
 }
 
+/** The most recent sync's status + message, for explaining an empty graph. */
+export function readLastSyncOutcome(): { status: string; message: string | null } | null {
+  const row = getDb()
+    .prepare('SELECT status, error_message FROM sync_log ORDER BY started_at DESC LIMIT 1')
+    .get() as { status: string; error_message: string | null } | undefined
+  return row ? { status: row.status, message: row.error_message } : null
+}
+
 export function writeIssueCache(issues: NormalizedIssue[]): void {
   const db = getDb()
   const now = Date.now()

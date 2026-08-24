@@ -9,10 +9,12 @@ import {
   readLastSyncMs,
   readAnnotations,
   readMeta,
+  readLastSyncOutcome,
 } from '../cache.js'
 import type { WorkspaceChangeWarning } from '@shared/types.js'
 import { kickBackgroundSync, syncOnce, readViewerCached } from '../sync.js'
 import { getActiveDesignDocAdapter } from '../designdoc/factory.js'
+import { syncFailureKind } from '../lib/syncStatus.js'
 
 export const graphRoutes = new Hono()
 
@@ -62,6 +64,11 @@ graphRoutes.get('/api/graph', async (c) => {
     cacheEmpty: issues.length === 0 && cacheEmpty,
     workspaceWarning,
     authError: !isAuthConfigured(cfg),
+    syncFailure: (() => {
+      const last = readLastSyncOutcome()
+      const kind = syncFailureKind(last?.status)
+      return kind ? { kind, message: last?.message ?? null } : null
+    })(),
   }
   return c.json(body)
 })

@@ -245,6 +245,9 @@ export const en = {
     otherBackends: 'For other backends, see the README.',
   },
   syncBanner: {
+    syncAuthFailed: '⚠ Linear rejected this workspace\u2019s API key.',
+    syncAuthFailedHelp: 'Nothing can sync until it is replaced. Check for a typo, or that the key has not been revoked.',
+    syncFailed: '⚠ The last sync failed.',
     authError: '⚠ Linear rejected these credentials.',
     authErrorHelp: 'Sync is paused. Check this workspace’s API key in Settings.',
     workspaceChanged: '⚠ Workspace changed:',

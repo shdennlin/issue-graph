@@ -8,6 +8,7 @@
 // Tailscale funnel mount is path-scoped to /api/webhooks/linear precisely so
 // that the rest of the API, this file included, stays unreachable from outside.
 
+import { existsSync } from 'node:fs'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import {
@@ -102,9 +103,11 @@ workspaceRoutes.post('/api/workspaces', async (c) => {
   applyWorkspaceEdit(id)
   getLogger().info({ workspaceId: id }, 'workspace created')
   // The slug decides the data path, so re-adding a previously-removed id
-  // re-adopts whatever cache is already on disk.
+  // re-adopts whatever cache is already on disk. Reported honestly: it was
+  // hardcoded true, which told a first-time user their brand-new workspace had
+  // picked up existing data.
   const dbPath = workspaceDbPath(getBaseSqlitePath(), id)
-  return c.json({ ok: true, id, dbPath, adoptedExistingData: true }, 201)
+  return c.json({ ok: true, id, dbPath, adoptedExistingData: existsSync(dbPath) }, 201)
 })
 
 workspaceRoutes.patch('/api/workspaces/:id', async (c) => {
