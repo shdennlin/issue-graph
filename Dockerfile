@@ -18,11 +18,18 @@ RUN bun install --production --frozen-lockfile || bun install --production
 # Runtime stage
 FROM oven/bun:1-slim
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends curl git && rm -rf /var/lib/apt/lists/*
+# curl: healthcheck. git: design-doc worktree scanning.
+# sqlite3: scripts/backup.sh uses the CLI's .backup command, which snapshots a
+# live WAL database safely — the script's own header and the README both say it
+# can run in the container, and without this it could not.
+RUN apt-get update && apt-get install -y --no-install-recommends curl git sqlite3 && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/build ./build
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=builder /app/package.json .
+# Operational scripts. backup.sh is documented as runnable at
+# /app/scripts/backup.sh; it was never copied in, so that path did not exist.
+COPY scripts ./scripts
 RUN mkdir -p /app/data && chown -R bun:bun /app/data
 EXPOSE 31415
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
