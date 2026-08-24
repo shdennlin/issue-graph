@@ -17,7 +17,7 @@ Self-hosted, read-only graph viewer for issue dependencies. Fetches from Linear,
 ## Five-minute setup
 
 ```bash
-git clone https://github.com/<owner>/issue-graph
+git clone https://github.com/shdennlin/issue-graph
 cd issue-graph
 mkdir -p data
 docker compose up -d --build

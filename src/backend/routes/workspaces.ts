@@ -32,6 +32,8 @@ import {
   writeControlMeta,
 } from '../controlDb.js'
 import { resetBackendCache } from '../sources/factory.js'
+import { LinearBackend } from '../sources/linear/index.js'
+import { classifyCredentialFailure } from '../lib/credentialCheck.js'
 
 const SwitchSchema = z.object({ id: z.string().min(1) })
 
@@ -59,6 +61,27 @@ let switching = false
 /** Re-read a workspace's config and rebuild its backend adapter on the next
  *  use. Without this an edited API key sits in the roster while the process
  *  keeps using the old one until restart. */
+/**
+ * Ask the backend whether a key actually works, before it is stored.
+ *
+ * Endpoint is read from server config, never from the request: a caller-supplied
+ * endpoint would let anyone point this at their own host and be handed the key
+ * in the Authorization header.
+ */
+async function verifyKey(
+  apiKey: string,
+  teamId: string | undefined,
+): Promise<{ ok: true; viewer: string | null } | { ok: false; failure: 'rejected' | 'unreachable' }> {
+  const cfg = loadConfig()
+  const probe = new LinearBackend({ apiKey, endpoint: cfg.LINEAR_API_ENDPOINT, teamId })
+  try {
+    const viewer = await probe.fetchViewer()
+    return { ok: true, viewer: viewer.displayName || viewer.email || null }
+  } catch (err) {
+    return { ok: false, failure: classifyCredentialFailure(err) }
+  }
+}
+
 function applyWorkspaceEdit(id: string): void {
   invalidateWorkspaceConfig(id)
   resetBackendCache(id)
@@ -98,6 +121,34 @@ workspaceRoutes.post('/api/workspaces', async (c) => {
     return c.json({ error: { code: 'exists', message: `Workspace "${id}" already exists.` } }, 409)
   }
 
+  // Check the key before storing it. A rejected key is refused outright — that
+  // is the typo case, and letting it save is what produced a blank graph with
+  // no explanation. An unreachable Linear is NOT a reason to block: it says
+  // nothing about the key, so the workspace saves and the response reports that
+  // it went in unverified.
+  let verified = false
+  let viewer: string | null = null
+  let unverifiedReason: string | null = null
+  if (parsed.data.apiKey) {
+    const check = await verifyKey(parsed.data.apiKey, parsed.data.teamId ?? undefined)
+    if (check.ok) {
+      verified = true
+      viewer = check.viewer
+    } else if (check.failure === 'rejected') {
+      return c.json(
+        {
+          error: {
+            code: 'key_rejected',
+            message: 'Linear rejected this API key. Check for a typo, or that it has not been revoked.',
+          },
+        },
+        400,
+      )
+    } else {
+      unverifiedReason = 'unreachable'
+    }
+  }
+
   upsertWorkspace({ ...parsed.data, id, name: parsed.data.name ?? id })
   bustDefaultWorkspaceCache()
   applyWorkspaceEdit(id)
@@ -107,7 +158,10 @@ workspaceRoutes.post('/api/workspaces', async (c) => {
   // hardcoded true, which told a first-time user their brand-new workspace had
   // picked up existing data.
   const dbPath = workspaceDbPath(getBaseSqlitePath(), id)
-  return c.json({ ok: true, id, dbPath, adoptedExistingData: existsSync(dbPath) }, 201)
+  return c.json(
+    { ok: true, id, dbPath, adoptedExistingData: existsSync(dbPath), verified, viewer, unverifiedReason },
+    201,
+  )
 })
 
 workspaceRoutes.patch('/api/workspaces/:id', async (c) => {
@@ -121,6 +175,24 @@ workspaceRoutes.patch('/api/workspaces/:id', async (c) => {
   if (!existing) {
     return c.json({ error: { code: 'not_found', message: `Unknown workspace: ${id}` } }, 404)
   }
+  // A replaced key gets the same check as a new one: a typo here fails exactly
+  // like a typo at setup. An empty string is a deliberate clear, not a key to
+  // verify.
+  if (parsed.data.apiKey) {
+    const check = await verifyKey(parsed.data.apiKey, parsed.data.teamId ?? existing.teamId ?? undefined)
+    if (!check.ok && check.failure === 'rejected') {
+      return c.json(
+        {
+          error: {
+            code: 'key_rejected',
+            message: 'Linear rejected this API key. The previous one is unchanged.',
+          },
+        },
+        400,
+      )
+    }
+  }
+
   // Omitted credential fields keep their stored value; '' clears one. That is
   // what lets the UI render an empty password box without wiping the secret on
   // every unrelated save.

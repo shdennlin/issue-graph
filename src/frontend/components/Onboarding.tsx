@@ -10,8 +10,12 @@ export function Onboarding() {
   const [idTouched, setIdTouched] = useState(false)
   const [apiKey, setApiKey] = useState('')
   const [teamId, setTeamId] = useState('')
-  const [busy, setBusy] = useState(false)
+  // 'saving' covers the create + key check; 'syncing' covers the first pull,
+  // which takes a few seconds against a real workspace. Without the second
+  // state the page reloaded straight into a blank canvas with no explanation.
+  const [phase, setPhase] = useState<'idle' | 'saving' | 'syncing'>('idle')
   const [error, setError] = useState<string | null>(null)
+  const busy = phase !== 'idle'
 
   const effectiveId = idTouched ? id : slugifyWorkspaceName(name)
   const idValid = isValidWorkspaceId(effectiveId)
@@ -20,15 +24,22 @@ export function Onboarding() {
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     if (!canSubmit) return
-    setBusy(true)
+    setPhase('saving')
     setError(null)
     try {
+      // The server verifies the key before storing it, so a typo comes back as
+      // an error here rather than as an empty graph later.
       await api.createWorkspace({
         id: effectiveId,
         name: name.trim() || effectiveId,
         apiKey: apiKey.trim(),
         teamId: teamId.trim() || null,
       })
+      // Pull the first batch while the user is still looking at a screen that
+      // says so. GET /api/graph runs a blocking first-run sync, and reloading
+      // straight away spent those seconds on an empty canvas instead.
+      setPhase('syncing')
+      await fetch(`/api/graph?w=${encodeURIComponent(effectiveId)}`).catch(() => undefined)
       // Full reload rather than a store update: the workspace store, the tab
       // state and the graph all bootstrap from /api/workspaces, and replaying
       // that sequence by hand is more moving parts than it is worth on a
@@ -36,7 +47,7 @@ export function Onboarding() {
       window.location.reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
-      setBusy(false)
+      setPhase('idle')
     }
   }
 
@@ -104,8 +115,13 @@ export function Onboarding() {
         {error && <div className="onboarding-error">{error}</div>}
 
         <button className="primary" type="submit" disabled={!canSubmit}>
-          {busy ? t('onboarding.submitting') : t('onboarding.submit')}
+          {phase === 'syncing'
+            ? t('onboarding.syncing')
+            : phase === 'saving'
+              ? t('onboarding.submitting')
+              : t('onboarding.submit')}
         </button>
+        {phase === 'syncing' && <div className="onboarding-hint">{t('onboarding.syncingHelp')}</div>}
       </form>
 
       <p style={{ color: 'var(--fg-muted)', fontSize: 12 }}>{t('onboarding.otherBackends')}</p>

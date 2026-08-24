@@ -224,6 +224,9 @@ export const en = {
     },
   },
   onboarding: {
+    submitting: 'Checking the key…',
+    syncing: 'Fetching your issues…',
+    syncingHelp: 'First sync — this can take a few seconds.',
     title: 'Welcome to Issue Graph',
     notConfigured: 'No workspaces yet. Add one to get started.',
     stepsHeading: 'Steps for Linear',
@@ -241,7 +244,6 @@ export const en = {
     fieldTeam: 'Team id (optional)',
     fieldTeamPlaceholder: 'Leave empty for all teams',
     submit: 'Add workspace',
-    submitting: 'Adding…',
     otherBackends: 'For other backends, see the README.',
   },
   syncBanner: {

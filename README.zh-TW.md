@@ -17,7 +17,7 @@
 ## 五分鐘快速啟動
 
 ```bash
-git clone https://github.com/<owner>/issue-graph
+git clone https://github.com/shdennlin/issue-graph
 cd issue-graph
 mkdir -p data
 docker compose up -d --build

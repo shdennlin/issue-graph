@@ -224,6 +224,9 @@ export const zhTW: Dict = {
     },
   },
   onboarding: {
+    submitting: '驗證金鑰中…',
+    syncing: '正在取得議題…',
+    syncingHelp: '第一次同步，可能需要幾秒鐘。',
     title: '歡迎使用 Issue Graph',
     notConfigured: '尚未建立任何 workspace，先新增一個吧。',
     stepsHeading: 'Linear 設定步驟',
@@ -241,7 +244,6 @@ export const zhTW: Dict = {
     fieldTeam: 'Team ID（選填）',
     fieldTeamPlaceholder: '留空表示全部團隊',
     submit: '新增 workspace',
-    submitting: '新增中…',
     otherBackends: '其他後端的設定請參閱 README。',
   },
   syncBanner: {

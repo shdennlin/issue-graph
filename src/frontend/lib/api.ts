@@ -9,6 +9,7 @@ import type {
   WorkflowState,
 } from '@shared/types.js'
 import { useWorkspaceStore } from '../store/workspaceStore'
+import { ApiError, extractApiError } from './apiError'
 
 /**
  * Inject the current tab's workspace id as `?w=<id>` into a path. The
@@ -33,7 +34,10 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${path}: ${text.slice(0, 200)}`)
+    // Surface the server's sentence, not the JSON envelope around it — these
+    // reach the user directly in the setup form.
+    const { code, message } = extractApiError(text)
+    throw new ApiError(message, res.status, code)
   }
   return (await res.json()) as T
 }
