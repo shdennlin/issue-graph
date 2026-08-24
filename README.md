@@ -26,8 +26,10 @@ open http://localhost:31415
 
 The app opens on a setup form. Give your workspace a name, paste a Linear
 personal API key (Linear → Settings → API → Create Personal API Key), and save.
-The backend then pulls active+recent issues, scans the optional repo at
-`REPO_PATH` for design docs, and renders the dependency graph.
+The key is checked against Linear before it is stored, so a typo comes back
+immediately instead of showing up later as an empty graph. The backend then
+pulls active+recent issues, scans the optional repo at `REPO_PATH` for design
+docs, and renders the dependency graph.
 
 No `.env` is required — `docker compose` runs without one. Your API key is
 stored server-side in `data/workspaces.db` and is never sent back to the
@@ -60,6 +62,36 @@ One value is deliberately not configurable anywhere: the Linear API endpoint.
 Anyone who could change it could point the app at their own host and receive
 your API key in the next sync's `Authorization` header, so it is fixed in the
 source.
+
+### Realtime updates (optional)
+
+By default the cache refreshes on a TTL, so an issue edited in Linear shows up
+on the next sync. A webhook makes it appear within a couple of seconds.
+
+1. **Set a shared secret.** Settings → Webhook, pick any long random string,
+   save. This has to come after you have added a workspace — the secret is
+   stored on the workspace row, not globally.
+2. **Publish just the webhook path.** It is the only route designed to be
+   reachable from outside; everything else must stay behind your loopback bind.
+   On a Tailscale host:
+
+   ```bash
+   tailscale funnel --bg --set-path=/linear-hook \
+     http://localhost:31415/api/webhooks/linear
+   ```
+
+3. **Register it in Linear.** Settings → API → Webhooks → new webhook, URL
+   `https://<your-host>.ts.net/linear-hook?w=<workspace-id>`, and paste the same
+   secret. The `?w=` is what routes a delivery to the right workspace, so one
+   funnel mount serves all of them.
+
+Deliveries are HMAC-verified, rejected if the timestamp is stale, rate-limited,
+and a burst is collapsed into a single sync. Settings → Webhook shows accepted
+and rejected counts — worth a look if updates stop arriving, since a webhook
+that silently stops just looks like a stale graph.
+
+Note that the secret lives on the workspace row, so removing and re-adding a
+workspace means setting it again.
 
 ### Multiple Linear workspaces
 
@@ -122,9 +154,20 @@ The service worker pre-caches only the app shell (HTML / CSS / JS / icons). Line
 
 ## Backup posture
 
-- **Daily SQLite backup**: `scripts/backup.sh` runs via cron, keeps 30 days locally at `data/backups/`.
-- **If the SQLite volume is lost**: the next sync repopulates issue data from Linear. Snapshot history (max 1 year) and user-added annotations would be lost.
-- **Off-site replication**: the tool deliberately does not ship with cloud-storage credentials handling. Operators wanting off-site backup should add their own rsync/rclone job pointing at `data/backups/`.
+Two SQLite stores with opposite characteristics, and the small one is the one
+that matters:
+
+- **`data/workspaces.db`** — the roster: names, API keys, webhook secrets, and
+  which workspace is the default. A few KB, holds credentials, and **cannot be
+  rebuilt** — losing it means re-entering every workspace by hand.
+- **`data/workspaces/<id>/graph.db`** — cached issues and labels. Megabytes, and
+  a re-sync restores all of it. Only its snapshot history and any annotations
+  are unrecoverable.
+
+- **Daily SQLite backup**: `scripts/backup.sh` runs via cron, keeps 30 days locally at `data/backups/`. It backs up the control plane first and the per-workspace caches after.
+- **If the SQLite volume is lost**: re-adding each workspace under its original id reconnects nothing by itself — the caches are gone too — but a fresh sync repopulates issue data from Linear. Snapshot history and annotations are what you actually lose.
+- **The backup contains credentials.** `data/backups/` deserves the same handling as the data directory.
+- **Off-site replication**: the tool deliberately does not ship with cloud-storage credentials handling. Operators wanting off-site backup should add their own rsync/rclone job pointing at `data/backups/` — and should think about where those API keys end up.
 
 ## Architecture
 
@@ -197,6 +240,7 @@ bun run dev        # concurrent backend + frontend (Vite proxies /api → :31415
 bun run typecheck
 bun run lint
 bun run test
+bun run test:smoke  # control-plane checks; needs Bun (vitest cannot load bun:sqlite)
 bun run build      # production build → dist/ + build/
 ```
 

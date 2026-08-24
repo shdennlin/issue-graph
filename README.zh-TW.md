@@ -25,7 +25,8 @@ open http://localhost:31415
 ```
 
 開啟後會看到設定畫面。輸入工作區名稱、貼上 Linear 個人 API 金鑰
-（Linear → Settings → API → Create Personal API Key）後儲存即可。接著後端會從
+（Linear → Settings → API → Create Personal API Key）後儲存即可。金鑰在存進去之前
+會先跟 Linear 驗證，所以打錯會當場告訴你，而不是之後變成一張空白的圖。接著後端會從
 Linear 拉取進行中與最近的議題、掃描 `REPO_PATH` 下的設計文件（選用），然後渲染
 相依圖。
 
@@ -56,6 +57,31 @@ Linear 拉取進行中與最近的議題、掃描 `REPO_PATH` 下的設計文件
 有一項刻意不開放設定：Linear API endpoint。能改這個值的人就能把應用程式指向
 自己的主機，並在下一次同步時收到你的 API 金鑰（在 `Authorization` 標頭裡），
 因此它固定寫在原始碼中。
+
+### 即時更新（選用）
+
+預設情況下快取依 TTL 更新，所以在 Linear 改了議題要等下一次同步才看得到。設定
+webhook 之後幾秒內就會出現。
+
+1. **設定共用密鑰。** 設定 → Webhook，填一組夠長的隨機字串後儲存。這一步必須在
+   新增工作區之後 —— 密鑰是存在工作區那一列上的，不是全域設定。
+2. **只公開 webhook 這一條路徑。** 它是唯一設計成可以從外部連到的路由，其他全部
+   都必須留在 loopback 後面。在 Tailscale 主機上：
+
+   ```bash
+   tailscale funnel --bg --set-path=/linear-hook \
+     http://localhost:31415/api/webhooks/linear
+   ```
+
+3. **在 Linear 註冊。** Settings → API → Webhooks → 新增，URL 填
+   `https://<你的主機>.ts.net/linear-hook?w=<工作區代號>`，密鑰貼上同一組。`?w=`
+   決定這次推播要送到哪個工作區，所以一個 funnel 掛載就能服務全部工作區。
+
+推播會做 HMAC 驗證、時間戳過期就拒絕、有流量上限，而且一連串事件會收斂成一次同步。
+設定 → Webhook 會顯示接受／拒絕的次數 —— 更新突然不來的時候值得看一眼，因為 webhook
+默默停掉的樣子跟「圖沒更新」長得一模一樣。
+
+另外，密鑰跟著工作區那一列走，所以移除再重新加入工作區之後要重設一次。
 
 ### 多個 Linear 工作區
 
@@ -124,11 +150,20 @@ Service worker 只會預先快取 app shell（HTML / CSS / JS / icons）。Linea
 
 ## 備份策略
 
-- **每日 SQLite 備份**：`scripts/backup.sh` 透過 cron 執行，本地保留 30 天於 `data/backups/`。
-- **若 SQLite volume 遺失**：下一次同步會從 Linear 重新填入議題資料。快照歷史（最多 1 年）
-  與使用者新增的註解會遺失。
+兩顆 SQLite，性質完全相反，而**重要的是小的那顆**：
+
+- **`data/workspaces.db`** — 名冊：名稱、API 金鑰、webhook secret，以及哪一個是預設
+  工作區。只有幾 KB，存放憑證，而且**無法重建** —— 弄丟就得把每個工作區重新輸入一次。
+- **`data/workspaces/<id>/graph.db`** — 議題與標籤快取。好幾 MB，重新同步就全部回來。
+  只有快照歷史和註解是救不回來的。
+
+- **每日 SQLite 備份**：`scripts/backup.sh` 透過 cron 執行，本地保留 30 天於
+  `data/backups/`。會先備份 control plane，再備份各工作區的快取。
+- **若 SQLite volume 遺失**：用原本的代號重新加入工作區並不會自己接回資料（快取也一起
+  沒了），但重新同步會從 Linear 拉回議題。真正會失去的是快照歷史和註解。
+- **備份檔裡有憑證。** `data/backups/` 要比照資料目錄的規格對待。
 - **異地備份**：本工具刻意不內建任何雲端儲存的憑證處理。需要異地備份的維運者請自行
-  加上 rsync/rclone 工作，指向 `data/backups/`。
+  加上 rsync/rclone 工作，指向 `data/backups/` —— 並且想清楚那些 API 金鑰會流到哪裡。
 
 ## 架構
 
@@ -202,6 +237,7 @@ bun run dev        # 後端 + 前端同時啟動（Vite 將 /api 代理到 :3141
 bun run typecheck
 bun run lint
 bun run test
+bun run test:smoke  # control plane 檢查；需要 Bun（vitest 載不了 bun:sqlite）
 bun run build      # 正式版建置 → dist/ + build/
 ```
 
