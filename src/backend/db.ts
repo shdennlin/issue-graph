@@ -8,7 +8,7 @@ import { Database } from 'bun:sqlite'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { loadConfig } from './lib/env.js'
-import { getCurrentWorkspaceId, LEGACY_WORKSPACE_ID } from './lib/workspaceContext.js'
+import { getCurrentWorkspaceId, UNCONFIGURED_WORKSPACE_ID } from './lib/workspaceContext.js'
 import { getDefaultWorkspaceId } from './lib/env.js'
 import { getLogger } from './lib/log.js'
 
@@ -84,7 +84,7 @@ const MIGRATIONS: string[] = [
 const dbByWorkspaceId: Map<string, Database> = new Map()
 
 function currentWid(): string {
-  return getCurrentWorkspaceId() ?? getDefaultWorkspaceId() ?? LEGACY_WORKSPACE_ID
+  return getCurrentWorkspaceId() ?? getDefaultWorkspaceId() ?? UNCONFIGURED_WORKSPACE_ID
 }
 
 export function getDb(): Database {

@@ -271,6 +271,10 @@ export interface GraphResponse {
   hasDesigndoc: boolean
   cacheEmpty: boolean
   authError?: boolean
+  /** Set when the LAST sync failed. Distinct from `authError`, which only means
+   *  no key is configured — a *wrong* key IS configured, so it used to surface
+   *  as a silently empty graph with nothing on screen to explain it. */
+  syncFailure?: { kind: 'auth' | 'error'; message: string | null } | null
   /** Set when sync detected a workspace switch. UI surfaces a banner +
    *  Reset Cache button. Cleared after acknowledge or successful reset. */
   workspaceWarning?: WorkspaceChangeWarning | null

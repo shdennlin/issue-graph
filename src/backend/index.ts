@@ -3,10 +3,16 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
 import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { getDefaultWorkspaceId, getWorkspaceInfo, loadConfig } from './lib/env.js'
+import { getDefaultWorkspaceId, getWorkspaceInfo, loadConfig, setRosterSource } from './lib/env.js'
+import {
+  ACTIVE_WORKSPACE_KEY,
+  clearControlMeta,
+  readControlMeta,
+  readWorkspaceRows,
+} from './controlDb.js'
 import { getLogger } from './lib/log.js'
 import { getDb } from './db.js'
-import { LEGACY_WORKSPACE_ID, runWithWorkspace } from './lib/workspaceContext.js'
+import { UNCONFIGURED_WORKSPACE_ID, runWithWorkspace } from './lib/workspaceContext.js'
 import { graphRoutes } from './routes/graph.js'
 import { syncRoutes } from './routes/sync.js'
 import { issueRoutes } from './routes/issue.js'
@@ -34,13 +40,38 @@ function findStaticRoot(): string | null {
   return null
 }
 
+/**
+ * Point lib/env.ts at the real roster.
+ *
+ * MUST run before anything calls loadConfig(), getDb() or getWorkspaceInfo().
+ * Those cache their answer on first use, and the default source is an empty
+ * roster — so resolving even once too early pins the process to
+ * "unconfigured" for its whole lifetime. lib/env.ts cannot import controlDb.ts
+ * itself: that would pull `bun:sqlite` into every test that transitively
+ * reaches getLogger(), and vitest runs on Node where the specifier does not
+ * resolve.
+ */
+export function wireRoster(): void {
+  setRosterSource({
+    rows: readWorkspaceRows,
+    readActive: () => readControlMeta(ACTIVE_WORKSPACE_KEY),
+    clearActive: () => clearControlMeta(ACTIVE_WORKSPACE_KEY),
+  })
+}
+
 export function createApp(): Hono {
+  // First statement, deliberately — see wireRoster().
+  wireRoster()
   const app = new Hono()
   const cfg = loadConfig()
   const log = getLogger()
 
-  // Eagerly init the default workspace's DB so schema migrations run at startup.
-  getDb()
+  // Eagerly init the default workspace's DB so schema migrations run at startup
+  // — but only once there IS a workspace. On a fresh install the roster is
+  // empty, and migrating the unconfigured sentinel just leaves a stray empty
+  // graph.db sitting next to workspaces.db for the user to wonder about. The
+  // first real workspace gets its DB built on its first request anyway.
+  if (getWorkspaceInfo().profiles.length > 0) getDb()
 
   // Per-request workspace middleware: resolve `?w=<id>` (or fall back to the
   // current default) and run the rest of the handler chain under that
@@ -52,8 +83,10 @@ export function createApp(): Hono {
     const requested = c.req.query('w')?.toLowerCase() ?? null
     let wid: string
     if (info.profiles.length === 0) {
-      // Legacy mode: no profiles defined. Always use the sentinel; ignore ?w.
-      wid = LEGACY_WORKSPACE_ID
+      // Nothing configured yet. The sentinel keeps every cache keyed
+      // consistently while the frontend shows onboarding; `?w=` cannot name a
+      // workspace that does not exist, so it is ignored rather than trusted.
+      wid = UNCONFIGURED_WORKSPACE_ID
     } else if (requested && info.profiles.some((p) => p.id === requested)) {
       wid = requested
     } else {

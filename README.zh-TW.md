@@ -17,64 +17,96 @@
 ## 五分鐘快速啟動
 
 ```bash
-git clone https://github.com/<owner>/issue-graph
+git clone https://github.com/shdennlin/issue-graph
 cd issue-graph
-cp .env.example .env
-# 編輯 .env，設定 LINEAR_API_KEY
 mkdir -p data
 docker compose up -d --build
 open http://localhost:31415
 ```
 
-頁面載入時，後端會從 Linear 拉取進行中與最近的議題、掃描 `REPO_PATH` 下的設計文件（選用），然後渲染相依圖。
+開啟後會看到設定畫面。輸入工作區名稱、貼上 Linear 個人 API 金鑰
+（Linear → Settings → API → Create Personal API Key）後儲存即可。金鑰在存進去之前
+會先跟 Linear 驗證，所以打錯會當場告訴你，而不是之後變成一張空白的圖。接著後端會從
+Linear 拉取進行中與最近的議題、掃描 `REPO_PATH` 下的設計文件（選用），然後渲染
+相依圖。
+
+不需要 `.env` — `docker compose` 沒有這個檔案也跑得起來。API 金鑰儲存在伺服器端的
+`data/workspaces.db`，永遠不會回傳到瀏覽器 — API 只會回報「是否已設定」。
 
 > [!WARNING]
-> **請勿在沒有驗證的情況下將此 port 暴露到 LAN 或網際網路。**
-> `issue-graph` **沒有內建身份驗證**。寫入端點（`POST /api/sync`、
-> `POST/DELETE /api/annotations`、`POST /api/settings`）對任何能連到該 port
-> 的人都是開放的。預設的 Docker compose 將 `31415` 綁在所有介面 — 自用
-> `localhost` 沒問題；如果需要遠端存取，請放在反向代理之後並加上身份驗證
-> （Tailscale、Cloudflare Access、basic-auth nginx 等）。
+> **這個應用程式沒有內建身份驗證。** 任何能連到該 port 的人都能讀取所有工作區的議題
+> 資料，並呼叫寫入端點（`POST /api/sync`、`POST/DELETE /api/annotations`、
+> `PATCH /api/settings`，以及會接收 API 金鑰的工作區路由）。
+>
+> 因此 Docker compose 只綁在 `127.0.0.1`。需要遠端存取時，請在前面加一層有驗證的入口，
+> 而不是把綁定範圍放寬 — 在 Tailscale 主機上，`tailscale serve --bg 31415` 能連到
+> loopback 綁定並提供 HTTPS，而 PWA 本來就需要它（service worker 需要 secure context，
+> 直接用 `http://<tailnet-ip>:31415` 會靜默失去離線支援）。Cloudflare Access 或加了
+> 驗證的 nginx 也同樣可行。
+>
+> 唯一的例外是 `POST /api/webhooks/linear`，它本來就設計成要公開，並且有 HMAC 驗證。
+> 只暴露那一條路徑 — 例如 `tailscale funnel --bg --set-path=/linear-hook
+> http://localhost:31415/api/webhooks/linear` — 絕對不要整個 port。
 
-### 必要環境變數
+### 設定
 
-| 變數 | 用途 |
-|---|---|
-| `LINEAR_API_KEY` | 個人 API 金鑰 — Linear → Settings → API → Create Personal API Key |
+`.env` 沒有任何必填項目。工作區直接在應用程式內管理；`.env` 只承載伺服器在
+「能打開資料庫之前」就需要知道的少數設定 — 資料放哪、綁哪個 port、log 等級 —
+而且全部都有預設值。詳見 [`.env.example`](.env.example)。
 
-其他都有合理預設值。`.env.example` 刻意精簡；
-進階的工作區設定檔細節請見 [Advanced workspace profiles](docs/advanced-workspaces.zh-TW.md)。
+有一項刻意不開放設定：Linear API endpoint。能改這個值的人就能把應用程式指向
+自己的主機，並在下一次同步時收到你的 API 金鑰（在 `Authorization` 標頭裡），
+因此它固定寫在原始碼中。
+
+### 即時更新（選用）
+
+預設情況下快取依 TTL 更新，所以在 Linear 改了議題要等下一次同步才看得到。設定
+webhook 之後幾秒內就會出現。
+
+1. **設定共用密鑰。** 設定 → Webhook，填一組夠長的隨機字串後儲存。這一步必須在
+   新增工作區之後 —— 密鑰是存在工作區那一列上的，不是全域設定。
+2. **只公開 webhook 這一條路徑。** 它是唯一設計成可以從外部連到的路由，其他全部
+   都必須留在 loopback 後面。在 Tailscale 主機上：
+
+   ```bash
+   tailscale funnel --bg --set-path=/linear-hook \
+     http://localhost:31415/api/webhooks/linear
+   ```
+
+3. **在 Linear 註冊。** Settings → API → Webhooks → 新增，URL 填
+   `https://<你的主機>.ts.net/linear-hook?w=<工作區代號>`，密鑰貼上同一組。`?w=`
+   決定這次推播要送到哪個工作區，所以一個 funnel 掛載就能服務全部工作區。
+
+推播會做 HMAC 驗證、時間戳過期就拒絕、有流量上限，而且一連串事件會收斂成一次同步。
+設定 → Webhook 會顯示接受／拒絕的次數 —— 更新突然不來的時候值得看一眼，因為 webhook
+默默停掉的樣子跟「圖沒更新」長得一模一樣。
+
+另外，密鑰跟著工作區那一列走，所以移除再重新加入工作區之後要重設一次。
 
 ### 多個 Linear 工作區
 
-預設單工作區設定請繼續使用 `LINEAR_API_KEY`。如果你經常在多個 Linear 工作區之間
-切換，請在 `.env` 中改用具名的設定檔：
+在 **設定 → Workspaces** 中想加幾個就加幾個。每個工作區除了名稱之外還需要一個
+簡短代號（像 `client-a` 這樣的 slug）；這個代號會出現在網址的 `?w=client-a`，
+同時也是它快取資料夾的名稱 — 所以重新輸入用過的代號會接回原本的快取，而不必
+從頭重新同步。
 
-```env
-WORKSPACE_ACTIVE=personal
-
-WORKSPACE_PERSONAL_NAME=Personal
-WORKSPACE_PERSONAL_LINEAR_API_KEY=lin_api_xxx
-WORKSPACE_PERSONAL_LINEAR_TEAM_ID=
-WORKSPACE_PERSONAL_REPO_PATH=/path/to/personal/repo
-
-WORKSPACE_CLIENT_A_NAME=Client A
-WORKSPACE_CLIENT_A_LINEAR_API_KEY=lin_api_yyy
-WORKSPACE_CLIENT_A_LINEAR_TEAM_ID=
-WORKSPACE_CLIENT_A_REPO_PATH=/path/to/client-a/repo
-```
-
-設定多個設定檔後，左上角會變成 **分頁列**。每個分頁都有自己的工作區、篩選、檢視
+建立工作區後，左上角會變成 **分頁列**。每個分頁都有自己的工作區、篩選、檢視
 與視窗位置，因此你可以同時開兩個工作區（或同一工作區的兩個檢視）並在中間切換而
 不失去脈絡。拖曳分頁可重新排序，`Cmd/Ctrl + 1..9` 跳到第 N 個分頁。切換分頁
-（或工作區）不需要重新啟動後端。API 金鑰仍放在 `.env` 中。
+（或工作區）不需要重新啟動後端，更換 API 金鑰同樣不需要。
 
-每個設定檔擁有獨立的本地資料：
+每個工作區擁有獨立的本地資料：
 
 ```text
-data/workspaces/personal/graph.db
-data/workspaces/client_a/graph.db
+data/workspaces.db              <- 名冊：名稱、API 金鑰、webhook secret
+data/workspaces/personal/graph.db   <- 議題快取；刪掉重新同步即可
+data/workspaces/client-a/graph.db
 ```
+
+其中只有第一個值得備份：它很小、存放你的憑證，而且無法重建。`graph.db` 只是快取。
+
+移除工作區只會刪掉名冊中的那一筆，資料夾會原封不動保留 — 不會有東西在按下刪除
+之後被銷毀。
 
 `重設目前工作區資料` 只會清除目前作用中的設定檔快取。其他工作區資料庫不會被動到。
 
@@ -118,11 +150,16 @@ Service worker 只會預先快取 app shell（HTML / CSS / JS / icons）。Linea
 
 ## 備份策略
 
-- **每日 SQLite 備份**：`scripts/backup.sh` 透過 cron 執行，本地保留 30 天於 `data/backups/`。
-- **若 SQLite volume 遺失**：下一次同步會從 Linear 重新填入議題資料。快照歷史（最多 1 年）
-  與使用者新增的註解會遺失。
-- **異地備份**：本工具刻意不內建任何雲端儲存的憑證處理。需要異地備份的維運者請自行
-  加上 rsync/rclone 工作，指向 `data/backups/`。
+這裡幾乎沒有東西需要備份。`issue-graph` 是 Linear 的一個 view：刪掉快取，下一次
+同步就會重建。
+
+唯一的例外是 **`data/workspaces.db`** —— 幾 KB，存放工作區名冊、API 金鑰與 webhook
+secret。它無法重建，不過「重建」也不過就是把每個工作區重新輸入一次。
+`data/workspaces/<id>/` 底下全部都是快取；只有快照歷史和註解救不回來，而這兩者本來
+就不被當成需要長期保存的資料。
+
+本專案沒有備份腳本。真要備份的話 `rsync` 整個 `data/` 目錄即可 —— 但要注意那會一併
+複製你的 API 金鑰，目的地請比照辦理。
 
 ## 架構
 
@@ -196,6 +233,7 @@ bun run dev        # 後端 + 前端同時啟動（Vite 將 /api 代理到 :3141
 bun run typecheck
 bun run lint
 bun run test
+bun run test:smoke  # control plane 檢查；需要 Bun（vitest 載不了 bun:sqlite）
 bun run build      # 正式版建置 → dist/ + build/
 ```
 

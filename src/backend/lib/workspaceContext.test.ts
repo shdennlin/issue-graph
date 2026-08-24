@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   getCurrentWorkspaceId,
-  LEGACY_WORKSPACE_ID,
+  UNCONFIGURED_WORKSPACE_ID,
   runWithWorkspace,
 } from './workspaceContext.js'
 
@@ -52,7 +52,7 @@ describe('workspaceContext', () => {
     expect(getCurrentWorkspaceId()).toBeNull()
   })
 
-  it('exposes a stable LEGACY_WORKSPACE_ID sentinel', () => {
-    expect(LEGACY_WORKSPACE_ID).toBe('__legacy__')
+  it('exposes a stable UNCONFIGURED_WORKSPACE_ID sentinel', () => {
+    expect(UNCONFIGURED_WORKSPACE_ID).toBe('__unconfigured__')
   })
 })

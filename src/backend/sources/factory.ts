@@ -1,5 +1,5 @@
 import { loadConfig } from '../lib/env.js'
-import { getCurrentWorkspaceId, LEGACY_WORKSPACE_ID } from '../lib/workspaceContext.js'
+import { getCurrentWorkspaceId, UNCONFIGURED_WORKSPACE_ID } from '../lib/workspaceContext.js'
 import { getDefaultWorkspaceId } from '../lib/env.js'
 import type { BackendAdapter } from './types.js'
 import { LinearBackend } from './linear/index.js'
@@ -9,7 +9,7 @@ import { LinearBackend } from './linear/index.js'
 const backendByWorkspaceId: Map<string, BackendAdapter> = new Map()
 
 function currentWid(): string {
-  return getCurrentWorkspaceId() ?? getDefaultWorkspaceId() ?? LEGACY_WORKSPACE_ID
+  return getCurrentWorkspaceId() ?? getDefaultWorkspaceId() ?? UNCONFIGURED_WORKSPACE_ID
 }
 
 export function getBackend(): BackendAdapter {

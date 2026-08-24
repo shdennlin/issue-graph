@@ -22,4 +22,4 @@ curl -X POST http://localhost:31415/api/sync
 
 或者，如果你想完全從零開始（連 snapshots 與註解都不要），停掉 server 然後 `rm data/graph.db data/graph.db-shm data/graph.db-wal`。
 
-如果常常切換，請改用 `WORKSPACE_<ID>_*` 設定檔變數。各設定檔有獨立資料庫，從工具列切換不需要重置快取。請見 [Advanced workspace profiles](advanced-workspaces.zh-TW.md)。
+如果常常切換，請在 **設定 → Workspaces** 中分別加入每個 Linear 工作區。每個工作區有獨立資料庫，從分頁列切換完全不需要重置快取。請見 [工作區](advanced-workspaces.zh-TW.md)。

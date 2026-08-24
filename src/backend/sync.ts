@@ -1,6 +1,7 @@
 import { getLogger } from './lib/log.js'
 import { loadConfig, isAuthConfigured, getDefaultWorkspaceId } from './lib/env.js'
-import { getCurrentWorkspaceId, LEGACY_WORKSPACE_ID } from './lib/workspaceContext.js'
+import { getCurrentWorkspaceId, UNCONFIGURED_WORKSPACE_ID } from './lib/workspaceContext.js'
+import { settingInt } from './lib/settings.js'
 import { getDb } from './db.js'
 import {
   writeIssueCache,
@@ -42,7 +43,7 @@ const VIEWER_KEY = 'viewer_json'
 const SNAPSHOT_DATE_KEY = 'last_snapshot_yyyymmdd'
 
 function currentWid(): string {
-  return getCurrentWorkspaceId() ?? getDefaultWorkspaceId() ?? LEGACY_WORKSPACE_ID
+  return getCurrentWorkspaceId() ?? getDefaultWorkspaceId() ?? UNCONFIGURED_WORKSPACE_ID
 }
 
 function ymd(d: Date): string {
@@ -286,7 +287,8 @@ function updateSyncLog(
 function maybeWriteSnapshot(issues: unknown, labels: unknown, designdocs: unknown): void {
   const cfg = loadConfig()
   const now = new Date()
-  if (now.getHours() < cfg.DAILY_SNAPSHOT_HOUR) return
+  // getHours() is local time, so the container's TZ decides when this fires.
+  if (now.getHours() < settingInt('daily_snapshot_hour', cfg.DAILY_SNAPSHOT_HOUR)) return
   const today = ymd(now)
   if (readMeta(SNAPSHOT_DATE_KEY) === today) return
   const db = getDb()
@@ -301,7 +303,8 @@ function maybeWriteSnapshot(issues: unknown, labels: unknown, designdocs: unknow
   writeMeta(SNAPSHOT_DATE_KEY, today)
 
   // Prune old snapshots.
-  const cutoff = Date.now() - cfg.SNAPSHOT_RETENTION_DAYS * 24 * 3600 * 1000
+  const retentionDays = settingInt('snapshot_retention_days', cfg.SNAPSHOT_RETENTION_DAYS)
+  const cutoff = Date.now() - retentionDays * 24 * 3600 * 1000
   db.prepare('DELETE FROM snapshot WHERE ts < ?').run(cutoff)
 }
 

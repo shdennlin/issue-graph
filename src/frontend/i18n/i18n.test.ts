@@ -50,3 +50,34 @@ describe('locale store default', () => {
     expect(mod.__testing__.DEFAULT_LOCALE).toBe('en')
   })
 })
+
+// Every user-facing route error is localised by code. The Dict type already
+// forces zh-TW to carry any key en defines, but nothing stops a code from
+// being added to apiErrorMessage.ts with no dictionary entry behind it — that
+// would render a raw path like "apiError.somethingNew" at the user.
+describe('apiError dictionary coverage', () => {
+  const CODES = [
+    'invalid',
+    'invalid_id',
+    'exists',
+    'key_rejected',
+    'key_rejected_unchanged',
+    'not_found',
+    'unconfigured',
+    'switch_in_progress',
+    'switch_failed',
+  ]
+
+  it('resolves a real sentence for every mapped error code, in both locales', async () => {
+    const { apiErrorKey } = await import('../lib/apiErrorMessage')
+    for (const code of CODES) {
+      const key = apiErrorKey(code)
+      expect(key, code).not.toBeNull()
+      for (const locale of ['en', 'zh-TW'] as const) {
+        const text = translate(locale, key!)
+        expect(text, `${locale}/${code}`).not.toBe(key)
+        expect(text.length, `${locale}/${code}`).toBeGreaterThan(0)
+      }
+    }
+  })
+})

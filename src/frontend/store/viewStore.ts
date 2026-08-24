@@ -1,5 +1,12 @@
 import { create } from 'zustand'
 import type { IssueStateType } from '@shared/types.js'
+import {
+  readDefaultView,
+  readStaleDays,
+  readTheme,
+  writeStaleDays,
+  writeTheme,
+} from '../lib/preferences'
 
 export type ViewId = 'dependency' | 'mix' | 'project' | 'milestone' | 'designdoc'
 export type Density = 'compact' | 'default' | 'verbose'
@@ -250,7 +257,9 @@ function toggle<T>(arr: T[], v: T): T[] {
 }
 
 export const useViewStore = create<ViewState>((set) => ({
-  activeView: 'dependency',
+  // Where a fresh session lands. Per-browser preference; a `?view=` in the
+  // URL overrides it for that visit without rewriting it.
+  activeView: readDefaultView(),
   filters: defaultFilters,
   focusedId: null,
   chainRootIds: [],
@@ -258,7 +267,7 @@ export const useViewStore = create<ViewState>((set) => ({
   chainDepthDown: null,
   layoutBump: 0,
   expandedBuckets: [],
-  theme: 'auto',
+  theme: readTheme(),
   density: 'default',
   mixGroupBy: null,
   fontSize: (() => {
@@ -303,7 +312,7 @@ export const useViewStore = create<ViewState>((set) => ({
   highlightedEdgeId: null,
   highlightedNodeId: null,
   contextMenu: null,
-  staleDays: 14,
+  staleDays: readStaleDays(),
   filterPanelOpen:
     typeof window !== 'undefined' && window.localStorage?.getItem('ig-filter-panel') === '0' ? false : true,
   // Decouples "I want to focus this issue" (for chain mode, find, etc.)
@@ -319,6 +328,8 @@ export const useViewStore = create<ViewState>((set) => ({
   focusedMilestoneId: null,
   projectPanelOpen: false,
 
+  // Does NOT persist: switching view is a transient act, while the stored
+  // default is "where new sessions start" and is only written from Settings.
   setActiveView: (v) => set({ activeView: v }),
   setFilter: (k, v) => set((s) => ({ filters: { ...s.filters, [k]: v } })),
   toggleStateType: (t) =>
@@ -376,7 +387,10 @@ export const useViewStore = create<ViewState>((set) => ({
   setChainDepthUp: (depth) => set({ chainDepthUp: depth }),
   setChainDepthDown: (depth) => set({ chainDepthDown: depth }),
   bumpLayout: () => set((s) => ({ layoutBump: s.layoutBump + 1 })),
-  setTheme: (t) => set({ theme: t }),
+  setTheme: (t) => {
+    writeTheme(t)
+    set({ theme: t })
+  },
   setDensity: (d) => set({ density: d }),
   setMixGroupBy: (key) => set({ mixGroupBy: key }),
   setFontSize: (f) => {
@@ -432,7 +446,10 @@ export const useViewStore = create<ViewState>((set) => ({
   setHighlightedEdgeId: (id) => set({ highlightedEdgeId: id }),
   setHighlightedNodeId: (id) => set({ highlightedNodeId: id }),
   setContextMenu: (m) => set({ contextMenu: m }),
-  setStaleDays: (n) => set({ staleDays: n }),
+  setStaleDays: (n) => {
+    writeStaleDays(n)
+    set({ staleDays: n })
+  },
   setFilterPanelOpen: (b) => {
     if (typeof window !== 'undefined') {
       window.localStorage?.setItem('ig-filter-panel', b ? '1' : '0')

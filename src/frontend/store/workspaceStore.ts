@@ -25,7 +25,7 @@ export interface Tab {
 interface WorkspaceState {
   // Server-provided
   profiles: WorkspaceProfile[]
-  legacyMode: boolean
+  unconfigured: boolean
   defaultWorkspaceId: string | null
   initialized: boolean
 
@@ -38,7 +38,7 @@ interface WorkspaceState {
 
   // Setters for server-provided
   setProfiles: (profiles: WorkspaceProfile[]) => void
-  setLegacyMode: (legacy: boolean) => void
+  setUnconfigured: (legacy: boolean) => void
   setDefaultWorkspaceId: (id: string | null) => void
   setInitialized: (v: boolean) => void
 
@@ -89,8 +89,8 @@ function sameProfiles(a: WorkspaceProfile[], b: WorkspaceProfile[]): boolean {
       x.id !== y.id ||
       x.name !== y.name ||
       x.linearApiKeySet !== y.linearApiKeySet ||
+      x.webhookSecretSet !== y.webhookSecretSet ||
       x.linearTeamId !== y.linearTeamId ||
-      x.repoPath !== y.repoPath ||
       x.dbPath !== y.dbPath
     ) {
       return false
@@ -136,7 +136,7 @@ const persisted = loadPersisted()
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   profiles: [],
-  legacyMode: false,
+  unconfigured: false,
   defaultWorkspaceId: null,
   initialized: false,
 
@@ -149,8 +149,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
   setProfiles: (profiles) =>
     set((s) => (sameProfiles(s.profiles, profiles) ? s : { profiles })),
-  setLegacyMode: (legacyMode) =>
-    set((s) => (s.legacyMode === legacyMode ? s : { legacyMode })),
+  setUnconfigured: (unconfigured) =>
+    set((s) => (s.unconfigured === unconfigured ? s : { unconfigured })),
   setDefaultWorkspaceId: (defaultWorkspaceId) =>
     set((s) => (s.defaultWorkspaceId === defaultWorkspaceId ? s : { defaultWorkspaceId })),
   setInitialized: (initialized) =>

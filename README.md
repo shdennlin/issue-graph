@@ -17,67 +17,110 @@ Self-hosted, read-only graph viewer for issue dependencies. Fetches from Linear,
 ## Five-minute setup
 
 ```bash
-git clone https://github.com/<owner>/issue-graph
+git clone https://github.com/shdennlin/issue-graph
 cd issue-graph
-cp .env.example .env
-# edit .env, set LINEAR_API_KEY
 mkdir -p data
 docker compose up -d --build
 open http://localhost:31415
 ```
 
-When the page loads, the backend pulls active+recent issues from Linear, scans the optional repo at `REPO_PATH` for design docs, and renders the dependency graph.
+The app opens on a setup form. Give your workspace a name, paste a Linear
+personal API key (Linear → Settings → API → Create Personal API Key), and save.
+The key is checked against Linear before it is stored, so a typo comes back
+immediately instead of showing up later as an empty graph. The backend then
+pulls active+recent issues, scans the optional repo at `REPO_PATH` for design
+docs, and renders the dependency graph.
+
+No `.env` is required — `docker compose` runs without one. Your API key is
+stored server-side in `data/workspaces.db` and is never sent back to the
+browser; the API only ever reports whether one is set.
 
 > [!WARNING]
-> **Do not expose this port to a LAN or the internet without auth.**
-> `issue-graph` ships with **no authentication**. The write endpoints (`POST /api/sync`,
-> `POST/DELETE /api/annotations`, `POST /api/settings`) are open to anyone who can reach
-> the port. The default Docker compose binds `31415` on all interfaces — fine for
-> `localhost`-only use, but if you need remote access put it behind a reverse proxy
-> with auth (Tailscale, Cloudflare Access, basic-auth nginx, etc.).
+> **This app ships with no authentication.** Anyone who can reach the port can read every
+> workspace's issue data and call the write endpoints (`POST /api/sync`, `POST/DELETE
+> /api/annotations`, `PATCH /api/settings`, and the workspace routes, which accept API keys).
+>
+> Docker compose therefore publishes on `127.0.0.1` only. For remote access put a layer
+> with auth in front rather than widening the bind — on a Tailscale host,
+> `tailscale serve --bg 31415` reaches the loopback bind and terminates HTTPS, which the
+> PWA needs anyway (service workers require a secure context, so a plain
+> `http://<tailnet-ip>:31415` silently loses offline support). Cloudflare Access or an
+> auth-ing nginx work equally well.
+>
+> The one exception is `POST /api/webhooks/linear`, which is designed to be published and
+> is HMAC-authenticated. Expose that path alone — e.g. `tailscale funnel --bg
+> --set-path=/linear-hook http://localhost:31415/api/webhooks/linear` — never the whole port.
 
-### Required env vars
+### Configuration
 
-| Var | Purpose |
-|---|---|
-| `LINEAR_API_KEY` | Personal API key — Linear → Settings → API → Create Personal API Key |
+There is nothing you must put in `.env`. Workspaces are managed in the app;
+`.env` carries only the handful of settings the server needs *before* it can
+open a database — where the data lives, which port to bind, log level — and all
+of them have defaults. See [`.env.example`](.env.example).
 
-Everything else has a sane default. `.env.example` is intentionally minimal;
-advanced workspace profile details live in [Advanced workspace profiles](docs/advanced-workspaces.md).
+One value is deliberately not configurable anywhere: the Linear API endpoint.
+Anyone who could change it could point the app at their own host and receive
+your API key in the next sync's `Authorization` header, so it is fixed in the
+source.
+
+### Realtime updates (optional)
+
+By default the cache refreshes on a TTL, so an issue edited in Linear shows up
+on the next sync. A webhook makes it appear within a couple of seconds.
+
+1. **Set a shared secret.** Settings → Webhook, pick any long random string,
+   save. This has to come after you have added a workspace — the secret is
+   stored on the workspace row, not globally.
+2. **Publish just the webhook path.** It is the only route designed to be
+   reachable from outside; everything else must stay behind your loopback bind.
+   On a Tailscale host:
+
+   ```bash
+   tailscale funnel --bg --set-path=/linear-hook \
+     http://localhost:31415/api/webhooks/linear
+   ```
+
+3. **Register it in Linear.** Settings → API → Webhooks → new webhook, URL
+   `https://<your-host>.ts.net/linear-hook?w=<workspace-id>`, and paste the same
+   secret. The `?w=` is what routes a delivery to the right workspace, so one
+   funnel mount serves all of them.
+
+Deliveries are HMAC-verified, rejected if the timestamp is stale, rate-limited,
+and a burst is collapsed into a single sync. Settings → Webhook shows accepted
+and rejected counts — worth a look if updates stop arriving, since a webhook
+that silently stops just looks like a stale graph.
+
+Note that the secret lives on the workspace row, so removing and re-adding a
+workspace means setting it again.
 
 ### Multiple Linear workspaces
 
-For the default single-workspace setup, keep using `LINEAR_API_KEY`. If you
-regularly switch between Linear workspaces, define named profiles in `.env`
-instead:
+Add as many as you like from **Settings → Workspaces**. Each one needs a short
+id (a slug like `client-a`) alongside its name; that id appears in the URL as
+`?w=client-a` and names the folder its cached data lives in, so re-adding an id
+you used before reconnects that workspace's existing cache instead of
+re-syncing from scratch.
 
-```env
-WORKSPACE_ACTIVE=personal
-
-WORKSPACE_PERSONAL_NAME=Personal
-WORKSPACE_PERSONAL_LINEAR_API_KEY=lin_api_xxx
-WORKSPACE_PERSONAL_LINEAR_TEAM_ID=
-WORKSPACE_PERSONAL_REPO_PATH=/path/to/personal/repo
-
-WORKSPACE_CLIENT_A_NAME=Client A
-WORKSPACE_CLIENT_A_LINEAR_API_KEY=lin_api_yyy
-WORKSPACE_CLIENT_A_LINEAR_TEAM_ID=
-WORKSPACE_CLIENT_A_REPO_PATH=/path/to/client-a/repo
-```
-
-The top-left becomes a **tab bar** when profiles are configured. Each tab
+The top-left becomes a **tab bar** once you have a workspace. Each tab
 holds its own workspace + filters + view + viewport, so you can keep two
 workspaces (or two views of the same workspace) open side-by-side and
 flip between them without losing context. Drag tabs left/right to reorder,
 `Cmd/Ctrl + 1..9` to jump to the Nth tab. Switching tabs (or workspaces)
-does not require a backend restart. API keys remain in `.env`.
+does not require a backend restart, and neither does changing an API key.
 
-Each profile gets isolated local data:
+Each workspace gets isolated local data:
 
 ```text
-data/workspaces/personal/graph.db
-data/workspaces/client_a/graph.db
+data/workspaces.db              <- the roster: names, API keys, webhook secrets
+data/workspaces/personal/graph.db   <- cached issues; safe to delete and re-sync
+data/workspaces/client-a/graph.db
 ```
+
+Only the first of those is worth backing up: it is small, holds your
+credentials, and cannot be rebuilt. The `graph.db` files are a cache.
+
+Removing a workspace deletes its roster entry and leaves its data directory
+alone, so nothing is destroyed behind a delete button.
 
 `Reset current workspace data` only clears the active profile's cache. Other
 workspace databases are left untouched.
@@ -111,9 +154,18 @@ The service worker pre-caches only the app shell (HTML / CSS / JS / icons). Line
 
 ## Backup posture
 
-- **Daily SQLite backup**: `scripts/backup.sh` runs via cron, keeps 30 days locally at `data/backups/`.
-- **If the SQLite volume is lost**: the next sync repopulates issue data from Linear. Snapshot history (max 1 year) and user-added annotations would be lost.
-- **Off-site replication**: the tool deliberately does not ship with cloud-storage credentials handling. Operators wanting off-site backup should add their own rsync/rclone job pointing at `data/backups/`.
+Almost nothing here is worth backing up. `issue-graph` is a view over Linear:
+delete a cache and the next sync rebuilds it.
+
+The one exception is **`data/workspaces.db`** — a few KB holding the workspace
+roster, API keys and webhook secrets. It cannot be rebuilt, though recreating it
+means little more than re-entering each workspace by hand. Everything under
+`data/workspaces/<id>/` is a cache; only its snapshot history and any
+annotations are unrecoverable, and neither is treated as durable data.
+
+There is no backup script. If you want one, `rsync` the `data/` directory —
+and note that doing so copies your API keys, so treat the destination
+accordingly.
 
 ## Architecture
 
@@ -186,6 +238,7 @@ bun run dev        # concurrent backend + frontend (Vite proxies /api → :31415
 bun run typecheck
 bun run lint
 bun run test
+bun run test:smoke  # control-plane checks; needs Bun (vitest cannot load bun:sqlite)
 bun run build      # production build → dist/ + build/
 ```
 

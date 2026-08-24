@@ -811,7 +811,11 @@ function CanvasInner() {
         zIndex: isOn ? 1000 : 0,
       }
     })
-  }, [built.edges, highlight, highlightStrength, hoveredEdgeId])
+    // hoveredEdgeId is deliberately NOT a dependency: the hover hint is a
+    // floating overlay rendered near the cursor (see EdgeHoverLabel below),
+    // not an edge style, so recomputing every edge on each hover was pure
+    // waste on the hot path.
+  }, [built.edges, highlight, highlightStrength])
 
   const onNodeClick: NodeMouseHandler = (event, node) => {
     if (event.metaKey || event.ctrlKey) {

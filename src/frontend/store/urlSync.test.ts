@@ -69,11 +69,28 @@ describe('resolveActiveView', () => {
     expect(resolveActiveView(null, true, 'mix', true)).toBe('mix')
   })
 
-  it('resets to dependency on popstate even with a focus (preserve off)', () => {
+  it('resets to the default view on popstate even with a focus (preserve off)', () => {
     expect(resolveActiveView(null, true, 'milestone', false)).toBe('dependency')
   })
 
-  it('resets to dependency when no focus is present', () => {
+  it('resets to the default view when no focus is present', () => {
     expect(resolveActiveView(null, false, 'milestone', true)).toBe('dependency')
+  })
+
+  // The default is a per-browser preference now, not the hardcoded
+  // 'dependency'. buildUrl omits ?view= for exactly this value, so if the two
+  // disagree a bare URL means one view to the writer and another to the
+  // reader — Back/Forward would flip the view under you.
+  it('falls back to the caller-supplied default rather than a hardcoded view', () => {
+    expect(resolveActiveView(null, false, 'milestone', true, 'mix')).toBe('mix')
+    expect(resolveActiveView(null, true, 'milestone', false, 'project')).toBe('project')
+  })
+
+  it('still lets an explicit ?view= win over the default', () => {
+    expect(resolveActiveView('designdoc', false, 'dependency', true, 'mix')).toBe('designdoc')
+  })
+
+  it('still preserves the current view for a focus deep link', () => {
+    expect(resolveActiveView(null, true, 'milestone', true, 'mix')).toBe('milestone')
   })
 })

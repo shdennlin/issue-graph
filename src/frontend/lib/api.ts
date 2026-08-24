@@ -9,6 +9,7 @@ import type {
   WorkflowState,
 } from '@shared/types.js'
 import { useWorkspaceStore } from '../store/workspaceStore'
+import { ApiError, extractApiError } from './apiError'
 
 /**
  * Inject the current tab's workspace id as `?w=<id>` into a path. The
@@ -33,7 +34,10 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${path}: ${text.slice(0, 200)}`)
+    // Surface the server's sentence, not the JSON envelope around it — these
+    // reach the user directly in the setup form.
+    const { code, message } = extractApiError(text)
+    throw new ApiError(message, res.status, code)
   }
   return (await res.json()) as T
 }
@@ -70,15 +74,26 @@ export interface WorkspaceProfile {
   id: string
   name: string
   linearApiKeySet: boolean
+  webhookSecretSet: boolean
   linearTeamId: string | null
-  repoPath: string | null
-  dbPath: string | null
+  dbPath: string
 }
 
 export interface WorkspaceListResponse {
   active: WorkspaceProfile | null
   profiles: WorkspaceProfile[]
-  legacyMode: boolean
+  /** Empty roster — nothing has been set up yet, so the app shows onboarding. */
+  unconfigured: boolean
+}
+
+/** Credential fields are patch-style: omit one to keep the stored value, pass
+ *  '' to clear it. That is what lets the form show an empty password box
+ *  without wiping the secret on every unrelated save. */
+export interface WorkspaceInput {
+  name?: string
+  apiKey?: string
+  teamId?: string | null
+  webhookSecret?: string
 }
 
 export interface SnapshotDiff {
@@ -123,6 +138,20 @@ export const api = {
   // Sets the server-default workspace (the one new tabs land on, and the one
   // the file watcher follows). Distinct from changing this tab's view —
   // that's a URL change handled in the workspace store.
+  createWorkspace: (input: WorkspaceInput & { id: string }) =>
+    http<{ ok: boolean; id: string; dbPath: string; adoptedExistingData: boolean }>('/api/workspaces', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateWorkspace: (id: string, input: WorkspaceInput) =>
+    http<{ ok: boolean; id: string }>(`/api/workspaces/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  deleteWorkspace: (id: string) =>
+    http<{ ok: boolean; id: string; dataRetained: boolean }>(`/api/workspaces/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
   setDefaultWorkspace: (id: string) =>
     http<{ ok: boolean; active: WorkspaceProfile | null; changed: boolean }>('/api/workspaces/active', {
       method: 'POST',

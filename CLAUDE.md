@@ -24,7 +24,7 @@ bun x vitest run -t "overdue partition"   # by test name
 
 `bun run typecheck` is two separate `tsc` invocations because server (`src/backend`, `src/shared`) and web (`src/frontend`, `src/shared`) have different lib/target needs. When changes span both layers, expect to see both run.
 
-Docker for production-shaped runs: `cp .env.example .env` → set `LINEAR_API_KEY` → `docker compose up -d --build`. CI (`.github/workflows/ci.yml`) installs with `bun install --frozen-lockfile` and runs typecheck → lint → test → build → docker build.
+Docker for production-shaped runs: `docker compose up -d --build`, then open the app and add a workspace through the setup form. `.env` is optional now — it carries only the settings the server needs before it can open a database (see `.env.example`), and `docker-compose.yml` already pins `PORT` and `SQLITE_PATH`. CI (`.github/workflows/ci.yml`) installs with `bun install --frozen-lockfile` and runs typecheck → lint → test → build → docker build.
 
 ## Architecture in one screen
 
@@ -45,6 +45,10 @@ src/
     sync.ts, cache.ts     Pull-from-Linear → normalize → SQLite cache.
     db.ts                 bun:sqlite Database + inline MIGRATIONS array. Adding a column
                           means appending a CREATE TABLE / ALTER TABLE statement here.
+    controlStore.ts       PURE roster logic (rows in, resolved config out). Tested.
+    controlDb.ts          The bun:sqlite half: data/workspaces.db. Untestable under
+                          vitest by construction — keep it thin, no logic. Covered by
+                          controlDb.smoke.ts via `bun run test:smoke`.
   frontend/               React 18 + Vite + React Flow + dagre, no SSR.
     App.tsx               Lazy-loads heavy modals (DetailPanel, Notes, SettingsPage, …).
     store/                Zustand stores split by concern:
@@ -79,27 +83,45 @@ Path aliases (`@shared/*`, `@backend/*`, `@frontend/*`) are defined in the root 
 
 ### Workspace isolation
 
-Single-binary multi-tenant. `src/backend/lib/workspaceContext.ts` exposes an AsyncLocalStorage scope; the `/api/*` middleware in `index.ts` resolves `?w=<id>` (or the default) and runs the rest of the handler chain inside `runWithWorkspace(wid, …)`. Downstream `loadConfig()`, `getDb()`, `getBackend()`, `runDesignDocScan()` all call `getCurrentWorkspaceId()` — there is no per-route plumbing. Each workspace gets its own SQLite file under `data/workspaces/<id>/graph.db`. The sentinel `LEGACY_WORKSPACE_ID` keeps single-workspace deployments working with no profile config.
+Single-binary multi-tenant. `src/backend/lib/workspaceContext.ts` exposes an AsyncLocalStorage scope; the `/api/*` middleware in `index.ts` resolves `?w=<id>` (or the default) and runs the rest of the handler chain inside `runWithWorkspace(wid, …)`. Downstream `loadConfig()`, `getDb()`, `getBackend()`, `runDesignDocScan()` all call `getCurrentWorkspaceId()` — there is no per-route plumbing. Each workspace gets its own SQLite file under `data/workspaces/<id>/graph.db`. When the roster is empty, `UNCONFIGURED_WORKSPACE_ID` keeps every cache keyed consistently while the frontend shows the onboarding form.
+
+**Two SQLite stores, and the difference matters.** `data/workspaces.db` (the control plane) holds the roster: names, API keys, webhook secrets, and the active selection. `data/workspaces/<id>/graph.db` is a *rebuildable cache* — deleting one and re-syncing is a normal troubleshooting step. **Credentials therefore never go in `graph.db`.** The workspace id is a slug that derives the cache path, so re-adding a previously removed id re-adopts its data; that slug reaches the filesystem, so `isValidWorkspaceId()` in `controlStore.ts` is a traversal guard, not a formatting preference.
+
+**`lib/env.ts` must never import `controlDb.ts`.** The roster is injected via `setRosterSource()`, wired as the first statement of `createApp()`. Two reasons: `controlDb.ts` imports `bun:sqlite`, which would break every test that transitively reaches `getLogger()`; and `loadConfig()` caches on first use, so resolving once before the roster is wired pins the process to "unconfigured" for its lifetime.
+
+**After changing a workspace's credentials**, call `invalidateWorkspaceConfig(wid)` *and* `resetBackendCache(wid)` (see `applyWorkspaceEdit` in `routes/workspaces.ts`). `bustDefaultWorkspaceCache()` deliberately does not clear `configByWorkspaceId`, so without both the change does not take effect until restart.
 
 ### URL is the source of truth
 
 `urlSync.ts` (see header comment for the two-mode history strategy) encodes view, every filter, focus, chain, search, and workspace into the URL. "Significant" changes push a history entry (Cmd+[/Cmd+] navigate them); preference changes (theme, density, expanded buckets) only replace. When adding a new filter or view-level piece of state that users should be able to share via link, extend three things in `urlSync.ts`: the serializer, the deserializer, and the `significantSignature` (so Back/Forward treats it as a step).
 
-### React Compiler is on
+### Memoization is manual — React Compiler is NOT enabled
 
-Do **not** add manual `useMemo` / `useCallback`. The compiler memoizes for us. Manual memo here is noise and usually wrong.
+An earlier version of this file claimed the compiler was on and that manual
+`useMemo` / `useCallback` should never be added. That was wrong, and acting on it
+would strip real memoization from hot paths. Verified: `babel-plugin-react-compiler`
+appears in neither `package.json` nor `bun.lock`, `vite.config.ts` calls `react()`
+with no options, and no `react-compiler` ESLint rule is configured. The ~36 manual
+memos across `src/frontend/components/` are all load-bearing.
+
+So: memoize by hand where it pays — `GraphCanvas.tsx` (node/edge derivation runs on
+every hover and pan) and `FilterPanel.tsx` (counts over every issue) are the ones
+that matter. Keep dependency arrays honest; `eslint-plugin-react-hooks` is enabled
+and its `exhaustive-deps` warnings are real in both directions, including a
+*spurious* dep that makes a memo recompute for nothing.
 
 ## Stack notes that bite
 
 - `bun:sqlite` is required — `better-sqlite3` was removed (Bun refuses to load its N-API binding; see `src/backend/db.ts` header). The previous `Dockerfile.node` no longer works against this code path. Backend code only runs on Bun now; the surface of the API stays Node-compatible via `@hono/node-server`.
 - TypeScript is strict with `noUncheckedIndexedAccess`. Destructuring `parts[0]` from a `string[]` is `string | undefined`. Plan for that.
-- Vitest runs in Node (not Bun) under the configured environment. Most suites use `happy-dom`; pure logic tests run in node. No `bun:test`.
+- Vitest runs in Node (not Bun). `vitest.config.ts` sets `environment: 'node'` for **every** suite — there is no per-suite override, and `happy-dom` is an installed but unconfigured devDependency. No `bun:test`. Consequence: `src/backend/db.ts` imports `bun:sqlite`, a specifier Node cannot resolve, so **no test can transitively import `db.ts`**. That is why `routes/webhooks.test.ts` mocks `../cache.js` — the mock exists to sever that import edge, not to simplify the test. Any new module that touches SQLite needs the same treatment: keep the `bun:sqlite` layer thin and put the logic in a pure module that takes rows.
 - `eslint-plugin-react-hooks` v7's full preset is enabled (not just `rules-of-hooks` + `exhaustive-deps`) — it will flag set-state-in-effect, ref purity, etc. Treat its warnings as real.
 
 ## Conventions
 
 - Tests are co-located beside source as `*.test.ts` / `*.test.tsx`. Grep for the existing nearest test before adding a new one.
-- Migrations are append-only entries in the `MIGRATIONS` array in `src/backend/db.ts`. Never edit a past entry — write a new ALTER.
+- Migrations are append-only entries in the `MIGRATIONS` array in `src/backend/db.ts` (per-workspace schema) or `CONTROL_MIGRATIONS` in `src/backend/controlDb.ts` (the roster). Never edit a past entry — write a new ALTER.
+- User-overridable settings go in `SETTING_SPECS` (`src/backend/lib/settingSpecs.ts`), which owns the bounds *and* the `stored > env > default` precedence; read them via `settingInt()`. Do not hand-wire a reader against the `setting` table — that pattern is how eight of nine settings ended up accepted, validated, stored, and then ignored. A setting with no consumer should not be in the registry at all.
 - The shared type module is the contract: changing `src/shared/types.ts` will propagate type errors to both sides; that's the intended signal.
 - Auth is intentionally absent — this is a localhost-only / Tailscale-style tool. Don't add CSRF/JWT/etc. unless the user explicitly asks; see the warning block in `README.md`.
 - No animations on programmatic scroll/pan unless the user asks. Direct `scrollTop = X` and `rf.setCenter(x, y, { zoom, duration: 0 })` are the house style.
