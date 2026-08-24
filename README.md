@@ -154,20 +154,18 @@ The service worker pre-caches only the app shell (HTML / CSS / JS / icons). Line
 
 ## Backup posture
 
-Two SQLite stores with opposite characteristics, and the small one is the one
-that matters:
+Almost nothing here is worth backing up. `issue-graph` is a view over Linear:
+delete a cache and the next sync rebuilds it.
 
-- **`data/workspaces.db`** — the roster: names, API keys, webhook secrets, and
-  which workspace is the default. A few KB, holds credentials, and **cannot be
-  rebuilt** — losing it means re-entering every workspace by hand.
-- **`data/workspaces/<id>/graph.db`** — cached issues and labels. Megabytes, and
-  a re-sync restores all of it. Only its snapshot history and any annotations
-  are unrecoverable.
+The one exception is **`data/workspaces.db`** — a few KB holding the workspace
+roster, API keys and webhook secrets. It cannot be rebuilt, though recreating it
+means little more than re-entering each workspace by hand. Everything under
+`data/workspaces/<id>/` is a cache; only its snapshot history and any
+annotations are unrecoverable, and neither is treated as durable data.
 
-- **Daily SQLite backup**: `scripts/backup.sh` runs via cron, keeps 30 days locally at `data/backups/`. It backs up the control plane first and the per-workspace caches after.
-- **If the SQLite volume is lost**: re-adding each workspace under its original id reconnects nothing by itself — the caches are gone too — but a fresh sync repopulates issue data from Linear. Snapshot history and annotations are what you actually lose.
-- **The backup contains credentials.** `data/backups/` deserves the same handling as the data directory.
-- **Off-site replication**: the tool deliberately does not ship with cloud-storage credentials handling. Operators wanting off-site backup should add their own rsync/rclone job pointing at `data/backups/` — and should think about where those API keys end up.
+There is no backup script. If you want one, `rsync` the `data/` directory —
+and note that doing so copies your API keys, so treat the destination
+accordingly.
 
 ## Architecture
 

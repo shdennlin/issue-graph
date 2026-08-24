@@ -150,20 +150,16 @@ Service worker 只會預先快取 app shell（HTML / CSS / JS / icons）。Linea
 
 ## 備份策略
 
-兩顆 SQLite，性質完全相反，而**重要的是小的那顆**：
+這裡幾乎沒有東西需要備份。`issue-graph` 是 Linear 的一個 view：刪掉快取，下一次
+同步就會重建。
 
-- **`data/workspaces.db`** — 名冊：名稱、API 金鑰、webhook secret，以及哪一個是預設
-  工作區。只有幾 KB，存放憑證，而且**無法重建** —— 弄丟就得把每個工作區重新輸入一次。
-- **`data/workspaces/<id>/graph.db`** — 議題與標籤快取。好幾 MB，重新同步就全部回來。
-  只有快照歷史和註解是救不回來的。
+唯一的例外是 **`data/workspaces.db`** —— 幾 KB，存放工作區名冊、API 金鑰與 webhook
+secret。它無法重建，不過「重建」也不過就是把每個工作區重新輸入一次。
+`data/workspaces/<id>/` 底下全部都是快取；只有快照歷史和註解救不回來，而這兩者本來
+就不被當成需要長期保存的資料。
 
-- **每日 SQLite 備份**：`scripts/backup.sh` 透過 cron 執行，本地保留 30 天於
-  `data/backups/`。會先備份 control plane，再備份各工作區的快取。
-- **若 SQLite volume 遺失**：用原本的代號重新加入工作區並不會自己接回資料（快取也一起
-  沒了），但重新同步會從 Linear 拉回議題。真正會失去的是快照歷史和註解。
-- **備份檔裡有憑證。** `data/backups/` 要比照資料目錄的規格對待。
-- **異地備份**：本工具刻意不內建任何雲端儲存的憑證處理。需要異地備份的維運者請自行
-  加上 rsync/rclone 工作，指向 `data/backups/` —— 並且想清楚那些 API 金鑰會流到哪裡。
+本專案沒有備份腳本。真要備份的話 `rsync` 整個 `data/` 目錄即可 —— 但要注意那會一併
+複製你的 API 金鑰，目的地請比照辦理。
 
 ## 架構
 

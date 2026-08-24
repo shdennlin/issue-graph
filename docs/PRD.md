@@ -7,7 +7,10 @@
 > - **Timeline view** was deferred — daily snapshots are still written to SQLite (`scripts/backup.sh`, `snapshot` table) but no UI surfaces them yet.
 > - **Phasing language** ("Phase 1a / 1b / 2 / 3") is internal planning vocabulary; v1.0 ships everything that was Phases 1a → 3.
 > - **Stack:** migrated from `better-sqlite3` to `bun:sqlite` post-spec (Bun refused to load the N-API binding — see [oven-sh/bun#4290](https://github.com/oven-sh/bun/issues/4290)).
-> - **Four env vars below were specced but never implemented** and have been dropped from the config schema: `LINEAR_WORKSPACE`, `LOG_TO_FILE`, `SYNC_LOG_RETENTION`, `DESIGNDOC_REQUIRED`. Nothing ever read them. In particular there is **no file logging** — the `/app/data/logs/app.log` mentioned in §"Operations" does not exist; logs go to stdout only.
+> - **`scripts/backup.sh` was removed.** It was never wired to anything — no cron
+>   shipped, nothing invoked it, and no instance had ever run it. §12.1's local
+>   rotation design is unimplemented; `rsync` of `data/` is the documented answer.
+> > - **Four env vars below were specced but never implemented** and have been dropped from the config schema: `LINEAR_WORKSPACE`, `LOG_TO_FILE`, `SYNC_LOG_RETENTION`, `DESIGNDOC_REQUIRED`. Nothing ever read them. In particular there is **no file logging** — the `/app/data/logs/app.log` mentioned in §"Operations" does not exist; logs go to stdout only.
 >
 > For **current capabilities**, see [`../README.md`](../README.md). For **what's planned next**, see [`../ROADMAP.md`](../ROADMAP.md). This PRD is preserved for design rationale and decision history (§16).
 
