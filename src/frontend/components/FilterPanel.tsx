@@ -767,6 +767,51 @@ export function FilterPanel() {
         </CollapsibleSection>
       )}
 
+      {/* Unconditional, unlike the due/designdoc sections: every issue has
+          createdAt/updatedAt, so there is no empty-data case that would leave
+          this as dead UI. */}
+      <CollapsibleSection
+        id="time"
+        title={t('filterPanel.recency')}
+        activeCount={filters.recencyWindow !== 'any' ? 1 : 0}
+        onClear={() => {
+          setFilter('recencyWindow', 'any')
+          setFilter('recencyMode', 'updated')
+        }}
+      >
+        {(['updated', 'created'] as const).map((m) => (
+          <label key={m}>
+            <input
+              type="radio"
+              name="recencyMode"
+              checked={filters.recencyMode === m}
+              onChange={() => setFilter('recencyMode', m)}
+            />
+            {m === 'updated'
+              ? t('filterPanel.recencyModeUpdated')
+              : t('filterPanel.recencyModeCreated')}
+          </label>
+        ))}
+        <div className="sep-h" />
+        {(['any', 'today', '7d', '30d'] as const).map((w) => (
+          <label key={w}>
+            <input
+              type="radio"
+              name="recencyWindow"
+              checked={filters.recencyWindow === w}
+              onChange={() => setFilter('recencyWindow', w)}
+            />
+            {w === 'any'
+              ? t('filterPanel.recencyAny')
+              : w === 'today'
+                ? t('filterPanel.recencyToday')
+                : w === '7d'
+                  ? t('filterPanel.recency7d')
+                  : t('filterPanel.recency30d')}
+          </label>
+        ))}
+      </CollapsibleSection>
+
       <button onClick={resetFilters} className="filter-reset">{t('filterPanel.resetFilters')}</button>
     </aside>
   )

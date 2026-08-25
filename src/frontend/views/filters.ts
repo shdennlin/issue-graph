@@ -3,6 +3,7 @@
 import type { NormalizedIssue } from '@shared/types.js'
 import type { Filters } from '../store/viewStore'
 import { isDueWithin, isOverdueIssue } from '../lib/dueDate'
+import { passesRecency } from '../lib/recency'
 
 // Filter-panel "leave-one-out" counting: when showing the count next to e.g.
 // "(unassigned)", we want it to reflect "if you click this, how many issues
@@ -27,6 +28,7 @@ export type FilterDimension =
   | 'label'
   | 'project'
   | 'due'
+  | 'time'
 
 export function applyFiltersExcluding(
   issues: NormalizedIssue[],
@@ -87,6 +89,12 @@ export function applyFiltersExcluding(
     case 'due':
       f.dueFilter = 'any'
       break
+    case 'time':
+      // Only the window is cleared. recencyMode is a mode selector, not a
+      // filter value — zeroing it would change which timestamp the *other*
+      // dimensions' counts are computed against.
+      f.recencyWindow = 'any'
+      break
   }
   return applyFilters(issues, f, staleDays, myUserName, search)
 }
@@ -107,7 +115,8 @@ export function applyFilters(
   myUserName: string | null,
   search?: string,
 ): NormalizedIssue[] {
-  const cutoff = Date.now() - staleDays * 24 * 3600 * 1000
+  const now = Date.now()
+  const cutoff = now - staleDays * 24 * 3600 * 1000
   const q = (search ?? '').trim().toLowerCase()
   return issues.filter((i) => {
     if (q.length > 0) {
@@ -137,6 +146,10 @@ export function applyFilters(
       const u = new Date(i.updatedAt).getTime()
       if (u >= cutoff) return false
     }
+    // Adjacent to staleOnly because they are complements: staleOnly keeps
+    // issues updated *before* its cutoff, recency keeps those touched *after*
+    // one. Enabling both is legal but almost always yields an empty set.
+    if (!passesRecency(i, filters.recencyMode, filters.recencyWindow, now)) return false
     if (filters.primaryValues.length > 0) {
       const hit = i.labels.some((l) => filters.primaryValues.includes(l.id))
       if (!hit) return false

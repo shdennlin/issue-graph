@@ -7,6 +7,7 @@ import {
   writeStaleDays,
   writeTheme,
 } from '../lib/preferences'
+import type { RecencyMode, RecencyWindow } from '../lib/recency'
 
 export type ViewId = 'dependency' | 'mix' | 'project' | 'milestone' | 'designdoc'
 export type Density = 'compact' | 'default' | 'verbose'
@@ -61,6 +62,12 @@ export interface Filters {
   // milestone within it). Sub-filter of projectIds: when non-empty, takes
   // precedence — projectIds is ignored (mirrors stateNames > stateTypes).
   milestoneIds: string[]
+  // Recency filter — the complement of `staleOnly`. `recencyWindow` is the
+  // filter value ('any' = off); `recencyMode` picks which timestamp it reads
+  // and is a mode selector, not a filter value (leave-one-out counting
+  // clears the window but keeps the mode).
+  recencyWindow: RecencyWindow
+  recencyMode: RecencyMode
 }
 
 export interface ViewState {
@@ -250,6 +257,10 @@ export const defaultFilters: Filters = {
   dueFilter: 'any',
   projectIds: [],
   milestoneIds: [],
+  recencyWindow: 'any',
+  // 'updated' answers "what moved lately", the more common question, and
+  // matches the timestamp staleOnly already reads.
+  recencyMode: 'updated',
 }
 
 function toggle<T>(arr: T[], v: T): T[] {

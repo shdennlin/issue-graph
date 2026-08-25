@@ -7,6 +7,8 @@ function baseFilters(overrides: Partial<Filters> = {}): Filters {
   return {
     stateTypes: [],
     stateNames: [],
+    recencyWindow: 'any',
+    recencyMode: 'updated',
     activeOnly: false,
     myIssuesOnly: false,
     staleOnly: false,
@@ -211,5 +213,57 @@ describe("applyFiltersExcluding · 'label'", () => {
   it('leaves non-label dimensions applied', () => {
     const f = baseFilters({ groupSelections: { Platform: ['1'] }, assignees: ['nobody'] })
     expect(ids(applyFiltersExcluding(all, f, 365, null, undefined, 'label'))).toEqual([])
+  })
+})
+
+describe('recency filter', () => {
+  // applyFilters reads the clock internally, so these use offsets from real
+  // "now". Boundary precision is covered exhaustively in recency.test.ts
+  // against a fixed clock; here we only prove the wiring.
+  const isoDaysAgo = (days: number) => new Date(Date.now() - days * 86400_000).toISOString()
+
+  const fresh = makeIssue({
+    identifier: 'FRESH',
+    createdAt: isoDaysAgo(200),
+    updatedAt: isoDaysAgo(1),
+  })
+  const old = makeIssue({
+    identifier: 'OLD',
+    createdAt: isoDaysAgo(200),
+    updatedAt: isoDaysAgo(200),
+  })
+  const bornToday = makeIssue({
+    identifier: 'NEW',
+    createdAt: isoDaysAgo(0),
+    updatedAt: isoDaysAgo(0),
+  })
+  const all = [fresh, old, bornToday]
+  const ids = (out: NormalizedIssue[]) => out.map((i) => i.identifier)
+
+  it('is off at the default window', () => {
+    expect(ids(applyFilters(all, baseFilters(), 365, null))).toEqual(['FRESH', 'OLD', 'NEW'])
+  })
+
+  it('keeps only recently updated issues in updated mode', () => {
+    const f = baseFilters({ recencyWindow: '7d', recencyMode: 'updated' })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['FRESH', 'NEW'])
+  })
+
+  it('keeps only recently created issues in created mode', () => {
+    // FRESH was created long ago but touched yesterday — the distinction the
+    // two modes exist for.
+    const f = baseFilters({ recencyWindow: '7d', recencyMode: 'created' })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['NEW'])
+  })
+
+  it('excludes the window but keeps other dimensions when excluding "time"', () => {
+    const f = baseFilters({ recencyWindow: '7d', priorities: [9] })
+    expect(ids(applyFiltersExcluding(all, f, 365, null, undefined, 'time'))).toEqual([])
+    const g = baseFilters({ recencyWindow: '7d' })
+    expect(ids(applyFiltersExcluding(all, g, 365, null, undefined, 'time'))).toEqual([
+      'FRESH',
+      'OLD',
+      'NEW',
+    ])
   })
 })

@@ -30,6 +30,8 @@ function mk(
 const emptyFilters: Filters = {
   stateTypes: [],
   stateNames: [],
+  recencyWindow: 'any',
+  recencyMode: 'updated',
   activeOnly: false,
   myIssuesOnly: false,
   staleOnly: false,
