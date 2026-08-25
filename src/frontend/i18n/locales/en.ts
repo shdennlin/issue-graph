@@ -356,6 +356,8 @@ export const en = {
     removeChip: 'Remove this filter',
     moreChips: '+{count} more',
     facetSearch: 'Search…',
+    pin: 'Pin to the filter bar',
+    unpin: 'Unpin',
     noFacetMatch: 'No match',
     recencyModeUpdated: 'Updated',
     recencyModeCreated: 'Created',

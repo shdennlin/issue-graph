@@ -2639,3 +2639,31 @@ body[data-detail-wide='1'] .inline-search { display: none; }
 }
 .facet-search:focus-visible { outline: none; border-color: var(--accent); }
 .facet-empty { padding: 8px; color: var(--fg-muted); font-size: var(--fs-meta); }
+
+/* Pinned-but-inactive chips: recessive so they never read as an applied
+   filter. Dashed edge echoes the "+ Filter" affordance — both are invitations
+   rather than state. */
+.facet-chip.is-pinned {
+  background: transparent;
+  border-style: dashed;
+  color: var(--fg-muted);
+}
+.facet-chip.is-pinned:hover { color: var(--accent); }
+
+.facet-option-row { display: flex; align-items: center; }
+.facet-option-row .facet-option { flex: 1; min-width: 0; }
+.facet-pin {
+  display: inline-flex;
+  padding: 4px;
+  background: transparent;
+  border: 0;
+  color: var(--fg-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.facet-option-row:hover .facet-pin,
+.facet-pin.is-pinned,
+.facet-pin:focus-visible { opacity: 1; }
+.facet-pin.is-pinned { color: var(--accent); }
+.facet-pin:hover { color: var(--accent); background: transparent; border: 0; }

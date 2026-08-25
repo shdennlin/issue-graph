@@ -356,6 +356,8 @@ export const zhTW: Dict = {
     removeChip: '移除這個篩選',
     moreChips: '還有 {count} 項',
     facetSearch: '搜尋…',
+    pin: '釘選到篩選列',
+    unpin: '取消釘選',
     noFacetMatch: '沒有符合項目',
     recencyModeUpdated: '更新時間',
     recencyModeCreated: '建立時間',

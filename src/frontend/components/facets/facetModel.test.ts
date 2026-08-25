@@ -8,6 +8,7 @@ import {
   buildFacets,
   chipsFromFilters,
   clearFacetPatch,
+  pinnedChips,
   selectedValues,
   type BuildFacetsInput,
   type FacetDef,
@@ -264,5 +265,46 @@ describe('clearFacetPatch', () => {
       recencyWindow: 'any',
       recencyMode: 'updated',
     })
+  })
+})
+
+describe('pinnedChips', () => {
+  const facets = buildFacets(input({ showDueFilter: true }))
+
+  it('renders a muted chip for a pinned value that is not active', () => {
+    const chips = pinnedChips(defaultFilters, facets, [{ facetId: 'due', value: 'overdue' }])
+    expect(chips).toHaveLength(1)
+    expect(chips[0]?.summary).toBe('filterPanel.dueDateOverdue')
+    expect(chips[0]?.selectedCount).toBe(0)
+  })
+
+  it('skips a pin that is already active, so it is not shown twice', () => {
+    const f = filters({ dueFilter: 'overdue' })
+    expect(pinnedChips(f, facets, [{ facetId: 'due', value: 'overdue' }])).toEqual([])
+  })
+
+  // Dropped at render, NOT pruned from storage: a label can be missing simply
+  // because a sync is in flight, and deleting the pin then would destroy a
+  // choice the user still wants.
+  it('drops a pin whose value no longer exists without touching storage', () => {
+    expect(pinnedChips(defaultFilters, facets, [{ facetId: 'due', value: 'gone' }])).toEqual([])
+    expect(pinnedChips(defaultFilters, facets, [{ facetId: 'nosuch', value: 'x' }])).toEqual([])
+  })
+
+  it('finds pinned values nested under a parent option', () => {
+    const withProjects = buildFacets(
+      input({
+        projectsWithMilestones: [
+          {
+            projId: 'p1', name: 'Core', color: null, count: 1,
+            children: [{ key: 'p1::m1', milestoneId: 'm1', name: 'M1', sortOrder: 1, count: 2 }],
+          },
+        ],
+      }),
+    )
+    const chips = pinnedChips(defaultFilters, withProjects, [
+      { facetId: 'project', value: 'p1::m1' },
+    ])
+    expect(chips[0]?.summary).toBe('M1')
   })
 })

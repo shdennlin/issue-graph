@@ -9,11 +9,13 @@
 // because vitest runs `environment: 'node'` with no DOM.
 
 import { useMemo, useRef, useState } from 'react'
-import { ChevronDown, Plus, X } from 'lucide-react'
+import { ChevronDown, Pin, PinOff, Plus, X } from 'lucide-react'
 import type { IssueStateType } from '@shared/types.js'
 import { useGraphStore } from '../../store/graphStore'
 import { defaultFilters, useViewStore } from '../../store/viewStore'
 import { useSchemaStore } from '../../store/schemaStore'
+import { useWorkspaceStore } from '../../store/workspaceStore'
+import { isPinned, readPins, togglePin, writePins } from '../../lib/pinnedFilters'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import { stateColorVar, stateLabelFor } from '../../lib/colors'
 import { useLocale, useT } from '../../i18n'
@@ -23,9 +25,11 @@ import {
   chipsFromFilters,
   clearFacetPatch,
   isFacetAtDefault,
+  pinnedChips,
   selectedValues,
   type FacetDef,
   type FacetOption,
+  type PinnedFilter,
 } from './facetModel'
 
 /** Long option lists get a search box; short ones would just be noise. */
@@ -52,6 +56,23 @@ export function FacetBar() {
 
   const [openFacetId, setOpenFacetId] = useState<string | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
+
+  // Pins live in localStorage, so they are mirrored into state rather than read
+  // during render — reading storage in a render body is both a side effect and
+  // a way to miss updates.
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  const [pins, setPins] = useState<PinnedFilter[]>(() => readPins(workspaceId))
+  const [pinnedFor, setPinnedFor] = useState<string | null>(workspaceId)
+  if (pinnedFor !== workspaceId) {
+    // Workspace changed: swap in that workspace's own pins. Pins hold raw
+    // label/project/assignee tokens, which mean nothing elsewhere.
+    setPinnedFor(workspaceId)
+    setPins(readPins(workspaceId))
+  }
+  const applyPins = (next: PinnedFilter[]) => {
+    setPins(next)
+    writePins(workspaceId, next)
+  }
 
   // Prefix sections come straight off the detected schema; each becomes its own
   // facet titled with the literal token.
@@ -107,6 +128,7 @@ export function FacetBar() {
     () => chipsFromFilters(filters, facets, t, defaultFilters),
     [filters, facets, t],
   )
+  const inactivePins = useMemo(() => pinnedChips(filters, facets, pins), [filters, facets, pins])
 
   const facetById = (id: string) => facets.find((f) => f.id === id)
 
@@ -149,7 +171,42 @@ export function FacetBar() {
               <X size={11} />
             </button>
             {openFacetId === facet.id && (
-              <FacetPopover facet={facet} onClose={() => setOpenFacetId(null)} />
+              <FacetPopover
+                facet={facet}
+                pins={pins}
+                onTogglePin={(p) => applyPins(togglePin(pins, p))}
+                onClose={() => setOpenFacetId(null)}
+              />
+            )}
+          </div>
+        )
+      })}
+
+      {/* Pinned-but-inactive: one click away, but visually recessive so they
+          never read as an applied filter. */}
+      {inactivePins.map((chip) => {
+        const facet = facetById(chip.facetId)
+        if (!facet) return null
+        const popoverId = `pin:${chip.facetId}:${chip.summary}`
+        return (
+          <div className="facet-chip-wrap" key={popoverId}>
+            <button
+              type="button"
+              className="facet-chip is-pinned"
+              onClick={() => setOpenFacetId(openFacetId === popoverId ? null : popoverId)}
+              aria-expanded={openFacetId === popoverId}
+              title={chip.title}
+            >
+              <Pin size={10} />
+              <span className="facet-chip-value">{chip.summary}</span>
+            </button>
+            {openFacetId === popoverId && (
+              <FacetPopover
+                facet={facet}
+                pins={pins}
+                onTogglePin={(p) => applyPins(togglePin(pins, p))}
+                onClose={() => setOpenFacetId(null)}
+              />
             )}
           </div>
         )
@@ -221,7 +278,17 @@ function FacetPicker({
   )
 }
 
-function FacetPopover({ facet, onClose }: { facet: FacetDef; onClose: () => void }) {
+function FacetPopover({
+  facet,
+  pins,
+  onTogglePin,
+  onClose,
+}: {
+  facet: FacetDef
+  pins: PinnedFilter[]
+  onTogglePin: (pin: PinnedFilter) => void
+  onClose: () => void
+}) {
   const t = useT()
   const ref = useRef<HTMLDivElement>(null)
   const [query, setQuery] = useState('')
@@ -295,18 +362,34 @@ function FacetPopover({ facet, onClose }: { facet: FacetDef; onClose: () => void
       )
     : facet.options
 
-  const renderOption = (o: FacetOption, isChild: boolean, parentValue?: string) => (
-    <button
-      type="button"
-      className={`facet-option${isChild ? ' is-child' : ''}${selected.has(o.value) ? ' is-selected' : ''}`}
-      key={o.value}
-      onClick={() => pick(o.value, isChild, parentValue)}
-    >
-      {o.tint && <span className="facet-option-dot" style={{ background: o.tint }} />}
-      <span className="facet-option-label">{o.label}</span>
-      {o.count !== undefined && <span className="facet-option-count">{o.count}</span>}
-    </button>
-  )
+  const renderOption = (o: FacetOption, isChild: boolean, parentValue?: string) => {
+    const pin: PinnedFilter = { facetId: facet.id, value: o.value }
+    const pinned = isPinned(pins, pin)
+    return (
+      // Row, not a button, because the pin toggle is a second control and HTML
+      // forbids nesting one button inside another.
+      <div className="facet-option-row" key={o.value}>
+        <button
+          type="button"
+          className={`facet-option${isChild ? ' is-child' : ''}${selected.has(o.value) ? ' is-selected' : ''}`}
+          onClick={() => pick(o.value, isChild, parentValue)}
+        >
+          {o.tint && <span className="facet-option-dot" style={{ background: o.tint }} />}
+          <span className="facet-option-label">{o.label}</span>
+          {o.count !== undefined && <span className="facet-option-count">{o.count}</span>}
+        </button>
+        <button
+          type="button"
+          className={`facet-pin${pinned ? ' is-pinned' : ''}`}
+          onClick={() => onTogglePin(pin)}
+          aria-label={pinned ? t('filterPanel.unpin') : t('filterPanel.pin')}
+          title={pinned ? t('filterPanel.unpin') : t('filterPanel.pin')}
+        >
+          {pinned ? <PinOff size={11} /> : <Pin size={11} />}
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="facet-popover" ref={ref}>

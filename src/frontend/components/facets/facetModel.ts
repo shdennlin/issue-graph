@@ -85,6 +85,13 @@ export interface ChipDescriptor {
 
 export type Translate = (key: DictKey, params?: Record<string, string | number>) => string
 
+/** A filter value the user keeps visible in the bar for one-click toggling.
+ *  Stored per workspace in localStorage — see lib/pinnedFilters.ts. */
+export interface PinnedFilter {
+  facetId: string
+  value: string
+}
+
 const PRIORITIES = [1, 2, 3, 4, 0]
 const PRIORITY_KEYS: Record<number, DictKey> = {
   0: 'filterPanel.priorityNoPriority',
@@ -518,4 +525,48 @@ export function clearFacetPatch(
     case 'time':
       return { recencyWindow: 'any', recencyMode: 'updated' }
   }
+}
+
+/** Find an option by value anywhere in a facet, children included. */
+function findOption(facet: FacetDef, value: string): FacetOption | null {
+  for (const o of facet.options) {
+    if (o.value === value) return o
+    for (const c of o.children ?? []) if (c.value === value) return c
+  }
+  return null
+}
+
+/**
+ * Chips for pinned-but-inactive values. Rendered in a muted style; clicking one
+ * activates that value.
+ *
+ * Two filters applied here, both deliberate:
+ *  - a pin whose value is no longer among its facet's options is DROPPED at
+ *    render time rather than pruned from storage. A label can be missing
+ *    simply because a sync is mid-flight, and deleting the pin then would
+ *    destroy a choice the user still wants.
+ *  - a pin that is currently selected is skipped, because chipsFromFilters
+ *    already emits an active chip for it; showing both would double it.
+ */
+export function pinnedChips(
+  filters: Filters,
+  facets: FacetDef[],
+  pins: PinnedFilter[],
+): ChipDescriptor[] {
+  const chips: ChipDescriptor[] = []
+  for (const pin of pins) {
+    const facet = facets.find((f) => f.id === pin.facetId)
+    if (!facet) continue
+    const option = findOption(facet, pin.value)
+    if (!option) continue
+    if (selectedValues(filters, facet).includes(pin.value)) continue
+    chips.push({
+      facetId: facet.id,
+      title: facet.title,
+      summary: option.label,
+      selectedCount: 0,
+      tint: option.tint ?? null,
+    })
+  }
+  return chips
 }
