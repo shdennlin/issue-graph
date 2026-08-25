@@ -19,9 +19,7 @@ import type { Viewport } from 'reactflow'
 import { useViewStore, type ViewId, type ThemeMode, type Density } from './viewStore'
 import { useWorkspaceStore } from './workspaceStore'
 import { DEFAULT_VIEW, readDefaultView } from '../lib/preferences'
-import type { IssueStateType } from '@shared/types.js'
-
-const STATE_TYPES: IssueStateType[] = ['backlog', 'unstarted', 'started', 'completed', 'canceled', 'triage']
+import { filterSignatureParts, parseFilters, serializeFilters } from './filterCodec'
 
 interface HistoryEntryState {
   seq: number
@@ -75,11 +73,6 @@ export function storeViewportInHistory(vp: Viewport): void {
   window.history.replaceState(next, '', window.location.href)
 }
 
-function csv(arr: string[] | number[]): string | null {
-  if (!arr || arr.length === 0) return null
-  return arr.join(',')
-}
-
 function buildUrl(): string {
   const s = useViewStore.getState()
   const ws = useWorkspaceStore.getState()
@@ -102,29 +95,12 @@ function buildUrl(): string {
   if (s.density !== 'default') params.set('density', s.density)
   if (s.mixGroupBy) params.set('mixby', s.mixGroupBy)
 
-  if (!s.filters.activeOnly) params.set('active', '0')
-  if (s.filters.myIssuesOnly) params.set('mine', '1')
-  if (s.filters.staleOnly) params.set('stale', '1')
-  const states = csv(s.filters.stateTypes)
-  if (states) params.set('state', states)
-  const primaries = csv(s.filters.primaryValues)
-  if (primaries) params.set('bucket', primaries)
-  const types = csv(s.filters.typeValues)
-  if (types) params.set('type', types)
-  const prios = csv(s.filters.priorities)
-  if (prios) params.set('priority', prios)
-  const asg = csv(s.filters.assignees)
-  if (asg) params.set('assignee', asg)
-  for (const [token, ids] of Object.entries(s.filters.prefixSelections)) {
-    if (ids.length) params.set(`pfx_${token}`, ids.join(','))
+  // Filters + search are owned by filterCodec so that all three registration
+  // points (write / read / signature) live in one testable module.
+  for (const [k, v] of serializeFilters({ filters: s.filters, search: s.search })) {
+    params.set(k, v)
   }
-  for (const [group, ids] of Object.entries(s.filters.groupSelections)) {
-    if (ids.length) params.set(`grp_${group}`, ids.join(','))
-  }
-  if (s.filters.orphanValues.length) params.set('label', s.filters.orphanValues.join(','))
-  if (s.filters.tagIds.length) params.set('tag', s.filters.tagIds.join(','))
-  if (s.filters.designdocFilter !== 'all') params.set('designdoc', s.filters.designdocFilter)
-  if (s.filters.dueFilter !== 'any') params.set('due', s.filters.dueFilter)
+
   if (s.expandedBuckets.length) params.set('expand', s.expandedBuckets.join(','))
   if (s.notesOpen) params.set('notes', '1')
   if (s.focusedNoteId !== null) params.set('note', String(s.focusedNoteId))
@@ -149,7 +125,6 @@ let lastAppliedSearch = ''
 function significantSignature(): string {
   const s = useViewStore.getState()
   const ws = useWorkspaceStore.getState()
-  const f = s.filters
   return [
     ws.currentWorkspaceId ?? '',
     s.activeView,
@@ -160,22 +135,8 @@ function significantSignature(): string {
     s.showRelated ? '1' : '0',
     s.showHierarchy ? '1' : '0',
     s.mixGroupBy ?? '',
-    s.search,
-    f.activeOnly ? '1' : '0',
-    f.myIssuesOnly ? '1' : '0',
-    f.staleOnly ? '1' : '0',
-    f.stateTypes.slice().sort().join(','),
-    f.stateNames.slice().sort().join(','),
-    f.primaryValues.slice().sort().join(','),
-    f.typeValues.slice().sort().join(','),
-    f.priorities.slice().sort().join(','),
-    f.assignees.slice().sort().join(','),
-    f.projectIds.slice().sort().join(','),
-    f.designdocFilter,
-    f.dueFilter,
-    Object.entries(f.prefixSelections).map(([k, v]) => `${k}:${v.slice().sort().join(',')}`).sort().join('|'),
-    Object.entries(f.groupSelections).map(([k, v]) => `${k}:${v.slice().sort().join(',')}`).sort().join('|'),
-    f.orphanValues.slice().sort().join(','),
+    // search + every filter dimension — see filterCodec.filterSignatureParts.
+    ...filterSignatureParts({ filters: s.filters, search: s.search }),
     s.notesOpen ? '1' : '0',
     s.focusedNoteId === null ? '' : String(s.focusedNoteId),
   ].join('|')
@@ -359,47 +320,11 @@ function parseUrl({ preserveViewOnFocus = false }: { preserveViewOnFocus?: boole
   // An unresolvable key is tolerated downstream by mixGrouping.resolveMixKey.
   set({ mixGroupBy: params.get('mixby') || null })
 
-  // Filters: build a fresh object from URL — fall back to defaults
-  // for any field whose param is absent.
-  const filters = {
-    activeOnly: params.get('active') !== '0',
-    myIssuesOnly: params.get('mine') === '1',
-    staleOnly: params.get('stale') === '1',
-    stateTypes: (() => {
-      const s = params.get('state')
-      if (!s) return ['backlog', 'unstarted', 'started', 'triage'] as IssueStateType[]
-      return s.split(',').filter((x): x is IssueStateType => STATE_TYPES.includes(x as IssueStateType))
-    })(),
-    stateNames: [] as string[],
-    primaryValues: (params.get('bucket')?.split(',') ?? []),
-    typeValues: (params.get('type')?.split(',') ?? []),
-    priorities: (params.get('priority')?.split(',').map(Number).filter((n) => !isNaN(n)) ?? []),
-    assignees: (params.get('assignee')?.split(',') ?? []),
-    projectIds: [] as string[],
-    milestoneIds: [] as string[],
-    prefixSelections: {} as Record<string, string[]>,
-    groupSelections: {} as Record<string, string[]>,
-    orphanValues: (params.get('label')?.split(',') ?? []),
-    tagIds: (params.get('tag')?.split(',') ?? []),
-    designdocFilter: ((): 'all' | 'has' | 'missing' => {
-      const dd = params.get('designdoc')
-      return dd === 'has' || dd === 'missing' ? dd : 'all'
-    })(),
-    dueFilter: ((): 'any' | 'has' | 'overdue' | 'soon7' | 'soon30' => {
-      const d = params.get('due')
-      return d === 'has' || d === 'overdue' || d === 'soon7' || d === 'soon30' ? d : 'any'
-    })(),
-  }
-  for (const [k, v] of params.entries()) {
-    if (k.startsWith('pfx_')) {
-      const token = k.slice(4)
-      filters.prefixSelections[token] = v.split(',')
-    } else if (k.startsWith('grp_')) {
-      const group = k.slice(4)
-      filters.groupSelections[group] = v.split(',')
-    }
-  }
-  set({ filters })
+  // Filters + search: rebuilt wholesale from the URL, so a field whose param is
+  // absent resets to its default instead of sticking. `search` is assigned
+  // unconditionally for the same reason — otherwise Back cannot clear it.
+  const decoded = parseFilters(params)
+  set({ filters: decoded.filters, search: decoded.search })
 
   set({ expandedBuckets: (params.get('expand')?.split(',') ?? []) })
 
