@@ -522,4 +522,15 @@ export const zhTW: Dict = {
     findInNoteNoMatch: '沒有結果',
     findInNoteMatchPosition: '{index} / {total}',
   },
+  savedViews: {
+    label: '檢視',
+    empty: '尚未儲存任何檢視',
+    saveCurrent: '儲存目前檢視',
+    namePlaceholder: '為這個檢視命名…',
+    rename: '重新命名',
+    delete: '刪除',
+    updateToCurrent: '更新為目前檢視',
+    updatedAt: '{when}更新',
+    confirmDelete: '要刪除儲存的檢視「{name}」嗎？使用這台 server 的所有人都會失去它。',
+  },
 }

@@ -2667,3 +2667,15 @@ body[data-detail-wide='1'] .inline-search { display: none; }
 .facet-pin:focus-visible { opacity: 1; }
 .facet-pin.is-pinned { color: var(--accent); }
 .facet-pin:hover { color: var(--accent); background: transparent; border: 0; }
+
+/* Saved views live at the head of the bar — a view sets everything to its
+   right, so the separator marks it as a different kind of control. */
+.facet-chip.facet-views { border-style: solid; }
+.facet-sep {
+  width: 1px;
+  height: 18px;
+  flex-shrink: 0;
+  background: var(--node-border);
+  margin: 0 2px;
+}
+.facet-error { color: var(--danger, #dc2626); }

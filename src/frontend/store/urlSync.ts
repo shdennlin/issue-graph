@@ -142,31 +142,85 @@ function significantSignature(): string {
   ].join('|')
 }
 
+// The body of a scheduled push, factored out so flushUrlSync can run it
+// synchronously without duplicating the push/replace decision.
+function pushNow(): void {
+  const url = buildUrl()
+  if (url === lastPushedUrl) return
+  const sig = significantSignature()
+  const significantChanged = lastSnapshot?.signature !== sig
+  lastPushedUrl = url
+  if (significantChanged) {
+    // New "step" — push a fresh entry. Wipes any forward stack.
+    nextSeq++
+    currentSeq = nextSeq
+    maxSeq = nextSeq
+    window.history.pushState({ seq: nextSeq }, '', url)
+    lastSnapshot = { url, signature: sig }
+    lastAppliedSearch = window.location.search
+    notifyListeners()
+  } else {
+    // Same step, preferences-only change — patch the URL in place.
+    const prev = (window.history.state as HistoryEntryState | null) ?? { seq: currentSeq }
+    window.history.replaceState({ ...prev, seq: prev.seq }, '', url)
+    lastSnapshot = { url, signature: sig }
+    lastAppliedSearch = window.location.search
+  }
+}
+
 function schedulePush(): void {
   if (pending) window.clearTimeout(pending)
   pending = window.setTimeout(() => {
-    const url = buildUrl()
-    if (url === lastPushedUrl) return
-    const sig = significantSignature()
-    const significantChanged = lastSnapshot?.signature !== sig
-    lastPushedUrl = url
-    if (significantChanged) {
-      // New "step" — push a fresh entry. Wipes any forward stack.
-      nextSeq++
-      currentSeq = nextSeq
-      maxSeq = nextSeq
-      window.history.pushState({ seq: nextSeq }, '', url)
-      lastSnapshot = { url, signature: sig }
-      lastAppliedSearch = window.location.search
-      notifyListeners()
-    } else {
-      // Same step, preferences-only change — patch the URL in place.
-      const prev = (window.history.state as HistoryEntryState | null) ?? { seq: currentSeq }
-      window.history.replaceState({ ...prev, seq: prev.seq }, '', url)
-      lastSnapshot = { url, signature: sig }
-      lastAppliedSearch = window.location.search
-    }
+    pending = undefined
+    pushNow()
   }, 200)
+}
+
+/**
+ * Force any debounced URL write to land right now.
+ *
+ * schedulePush waits 200ms, so a filter changed just before "save view" is
+ * clicked would still be missing from `location.search`. Saved-view capture
+ * calls this first so it records what the user actually sees.
+ */
+export function flushUrlSync(): void {
+  if (!pending) return
+  window.clearTimeout(pending)
+  pending = undefined
+  pushNow()
+}
+
+/**
+ * Apply a saved view's query string: push one history entry and replay it into
+ * the stores.
+ *
+ * The current workspace is re-applied here rather than read from the query —
+ * saved views are stored per workspace with `w` stripped, so the view carries
+ * no opinion about which workspace it belongs to.
+ *
+ * The bookkeeping at the end is not optional. parseUrl mutates the stores,
+ * whose subscribers call schedulePush; without marking this URL as already
+ * pushed, that fires a second, spurious history entry and Back stops working
+ * in one step. Same reason onPopState does it.
+ */
+export function applySavedQuery(query: string): void {
+  const params = new URLSearchParams(query)
+  const wid = useWorkspaceStore.getState().currentWorkspaceId
+  if (wid) params.set('w', wid)
+  const qs = params.toString()
+  const url = qs ? `?${qs}` : window.location.pathname
+
+  nextSeq++
+  currentSeq = nextSeq
+  maxSeq = nextSeq
+  window.history.pushState({ seq: nextSeq }, '', url)
+
+  parseUrl()
+
+  lastPushedUrl = buildUrl()
+  lastSnapshot = { url: lastPushedUrl, signature: significantSignature() }
+  lastAppliedSearch = window.location.search
+  notifyListeners()
 }
 
 // Translate a `web+issuegraph://<workspace>/<identifier>[?mode=chain]`

@@ -525,4 +525,15 @@ export const en = {
     findInNoteNoMatch: 'No matches',
     findInNoteMatchPosition: '{index} / {total}',
   },
+  savedViews: {
+    label: 'Views',
+    empty: 'No saved views yet',
+    saveCurrent: 'Save current view',
+    namePlaceholder: 'Name this view…',
+    rename: 'Rename',
+    delete: 'Delete',
+    updateToCurrent: 'Update to the current view',
+    updatedAt: 'Updated {when}',
+    confirmDelete: 'Delete the saved view "{name}"? Everyone using this server loses it.',
+  },
 } as const

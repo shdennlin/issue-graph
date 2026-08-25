@@ -19,6 +19,7 @@ import { isPinned, readPins, togglePin, writePins } from '../../lib/pinnedFilter
 import { useClickOutside } from '../../hooks/useClickOutside'
 import { stateColorVar, stateLabelFor } from '../../lib/colors'
 import { useLocale, useT } from '../../i18n'
+import { SavedViewsChip } from './SavedViewsChip'
 import { useFilterCounts } from './useFilterCounts'
 import {
   buildFacets,
@@ -145,6 +146,9 @@ export function FacetBar() {
 
   return (
     <div className="facet-bar">
+      {/* Leads the bar: a saved view sets everything to its right. */}
+      <SavedViewsChip />
+      <div className="facet-sep" />
       {chips.map((chip) => {
         const facet = facetById(chip.facetId)
         if (!facet) return null

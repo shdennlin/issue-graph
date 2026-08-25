@@ -229,8 +229,8 @@ export function countCachedIssues(): number {
 /**
  * Wipe everything tied to the configured backend/workspace so the next
  * sync rebuilds from scratch. Intentionally preserves user-created data:
- * annotations, notes (+ notes-assets on disk), snapshots, sync_log,
- * settings. Use after switching LINEAR_API_KEY to a different workspace,
+ * annotations, notes (+ notes-assets on disk), saved views, snapshots,
+ * sync_log, settings. Use after switching LINEAR_API_KEY to a different workspace,
  * or to recover from a corrupted cache.
  */
 export function resetCache(): { issues: number; labels: number } {

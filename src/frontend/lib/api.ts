@@ -4,6 +4,7 @@ import type {
   DetectedSchema,
   GraphResponse,
   ProjectDetail,
+  SavedViewDTO,
   SyncLogEntry,
   Viewer,
   WorkflowState,
@@ -178,4 +179,17 @@ export const api = {
     http<SnapshotDiff>(`/api/snapshot-diff?from=${from}&to=${to}`),
   exportUrl: (format: 'csv' | 'md') => withWorkspaceParam(`/api/export?format=${format}`),
   fetchCoverage: () => http<DesignDocCoverage>('/api/designdoc/coverage'),
+  // Saved views deliberately live on `api` rather than in their own client
+  // module: this `http` helper throws a typed ApiError that flows into
+  // apiErrorMessage -> i18n, whereas notesApi.ts rolls its own and throws a
+  // bare Error, which is why note failures surface untranslated.
+  fetchSavedViews: () => http<{ entries: SavedViewDTO[] }>('/api/saved-views'),
+  createSavedView: (name: string, query: string) =>
+    http<SavedViewDTO>('/api/saved-views', { method: 'POST', body: JSON.stringify({ name, query }) }),
+  patchSavedView: (id: number, patch: { name?: string; query?: string }) =>
+    http<SavedViewDTO>(`/api/saved-views/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deleteSavedView: (id: number) =>
+    fetch(withWorkspaceParam(`/api/saved-views/${id}`), { method: 'DELETE' }).then((r) => {
+      if (!r.ok) throw new Error(`${r.status}`)
+    }),
 }

@@ -245,6 +245,20 @@ export interface NoteDTO {
   updatedAt: number
 }
 
+/** A named snapshot of the URL's view + filter state, shared by everyone
+ *  hitting the same server. `query` is a URL query string (no leading '?'),
+ *  with `w` and record-pointer params already stripped — see
+ *  backend/savedViewStore.ts. */
+export interface SavedViewDTO {
+  id: number
+  name: string
+  query: string
+  /** Lower values sort first. Appended at max+1. */
+  sortOrder: number
+  createdAt: number
+  updatedAt: number
+}
+
 export interface GraphData {
   issues: NormalizedIssue[]
   labels: NormalizedLabel[]
