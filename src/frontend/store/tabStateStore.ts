@@ -18,7 +18,7 @@
 //
 // What gets snapshotted: the IDE-feel state — filters, focus, chain,
 // selection, expanded buckets. NOT global preferences (theme, density, font
-// size, modal-open flags, `filterPanelOpen`, `inlineSearch`) — those are
+// size, modal-open flags, `inlineSearch`) — those are
 // user-level preferences that should not vary by tab.
 
 import type { Viewport } from 'reactflow'
@@ -132,7 +132,7 @@ function hydrate(): void {
       snapshots.set(id, {
         // Merge over defaults rather than trusting the stored shape: filter
         // fields added after a payload was written would otherwise restore as
-        // undefined and blow up the FilterPanel's `filters.x[key]` reads. A
+        // undefined and blow up the filter UI's `filters.x[key]` reads. A
         // STORAGE_VERSION bump would also fix it, but at the cost of wiping
         // every tab's state for a purely additive change.
         // restoreTab does useViewStore.setState(view), a shallow merge — a key

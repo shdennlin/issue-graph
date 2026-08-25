@@ -146,7 +146,6 @@ export interface ViewState {
   highlightedNodeId: string | null // when set, the node + its connected edges/neighbors stay opaque
   contextMenu: { x: number; y: number; targetIdentifier: string } | null
   staleDays: number
-  filterPanelOpen: boolean
   // Session panel visibility. The persistent preference is
   // `detailPanelAutoOpen` below; that flag decides whether selecting a new
   // issue *automatically* opens the panel. detailPanelOpen tracks the actual
@@ -225,8 +224,6 @@ export interface ViewState {
   setHighlightedNodeId: (id: string | null) => void
   setContextMenu: (m: ViewState['contextMenu']) => void
   setStaleDays: (n: number) => void
-  setFilterPanelOpen: (b: boolean) => void
-  toggleFilterPanel: () => void
   detailPanelAutoOpen: boolean
   setDetailPanelAutoOpen: (b: boolean) => void
   toggleDetailPanelAutoOpen: () => void
@@ -324,8 +321,6 @@ export const useViewStore = create<ViewState>((set) => ({
   highlightedNodeId: null,
   contextMenu: null,
   staleDays: readStaleDays(),
-  filterPanelOpen:
-    typeof window !== 'undefined' && window.localStorage?.getItem('ig-filter-panel') === '0' ? false : true,
   // Decouples "I want to focus this issue" (for chain mode, find, etc.)
   // from "I want to read its details". When OFF, clicking an issue still
   // sets focusedId but DetailPanel doesn't render — the canvas stays
@@ -461,20 +456,6 @@ export const useViewStore = create<ViewState>((set) => ({
     writeStaleDays(n)
     set({ staleDays: n })
   },
-  setFilterPanelOpen: (b) => {
-    if (typeof window !== 'undefined') {
-      window.localStorage?.setItem('ig-filter-panel', b ? '1' : '0')
-    }
-    set({ filterPanelOpen: b })
-  },
-  toggleFilterPanel: () =>
-    set((s) => {
-      const next = !s.filterPanelOpen
-      if (typeof window !== 'undefined') {
-        window.localStorage?.setItem('ig-filter-panel', next ? '1' : '0')
-      }
-      return { filterPanelOpen: next }
-    }),
   setDetailPanelAutoOpen: (b) => {
     if (typeof window !== 'undefined') {
       window.localStorage?.setItem('ig-detail-panel-auto', b ? '1' : '0')

@@ -581,194 +581,8 @@ a:hover { text-decoration: underline; }
   font-family: var(--font-mono);
 }
 
-.filter-panel {
-  /* width comes from inline style (useResizable). Keep position relative so the
-     absolute-positioned resize-handle anchors here. */
-  position: relative;
-  border-right: 1px solid var(--node-border);
-  background: var(--bg-elev);
-  overflow-y: auto;
-  padding: 10px;
-  font-size: var(--fs-base);
-}
-.filter-panel section {
-  margin-bottom: var(--sp-2);
-  padding-bottom: var(--sp-2);
-  border-bottom: 1px solid color-mix(in srgb, var(--fg-muted) 14%, transparent);
-}
-.filter-panel section:last-of-type {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-/* Sticky section header — stays pinned to the top of the .filter-panel
-   scroll container as you scroll. The negative-then-positive `top` math
-   accounts for the panel's 10px padding: at top: 0, the header would sit
-   10px below the visible top edge; using `top: 0` plus padding-top on the
-   heading itself keeps the visual offset minimal while letting the
-   sticky behavior register against the scroll edge. */
-.filter-section-heading {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin: 0 0 var(--sp-2);
-  position: sticky;
-  top: 0;
-  background: var(--bg-elev);
-  z-index: 1;
-  /* match .filter-panel's padding so the heading bg covers the gap */
-  padding: 0px 0;
-}
-.filter-section-toggle {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-  padding: 0;
-  background: transparent;
-  border: none;
-  color: var(--fg);
-  font: inherit;
-  font-size: var(--fs-base);
-  font-weight: 600;
-  cursor: pointer;
-  text-align: left;
-}
-.filter-section-toggle:hover { background: transparent; border-color: transparent; }
-.filter-section-toggle:hover .filter-section-title { color: var(--accent); }
-.filter-section-toggle:hover svg { color: var(--accent); }
-.filter-section-toggle svg { color: var(--fg-muted); flex-shrink: 0; }
-
-.filter-section-title { flex: 1; }
-
-/* Active-filter count badge next to the section title — subtle accent
-   pill so you can see at a glance which sections have active filters
-   even when the section body is collapsed. */
-.filter-section-count {
-  font-size: var(--fs-meta);
-  font-variant-numeric: tabular-nums;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  padding: 0 6px;
-  border-radius: 999px;
-  font-weight: 500;
-  min-width: 18px;
-  text-align: center;
-  line-height: 1.5;
-}
-
-/* Per-section clear button (× icon). Lives as a sibling of the toggle
-   button inside the same h4 — HTML doesn't allow nested <button>s. */
-.filter-section-clear {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  padding: 2px 4px;
-  background: transparent;
-  border: 0;
-  color: var(--fg-muted);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-.filter-section-clear:hover {
-  background: color-mix(in srgb, var(--fg) 8%, transparent);
-  color: var(--fg);
-  border: 0;
-}
-
-/* Help affordance next to "Active only" — lucide HelpCircle replaces the
-   hand-rolled ?-in-a-circle that read as a heavy badge. */
-.filter-help-icon {
-  display: inline-flex;
-  align-items: center;
-  color: var(--fg-muted);
-  margin-left: 4px;
-  cursor: help;
-  transition: color 0.12s ease;
-}
-.filter-help-icon:hover,
-.filter-help-icon:focus { color: var(--fg); outline: none; }
-
-/* Reset filters button — secondary/ghost. Lives at the bottom of the
-   sidebar so it shouldn't compete with the active filter controls. */
-/* Divider between the recency section's mode radios and its window radios —
-   they are two separate choices inside one section. */
-.filter-panel .sep-h {
-  height: 1px;
-  margin: 6px 0;
-  background: color-mix(in srgb, var(--fg-muted) 14%, transparent);
-}
-.filter-reset {
-  margin-top: var(--sp-3);
-  width: 100%;
-  color: var(--fg-muted);
-  font-size: var(--fs-meta);
-}
-.filter-reset:hover { color: var(--fg); }
-/* Section headers: dropped tiny-uppercase-letterspaced look (cramped, hard to
-   scan). Sentence-case bold at fs-base reads cleaner and matches Linear's
-   own filter sidebar treatment. */
-.filter-panel h4 { margin: 0 0 var(--sp-2); font-size: var(--fs-base); font-weight: 600; color: var(--fg); }
-.filter-panel label {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  /* Comfortable hit area; Linear-like rest spacing without inflating columns */
-  padding: 3px var(--sp-1);
-  margin: 0 calc(-1 * var(--sp-1));
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: background 80ms ease;
-}
-.filter-panel label:hover { background: color-mix(in srgb, var(--fg-muted) 8%, transparent); }
-.filter-panel .count {
-  color: var(--fg-muted);
-  font-size: var(--fs-meta);
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
-  /* Right-pad a hair so the number doesn't kiss the panel edge or scrollbar. */
-  padding-left: var(--sp-2);
-}
-
-/* Hierarchical state filter — parent type + child Linear state names. */
-.state-group { margin-bottom: var(--sp-1); }
-.state-group-header { display: flex; align-items: center; gap: var(--sp-2); }
-.state-group-header .glyph { font-size: var(--fs-base); line-height: 1; }
-.state-children {
-  margin-left: var(--sp-3);
-  padding-left: var(--sp-3);
-  /* Solid 1px instead of 1px dashed — dashed reads as "boundary" / "warning"
-     and made the children look detached. Solid muted line + 25% opacity is
-     subtle enough to imply hierarchy without competing with the controls. */
-  border-left: 1px solid color-mix(in srgb, var(--fg-muted) 25%, transparent);
-  margin-top: 2px;
-}
-.state-child {
-  display: flex !important;
-  align-items: center;
-  gap: var(--sp-2);
-  padding: 2px var(--sp-1);
-  margin: 0 calc(-1 * var(--sp-1));
-  font-size: var(--fs-meta);
-  color: var(--fg-muted);
-  border-radius: var(--radius-sm);
-}
-.state-child:hover { background: color-mix(in srgb, var(--fg-muted) 8%, transparent); }
-
-/* Project color swatch in the hierarchical Project / Milestone filter.
-   Same color the project view's container is tinted with — visual link
-   between the filter list and the canvas containers. */
-.project-color-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  /* Subtle inset border keeps light gray dots (#bec2c8 — Linear default)
-     visible against the panel background without looking heavy. */
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 12%, transparent);
-}
+/* The sidebar FilterPanel and every style that served it were removed in
+   favour of the .facet-bar chip UI further down this file. */
 
 .detail-panel {
   position: relative;
@@ -2682,3 +2496,146 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* ── Filter chip / facet bar ───────────────────────────────────────────────
+   Replaces the sidebar FilterPanel. The premise: a dimension at its default
+   renders nothing at all, so unused filters cost zero space.
+
+   .facet-chip generalizes .detail-filter-link (which was already a pill button
+   that sets one dimension to one value); that rule now composes this one so
+   DetailPanel keeps working.
+
+   The popover deliberately COPIES .toolbar-overflow-menu's geometry rather
+   than reusing the class — NoteEditor shares that class for its copy menu and
+   needs different sizing.
+
+   No [data-theme='dark'] rules here: every colour is a token that tokens.css
+   re-declares per theme. */
+.facet-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--node-border);
+  /* One line, always. Wrapping to a second row would reintroduce exactly the
+     vertical-space problem this bar exists to remove. */
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: thin;
+}
+.facet-chip-wrap { position: relative; display: inline-flex; flex-shrink: 0; }
+
+.facet-chip {
+  --chip-tint: var(--fg-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: color-mix(in srgb, var(--fg-muted) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fg-muted) 18%, transparent);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: var(--fs-meta);
+  color: var(--fg);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.facet-chip:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.facet-chip:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.facet-chip.is-active {
+  background: color-mix(in srgb, var(--chip-tint) 16%, transparent);
+  border-color: color-mix(in srgb, var(--chip-tint) 40%, transparent);
+}
+.facet-chip-title { color: var(--fg-muted); }
+.facet-chip-value { font-weight: 600; }
+.facet-chip.is-active .facet-chip-title { color: var(--fg); }
+
+/* Sibling, not nested: HTML forbids a button inside a button. */
+.facet-chip-x {
+  display: inline-flex;
+  align-items: center;
+  margin-left: -22px;
+  padding: 2px 4px;
+  background: transparent;
+  border: 0;
+  color: var(--fg-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.facet-chip-wrap:hover .facet-chip-x,
+.facet-chip-x:focus-visible { opacity: 1; }
+.facet-chip-x:hover { color: var(--accent); background: transparent; border: 0; }
+
+.facet-add { border-style: dashed; }
+.facet-clear-all {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+  background: transparent;
+  border: 0;
+}
+
+.facet-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 220px;
+  max-width: 320px;
+  background: var(--bg-elev);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 4px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+}
+.facet-option-list { max-height: 320px; overflow-y: auto; }
+.facet-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  font-size: var(--fs-base);
+  cursor: pointer;
+}
+.facet-option:hover { background: var(--chip-bg); border: 0; }
+.facet-option.is-selected { color: var(--accent); font-weight: 600; }
+.facet-option.is-child { padding-left: 24px; font-size: var(--fs-meta); }
+.facet-option-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.facet-option-count {
+  color: var(--fg-muted);
+  font-size: var(--fs-meta);
+  font-variant-numeric: tabular-nums;
+}
+.facet-option-dot { width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; }
+.facet-search {
+  margin: 2px 4px 4px;
+  padding: 4px 6px;
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: var(--fs-base);
+}
+.facet-search:focus-visible { outline: none; border-color: var(--accent); }
+.facet-empty { padding: 8px; color: var(--fg-muted); font-size: var(--fs-meta); }

@@ -12,7 +12,7 @@ import { api } from './lib/api'
 import { GraphCanvas } from './components/GraphCanvas'
 import { TabBar } from './components/TabBar'
 import { Toolbar } from './components/Toolbar'
-import { FilterPanel } from './components/FilterPanel'
+import { FacetBar } from './components/facets/FacetBar'
 import { SyncBanner } from './components/SyncBanner'
 import { Onboarding } from './components/Onboarding'
 import { ContextMenu } from './components/ContextMenu'
@@ -43,7 +43,6 @@ export function App() {
   const loadSchema = useSchemaStore((s) => s.load)
   const loadNotes = useNotesStore((s) => s.load)
   const focusedId = useViewStore((s) => s.focusedId)
-  const filterPanelOpen = useViewStore((s) => s.filterPanelOpen)
   const detailPanelOpen = useViewStore((s) => s.detailPanelOpen)
   const focusedProjectId = useViewStore((s) => s.focusedProjectId)
   const projectPanelOpen = useViewStore((s) => s.projectPanelOpen)
@@ -673,8 +672,8 @@ export function App() {
       <SyncBanner />
       <TabBar />
       <Toolbar />
+      <FacetBar />
       <div className="app-main">
-        {filterPanelOpen && <FilterPanel />}
         <GraphCanvas />
         {focusedId && detailPanelOpen && (
           <Suspense fallback={null}>

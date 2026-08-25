@@ -12,8 +12,6 @@ import {
   Monitor,
   Moon,
   MoreHorizontal,
-  PanelLeftClose,
-  PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
   Settings,
@@ -53,8 +51,6 @@ export function Toolbar() {
   const setCoverageOpen = useViewStore((s) => s.setCoverageOpen)
   const setShortcutsOpen = useViewStore((s) => s.setShortcutsOpen)
   const setNotesOpen = useViewStore((s) => s.setNotesOpen)
-  const filterPanelOpen = useViewStore((s) => s.filterPanelOpen)
-  const toggleFilterPanel = useViewStore((s) => s.toggleFilterPanel)
   const detailPanelAutoOpen = useViewStore((s) => s.detailPanelAutoOpen)
   const toggleDetailPanelAutoOpen = useViewStore((s) => s.toggleDetailPanelAutoOpen)
   const selection = useViewStore((s) => s.selection)
@@ -166,18 +162,6 @@ export function Toolbar() {
 
   return (
     <div className="toolbar">
-      <div className="group">
-        <button
-          onClick={toggleFilterPanel}
-          title={filterPanelOpen ? t('toolbar.filtersHide') : t('toolbar.filtersShow')}
-          aria-pressed={filterPanelOpen}
-          className="icon-text"
-        >
-          {filterPanelOpen ? <PanelLeftClose size={ICON_SIZE} /> : <PanelLeftOpen size={ICON_SIZE} />}
-          {t('toolbar.filters')}
-        </button>
-      </div>
-      <div className="sep" />
       <div className="group">
         {views.map((v) => (
           <button
