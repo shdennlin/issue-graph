@@ -565,6 +565,9 @@ a:hover { text-decoration: underline; }
   color: var(--fg);
   font-size: var(--fs-base);
   cursor: pointer;
+  /* The export entries are <a download>, not <button> — they must not render
+     with the default link underline. No-op for the button items. */
+  text-decoration: none;
 }
 .toolbar-overflow-item:hover {
   background: var(--chip-bg);
@@ -689,6 +692,13 @@ a:hover { text-decoration: underline; }
 
 /* Reset filters button — secondary/ghost. Lives at the bottom of the
    sidebar so it shouldn't compete with the active filter controls. */
+/* Divider between the recency section's mode radios and its window radios —
+   they are two separate choices inside one section. */
+.filter-panel .sep-h {
+  height: 1px;
+  margin: 6px 0;
+  background: color-mix(in srgb, var(--fg-muted) 14%, transparent);
+}
 .filter-reset {
   margin-top: var(--sp-3);
   width: 100%;

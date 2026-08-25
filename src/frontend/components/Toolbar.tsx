@@ -4,6 +4,7 @@ import {
   Camera,
   Eye,
   EyeOff,
+  FileDown,
   FileText,
   Keyboard,
   ListTree,
@@ -332,12 +333,6 @@ export function Toolbar() {
             <div className="sep" />
           </>
         )}
-        <a href={api.exportUrl('csv')} download>
-          <button>{t('toolbar.exportCsv')}</button>
-        </a>
-        <a href={api.exportUrl('md')} download>
-          <button>{t('toolbar.exportMd')}</button>
-        </a>
         <div className="toolbar-overflow" ref={overflowRef}>
           <button
             type="button"
@@ -352,6 +347,27 @@ export function Toolbar() {
           </button>
           {overflowOpen && (
             <div className="toolbar-overflow-menu" role="menu">
+              {/* Exports stay <a download> rather than becoming <button> —
+                  routing them through onClick would navigate instead of
+                  downloading. */}
+              <a
+                role="menuitem"
+                className="toolbar-overflow-item"
+                href={api.exportUrl('csv')}
+                download
+                onClick={() => setOverflowOpen(false)}
+              >
+                <FileDown size={14} /> {t('toolbar.exportCsv')}
+              </a>
+              <a
+                role="menuitem"
+                className="toolbar-overflow-item"
+                href={api.exportUrl('md')}
+                download
+                onClick={() => setOverflowOpen(false)}
+              >
+                <FileDown size={14} /> {t('toolbar.exportMd')}
+              </a>
               <button
                 type="button"
                 role="menuitem"
