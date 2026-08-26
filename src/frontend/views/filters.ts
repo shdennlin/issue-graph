@@ -108,6 +108,45 @@ export function milestoneFilterKey(projectId: string, milestoneId: string | null
   return `${projectId}::${milestoneId ?? NO_MILESTONE_TOKEN}`
 }
 
+/**
+ * Facet ids that `Filters.negated` may contain. Prefix and label-group facets
+ * are dynamic (`prefix:<token>`, `group:<key>`) so they are not listed.
+ *
+ * These strings are the same ids facetModel builds, deliberately: they already
+ * travel in the URL, so one vocabulary serves the UI, the engine and the link.
+ */
+export const NEGATABLE_FACETS = [
+  'state',
+  'primary',
+  'type',
+  'priority',
+  'assignee',
+  'project',
+  'orphan',
+  // NOT 'tag': `Filters.tagIds` is stored, serialized and present in the URL
+  // signature, but applyFilters never reads it — the tag dimension has no
+  // engine implementation at all, so `?tag=x` currently filters nothing.
+  // Negating a filter that does not apply would be meaningless. Pre-existing;
+  // out of scope here.
+] as const
+
+/** Whether a facet's selection is inverted. `?? []` guards tab snapshots
+ *  written before the field existed — same reason as groupSelections below. */
+function negated(filters: Filters, facetId: string): boolean {
+  return (filters.negated ?? []).includes(facetId)
+}
+
+/**
+ * Apply a membership test, inverting it when the facet is negated.
+ *
+ * `hit` is "this issue matches the selection". Un-negated, a miss excludes the
+ * issue; negated, a hit does. Written as one helper so the two readings can
+ * never drift apart across the eleven places this is applied.
+ */
+function passes(hit: boolean, isNegated: boolean): boolean {
+  return hit !== isNegated
+}
+
 export function applyFilters(
   issues: NormalizedIssue[],
   filters: Filters,
@@ -130,16 +169,27 @@ export function applyFilters(
     // overridden — it's a quick filter, not a hard gate. Without this, a
     // user picking "Duplicate" (canonical=canceled) with activeOnly still
     // on would silently see nothing.
+    const stateNegated = negated(filters, 'state')
     if (filters.stateNames.length > 0) {
-      if (!filters.stateNames.includes(i.state.name)) return false
+      if (!passes(filters.stateNames.includes(i.state.name), stateNegated)) return false
     } else {
       if (filters.activeOnly && (i.state.type === 'completed' || i.state.type === 'canceled')) return false
-      if (filters.stateTypes.length > 0 && !filters.stateTypes.includes(i.state.type)) return false
+      if (
+        filters.stateTypes.length > 0 &&
+        !passes(filters.stateTypes.includes(i.state.type), stateNegated)
+      ) {
+        return false
+      }
     }
-    if (filters.priorities.length > 0 && !filters.priorities.includes(i.priority)) return false
+    if (
+      filters.priorities.length > 0 &&
+      !passes(filters.priorities.includes(i.priority), negated(filters, 'priority'))
+    ) {
+      return false
+    }
     if (filters.assignees.length > 0) {
       const name = i.assignee?.displayName ?? '(unassigned)'
-      if (!filters.assignees.includes(name)) return false
+      if (!passes(filters.assignees.includes(name), negated(filters, 'assignee'))) return false
     }
     if (filters.myIssuesOnly && myUserName && i.assignee?.displayName !== myUserName) return false
     if (filters.staleOnly) {
@@ -152,29 +202,29 @@ export function applyFilters(
     if (!passesRecency(i, filters.recencyMode, filters.recencyWindow, now)) return false
     if (filters.primaryValues.length > 0) {
       const hit = i.labels.some((l) => filters.primaryValues.includes(l.id))
-      if (!hit) return false
+      if (!passes(hit, negated(filters, 'primary'))) return false
     }
     if (filters.typeValues.length > 0) {
       const hit = i.labels.some((l) => filters.typeValues.includes(l.id))
-      if (!hit) return false
+      if (!passes(hit, negated(filters, 'type'))) return false
     }
-    for (const [, ids] of Object.entries(filters.prefixSelections)) {
+    for (const [token, ids] of Object.entries(filters.prefixSelections)) {
       if (ids.length === 0) continue
       const hit = i.labels.some((l) => ids.includes(l.id))
-      if (!hit) return false
+      if (!passes(hit, negated(filters, `prefix:${token}`))) return false
     }
     // `?? {}` / `?? []`: filters are restored verbatim from localStorage tab
     // snapshots, so a payload written before these fields existed reaches
     // here with them undefined. Cheaper than a migration and keeps the
     // filter pure — see tabStateStore's STORAGE_VERSION note.
-    for (const [, ids] of Object.entries(filters.groupSelections ?? {})) {
+    for (const [key, ids] of Object.entries(filters.groupSelections ?? {})) {
       if (ids.length === 0) continue
       const hit = i.labels.some((l) => ids.includes(l.id))
-      if (!hit) return false
+      if (!passes(hit, negated(filters, `group:${key}`))) return false
     }
     if ((filters.orphanValues ?? []).length > 0) {
       const hit = i.labels.some((l) => filters.orphanValues.includes(l.id))
-      if (!hit) return false
+      if (!passes(hit, negated(filters, 'orphan'))) return false
     }
     switch (filters.dueFilter) {
       case 'any':
@@ -195,19 +245,22 @@ export function applyFilters(
     // Project / milestone hierarchy. Child (milestoneIds) takes precedence
     // over parent (projectIds) — mirrors stateNames > stateTypes. When the
     // child is empty, parent applies; when child is set, parent is ignored.
+    const projectNegated = negated(filters, 'project')
     if (filters.milestoneIds.length > 0) {
       const projId = i.project?.id
       // Issues without a project can never match any milestone selection
-      // (milestones are project-scoped in Linear's data model).
-      if (!projId) return false
+      // (milestones are project-scoped in Linear's data model). Under
+      // negation that makes them non-matches, so they PASS — "not in these
+      // milestones" is true of an issue that is in no milestone at all.
+      if (!projId) return projectNegated
       const key = milestoneFilterKey(projId, i.projectMilestone?.id ?? null)
-      if (!filters.milestoneIds.includes(key)) return false
+      if (!passes(filters.milestoneIds.includes(key), projectNegated)) return false
     } else if (filters.projectIds.length > 0) {
       // '__noproject' is the sentinel for "issues without a Linear project".
       // Mirrors the Project view's grouping key so the filter UI and view
       // stay aligned.
       const key = i.project?.id ?? '__noproject'
-      if (!filters.projectIds.includes(key)) return false
+      if (!passes(filters.projectIds.includes(key), projectNegated)) return false
     }
     return true
   })

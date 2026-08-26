@@ -27,7 +27,9 @@ import {
   chipsFromFilters,
   clearFacetPatch,
   isFacetAtDefault,
+  isNegated,
   partitionPinned,
+  toggleNegated,
   searchFacetValues,
   selectedValues,
   toggleValue,
@@ -209,11 +211,28 @@ export function FacetBar() {
             style={chip.tint ? { ['--chip-tint' as string]: chip.tint } : undefined}
           >
             <span className="facet-seg facet-seg-title">{chip.title}</span>
-            {chip.operator && (
-              <span className="facet-seg facet-seg-op">
-                {t(chip.operator === 'isAnyOf' ? 'filterPanel.chipIsAnyOf' : 'filterPanel.chipIs')}
-              </span>
-            )}
+            {chip.operator &&
+              (facet.selection === 'multi' ? (
+                // Multi-select facets can be inverted, so the operator is a
+                // control rather than a label. Single-select and boolean facets
+                // have no second reading, so theirs stays inert text — an
+                // operator you cannot change carries no information.
+                <button
+                  type="button"
+                  className="facet-seg facet-seg-op is-toggle"
+                  onClick={() => setFilter('negated', toggleNegated(filters, facet))}
+                  title={t('filterPanel.toggleNegate')}
+                  aria-pressed={chip.operator === 'isNotAnyOf'}
+                >
+                  {t(
+                    chip.operator === 'isNotAnyOf'
+                      ? 'filterPanel.chipIsNotAnyOf'
+                      : 'filterPanel.chipIsAnyOf',
+                  )}
+                </button>
+              ) : (
+                <span className="facet-seg facet-seg-op">{t('filterPanel.chipIs')}</span>
+              ))}
             {chip.summary && (
               <button
                 type="button"
@@ -346,6 +365,11 @@ function FacetOptionList({
   const [query, setQuery] = useState('')
   const filters = useViewStore((s) => s.filters)
   const { pick, selected } = useFacetPick(facet)
+  // Counts are leave-one-out: "pick this and N issues remain". Under negation
+  // picking a value EXCLUDES it, so that number is answering a question nobody
+  // asked. Suppressed rather than recomputed as a complement — an honest gap
+  // beats a confident wrong number.
+  const negated = isNegated(filters, facet)
 
   if (facet.selection === 'toggle') {
     return (
@@ -389,7 +413,9 @@ function FacetOptionList({
           />
           {o.tint && <span className="facet-option-dot" style={{ background: o.tint }} />}
           <span className="facet-option-label">{o.label}</span>
-          {o.count !== undefined && <span className="facet-option-count">{o.count}</span>}
+          {o.count !== undefined && !negated && (
+            <span className="facet-option-count">{o.count}</span>
+          )}
         </button>
         <button
           type="button"

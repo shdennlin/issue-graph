@@ -68,6 +68,21 @@ export interface Filters {
   // clears the window but keeps the mode).
   recencyWindow: RecencyWindow
   recencyMode: RecencyMode
+  /**
+   * Facet ids whose selection is INVERTED — "is not any of" rather than
+   * "is any of". Stored as a list of ids rather than a boolean per dimension
+   * so a new dimension is negatable for free and the whole thing serializes
+   * to one URL param.
+   *
+   * Only multi-select facets appear here. Negating a boolean quick-filter is a
+   * double negative, and negating a single-select enum ("not overdue") is
+   * expressible by picking the other values.
+   *
+   * Inert while the dimension has no values selected: every check is guarded
+   * on a non-empty selection, and "not in the empty set" matches everything —
+   * i.e. the same as no filter.
+   */
+  negated: string[]
 }
 
 export interface ViewState {
@@ -258,6 +273,7 @@ export const defaultFilters: Filters = {
   // 'updated' answers "what moved lately", the more common question, and
   // matches the timestamp staleOnly already reads.
   recencyMode: 'updated',
+  negated: [],
 }
 
 function toggle<T>(arr: T[], v: T): T[] {

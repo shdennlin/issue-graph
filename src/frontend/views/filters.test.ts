@@ -9,6 +9,7 @@ function baseFilters(overrides: Partial<Filters> = {}): Filters {
     stateNames: [],
     recencyWindow: 'any',
     recencyMode: 'updated',
+    negated: [],
     activeOnly: false,
     myIssuesOnly: false,
     staleOnly: false,
@@ -265,5 +266,80 @@ describe('recency filter', () => {
       'OLD',
       'NEW',
     ])
+  })
+})
+
+describe('negated facets', () => {
+  const a = makeIssue({
+    identifier: 'A',
+    state: { name: 'In Progress', type: 'started' },
+    priority: 1,
+    assignee: { displayName: 'shawn' },
+    labels: [{ id: 'l1', name: 'Bug', color: '#f00', group: null }],
+    project: { id: 'p1', name: 'Core' },
+  })
+  const b = makeIssue({
+    identifier: 'B',
+    state: { name: 'Todo', type: 'unstarted' },
+    priority: 2,
+    assignee: null,
+    labels: [{ id: 'l2', name: 'Chore', color: '#0f0', group: null }],
+    project: { id: 'p2', name: 'Side' },
+  })
+  const all = [a, b]
+  const ids = (out: NormalizedIssue[]) => out.map((i) => i.identifier)
+
+  it('inverts a state selection', () => {
+    const f = baseFilters({ stateTypes: ['started'] })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['A'])
+    expect(ids(applyFilters(all, { ...f, negated: ['state'] }, 365, null))).toEqual(['B'])
+  })
+
+  it.each([
+    ['priority', { priorities: [1] }, 'priority'],
+    ['assignee', { assignees: ['shawn'] }, 'assignee'],
+    ['primary label', { primaryValues: ['l1'] }, 'primary'],
+    ['orphan label', { orphanValues: ['l1'] }, 'orphan'],
+    ['project', { projectIds: ['p1'] }, 'project'],
+  ] as [string, Partial<Filters>, string][])('inverts %s', (_name, sel, facetId) => {
+    const f = baseFilters(sel)
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['A'])
+    expect(ids(applyFilters(all, { ...f, negated: [facetId] }, 365, null))).toEqual(['B'])
+  })
+
+  it('inverts a dynamic prefix group by its composed id', () => {
+    const f = baseFilters({ prefixSelections: { horizon: ['l1'] } })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['A'])
+    expect(
+      ids(applyFilters(all, { ...f, negated: ['prefix:horizon'] }, 365, null)),
+    ).toEqual(['B'])
+  })
+
+  it('negates only the named facet, leaving the others positive', () => {
+    const f = baseFilters({ priorities: [1], assignees: ['shawn'], negated: ['priority'] })
+    // priority NOT 1 excludes A; assignee IS shawn excludes B. Nothing left.
+    expect(ids(applyFilters(all, f, 365, null))).toEqual([])
+  })
+
+  // "Not in the empty set" matches everything, which is the same as no filter —
+  // so a negation with nothing selected must not hide anything.
+  it('is inert when the dimension has no selection', () => {
+    const f = baseFilters({ negated: ['priority', 'assignee', 'state'] })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['A', 'B'])
+  })
+
+  // "Not in these milestones" is true of an issue that is in no milestone at
+  // all, so a project-less issue passes under negation rather than being
+  // dropped by the milestone guard.
+  it('keeps project-less issues when a milestone selection is negated', () => {
+    const loose = makeIssue({ identifier: 'C' })
+    const f = baseFilters({ milestoneIds: ['p1::m1'], negated: ['project'] })
+    expect(ids(applyFilters([a, loose], f, 365, null))).toEqual(['A', 'C'])
+  })
+
+  it('tolerates a tab snapshot written before the field existed', () => {
+    const legacy = { ...baseFilters({ priorities: [1] }) } as Filters
+    delete (legacy as Partial<Filters>).negated
+    expect(ids(applyFilters(all, legacy, 365, null))).toEqual(['A'])
   })
 })

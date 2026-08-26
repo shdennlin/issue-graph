@@ -2832,3 +2832,15 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   color: var(--accent);
   font-weight: 600;
 }
+
+/* The operator is a control only where it can actually change — multi-select
+   facets, which can be inverted. Elsewhere it stays inert text. */
+.facet-seg-op.is-toggle { cursor: pointer; }
+.facet-seg-op.is-toggle:hover {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+.facet-seg-op[aria-pressed='true'] {
+  color: var(--danger, #dc2626);
+  font-weight: 600;
+}

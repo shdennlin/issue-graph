@@ -76,8 +76,9 @@ export interface ChipDescriptor {
   facetId: string
   /** Reads as "Status | is any of | 3 selected". Multi-select facets match any
    *  of their values, single-select match exactly one — saying so removes a
-   *  real ambiguity about what a multi-value chip means. */
-  operator: 'is' | 'isAnyOf' | null
+   *  real ambiguity about what a multi-value chip means. `isNotAnyOf` is the
+   *  negated form and, unlike the others, is a control the user can flip. */
+  operator: 'is' | 'isAnyOf' | 'isNotAnyOf' | null
   /** Facet title, e.g. 'Assignee'. */
   title: string
   /** Value summary: the single selected label, or a count for multi-selects. */
@@ -380,6 +381,24 @@ export function toggleValue(filters: Filters, facet: FacetDef): boolean {
   return filters.staleOnly
 }
 
+/**
+ * Whether a facet's selection is inverted.
+ *
+ * Only multi-select facets can be: negating a boolean is a double negative, and
+ * a single-select enum's negation is expressible by picking the other values.
+ */
+export function isNegated(filters: Filters, facet: FacetDef): boolean {
+  return facet.selection === 'multi' && (filters.negated ?? []).includes(facet.id)
+}
+
+/** Toggle a facet's negation, returning the new list. */
+export function toggleNegated(filters: Filters, facet: FacetDef): string[] {
+  const cur = filters.negated ?? []
+  return cur.includes(facet.id)
+    ? cur.filter((id) => id !== facet.id)
+    : [...cur, facet.id]
+}
+
 /** The values currently selected for a facet, as raw Filters tokens. */
 export function selectedValues(filters: Filters, facet: FacetDef): string[] {
   switch (facet.kind) {
@@ -482,13 +501,24 @@ export function chipsFromFilters(
     chips.push({
       facetId: facet.id,
       title: facet.title,
-      // One value reads as itself; several collapse to a count, because
-      // spelling out five state names makes the bar unscannable.
+      // One value reads as itself; several show the first plus a remainder.
+      // A bare count ("5 selected") forced you to open the menu to learn what
+      // was applied, which is the one thing the chip exists to tell you.
       summary:
-        selected.length === 1 && first !== undefined
-          ? labelFor(facet, first)
-          : t('filterPanel.chipCount', { count: selected.length }),
-      operator: facet.selection === 'multi' ? 'isAnyOf' : 'is',
+        first === undefined
+          ? ''
+          : selected.length === 1
+            ? labelFor(facet, first)
+            : t('filterPanel.chipPlusMore', {
+                first: labelFor(facet, first),
+                rest: selected.length - 1,
+              }),
+      operator:
+        facet.selection === 'multi'
+          ? isNegated(filters, facet)
+            ? 'isNotAnyOf'
+            : 'isAnyOf'
+          : 'is',
       selectedCount: selected.length,
       tint:
         selected.length === 1 && first !== undefined
@@ -508,6 +538,20 @@ export function chipsFromFilters(
  * shadowing field would leave a stale filter silently applied.
  */
 export function clearFacetPatch(
+  facet: FacetDef,
+  filters: Filters,
+  defaults: Filters,
+): Partial<Filters> {
+  // Clearing a facet drops its negation as well. Leaving it behind would park
+  // an invisible "is not" on a facet with nothing selected, which then flips
+  // meaning the next time a value is picked.
+  const dropNegation: Partial<Filters> = (filters.negated ?? []).includes(facet.id)
+    ? { negated: (filters.negated ?? []).filter((id) => id !== facet.id) }
+    : {}
+  return { ...dropNegation, ...clearFacetValues(facet, filters, defaults) }
+}
+
+function clearFacetValues(
   facet: FacetDef,
   filters: Filters,
   defaults: Filters,

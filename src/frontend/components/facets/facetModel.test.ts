@@ -8,6 +8,8 @@ import {
   buildFacets,
   chipsFromFilters,
   clearFacetPatch,
+  isNegated,
+  toggleNegated,
   locateOption,
   partitionPinned,
   searchFacetValues,
@@ -216,8 +218,10 @@ describe('chipsFromFilters', () => {
     const one = chipsFromFilters(filters({ dueFilter: 'overdue' }), facets, t, defaultFilters)
     expect(one[0]?.summary).toBe('filterPanel.dueDateOverdue')
     expect(one[0]?.operator).toBe('is')
+    // Shows what is applied, not just how much — a bare count made you open
+    // the menu to learn what the chip was already there to tell you.
     const many = chipsFromFilters(filters({ priorities: [1, 2, 3] }), facets, t, defaultFilters)
-    expect(many[0]?.summary).toBe('filterPanel.chipCount:3')
+    expect(many[0]?.summary).toBe('filterPanel.chipPlusMore:filterPanel.priorityUrgent,2')
     expect(many[0]?.selectedCount).toBe(3)
     // Multi-select facets match ANY of their values; saying so removes the
     // ambiguity in a chip that just reads "Priority 3".
@@ -417,5 +421,49 @@ describe('toggleValue', () => {
     expect(toggleValue(filters({ myIssuesOnly: true }), byId(facets, 'quick:mine'))).toBe(true)
     expect(toggleValue(filters({ staleOnly: true }), byId(facets, 'quick:stale'))).toBe(true)
     expect(toggleValue(defaultFilters, byId(facets, 'quick:stale'))).toBe(false)
+  })
+})
+
+describe('negation', () => {
+  const facets = buildFacets(input({ showDueFilter: true }))
+  const state = byId(facets, 'state')
+  const due = byId(facets, 'due')
+
+  it('reports a multi facet as negated when its id is listed', () => {
+    expect(isNegated(filters({ negated: ['state'] }), state)).toBe(true)
+    expect(isNegated(defaultFilters, state)).toBe(false)
+  })
+
+  // Negating a boolean is a double negative; a single-select enum's negation
+  // is already expressible by picking the other values.
+  it('refuses to negate a single-select facet even if listed', () => {
+    expect(isNegated(filters({ negated: ['due'] }), due)).toBe(false)
+  })
+
+  it('toggles an id on and off', () => {
+    expect(toggleNegated(defaultFilters, state)).toEqual(['state'])
+    expect(toggleNegated(filters({ negated: ['state'] }), state)).toEqual([])
+  })
+
+  it('leaves other negated facets alone when toggling one', () => {
+    const f = filters({ negated: ['assignee', 'state'] })
+    expect(toggleNegated(f, state)).toEqual(['assignee'])
+  })
+
+  it('renders the inverted operator on the chip', () => {
+    const f = filters({ stateTypes: ['started'], negated: ['state'] })
+    expect(chipsFromFilters(f, facets, t, defaultFilters)[0]?.operator).toBe('isNotAnyOf')
+  })
+
+  // An "is not" left parked on a facet with nothing selected is invisible, and
+  // would silently flip meaning the next time a value was picked.
+  it('drops the negation when the facet is cleared', () => {
+    const f = filters({ stateTypes: ['started'], negated: ['state', 'assignee'] })
+    expect(clearFacetPatch(state, f, defaultFilters).negated).toEqual(['assignee'])
+  })
+
+  it('leaves the negated list untouched when clearing a facet that has none', () => {
+    const f = filters({ negated: ['assignee'] })
+    expect(clearFacetPatch(state, f, defaultFilters).negated).toBeUndefined()
   })
 })

@@ -52,6 +52,7 @@ describe('filterCodec round-trip', () => {
         dueFilter: 'overdue',
         recencyWindow: '7d',
         recencyMode: 'created',
+        negated: ['state', 'prefix:horizon'],
       },
       'auth bug',
     )
@@ -67,6 +68,7 @@ describe('filterCodec round-trip', () => {
     ['tagIds', { tagIds: ['tag-1'] }, 'tag'],
     ['recencyWindow', { recencyWindow: '30d' }, 'recent'],
     ['recencyMode', { recencyMode: 'created' }, 'recentby'],
+    ['negated', { negated: ['assignee'] }, 'neg'],
   ]
   it.each(droppedCases)('%s survives the round-trip and writes ?%s', (_name, overrides, param) => {
     const s = state(overrides)
@@ -131,6 +133,7 @@ describe('filterSignatureParts', () => {
     ['stateNames', { stateNames: ['Review Spec'] }],
     ['recencyWindow', { recencyWindow: 'today' }],
     ['recencyMode', { recencyMode: 'created' }],
+    ['negated', { negated: ['state'] }],
   ]
   it.each(sigCases)('changing %s changes the signature', (_name, overrides) => {
     expect(filterSignatureParts(state(overrides))).not.toEqual(filterSignatureParts(state()))
@@ -138,5 +141,24 @@ describe('filterSignatureParts', () => {
 
   it('changing search changes the signature', () => {
     expect(filterSignatureParts(state({}, 'x'))).not.toEqual(filterSignatureParts(state()))
+  })
+})
+
+describe('negated facets in the URL', () => {
+  it('round-trips a facet id containing a colon', () => {
+    // prefix:/group: ids carry ':' — URLSearchParams encodes it as %3A, so it
+    // survives, but the codec must not split on it.
+    const s = state({ negated: ['prefix:horizon', 'group:Risk'] })
+    expect(roundTrip(s).filters.negated).toEqual(['prefix:horizon', 'group:Risk'])
+  })
+
+  it('omits the param entirely when nothing is negated', () => {
+    expect(serializeFilters(state()).has('neg')).toBe(false)
+  })
+
+  // Absent means "no negation", not "keep whatever was there" — the same rule
+  // every other dimension follows, and what makes Back able to clear it.
+  it('resets to [] when the param is absent', () => {
+    expect(parseFilters(new URLSearchParams('mine=1')).filters.negated).toEqual([])
   })
 })

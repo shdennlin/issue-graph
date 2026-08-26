@@ -32,6 +32,7 @@ const emptyFilters: Filters = {
   stateNames: [],
   recencyWindow: 'any',
   recencyMode: 'updated',
+  negated: [],
   activeOnly: false,
   myIssuesOnly: false,
   staleOnly: false,

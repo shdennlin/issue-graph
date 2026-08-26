@@ -99,6 +99,12 @@ export function serializeFilters(state: CodecState): URLSearchParams {
   if (f.recencyWindow !== 'any') params.set('recent', f.recencyWindow)
   if (f.recencyMode !== 'updated') params.set('recentby', f.recencyMode)
 
+  // Inverted facets, as one param rather than a flag per dimension — see
+  // Filters.negated. Facet ids may contain ':' (prefix:horizon), which
+  // round-trips through URLSearchParams as %3A.
+  const neg = csv(f.negated)
+  if (neg) params.set('neg', neg)
+
   if (state.search) params.set('q', state.search)
 
   return params
@@ -161,6 +167,7 @@ export function parseFilters(params: URLSearchParams): CodecState {
       const m = params.get('recentby')
       return RECENCY_MODES.includes(m as RecencyMode) ? (m as RecencyMode) : 'updated'
     })(),
+    negated: list(params.get('neg')),
   }
 
   return { filters, search: params.get('q') ?? '' }
@@ -196,6 +203,7 @@ export function filterSignatureParts(state: CodecState): string[] {
     // visible effect — keeping the signature a faithful mirror of the URL is
     // worth more than suppressing one no-op history entry.
     f.recencyMode,
+    (f.negated ?? []).slice().sort().join(','),
     Object.entries(f.prefixSelections)
       .map(([k, v]) => `${k}:${v.slice().sort().join(',')}`)
       .sort()
