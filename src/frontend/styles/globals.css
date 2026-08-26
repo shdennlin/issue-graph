@@ -2769,10 +2769,19 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   width: 100%;
   border: 1px solid color-mix(in srgb, var(--chip-tint) 40%, transparent);
   border-radius: 999px;
-  overflow: hidden;
   font-size: var(--fs-meta);
   background: color-mix(in srgb, var(--chip-tint) 10%, transparent);
 }
+/* Round the end segments individually rather than clipping the group with
+   `overflow: hidden` — the popover renders INSIDE this element, and a clipping
+   ancestor made clicking the value segment appear to do nothing. Third time
+   this trap has bitten in this feature; a non-visible overflow anywhere up the
+   tree beats any amount of z-index.
+   Targeted by class, not :first-child/:last-child: the popover becomes the
+   last child while it is open, which would strip the clear button's rounding
+   exactly when the chip is being interacted with. */
+.facet-seg-title { border-radius: 999px 0 0 999px; }
+.facet-seg-x { border-radius: 0 999px 999px 0; }
 .facet-seg {
   display: inline-flex;
   align-items: center;

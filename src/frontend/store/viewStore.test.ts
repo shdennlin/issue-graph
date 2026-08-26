@@ -146,3 +146,51 @@ describe('viewStore — label group / orphan filter toggles', () => {
     expect(useViewStore.getState().filters.orphanValues).toEqual([])
   })
 })
+
+describe('viewStore.toggleStateType — the state tree', () => {
+  beforeEach(() => {
+    useViewStore.setState({ filters: defaultFilters })
+  })
+
+  // Names refine within their own type, so switching a type OFF has to take
+  // its children with it — leaving them behind would keep matching issues of a
+  // type the user just unchecked.
+  it('drops the names belonging to a type being switched off', () => {
+    useViewStore.setState({
+      filters: {
+        ...defaultFilters,
+        stateTypes: ['started', 'unstarted'],
+        stateNames: ['unstarted::Todo', 'started::In Progress'],
+      },
+    })
+    useViewStore.getState().toggleStateType('unstarted')
+    const f = useViewStore.getState().filters
+    expect(f.stateTypes).toEqual(['started'])
+    // Only the unchecked type's children go; the other branch is independent,
+    // which is the whole point of the tree.
+    expect(f.stateNames).toEqual(['started::In Progress'])
+  })
+
+  it('leaves names untouched when switching a type on', () => {
+    useViewStore.setState({
+      filters: { ...defaultFilters, stateTypes: [], stateNames: ['unstarted::Todo'] },
+    })
+    useViewStore.getState().toggleStateType('started')
+    expect(useViewStore.getState().filters.stateNames).toEqual(['unstarted::Todo'])
+  })
+
+  // Pre-existing sibling behaviour, pinned here so the two clears stay together.
+  it('clears activeOnly when switching on a non-active state', () => {
+    useViewStore.setState({ filters: { ...defaultFilters, activeOnly: true, stateTypes: [] } })
+    useViewStore.getState().toggleStateType('completed')
+    expect(useViewStore.getState().filters.activeOnly).toBe(false)
+  })
+
+  it('keeps activeOnly when switching a non-active state back off', () => {
+    useViewStore.setState({
+      filters: { ...defaultFilters, activeOnly: true, stateTypes: ['completed'] },
+    })
+    useViewStore.getState().toggleStateType('completed')
+    expect(useViewStore.getState().filters.activeOnly).toBe(true)
+  })
+})

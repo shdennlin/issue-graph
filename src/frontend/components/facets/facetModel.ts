@@ -20,6 +20,7 @@
 import type { IssueStateType } from '@shared/types.js'
 import type { Filters } from '../../store/viewStore'
 import type { DictKey } from '../../i18n'
+import { stateNameKey } from '../../views/filters'
 import type { ProjectRow, StateNameRow } from './useFilterCounts'
 
 /** How a facet's values combine. Drives both the popover widget and whether
@@ -197,8 +198,10 @@ export function buildFacets(input: BuildFacetsInput): FacetDef[] {
       label: input.stateLabel(type),
       count: counts.byState[type] ?? 0,
       tint: input.stateColor(type),
+      // Composite `<type>::<name>` so applyFilters can tell which type a name
+      // refines without a lookup table — same convention as milestone keys.
       children: (input.stateNamesByType[type] ?? []).map((s: StateNameRow) => ({
-        value: s.name,
+        value: stateNameKey(type, s.name),
         label: s.name,
         count: s.count,
       })),
@@ -407,9 +410,10 @@ export function selectedValues(filters: Filters, facet: FacetDef): string[] {
       if (facet.id === 'quick:mine') return filters.myIssuesOnly ? ['on'] : []
       return filters.staleOnly ? ['on'] : []
     case 'state':
-      // stateNames takes precedence over stateTypes when non-empty — the same
-      // rule applyFilters uses, so the chip reflects what is actually applied.
-      return filters.stateNames.length > 0 ? filters.stateNames : filters.stateTypes
+      // Both levels are genuinely checked: a type selects its whole branch, a
+      // name refines within it. Returning only one made the tree look mutually
+      // exclusive — picking a name blanked every parent checkbox.
+      return [...filters.stateTypes, ...filters.stateNames]
     case 'primary':
       return filters.primaryValues
     case 'type':
@@ -453,12 +457,36 @@ function sameSet(a: string[], b: string[]): boolean {
 }
 
 /**
- * Whether a facet is at its resting value and should therefore render no chip.
+ * Whether a facet is currently excluding anything.
  *
- * NOT the same as "no values selected": `stateTypes` defaults to the four
- * active states, so an empty check would pin a State chip to the bar forever.
- * (The identical assumption is why `state=` is the one URL param written even
- * at the default — see filterCodec.)
+ * NOT "is it at its default". Two defaults in this app are not neutral:
+ * `activeOnly` starts TRUE (hiding everything completed or canceled) and
+ * `stateTypes` starts as four of the six types. Keying the chips off
+ * "non-default" therefore showed an empty panel while two real constraints
+ * were in force — the UI claimed nothing was filtered when a third of the
+ * state space was hidden.
+ *
+ * A facet that genuinely does nothing (dueFilter 'any', an empty assignee
+ * list) still renders no chip, so unused dimensions keep costing no space.
+ */
+export function facetConstrains(filters: Filters, facet: FacetDef): boolean {
+  switch (facet.kind) {
+    case 'quick':
+      // activeOnly constrains when ON; the other two are plain opt-ins.
+      return toggleValue(filters, facet)
+    case 'state':
+      return (
+        filters.stateNames.length > 0 ||
+        (filters.stateTypes.length > 0 && filters.stateTypes.length < ALL_STATES.length)
+      )
+    default:
+      return selectedValues(filters, facet).length > 0
+  }
+}
+
+/**
+ * Whether a facet is at its resting value. Used for the "already in use"
+ * marker in the picker; chips key off facetConstrains instead.
  */
 export function isFacetAtDefault(filters: Filters, facet: FacetDef, defaults: Filters): boolean {
   if (facet.kind === 'state') {
@@ -476,11 +504,10 @@ export function chipsFromFilters(
   filters: Filters,
   facets: FacetDef[],
   t: Translate,
-  defaults: Filters,
 ): ChipDescriptor[] {
   const chips: ChipDescriptor[] = []
   for (const facet of facets) {
-    if (isFacetAtDefault(filters, facet, defaults)) continue
+    if (!facetConstrains(filters, facet)) continue
     const selected = selectedValues(filters, facet)
 
     if (facet.selection === 'toggle') {

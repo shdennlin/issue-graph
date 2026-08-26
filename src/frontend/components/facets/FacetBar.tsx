@@ -145,7 +145,7 @@ export function FacetBar() {
   }, [facets, filters])
 
   const chips = useMemo(
-    () => chipsFromFilters(filters, facets, t, defaultFilters),
+    () => chipsFromFilters(filters, facets, t),
     [filters, facets, t],
   )
 

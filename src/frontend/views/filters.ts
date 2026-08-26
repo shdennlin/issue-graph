@@ -99,6 +99,16 @@ export function applyFiltersExcluding(
   return applyFilters(issues, f, staleDays, myUserName, search)
 }
 
+/** Separator for the composite `<type>::<name>` keys in Filters.stateNames.
+ *  Same convention as milestoneFilterKey — the key carries its own parent so
+ *  applyFilters needs no lookup table. */
+export const STATE_NAME_SEP = '::'
+
+/** Build the composite key stored in Filters.stateNames. */
+export function stateNameKey(type: string, name: string): string {
+  return `${type}${STATE_NAME_SEP}${name}`
+}
+
 /** Composite key for issues that have a project but no milestone within it.
  *  Stored inside Filters.milestoneIds as '<projectId>::__nomilestone'. */
 export const NO_MILESTONE_TOKEN = '__nomilestone'
@@ -169,8 +179,28 @@ export function applyFilters(
     // overridden — it's a quick filter, not a hard gate. Without this, a
     // user picking "Duplicate" (canonical=canceled) with activeOnly still
     // on would silently see nothing.
+    // State is a two-level tree: canonical type, then the workspace's own state
+    // names within it. Names REFINE their own type rather than replacing the
+    // whole selection — picking "Todo" narrows Unstarted to Todo and leaves
+    // Started and Backlog untouched. (It used to shadow every type at once,
+    // which read as the tree being mutually exclusive.)
+    //
+    // The composite `<type>::<name>` key is what makes this possible without a
+    // name -> type lookup here: the key carries its own type, exactly as
+    // milestoneIds carries its project.
     const stateNegated = negated(filters, 'state')
-    if (filters.stateNames.length > 0) {
+    const typePrefix = `${i.state.type}${STATE_NAME_SEP}`
+    const refinedWithinType = filters.stateNames.some((k) => k.startsWith(typePrefix))
+    if (refinedWithinType) {
+      // Naming a state implies its type is wanted, so activeOnly and the type
+      // list are both bypassed here — otherwise picking "Duplicate"
+      // (canonically canceled) with activeOnly on would silently match nothing.
+      if (!passes(filters.stateNames.includes(`${typePrefix}${i.state.name}`), stateNegated)) {
+        return false
+      }
+    } else if (filters.stateNames.some((k) => !k.includes(STATE_NAME_SEP))) {
+      // Back-compat: a bare name, from a tab snapshot or link written before
+      // the keys became composite. Matched by name alone, ignoring type.
       if (!passes(filters.stateNames.includes(i.state.name), stateNegated)) return false
     } else {
       if (filters.activeOnly && (i.state.type === 'completed' || i.state.type === 'canceled')) return false

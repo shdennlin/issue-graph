@@ -364,7 +364,15 @@ export const useViewStore = create<ViewState>((set) => ({
       const isAdding = nextTypes.includes(t) && !s.filters.stateTypes.includes(t)
       const isNonActive = t === 'completed' || t === 'canceled'
       const activeOnly = isAdding && isNonActive ? false : s.filters.activeOnly
-      return { filters: { ...s.filters, stateTypes: nextTypes, activeOnly } }
+      // Names refine within their own type, so unchecking a type must take its
+      // children with it — leaving them behind would keep matching issues of a
+      // type the user just switched off. Other types' names are untouched;
+      // that independence is the whole point of the tree.
+      const removingType = !nextTypes.includes(t) && s.filters.stateTypes.includes(t)
+      const stateNames = removingType
+        ? s.filters.stateNames.filter((k) => !k.startsWith(`${t}::`))
+        : s.filters.stateNames
+      return { filters: { ...s.filters, stateTypes: nextTypes, stateNames, activeOnly } }
     }),
   toggleStateName: (name) => set((s) => ({ filters: { ...s.filters, stateNames: toggle(s.filters.stateNames, name) } })),
   togglePrimary: (id) => set((s) => ({ filters: { ...s.filters, primaryValues: toggle(s.filters.primaryValues, id) } })),
