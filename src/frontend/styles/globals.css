@@ -117,6 +117,8 @@ a:hover { text-decoration: underline; }
   display: flex;
   flex: 1;
   min-height: 0;
+  /* Containing block for the floating filter panel. */
+  position: relative;
 }
 
 .canvas {
@@ -2511,27 +2513,42 @@ body[data-detail-wide='1'] .inline-search { display: none; }
 
    No [data-theme='dark'] rules here: every colour is a token that tokens.css
    re-declares per theme. */
+/* A compact panel floating over the top-left of the canvas, one control per
+   row. A full-width strip above the graph took vertical space across the whole
+   window no matter how few filters were active; floating it means an empty
+   filter set costs almost nothing and the graph keeps the full viewport.
+
+   Deliberately NOT a scroll container: `overflow-x: auto` here once made this
+   one on both axes (a `visible` axis computes to `auto` when its partner is
+   not), which clipped every popover it contains. */
 .facet-bar {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 5;
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: var(--bg-elev);
-  border-bottom: 1px solid var(--node-border);
-  /* One line, always. Wrapping to a second row would reintroduce exactly the
-     vertical-space problem this bar exists to remove. */
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  overflow-y: visible;
-  scrollbar-width: thin;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 6px;
+  min-width: 176px;
+  max-width: 264px;
+  background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
 }
-.facet-chip-wrap { position: relative; display: inline-flex; flex-shrink: 0; }
+.facet-bar > * { flex-shrink: 0; }
+.facet-chip-wrap { position: relative; display: flex; flex-shrink: 0; }
 
 .facet-chip {
   --chip-tint: var(--fg-muted);
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
+  justify-content: flex-start;
   background: color-mix(in srgb, var(--fg-muted) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--fg-muted) 18%, transparent);
   padding: 2px 8px;
@@ -2565,17 +2582,22 @@ body[data-detail-wide='1'] .inline-search { display: none; }
 .facet-chip-x {
   display: inline-flex;
   align-items: center;
-  margin-left: -22px;
+  /* No negative margin. Overlapping the chip put this button on top of the
+     chip's trailing chevron, so clicking the "open this facet" affordance
+     cleared the filter instead. It sits beside the chip now. */
+  margin-left: 2px;
   padding: 2px 4px;
   background: transparent;
   border: 0;
   color: var(--fg-muted);
   cursor: pointer;
   opacity: 0;
+  /* Hidden means non-interactive: an opacity-0 button still takes clicks. */
+  pointer-events: none;
   transition: opacity 120ms ease;
 }
 .facet-chip-wrap:hover .facet-chip-x,
-.facet-chip-x:focus-visible { opacity: 1; }
+.facet-chip-x:focus-visible { opacity: 1; pointer-events: auto; }
 .facet-chip-x:hover { color: var(--accent); background: transparent; border: 0; }
 
 .facet-add { border-style: dashed; }
@@ -2586,12 +2608,15 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   color: var(--fg-muted);
   background: transparent;
   border: 0;
+  text-align: left;
 }
 
 .facet-popover {
   position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
+  /* Opens beside the panel, not below it: the rows are stacked vertically, so
+     a popover under a row would cover the rows after it. */
+  top: 0;
+  left: calc(100% + 8px);
   min-width: 220px;
   max-width: 320px;
   background: var(--bg-elev);
@@ -2640,15 +2665,8 @@ body[data-detail-wide='1'] .inline-search { display: none; }
 .facet-search:focus-visible { outline: none; border-color: var(--accent); }
 .facet-empty { padding: 8px; color: var(--fg-muted); font-size: var(--fs-meta); }
 
-/* Pinned-but-inactive chips: recessive so they never read as an applied
-   filter. Dashed edge echoes the "+ Filter" affordance — both are invitations
-   rather than state. */
-.facet-chip.is-pinned {
-  background: transparent;
-  border-style: dashed;
-  color: var(--fg-muted);
-}
-.facet-chip.is-pinned:hover { color: var(--accent); }
+/* Pinned values are ordered to the top of their facet's list rather than
+   given their own chip — see facetModel.partitionPinned for why. */
 
 .facet-option-row { display: flex; align-items: center; }
 .facet-option-row .facet-option { flex: 1; min-width: 0; }
@@ -2660,11 +2678,12 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   color: var(--fg-muted);
   cursor: pointer;
   opacity: 0;
+  pointer-events: none;
   transition: opacity 120ms ease;
 }
 .facet-option-row:hover .facet-pin,
 .facet-pin.is-pinned,
-.facet-pin:focus-visible { opacity: 1; }
+.facet-pin:focus-visible { opacity: 1; pointer-events: auto; }
 .facet-pin.is-pinned { color: var(--accent); }
 .facet-pin:hover { color: var(--accent); background: transparent; border: 0; }
 
@@ -2672,10 +2691,144 @@ body[data-detail-wide='1'] .inline-search { display: none; }
    right, so the separator marks it as a different kind of control. */
 .facet-chip.facet-views { border-style: solid; }
 .facet-sep {
-  width: 1px;
-  height: 18px;
+  height: 1px;
   flex-shrink: 0;
   background: var(--node-border);
-  margin: 0 2px;
+  margin: 2px 0;
 }
 .facet-error { color: var(--danger, #dc2626); }
+
+/* ── Cascading "Add filter" menu ───────────────────────────────────────────
+   The facet list stays put while the highlighted row's options fly out beside
+   it, so you can move between dimensions without losing your place. */
+.facet-menu { min-width: 240px; }
+.facet-menu .facet-option.is-open { background: var(--chip-bg); }
+.facet-menu .facet-option svg { color: var(--fg-muted); flex-shrink: 0; }
+
+/* `top` is set inline from the hovered row's offset — see FacetPicker. */
+.facet-submenu {
+  position: absolute;
+  left: calc(100% + 4px);
+  min-width: 240px;
+  max-width: 320px;
+  background: var(--bg-elev);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Square for multi-select, round for mutually-exclusive — the convention
+   readers already know from checkbox vs radio, without the input semantics
+   that made click-to-clear awkward in the old sidebar. */
+.facet-checkbox {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  border: 1.5px solid color-mix(in srgb, var(--fg-muted) 55%, transparent);
+  border-radius: 3px;
+  position: relative;
+}
+.facet-checkbox.is-radio { border-radius: 999px; }
+.facet-checkbox[data-checked='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.facet-checkbox[data-checked='true']::after {
+  content: '';
+  position: absolute;
+  left: 3.5px;
+  top: 0.5px;
+  width: 3px;
+  height: 7px;
+  border: solid var(--accent-fg, #fff);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.facet-checkbox.is-radio[data-checked='true']::after {
+  left: 3.5px;
+  top: 3px;
+  width: 4px;
+  height: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent-fg, #fff);
+  transform: none;
+}
+
+/* ── Segmented filter chip ─────────────────────────────────────────────────
+   Reads as one sentence: dimension | operator | value | clear. The operator
+   segment earns its width — "Status 3" alone is ambiguous between "any of
+   three" and "exactly three". */
+.facet-chip-group {
+  --chip-tint: var(--fg-muted);
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--chip-tint) 40%, transparent);
+  border-radius: 999px;
+  overflow: hidden;
+  font-size: var(--fs-meta);
+  background: color-mix(in srgb, var(--chip-tint) 10%, transparent);
+}
+.facet-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--fg);
+  font-size: inherit;
+  white-space: nowrap;
+}
+/* Hairline dividers instead of gaps, so the segments read as one control. */
+.facet-seg + .facet-seg {
+  border-left: 1px solid color-mix(in srgb, var(--chip-tint) 30%, transparent);
+}
+.facet-seg-op { color: var(--fg-muted); }
+.facet-seg-value {
+  font-weight: 600;
+  cursor: pointer;
+  /* Takes the slack so every row's clear button lines up on the right edge. */
+  flex: 1;
+  justify-content: space-between;
+  min-width: 0;
+}
+.facet-seg-value:hover,
+.facet-seg-x:hover {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--chip-tint) 30%, transparent);
+}
+.facet-seg-value svg { color: var(--fg-muted); }
+.facet-seg-x { color: var(--fg-muted); cursor: pointer; padding: 3px 7px; }
+.facet-seg:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+/* Divider between pinned values and the rest of a list, and between dimension
+   rows and cross-facet search hits. */
+.facet-divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: color-mix(in srgb, var(--fg-muted) 18%, transparent);
+}
+/* "Dimension › Value" — the dimension is context, so it recedes. */
+.facet-hit-facet {
+  color: var(--fg-muted);
+  margin-right: 6px;
+}
+.facet-hit-facet::after { content: ' ›'; }
+
+/* A count that reflects an applied selection rather than what is available. */
+.facet-option-count.is-active {
+  color: var(--accent);
+  font-weight: 600;
+}

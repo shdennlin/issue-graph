@@ -8,15 +8,20 @@ import {
   buildFacets,
   chipsFromFilters,
   clearFacetPatch,
-  pinnedChips,
+  locateOption,
+  partitionPinned,
+  searchFacetValues,
   selectedValues,
+  toggleValue,
   type BuildFacetsInput,
   type FacetDef,
 } from './facetModel'
 
-// Identity translator: returns the key path, so assertions read as the key
-// that would be looked up rather than a locale string that could drift.
-const t = ((k: string) => k) as BuildFacetsInput['t']
+// Near-identity translator: returns the key path (so assertions read as the
+// key that would be looked up, not a locale string that could drift) plus any
+// interpolated params, so count-bearing strings stay checkable.
+const t = ((k: string, p?: Record<string, string | number>) =>
+  p ? `${k}:${Object.values(p).join(',')}` : k) as BuildFacetsInput['t']
 
 const EMPTY_STATE_NAMES = {
   backlog: [], unstarted: [], started: [], completed: [], canceled: [], triage: [],
@@ -203,14 +208,20 @@ describe('chipsFromFilters', () => {
     const chips = chipsFromFilters(filters({ activeOnly: false }), facets, t, defaultFilters)
     expect(chips).toHaveLength(1)
     expect(chips[0]?.title).toBe('filterPanel.includingDone')
+    // A boolean has no operator or value — the title carries the whole meaning.
+    expect(chips[0]?.operator).toBeNull()
   })
 
   it('summarizes one value by its label and many by a count', () => {
     const one = chipsFromFilters(filters({ dueFilter: 'overdue' }), facets, t, defaultFilters)
     expect(one[0]?.summary).toBe('filterPanel.dueDateOverdue')
+    expect(one[0]?.operator).toBe('is')
     const many = chipsFromFilters(filters({ priorities: [1, 2, 3] }), facets, t, defaultFilters)
-    expect(many[0]?.summary).toBe('3')
+    expect(many[0]?.summary).toBe('filterPanel.chipCount:3')
     expect(many[0]?.selectedCount).toBe(3)
+    // Multi-select facets match ANY of their values; saying so removes the
+    // ambiguity in a chip that just reads "Priority 3".
+    expect(many[0]?.operator).toBe('isAnyOf')
   })
 
   it('emits one chip per active facet', () => {
@@ -268,30 +279,34 @@ describe('clearFacetPatch', () => {
   })
 })
 
-describe('pinnedChips', () => {
+describe('partitionPinned', () => {
   const facets = buildFacets(input({ showDueFilter: true }))
+  const due = byId(facets, 'due')
 
-  it('renders a muted chip for a pinned value that is not active', () => {
-    const chips = pinnedChips(defaultFilters, facets, [{ facetId: 'due', value: 'overdue' }])
-    expect(chips).toHaveLength(1)
-    expect(chips[0]?.summary).toBe('filterPanel.dueDateOverdue')
-    expect(chips[0]?.selectedCount).toBe(0)
+  it('floats pinned options above the rest, preserving relative order', () => {
+    const { pinned, rest } = partitionPinned(due, [{ facetId: 'due', value: 'overdue' }])
+    expect(pinned.map((o) => o.value)).toEqual(['overdue'])
+    expect(rest.map((o) => o.value)).toEqual(['any', 'has', 'soon7', 'soon30'])
   })
 
-  it('skips a pin that is already active, so it is not shown twice', () => {
-    const f = filters({ dueFilter: 'overdue' })
-    expect(pinnedChips(f, facets, [{ facetId: 'due', value: 'overdue' }])).toEqual([])
+  it('leaves the list untouched when nothing is pinned for this facet', () => {
+    // A pin belonging to another facet must not reorder this one.
+    const { pinned, rest } = partitionPinned(due, [{ facetId: 'priority', value: '1' }])
+    expect(pinned).toEqual([])
+    expect(rest).toBe(due.options)
   })
 
-  // Dropped at render, NOT pruned from storage: a label can be missing simply
-  // because a sync is in flight, and deleting the pin then would destroy a
-  // choice the user still wants.
-  it('drops a pin whose value no longer exists without touching storage', () => {
-    expect(pinnedChips(defaultFilters, facets, [{ facetId: 'due', value: 'gone' }])).toEqual([])
-    expect(pinnedChips(defaultFilters, facets, [{ facetId: 'nosuch', value: 'x' }])).toEqual([])
+  // Dropped at render, never pruned from storage: a value can be absent merely
+  // because a sync is in flight.
+  it('ignores a pin whose value no longer exists', () => {
+    const { pinned, rest } = partitionPinned(due, [{ facetId: 'due', value: 'gone' }])
+    expect(pinned).toEqual([])
+    expect(rest).toHaveLength(due.options.length)
   })
 
-  it('finds pinned values nested under a parent option', () => {
+  // Hoisting a child away from the parent that gives it meaning would be worse
+  // than leaving it in place, so only top-level options float.
+  it('does not hoist a pinned child out of its parent', () => {
     const withProjects = buildFacets(
       input({
         projectsWithMilestones: [
@@ -302,9 +317,105 @@ describe('pinnedChips', () => {
         ],
       }),
     )
-    const chips = pinnedChips(defaultFilters, withProjects, [
-      { facetId: 'project', value: 'p1::m1' },
-    ])
-    expect(chips[0]?.summary).toBe('M1')
+    const project = byId(withProjects, 'project')
+    const { pinned } = partitionPinned(project, [{ facetId: 'project', value: 'p1::m1' }])
+    expect(pinned).toEqual([])
+  })
+})
+
+describe('searchFacetValues', () => {
+  const facets = buildFacets(
+    input({
+      schema: { primaryGroup: 'Horizon', typeGroup: 'Kind', prefixes: [] },
+      typeLabels: [
+        { id: 't1', name: 'Bug' },
+        { id: 't2', name: 'Chore' },
+      ],
+      projectsWithMilestones: [
+        {
+          projId: 'p1', name: 'Core', color: null, count: 1,
+          children: [{ key: 'p1::m1', milestoneId: 'm1', name: 'Beta', sortOrder: 1, count: 2 }],
+        },
+      ],
+    }),
+  )
+  // Substring stand-in for the real fuzzy scorer — the ranking function is
+  // injected precisely so this suite doesn't depend on its tuning.
+  const score = (q: string, text: string) =>
+    text.toLowerCase().includes(q.toLowerCase()) ? text.length : null
+
+  it('finds a value without knowing which dimension it lives under', () => {
+    const hits = searchFacetValues(facets, 'bug', score, 10)
+    expect(hits.map((h) => h.option.label)).toContain('Bug')
+  })
+
+  it('reaches nested children and reports their parent', () => {
+    const hits = searchFacetValues(facets, 'Beta', score, 10)
+    expect(hits[0]).toMatchObject({ isChild: true, parentValue: 'p1' })
+  })
+
+  it('returns nothing for an empty query', () => {
+    expect(searchFacetValues(facets, '   ', score, 10)).toEqual([])
+  })
+
+  // Unbounded results defeat the purpose: a two-letter query matches most of a
+  // large workspace, and a list you must scroll is no faster than the nested
+  // menu it replaced.
+  it('caps the result count', () => {
+    const many = buildFacets(
+      input({
+        assignees: Array.from({ length: 40 }, (_, i) => [`user-${i}`, 1] as [string, number]),
+      }),
+    )
+    expect(searchFacetValues(many, 'user', score, 12)).toHaveLength(12)
+  })
+})
+
+describe('locateOption', () => {
+  const facets = buildFacets(
+    input({
+      projectsWithMilestones: [
+        {
+          projId: 'p1', name: 'Core', color: null, count: 1,
+          children: [{ key: 'p1::m1', milestoneId: 'm1', name: 'M1', sortOrder: 1, count: 2 }],
+        },
+      ],
+    }),
+  )
+  const project = byId(facets, 'project')
+
+  // The parent's value is what tells a caller which toggle action applies —
+  // a milestone and a project are different actions on the same facet.
+  it('reports a top-level option as not-a-child', () => {
+    expect(locateOption(project, 'p1')).toMatchObject({ isChild: false })
+    expect(locateOption(project, 'p1')?.parentValue).toBeUndefined()
+  })
+
+  it('reports a nested option with its parent value', () => {
+    expect(locateOption(project, 'p1::m1')).toMatchObject({ isChild: true, parentValue: 'p1' })
+  })
+
+  it('returns null for a value that is not in the facet', () => {
+    expect(locateOption(project, 'nope')).toBeNull()
+  })
+})
+
+describe('toggleValue', () => {
+  const facets = buildFacets(input())
+  const active = byId(facets, 'quick:active')
+
+  // activeOnly defaults to TRUE, so "away from default" and "switched on" are
+  // opposite for this one facet. Reading the checkbox off selectedValues
+  // ticked "Active only" at the exact moment it had been switched off.
+  it('reports the real boolean, not the away-from-default signal', () => {
+    expect(toggleValue(filters({ activeOnly: true }), active)).toBe(true)
+    expect(toggleValue(filters({ activeOnly: false }), active)).toBe(false)
+    expect(selectedValues(filters({ activeOnly: false }), active)).toHaveLength(1)
+  })
+
+  it('reads through for the facets whose default is false', () => {
+    expect(toggleValue(filters({ myIssuesOnly: true }), byId(facets, 'quick:mine'))).toBe(true)
+    expect(toggleValue(filters({ staleOnly: true }), byId(facets, 'quick:stale'))).toBe(true)
+    expect(toggleValue(defaultFilters, byId(facets, 'quick:stale'))).toBe(false)
   })
 })

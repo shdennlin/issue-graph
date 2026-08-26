@@ -672,8 +672,11 @@ export function App() {
       <SyncBanner />
       <TabBar />
       <Toolbar />
-      <FacetBar />
       <div className="app-main">
+        {/* Floats over the canvas rather than occupying a full-width strip
+            above it — a horizontal bar cost vertical space across the whole
+            window even when only two filters were active. */}
+        <FacetBar />
         <GraphCanvas />
         {focusedId && detailPanelOpen && (
           <Suspense fallback={null}>

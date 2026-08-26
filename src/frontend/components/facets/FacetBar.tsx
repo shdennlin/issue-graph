@@ -8,8 +8,8 @@
 // `activeOnly`. Anything written into this JSX is untestable by construction,
 // because vitest runs `environment: 'node'` with no DOM.
 
-import { useMemo, useRef, useState } from 'react'
-import { ChevronDown, Pin, PinOff, Plus, X } from 'lucide-react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { ChevronDown, ChevronRight, Pin, PinOff, Plus, X } from 'lucide-react'
 import type { IssueStateType } from '@shared/types.js'
 import { useGraphStore } from '../../store/graphStore'
 import { defaultFilters, useViewStore } from '../../store/viewStore'
@@ -17,6 +17,7 @@ import { useSchemaStore } from '../../store/schemaStore'
 import { useWorkspaceStore } from '../../store/workspaceStore'
 import { isPinned, readPins, togglePin, writePins } from '../../lib/pinnedFilters'
 import { useClickOutside } from '../../hooks/useClickOutside'
+import { fuzzyScore } from '../quickSwitcher/fuzzyMatch'
 import { stateColorVar, stateLabelFor } from '../../lib/colors'
 import { useLocale, useT } from '../../i18n'
 import { SavedViewsChip } from './SavedViewsChip'
@@ -26,8 +27,11 @@ import {
   chipsFromFilters,
   clearFacetPatch,
   isFacetAtDefault,
-  pinnedChips,
+  partitionPinned,
+  searchFacetValues,
   selectedValues,
+  toggleValue,
+  type FacetSearchHit,
   type FacetDef,
   type FacetOption,
   type PinnedFilter,
@@ -35,6 +39,8 @@ import {
 
 /** Long option lists get a search box; short ones would just be noise. */
 const SEARCH_THRESHOLD = 8
+/** Cross-facet search results are capped — see searchFacetValues for why. */
+const SEARCH_RESULT_LIMIT = 12
 
 export function FacetBar() {
   const t = useT()
@@ -125,11 +131,21 @@ export function FacetBar() {
     ],
   )
 
+  // How many values each facet currently has applied, so the picker can show
+  // "State 5" rather than the number of states that exist.
+  const activeCounts = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const f of facets) {
+      if (isFacetAtDefault(filters, f, defaultFilters)) continue
+      m.set(f.id, selectedValues(filters, f).length)
+    }
+    return m
+  }, [facets, filters])
+
   const chips = useMemo(
     () => chipsFromFilters(filters, facets, t, defaultFilters),
     [filters, facets, t],
   )
-  const inactivePins = useMemo(() => pinnedChips(filters, facets, pins), [filters, facets, pins])
 
   const facetById = (id: string) => facets.find((f) => f.id === id)
 
@@ -140,34 +156,78 @@ export function FacetBar() {
     }
   }
 
-  // Facets the picker offers: everything currently at its default. Once a facet
-  // is active it already has a chip, so listing it again would be redundant.
-  const availableFacets = facets.filter((f) => isFacetAtDefault(filters, f, defaultFilters))
+  // The picker lists EVERY facet, including ones already in use. Filtering it
+  // down to untouched facets seemed to avoid duplicating the chips, but chips
+  // are a summary while the picker is navigation — hiding an active facet meant
+  // that once you had picked one state, "+ Filter -> State" no longer existed
+  // and there was no obvious way back in to add a second.
+  const availableFacets = facets
+
 
   return (
     <div className="facet-bar">
-      {/* Leads the bar: a saved view sets everything to its right. */}
+      {/* Leads the panel: a saved view sets everything below it. */}
       <SavedViewsChip />
       <div className="facet-sep" />
+
+      {/* Second row, above the chips rather than after them. Sitting below a
+          growing list meant every filter added pushed this button down and the
+          open menu jumped with it — so you could not pick several in a row
+          without chasing the thing you were clicking. */}
+      <div className="facet-chip-wrap">
+        <button
+          type="button"
+          className="facet-chip facet-add"
+          onClick={() => setPickerOpen((v) => !v)}
+          aria-expanded={pickerOpen}
+          aria-label={t('filterPanel.addFilterAria')}
+        >
+          <Plus size={12} /> {t('filterPanel.addFilter')}
+        </button>
+        {pickerOpen && (
+          <FacetPicker
+            facets={availableFacets}
+            activeCounts={activeCounts}
+            pins={pins}
+            onTogglePin={(p) => applyPins(togglePin(pins, p))}
+            onClose={() => setPickerOpen(false)}
+          />
+        )}
+      </div>
+
+      {chips.length > 0 && <div className="facet-sep" />}
       {chips.map((chip) => {
         const facet = facetById(chip.facetId)
         if (!facet) return null
         return (
-          <div className="facet-chip-wrap" key={chip.facetId}>
+          // Segmented pill: dimension | operator | value | clear. The operator
+          // is not decoration — without it a chip reading "Status 3" is
+          // ambiguous between "any of three" and "exactly three".
+          <div
+            className="facet-chip-wrap facet-chip-group"
+            key={chip.facetId}
+            style={chip.tint ? { ['--chip-tint' as string]: chip.tint } : undefined}
+          >
+            <span className="facet-seg facet-seg-title">{chip.title}</span>
+            {chip.operator && (
+              <span className="facet-seg facet-seg-op">
+                {t(chip.operator === 'isAnyOf' ? 'filterPanel.chipIsAnyOf' : 'filterPanel.chipIs')}
+              </span>
+            )}
+            {chip.summary && (
+              <button
+                type="button"
+                className="facet-seg facet-seg-value"
+                onClick={() => setOpenFacetId(openFacetId === facet.id ? null : facet.id)}
+                aria-expanded={openFacetId === facet.id}
+              >
+                {chip.summary}
+                <ChevronDown size={11} />
+              </button>
+            )}
             <button
               type="button"
-              className="facet-chip is-active"
-              onClick={() => setOpenFacetId(openFacetId === facet.id ? null : facet.id)}
-              aria-expanded={openFacetId === facet.id}
-              style={chip.tint ? { ['--chip-tint' as string]: chip.tint } : undefined}
-            >
-              <span className="facet-chip-title">{chip.title}</span>
-              {chip.summary && <span className="facet-chip-value">{chip.summary}</span>}
-              {facet.selection !== 'toggle' && <ChevronDown size={12} />}
-            </button>
-            <button
-              type="button"
-              className="facet-chip-x"
+              className="facet-seg facet-seg-x"
               onClick={() => clearFacet(facet)}
               aria-label={t('filterPanel.removeChip')}
               title={t('filterPanel.removeChip')}
@@ -186,58 +246,6 @@ export function FacetBar() {
         )
       })}
 
-      {/* Pinned-but-inactive: one click away, but visually recessive so they
-          never read as an applied filter. */}
-      {inactivePins.map((chip) => {
-        const facet = facetById(chip.facetId)
-        if (!facet) return null
-        const popoverId = `pin:${chip.facetId}:${chip.summary}`
-        return (
-          <div className="facet-chip-wrap" key={popoverId}>
-            <button
-              type="button"
-              className="facet-chip is-pinned"
-              onClick={() => setOpenFacetId(openFacetId === popoverId ? null : popoverId)}
-              aria-expanded={openFacetId === popoverId}
-              title={chip.title}
-            >
-              <Pin size={10} />
-              <span className="facet-chip-value">{chip.summary}</span>
-            </button>
-            {openFacetId === popoverId && (
-              <FacetPopover
-                facet={facet}
-                pins={pins}
-                onTogglePin={(p) => applyPins(togglePin(pins, p))}
-                onClose={() => setOpenFacetId(null)}
-              />
-            )}
-          </div>
-        )
-      })}
-
-      <div className="facet-chip-wrap">
-        <button
-          type="button"
-          className="facet-chip facet-add"
-          onClick={() => setPickerOpen((v) => !v)}
-          aria-expanded={pickerOpen}
-          aria-label={t('filterPanel.addFilterAria')}
-        >
-          <Plus size={12} /> {t('filterPanel.addFilter')}
-        </button>
-        {pickerOpen && (
-          <FacetPicker
-            facets={availableFacets}
-            onPick={(id) => {
-              setPickerOpen(false)
-              setOpenFacetId(id)
-            }}
-            onClose={() => setPickerOpen(false)}
-          />
-        )}
-      </div>
-
       {chips.length > 0 && (
         <button type="button" className="facet-clear-all" onClick={resetFilters}>
           {t('filterPanel.clearAll')}
@@ -247,57 +255,15 @@ export function FacetBar() {
   )
 }
 
-function FacetPicker({
-  facets,
-  onPick,
-  onClose,
-}: {
-  facets: FacetDef[]
-  onPick: (id: string) => void
-  onClose: () => void
-}) {
-  const t = useT()
-  const ref = useRef<HTMLDivElement>(null)
-  useClickOutside(ref, true, onClose)
-  return (
-    <div className="facet-popover" ref={ref} role="menu">
-      {facets.length === 0 && <div className="facet-empty">{t('filterPanel.noFacetMatch')}</div>}
-      {facets.map((f) => (
-        <button
-          type="button"
-          role="menuitem"
-          className="facet-option"
-          key={f.id}
-          onClick={() => onPick(f.id)}
-        >
-          <span className="facet-option-label">{f.title}</span>
-          {/* Option count, so the picker still advertises what is filterable —
-              the discoverability a sidebar gave away for free. */}
-          {f.options.length > 0 && (
-            <span className="facet-option-count">{f.options.length}</span>
-          )}
-        </button>
-      ))}
-    </div>
-  )
-}
 
-function FacetPopover({
-  facet,
-  pins,
-  onTogglePin,
-  onClose,
-}: {
-  facet: FacetDef
-  pins: PinnedFilter[]
-  onTogglePin: (pin: PinnedFilter) => void
-  onClose: () => void
-}) {
-  const t = useT()
-  const ref = useRef<HTMLDivElement>(null)
-  const [query, setQuery] = useState('')
-  useClickOutside(ref, true, onClose)
-
+/**
+ * Binds a facet's option clicks to the store actions that own its semantics.
+ *
+ * Not a pure reducer, deliberately: `toggleStateType` auto-clears `activeOnly`,
+ * and checking a completed/canceled state has to widen the sync window or the
+ * result looks empty. Neither is a function of `Filters`.
+ */
+function useFacetPick(facet: FacetDef) {
   const filters = useViewStore((s) => s.filters)
   const setFilter = useViewStore((s) => s.setFilter)
   const toggleStateType = useViewStore((s) => s.toggleStateType)
@@ -315,8 +281,8 @@ function FacetPopover({
   const selected = new Set(selectedValues(filters, facet))
 
   // Completed/canceled data may sit outside the sync window, so checking one
-  // has to widen the scope or the user sees a near-empty result and reads it
-  // as a broken filter. Carried over from the sidebar verbatim.
+  // has to widen the scope — otherwise the user sees a near-empty result and
+  // reads it as a broken filter. Carried over from the sidebar verbatim.
   const extendIfArchival = (type: IssueStateType, willCheck: boolean) => {
     if (willCheck && (type === 'completed' || type === 'canceled')) {
       useGraphStore.getState().extendScope(365)
@@ -357,27 +323,70 @@ function FacetPopover({
     }
   }
 
+  return { pick, selected }
+}
+
+/**
+ * The option rows for one facet: search box when the list is long, then a
+ * checkbox row per value (plus nested children for the two-level facets).
+ *
+ * Shared by the chip popover and the picker's submenu so the two can never
+ * drift apart.
+ */
+function FacetOptionList({
+  facet,
+  pins,
+  onTogglePin,
+}: {
+  facet: FacetDef
+  pins: PinnedFilter[]
+  onTogglePin: (pin: PinnedFilter) => void
+}) {
+  const t = useT()
+  const [query, setQuery] = useState('')
+  const filters = useViewStore((s) => s.filters)
+  const { pick, selected } = useFacetPick(facet)
+
+  if (facet.selection === 'toggle') {
+    return (
+      <button type="button" className="facet-option" onClick={() => pick('', false)}>
+        {/* toggleValue, not `selected` — for quick:active the two are opposite,
+            and using `selected` ticked "Active only" when it was switched off. */}
+        <span className="facet-checkbox" data-checked={toggleValue(filters, facet)} />
+        <span className="facet-option-label">{facet.title}</span>
+      </button>
+    )
+  }
+
   const q = query.trim().toLowerCase()
-  const visible = q
-    ? facet.options.filter(
-        (o) =>
-          o.label.toLowerCase().includes(q) ||
-          (o.children ?? []).some((c) => c.label.toLowerCase().includes(q)),
-      )
-    : facet.options
+  const matches = (o: FacetOption) =>
+    o.label.toLowerCase().includes(q) ||
+    (o.children ?? []).some((c) => c.label.toLowerCase().includes(q))
+  // Pinned values sit at the top: pinning is purely a display preference here,
+  // which is what keeps it from being a second representation of filter state.
+  const { pinned, rest } = partitionPinned(facet, pins)
+  const visiblePinned = q ? pinned.filter(matches) : pinned
+  const visibleRest = q ? rest.filter(matches) : rest
 
   const renderOption = (o: FacetOption, isChild: boolean, parentValue?: string) => {
     const pin: PinnedFilter = { facetId: facet.id, value: o.value }
     const pinned = isPinned(pins, pin)
     return (
-      // Row, not a button, because the pin toggle is a second control and HTML
-      // forbids nesting one button inside another.
+      // A row rather than one button: the pin toggle is a second control, and
+      // HTML forbids nesting a button inside a button.
       <div className="facet-option-row" key={o.value}>
         <button
           type="button"
           className={`facet-option${isChild ? ' is-child' : ''}${selected.has(o.value) ? ' is-selected' : ''}`}
           onClick={() => pick(o.value, isChild, parentValue)}
         >
+          {/* `single` facets are mutually exclusive, so their box is round —
+              the same convention as a radio, without the input semantics that
+              made click-to-clear awkward in the old sidebar. */}
+          <span
+            className={`facet-checkbox${facet.selection === 'single' ? ' is-radio' : ''}`}
+            data-checked={selected.has(o.value)}
+          />
           {o.tint && <span className="facet-option-dot" style={{ background: o.tint }} />}
           <span className="facet-option-label">{o.label}</span>
           {o.count !== undefined && <span className="facet-option-count">{o.count}</span>}
@@ -396,35 +405,217 @@ function FacetPopover({
   }
 
   return (
-    <div className="facet-popover" ref={ref}>
-      {facet.selection === 'toggle' ? (
-        <button type="button" className="facet-option" onClick={() => pick('', false)}>
-          <span className="facet-option-label">{facet.title}</span>
-        </button>
-      ) : (
-        <>
-          {facet.options.length > SEARCH_THRESHOLD && (
-            <input
-              className="facet-search"
-              value={query}
-              autoFocus
-              placeholder={t('filterPanel.facetSearch')}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          )}
-          <div className="facet-option-list">
-            {visible.length === 0 && (
-              <div className="facet-empty">{t('filterPanel.noFacetMatch')}</div>
-            )}
-            {visible.map((o) => (
-              <div key={o.value}>
-                {renderOption(o, false)}
-                {(o.children ?? []).map((c) => renderOption(c, true, o.value))}
-              </div>
-            ))}
+    <>
+      {facet.options.length > SEARCH_THRESHOLD && (
+        <input
+          className="facet-search"
+          value={query}
+          autoFocus
+          placeholder={t('filterPanel.facetSearch')}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      )}
+      <div className="facet-option-list">
+        {visiblePinned.length + visibleRest.length === 0 && (
+          <div className="facet-empty">{t('filterPanel.noFacetMatch')}</div>
+        )}
+        {visiblePinned.map((o) => (
+          <div key={o.value}>
+            {renderOption(o, false)}
+            {(o.children ?? []).map((c) => renderOption(c, true, o.value))}
           </div>
-        </>
+        ))}
+        {visiblePinned.length > 0 && visibleRest.length > 0 && <div className="facet-divider" />}
+        {visibleRest.map((o) => (
+          <div key={o.value}>
+            {renderOption(o, false)}
+            {(o.children ?? []).map((c) => renderOption(c, true, o.value))}
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
+/** A facet's options on their own, anchored to a chip. */
+function FacetPopover({
+  facet,
+  pins,
+  onTogglePin,
+  onClose,
+}: {
+  facet: FacetDef
+  pins: PinnedFilter[]
+  onTogglePin: (pin: PinnedFilter) => void
+  onClose: () => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  useClickOutside(ref, true, onClose)
+  return (
+    <div className="facet-popover" ref={ref}>
+      <FacetOptionList facet={facet} pins={pins} onTogglePin={onTogglePin} />
+    </div>
+  )
+}
+
+/**
+ * Cascading "Add filter" menu: the facet list stays put while the highlighted
+ * row's options fly out beside it.
+ *
+ * Both hover and click open a submenu. Hover alone would strand keyboard and
+ * touch users; click alone loses the speed that makes a cascading menu worth
+ * having over the previous replace-in-place popover.
+ */
+function FacetPicker({
+  facets,
+  activeCounts,
+  pins,
+  onTogglePin,
+  onClose,
+}: {
+  facets: FacetDef[]
+  activeCounts: Map<string, number>
+  pins: PinnedFilter[]
+  onTogglePin: (pin: PinnedFilter) => void
+  onClose: () => void
+}) {
+  const t = useT()
+  const ref = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const [query, setQuery] = useState('')
+  const [openId, setOpenId] = useState<string | null>(null)
+  // The submenu aligns with the row that opened it, so it cannot live inside
+  // the row: `.facet-option-list` scrolls, and a scroll container clips
+  // absolutely-positioned children. It stays a sibling of the list and takes
+  // its offset from the row instead.
+  const [openRow, setOpenRow] = useState<HTMLElement | null>(null)
+  const [subTop, setSubTop] = useState(0)
+  useClickOutside(ref, true, onClose)
+
+  useLayoutEffect(() => {
+    if (!openRow) return
+    const list = listRef.current
+    // offsetParent is the popover (the list itself is unpositioned), so
+    // offsetTop is already in the coordinate space the submenu is placed in.
+    // Subtracting scrollTop keeps them aligned while the list scrolls; the 4px
+    // accounts for the submenu's own padding so the first option lines up with
+    // the row rather than sitting 4px below it.
+    const update = () => setSubTop(openRow.offsetTop - (list?.scrollTop ?? 0) - 4)
+    update()
+    list?.addEventListener('scroll', update)
+    return () => list?.removeEventListener('scroll', update)
+  }, [openRow])
+
+  const q = query.trim().toLowerCase()
+  const visible = q ? facets.filter((f) => f.title.toLowerCase().includes(q)) : facets
+  const openFacet = visible.find((f) => f.id === openId) ?? null
+
+  // A query searches VALUES across every facet, not just dimension names — the
+  // dimension is the part you already know, and you open this menu because you
+  // remember the value, not the taxonomy it was filed under.
+  const hits = useMemo(
+    () => searchFacetValues(facets, query, fuzzyScore, SEARCH_RESULT_LIMIT),
+    [facets, query],
+  )
+
+  return (
+    <div className="facet-popover facet-menu" ref={ref} role="menu">
+      <input
+        className="facet-search"
+        value={query}
+        autoFocus
+        placeholder={t('filterPanel.addFilterPlaceholder')}
+        onChange={(e) => {
+          setQuery(e.target.value)
+          setOpenId(null)
+          setOpenRow(null)
+        }}
+      />
+      <div className="facet-option-list" ref={listRef}>
+        {visible.length === 0 && hits.length === 0 && (
+          <div className="facet-empty">{t('filterPanel.noFacetMatch')}</div>
+        )}
+        {visible.map((f) => (
+          <button
+            type="button"
+            role="menuitem"
+            className={`facet-option${openId === f.id ? ' is-open' : ''}`}
+            key={f.id}
+            onMouseEnter={(e) => {
+              setOpenId(f.id)
+              setOpenRow(e.currentTarget)
+            }}
+            onFocus={(e) => {
+              setOpenId(f.id)
+              setOpenRow(e.currentTarget)
+            }}
+            onClick={(e) => {
+              setOpenId(f.id)
+              setOpenRow(e.currentTarget)
+            }}
+            aria-haspopup={f.options.length > 0 ? 'menu' : undefined}
+            aria-expanded={openId === f.id}
+          >
+            <span className="facet-option-label">{f.title}</span>
+            {/* Shows what is already picked when the facet is in use, and how
+                much there is to pick from when it is not — so the picker keeps
+                advertising what is filterable, the discoverability the sidebar
+                gave away for free. */}
+            {f.options.length > 0 &&
+              (activeCounts.get(f.id) ? (
+                <span className="facet-option-count is-active">{activeCounts.get(f.id)}</span>
+              ) : (
+                <span className="facet-option-count">{f.options.length}</span>
+              ))}
+            {f.options.length > 0 && <ChevronRight size={12} />}
+          </button>
+        ))}
+
+        {hits.length > 0 && (
+          <>
+            {visible.length > 0 && <div className="facet-divider" />}
+            {hits.map((h) => (
+              <FacetSearchRow key={`${h.facet.id}:${h.option.value}`} hit={h} />
+            ))}
+          </>
+        )}
+      </div>
+
+      {openFacet && (
+        <div className="facet-submenu" key={openFacet.id} style={{ top: subTop }}>
+          <FacetOptionList facet={openFacet} pins={pins} onTogglePin={onTogglePin} />
+        </div>
       )}
     </div>
+  )
+}
+
+/**
+ * One cross-facet search result: "Dimension › Value", applied on click.
+ *
+ * Its own component because the toggle actions come from a hook, and a hook
+ * cannot be called inside the `.map()` that produces these rows.
+ */
+function FacetSearchRow({ hit }: { hit: FacetSearchHit }) {
+  const { pick, selected } = useFacetPick(hit.facet)
+  const isSelected = selected.has(hit.option.value)
+  return (
+    <button
+      type="button"
+      className={`facet-option${isSelected ? ' is-selected' : ''}`}
+      onClick={() => pick(hit.option.value, hit.isChild, hit.parentValue)}
+    >
+      <span
+        className={`facet-checkbox${hit.facet.selection === 'single' ? ' is-radio' : ''}`}
+        data-checked={isSelected}
+      />
+      <span className="facet-option-label">
+        <span className="facet-hit-facet">{hit.facet.title}</span>
+        {hit.option.label}
+      </span>
+      {hit.option.count !== undefined && (
+        <span className="facet-option-count">{hit.option.count}</span>
+      )}
+    </button>
   )
 }

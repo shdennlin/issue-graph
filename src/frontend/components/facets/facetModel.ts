@@ -74,6 +74,10 @@ export interface FacetDef {
 
 export interface ChipDescriptor {
   facetId: string
+  /** Reads as "Status | is any of | 3 selected". Multi-select facets match any
+   *  of their values, single-select match exactly one — saying so removes a
+   *  real ambiguity about what a multi-value chip means. */
+  operator: 'is' | 'isAnyOf' | null
   /** Facet title, e.g. 'Assignee'. */
   title: string
   /** Value summary: the single selected label, or a count for multi-selects. */
@@ -81,6 +85,8 @@ export interface ChipDescriptor {
   /** How many values are selected. 0 for a toggle chip that is simply on. */
   selectedCount: number
   tint?: string | null
+  /** Pinned chips only: whether the pinned value is currently applied. */
+  active?: boolean
 }
 
 export type Translate = (key: DictKey, params?: Record<string, string | number>) => string
@@ -359,6 +365,21 @@ export function buildFacets(input: BuildFacetsInput): FacetDef[] {
   return facets
 }
 
+/**
+ * The actual boolean behind a `toggle` facet.
+ *
+ * Distinct from `selectedValues`, which reports "is this facet away from its
+ * default" so a chip appears at the right times. For `quick:active` those two
+ * are OPPOSITE — activeOnly defaults to true, so it is away from its default
+ * when false — and reading the checkbox off selectedValues showed
+ * "Active only" ticked at the exact moment it had been switched off.
+ */
+export function toggleValue(filters: Filters, facet: FacetDef): boolean {
+  if (facet.id === 'quick:active') return filters.activeOnly
+  if (facet.id === 'quick:mine') return filters.myIssuesOnly
+  return filters.staleOnly
+}
+
 /** The values currently selected for a facet, as raw Filters tokens. */
 export function selectedValues(filters: Filters, facet: FacetDef): string[] {
   switch (facet.kind) {
@@ -449,6 +470,8 @@ export function chipsFromFilters(
         // `activeOnly` defaults to TRUE, so its noteworthy state is being OFF.
         // The chip therefore reads "Including done" rather than "Active only".
         title: facet.id === 'quick:active' ? t('filterPanel.includingDone') : facet.title,
+        // A boolean has no operator or value — the title says everything.
+        operator: null,
         summary: '',
         selectedCount: 0,
       })
@@ -459,10 +482,13 @@ export function chipsFromFilters(
     chips.push({
       facetId: facet.id,
       title: facet.title,
+      // One value reads as itself; several collapse to a count, because
+      // spelling out five state names makes the bar unscannable.
       summary:
         selected.length === 1 && first !== undefined
           ? labelFor(facet, first)
-          : String(selected.length),
+          : t('filterPanel.chipCount', { count: selected.length }),
+      operator: facet.selection === 'multi' ? 'isAnyOf' : 'is',
       selectedCount: selected.length,
       tint:
         selected.length === 1 && first !== undefined
@@ -527,46 +553,120 @@ export function clearFacetPatch(
   }
 }
 
-/** Find an option by value anywhere in a facet, children included. */
-function findOption(facet: FacetDef, value: string): FacetOption | null {
+/**
+ * Locate an option by value, searching nested children too.
+ *
+ * Returns the parent's value alongside it because the toggle actions for the
+ * two-level facets need it: a state NAME toggles differently from a state
+ * TYPE, and picking an archival state has to widen the sync window based on
+ * the parent type. Callers acting on a bare value cannot know which level it
+ * came from without this.
+ */
+export function locateOption(
+  facet: FacetDef,
+  value: string,
+): { option: FacetOption; isChild: boolean; parentValue?: string } | null {
   for (const o of facet.options) {
-    if (o.value === value) return o
-    for (const c of o.children ?? []) if (c.value === value) return c
+    if (o.value === value) return { option: o, isChild: false }
+    for (const c of o.children ?? []) {
+      if (c.value === value) return { option: c, isChild: true, parentValue: o.value }
+    }
   }
   return null
 }
 
+
 /**
- * Chips for pinned-but-inactive values. Rendered in a muted style; clicking one
- * activates that value.
+ * Split a facet's options into pinned-first and the rest.
  *
- * Two filters applied here, both deliberate:
- *  - a pin whose value is no longer among its facet's options is DROPPED at
- *    render time rather than pruned from storage. A label can be missing
- *    simply because a sync is mid-flight, and deleting the pin then would
- *    destroy a choice the user still wants.
- *  - a pin that is currently selected is skipped, because chipsFromFilters
- *    already emits an active chip for it; showing both would double it.
+ * Pinning is a display preference, not state: it changes where a value sits in
+ * the list, nothing else. That is deliberate — an earlier version gave each pin
+ * its own chip in the bar, which meant one facet had two representations of the
+ * same fact and every question that followed ("show both? which wins? what
+ * happens when one changes?") produced another edge case.
+ *
+ * Only top-level options float. A pinned child (a state name, a milestone) stays
+ * under its parent, because hoisting it away from the parent that gives it
+ * meaning would be worse than leaving it in place.
+ *
+ * A pin whose value has vanished is simply absent from both lists — dropped at
+ * render, never pruned from storage, since a label can be missing merely
+ * because a sync is in flight.
  */
-export function pinnedChips(
-  filters: Filters,
-  facets: FacetDef[],
+export function partitionPinned(
+  facet: FacetDef,
   pins: PinnedFilter[],
-): ChipDescriptor[] {
-  const chips: ChipDescriptor[] = []
-  for (const pin of pins) {
-    const facet = facets.find((f) => f.id === pin.facetId)
-    if (!facet) continue
-    const option = findOption(facet, pin.value)
-    if (!option) continue
-    if (selectedValues(filters, facet).includes(pin.value)) continue
-    chips.push({
-      facetId: facet.id,
-      title: facet.title,
-      summary: option.label,
-      selectedCount: 0,
-      tint: option.tint ?? null,
-    })
+): { pinned: FacetOption[]; rest: FacetOption[] } {
+  const pinnedValues = new Set(
+    pins.filter((p) => p.facetId === facet.id).map((p) => p.value),
+  )
+  if (pinnedValues.size === 0) return { pinned: [], rest: facet.options }
+  const pinned: FacetOption[] = []
+  const rest: FacetOption[] = []
+  for (const o of facet.options) {
+    if (pinnedValues.has(o.value)) pinned.push(o)
+    else rest.push(o)
   }
-  return chips
+  return { pinned, rest }
+}
+
+/** One value found by searching across every facet at once. */
+export interface FacetSearchHit {
+  facet: FacetDef
+  option: FacetOption
+  isChild: boolean
+  parentValue?: string
+}
+
+/**
+ * Fuzzy-search every facet's values in one pass, so typing "bug" in the add-
+ * filter box finds `Type › Bug` without knowing which dimension it lives under.
+ *
+ * Without this the search box only matched dimension NAMES, which is the one
+ * thing you already know — you open the menu because you remember the value,
+ * not the taxonomy it was filed under.
+ *
+ * Capped, because an unbounded list defeats the point: a two-letter query
+ * matches most of a large workspace, and a menu you have to scroll through is
+ * no faster than the nested one it replaced. Results are ranked by score so the
+ * cap keeps the best ones.
+ */
+export function searchFacetValues(
+  facets: FacetDef[],
+  query: string,
+  score: (query: string, text: string) => number | null,
+  limit: number,
+): FacetSearchHit[] {
+  const q = query.trim()
+  if (q.length === 0) return []
+  const scored: { hit: FacetSearchHit; score: number }[] = []
+
+  const consider = (
+    facet: FacetDef,
+    option: FacetOption,
+    isChild: boolean,
+    parentValue?: string,
+  ) => {
+    // Match against "Dimension Value" so a query can name either half —
+    // "type bug" and "bug" both find it.
+    const direct = score(q, option.label)
+    const qualified = score(q, `${facet.title} ${option.label}`)
+    const best =
+      direct === null ? qualified : qualified === null ? direct : Math.max(direct, qualified)
+    if (best === null) return
+    scored.push({ hit: { facet, option, isChild, parentValue }, score: best })
+  }
+
+  for (const facet of facets) {
+    // Toggle facets have no values; their title is matched by the caller's
+    // dimension-level filter instead.
+    if (facet.selection === 'toggle') continue
+    for (const o of facet.options) {
+      consider(facet, o, false)
+      for (const c of o.children ?? []) consider(facet, c, true, o.value)
+    }
+  }
+
+  scored.sort((a, b) => b.score - a.score)
+  return scored.slice(0, limit).map((s) => s.hit)
 }
