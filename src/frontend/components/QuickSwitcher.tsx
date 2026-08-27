@@ -6,6 +6,7 @@ import { useNotesStore } from '../store/notesStore'
 import { getTabGraph } from '../store/tabStateStore'
 import { buildCandidates } from './quickSwitcher/buildCandidates'
 import { fuzzyMatch } from './quickSwitcher/fuzzyMatch'
+import { rankCandidates } from './quickSwitcher/rankCandidates'
 import type { Candidate, RecentItem } from './quickSwitcher/types'
 import { stateColorVar, stateIcon } from '../lib/colors'
 
@@ -58,22 +59,18 @@ export function QuickSwitcher({ onActivate }: Props) {
     if (query.trim() === '') {
       return out
     }
-    const scored: { c: Candidate; score: number }[] = []
-    for (const c of candidates) {
-      const identifier = c.kind === 'issue' ? c.identifier : null
-      const score = fuzzyMatch(query, { label: c.label, identifier })
-      if (score !== null) scored.push({ c, score })
-    }
-    scored.sort((a, b) => b.score - a.score)
+    const ranked = rankCandidates(candidates, query, activeTabId, (c) =>
+      fuzzyMatch(query, { label: c.label, identifier: c.kind === 'issue' ? c.identifier : null }),
+    )
     let total = 0
-    for (const { c } of scored) {
+    for (const c of ranked) {
       if (total >= TOTAL_CAP) break
       if (out[c.kind].length >= PER_GROUP_CAP) continue
       out[c.kind].push(c)
       total++
     }
     return out
-  }, [candidates, query])
+  }, [candidates, query, activeTabId])
 
   const flat = useMemo<Candidate[]>(() => {
     if (query.trim() === '') {
