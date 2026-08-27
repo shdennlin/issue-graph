@@ -357,6 +357,7 @@ export const zhTW: Dict = {
     moreChips: '還有 {count} 項',
     facetSearch: '搜尋…',
     addFilterPlaceholder: '搜尋篩選…',
+    countTitle: '畫面上的卡片數 / 這個工作區的 issue 總數',
     groupQuick: '快速',
     groupAttribute: '屬性',
     groupLabel: '標籤',

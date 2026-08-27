@@ -111,6 +111,18 @@ function CanvasInner() {
   // layout-equivalent context. Anything that changes node sizes (density) or
   // node parentage (view) invalidates positions and forces a fresh layout —
   // otherwise stale positions cause overlaps when nodes grow.
+  // Published for the filter panel to report. Counted here rather than derived
+  // from applyFilters because container views add non-issue nodes and chain
+  // isolation trims the set, so only the built graph knows what is on screen.
+  const issueNodeCount = useMemo(
+    () => built.nodes.reduce((n, node) => (node.type === 'issue' ? n + 1 : n), 0),
+    [built.nodes],
+  )
+  const setVisibleIssueCount = useViewStore((s) => s.setVisibleIssueCount)
+  useEffect(() => {
+    setVisibleIssueCount(issueNodeCount)
+  }, [issueNodeCount, setVisibleIssueCount])
+
   const [nodes, setNodes] = useState<RFNode[]>(built.nodes)
   // Include `measuredHeights ? 'm' : 'e'` so the post-measure re-layout pass is
   // treated as a sig change — that forces the freshly-laid-out positions in,

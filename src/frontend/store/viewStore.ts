@@ -168,6 +168,15 @@ export interface ViewState {
    */
   appliedSavedViewId: number | null
   setAppliedSavedViewId: (id: number | null) => void
+  /**
+   * How many issue cards the canvas is actually drawing, published by
+   * GraphCanvas because it is the only place that knows: container views add
+   * nodes that are not issues, and chain isolation cuts the set down further,
+   * so "issues matching the filters" and "cards on screen" are different
+   * numbers. Derived, so deliberately NOT part of the per-tab snapshot.
+   */
+  visibleIssueCount: number | null
+  setVisibleIssueCount: (n: number | null) => void
   // Session panel visibility. The persistent preference is
   // `detailPanelAutoOpen` below; that flag decides whether selecting a new
   // issue *automatically* opens the panel. detailPanelOpen tracks the actual
@@ -345,6 +354,8 @@ export const useViewStore = create<ViewState>((set) => ({
   staleDays: readStaleDays(),
   appliedSavedViewId: null,
   setAppliedSavedViewId: (id) => set({ appliedSavedViewId: id }),
+  visibleIssueCount: null,
+  setVisibleIssueCount: (n) => set({ visibleIssueCount: n }),
   // Decouples "I want to focus this issue" (for chain mode, find, etc.)
   // from "I want to read its details". When OFF, clicking an issue still
   // sets focusedId but DetailPanel doesn't render — the canvas stays

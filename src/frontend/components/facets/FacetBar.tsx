@@ -56,6 +56,11 @@ export function FacetBar() {
   const setFilter = useViewStore((s) => s.setFilter)
   const resetFilters = useViewStore((s) => s.resetFilters)
   const { schema, primaryGroupSingular } = useSchemaStore()
+  // A bare "42" cannot say whether that is most of the workspace or a sliver,
+  // so the total rides along whenever the two differ. When nothing is filtered
+  // out the second half would only repeat the first, so it is dropped.
+  const visibleCount = useViewStore((s) => s.visibleIssueCount)
+
   const {
     counts,
     stateNamesByType,
@@ -66,7 +71,9 @@ export function FacetBar() {
     projectsWithMilestones,
     showDesigndocFilter,
     showDueFilter,
+    issues,
   } = useFilterCounts()
+  const totalCount = issues.length
 
   const [openFacetId, setOpenFacetId] = useState<string | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -194,8 +201,25 @@ export function FacetBar() {
 
   return (
     <div className="facet-bar">
-      {/* Leads the panel: a saved view sets everything below it. */}
-      <SavedViewsChip />
+      {/* Leads the panel: a saved view sets everything below it. The count is
+          a SIBLING of that control, not part of it — the row is a button that
+          opens the views menu, and folding a non-interactive number into it
+          would blur what clicking does. */}
+      <div className="facet-title-row">
+        <SavedViewsChip />
+        {visibleCount !== null && (
+          <span className="facet-count" title={t('filterPanel.countTitle')}>
+            {totalCount !== null && visibleCount !== totalCount ? (
+              <>
+                {visibleCount}
+                <span className="facet-count-total">/{totalCount}</span>
+              </>
+            ) : (
+              visibleCount
+            )}
+          </span>
+        )}
+      </div>
       <div className="facet-sep" />
 
       {/* Second row, above the chips rather than after them. Sitting below a

@@ -2818,7 +2818,7 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   display: grid;
   /* Fixed label column so every row's value starts on the same line. Without
      it the eye has to re-find the value on each row. */
-  grid-template-columns: var(--facet-label-w, 4.4em) auto 1fr auto;
+  grid-template-columns: var(--facet-label-w, 4.6em) auto 1fr auto;
   align-items: center;
   gap: 2px;
   width: 100%;
@@ -2829,7 +2829,10 @@ body[data-detail-wide='1'] .inline-search { display: none; }
 
 .facet-row-label {
   color: var(--fg-muted);
-  font-size: var(--fs-meta);
+  /* Was --fs-meta (11px), a step below the panel title, which made the rows
+     the smallest text in a panel whose whole job is to be read at a glance.
+     Only the operator stays small — it is the one part that repeats. */
+  font-size: var(--fs-base);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2869,7 +2872,7 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   border: 0;
   border-radius: var(--radius-sm);
   color: var(--fg);
-  font-size: var(--fs-meta);
+  font-size: var(--fs-base);
   font-weight: 600;
   text-align: left;
   cursor: pointer;
@@ -3044,3 +3047,20 @@ body[data-detail-wide='1'] .inline-search { display: none; }
    this is a neutral fact, and tinting it would compete with the overdue chip,
    where colour means "needs attention". */
 .issue-age-mode { color: var(--fg-muted); font-weight: 400; }
+
+/* Card count, sitting beside the saved-views control rather than inside it —
+   that control is a button, and a number folded into it would blur what
+   clicking does. */
+.facet-title-row { display: flex; align-items: center; gap: 6px; }
+.facet-title-row .facet-chip-wrap { flex: 1; min-width: 0; }
+.facet-count {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  color: var(--fg);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+/* The total is context for the first number, not a second fact. */
+.facet-count-total { color: var(--fg-muted); font-weight: 400; }

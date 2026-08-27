@@ -357,6 +357,7 @@ export const en = {
     moreChips: '+{count} more',
     facetSearch: 'Search…',
     addFilterPlaceholder: 'Search filters…',
+    countTitle: 'Cards shown / issues in this workspace',
     groupQuick: 'Quick',
     groupAttribute: 'Attributes',
     groupLabel: 'Labels',
