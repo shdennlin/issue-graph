@@ -372,8 +372,11 @@ export const en = {
     recencyModeCreated: 'Created',
     recencyAny: 'any time',
     recencyToday: 'today',
-    recency7d: 'last 7 days',
-    recency30d: 'last 30 days',
+    recencyHours: 'last {count}h',
+    recencyDays: 'last {count}d',
+    recencyCustom: 'Custom',
+    recencyUnitHours: 'hours',
+    recencyUnitDays: 'days',
     resetFilters: 'Reset filters',
     activeAria: '{count} active',
   },
@@ -444,6 +447,9 @@ export const en = {
     unassignedShort: 'unassigned',
   },
   issueNode: {
+    ageMinutes: '{count}m',
+    ageHours: '{count}h',
+    ageDays: '{count}d',
     // Connectivity / hierarchy badge tooltip. Assembled from these parts so
     // the ' • ' separators stay outside the translated strings.
     badgeBlocks: 'Blocks {count}',

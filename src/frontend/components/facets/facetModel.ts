@@ -20,6 +20,7 @@
 import type { IssueStateType } from '@shared/types.js'
 import type { Filters } from '../../store/viewStore'
 import type { DictKey } from '../../i18n'
+import { RECENCY_PRESETS, type RecencyWindow } from '../../lib/recency'
 import { stateNameKey } from '../../views/filters'
 import type { ProjectRow, StateNameRow } from './useFilterCounts'
 
@@ -356,12 +357,10 @@ export function buildFacets(input: BuildFacetsInput): FacetDef[] {
     kind: 'time',
     selection: 'single',
     title: t('filterPanel.recency'),
-    options: [
-      { value: 'any', label: t('filterPanel.recencyAny') },
-      { value: 'today', label: t('filterPanel.recencyToday') },
-      { value: '7d', label: t('filterPanel.recency7d') },
-      { value: '30d', label: t('filterPanel.recency30d') },
-    ],
+    // Presets, plus the current value when it was typed rather than picked —
+    // without that the chip would have no label to show and the option list
+    // no row to tick.
+    options: recencyOptions(filters.recencyWindow, t),
   })
 
   void filters
@@ -399,6 +398,23 @@ export function toggleNegated(filters: Filters, facet: FacetDef): string[] {
   return cur.includes(facet.id)
     ? cur.filter((id) => id !== facet.id)
     : [...cur, facet.id]
+}
+
+/** Human label for a window, including spans that were typed in. */
+export function recencyWindowLabel(w: RecencyWindow, t: Translate): string {
+  if (w === 'any') return t('filterPanel.recencyAny')
+  if (w === 'today') return t('filterPanel.recencyToday')
+  const amount = w.slice(0, -1)
+  return w.endsWith('h')
+    ? t('filterPanel.recencyHours', { count: amount })
+    : t('filterPanel.recencyDays', { count: amount })
+}
+
+function recencyOptions(current: RecencyWindow, t: Translate): FacetOption[] {
+  const values: RecencyWindow[] = RECENCY_PRESETS.includes(current)
+    ? RECENCY_PRESETS
+    : [...RECENCY_PRESETS, current]
+  return values.map((v) => ({ value: v, label: recencyWindowLabel(v, t) }))
 }
 
 /** The values currently selected for a facet, as raw Filters tokens. */

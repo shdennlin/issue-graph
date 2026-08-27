@@ -18,6 +18,7 @@ import { useWorkspaceStore } from '../../store/workspaceStore'
 import { isPinned, readPins, togglePin, writePins } from '../../lib/pinnedFilters'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import { fuzzyScore } from '../quickSwitcher/fuzzyMatch'
+import { RECENCY_PRESETS, parseRecencyWindow } from '../../lib/recency'
 import { stateColorVar, stateLabelFor } from '../../lib/colors'
 import { useLocale, useT } from '../../i18n'
 import { useSavedViewsStore } from '../../store/savedViewsStore'
@@ -501,6 +502,7 @@ function FacetOptionList({
           onChange={(e) => setQuery(e.target.value)}
         />
       )}
+      {facet.kind === 'time' && <RecencySpanInput />}
       <div className="facet-option-list">
         {visiblePinned.length + visibleRest.length === 0 && (
           <div className="facet-empty">{t('filterPanel.noFacetMatch')}</div>
@@ -703,5 +705,60 @@ function FacetSearchRow({ hit }: { hit: FacetSearchHit }) {
         <span className="facet-option-count">{hit.option.count}</span>
       )}
     </button>
+  )
+}
+
+/**
+ * A typed recency span, for the windows no preset covers ("the last 6 hours").
+ *
+ * Only this facet gets a free-text control because it is the only one with a
+ * continuous domain — every other facet's values are enumerated by the data.
+ *
+ * Invalid input is simply not committed rather than being reported: the field
+ * is optional and adjacent to six working presets, so an error message would
+ * be louder than the mistake.
+ */
+function RecencySpanInput() {
+  const t = useT()
+  const window = useViewStore((s) => s.filters.recencyWindow)
+  const setFilter = useViewStore((s) => s.setFilter)
+
+  const matched = /^(\d+)([hd])$/.exec(window)
+  const isCustom = matched !== null && !RECENCY_PRESETS.includes(window)
+  const [amount, setAmount] = useState(isCustom && matched ? matched[1]! : '')
+  const [unit, setUnit] = useState<'h' | 'd'>(isCustom && matched ? (matched[2] as 'h' | 'd') : 'h')
+
+  const commit = (nextAmount: string, nextUnit: 'h' | 'd') => {
+    const parsed = parseRecencyWindow(`${nextAmount}${nextUnit}`)
+    if (parsed) setFilter('recencyWindow', parsed)
+  }
+
+  return (
+    <div className="facet-span">
+      <span className="facet-span-label">{t('filterPanel.recencyCustom')}</span>
+      <input
+        className="facet-span-amount"
+        inputMode="numeric"
+        value={amount}
+        placeholder="6"
+        onChange={(e) => {
+          const next = e.target.value.replace(/\D/g, '')
+          setAmount(next)
+          if (next) commit(next, unit)
+        }}
+      />
+      <select
+        className="facet-span-unit"
+        value={unit}
+        onChange={(e) => {
+          const next = e.target.value as 'h' | 'd'
+          setUnit(next)
+          if (amount) commit(amount, next)
+        }}
+      >
+        <option value="h">{t('filterPanel.recencyUnitHours')}</option>
+        <option value="d">{t('filterPanel.recencyUnitDays')}</option>
+      </select>
+    </div>
   )
 }

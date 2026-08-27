@@ -13,6 +13,7 @@ import {
   locateOption,
   orderByOptions,
   partitionPinned,
+  recencyWindowLabel,
   searchFacetValues,
   selectedValues,
   toggleValue,
@@ -542,5 +543,28 @@ describe('orderByOptions', () => {
   // from the chip's count.
   it('keeps unknown values, in their original order, at the end', () => {
     expect(orderByOptions(due, ['ghost', 'has', 'other'])).toEqual(['has', 'ghost', 'other'])
+  })
+})
+
+describe('recency options', () => {
+  const timeFacet = (window: Filters['recencyWindow']) =>
+    byId(buildFacets(input({ filters: filters({ recencyWindow: window }) })), 'time')
+
+  it('offers the presets when the current value is one of them', () => {
+    expect(timeFacet('7d').options.map((o) => o.value)).toEqual([
+      'any', '1h', '24h', 'today', '7d', '30d',
+    ])
+  })
+
+  // A typed span has no preset row, so without appending it the chip would
+  // have no label and the list no row to tick.
+  it('appends a typed span that is not a preset', () => {
+    expect(timeFacet('6h').options.map((o) => o.value)).toContain('6h')
+  })
+
+  it('labels spans from the grammar rather than a lookup table', () => {
+    expect(recencyWindowLabel('6h', t)).toBe('filterPanel.recencyHours:6')
+    expect(recencyWindowLabel('90d', t)).toBe('filterPanel.recencyDays:90')
+    expect(recencyWindowLabel('any', t)).toBe('filterPanel.recencyAny')
   })
 })

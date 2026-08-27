@@ -65,6 +65,7 @@ describe('filterCodec round-trip', () => {
     ['milestoneIds', { milestoneIds: ['proj-1::ms-1'] }, 'ms'],
     ['stateNames', { stateNames: ['Review Spec'] }, 'sname'],
     ['recencyWindow', { recencyWindow: '30d' }, 'recent'],
+    ['a typed recency span', { recencyWindow: '6h' }, 'recent'],
     ['recencyMode', { recencyMode: 'created' }, 'recentby'],
     ['negated', { negated: ['assignee'] }, 'neg'],
   ]
@@ -155,5 +156,18 @@ describe('negated facets in the URL', () => {
   // every other dimension follows, and what makes Back able to clear it.
   it('resets to [] when the param is absent', () => {
     expect(parseFilters(new URLSearchParams('mine=1')).filters.negated).toEqual([])
+  })
+})
+
+describe('recency windows in the URL', () => {
+  // Pattern-validated rather than whitelisted, so a span the UI never offers
+  // still survives a shared link.
+  it.each(['1h', '6h', '24h', '3d', '90d', 'today'])('round-trips %s', (w) => {
+    const s = state({ recencyWindow: w as Filters['recencyWindow'] })
+    expect(roundTrip(s).filters.recencyWindow).toBe(w)
+  })
+
+  it.each(['7w', '1.5h', '-2d', '0d', 'nonsense'])('falls back to any for %s', (raw) => {
+    expect(parseFilters(new URLSearchParams(`recent=${raw}`)).filters.recencyWindow).toBe('any')
   })
 })

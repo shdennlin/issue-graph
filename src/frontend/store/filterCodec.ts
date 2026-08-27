@@ -17,7 +17,7 @@
 // through `CodecState` instead of being handled separately by the caller.
 
 import type { IssueStateType } from '@shared/types.js'
-import { RECENCY_MODES, RECENCY_WINDOWS, type RecencyMode, type RecencyWindow } from '../lib/recency'
+import { RECENCY_MODES, parseRecencyWindow, type RecencyMode } from '../lib/recency'
 import { defaultFilters, type Filters } from './viewStore'
 
 /** Filter state plus the free-text search, which is a sibling of `Filters` in
@@ -156,10 +156,9 @@ export function parseFilters(params: URLSearchParams): CodecState {
       const d = params.get('due')
       return d === 'has' || d === 'overdue' || d === 'soon7' || d === 'soon30' ? d : 'any'
     })(),
-    recencyWindow: ((): RecencyWindow => {
-      const r = params.get('recent')
-      return RECENCY_WINDOWS.includes(r as RecencyWindow) ? (r as RecencyWindow) : 'any'
-    })(),
+    // Pattern-validated rather than whitelisted, so `recent=6h` works without
+    // the codec knowing which spans the UI happens to offer.
+    recencyWindow: parseRecencyWindow(params.get('recent')) ?? 'any',
     recencyMode: ((): RecencyMode => {
       const m = params.get('recentby')
       return RECENCY_MODES.includes(m as RecencyMode) ? (m as RecencyMode) : 'updated'

@@ -2958,3 +2958,65 @@ body[data-detail-wide='1'] .inline-search { display: none; }
 .facet-clear-all.is-primary:hover {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
+
+/* Typed recency span. Only the time facet has one: it is the only facet whose
+   domain is continuous rather than enumerated by the data. */
+.facet-span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 6px;
+}
+.facet-span-label { color: var(--fg-muted); font-size: var(--fs-meta); }
+.facet-span-amount {
+  width: 3.5em;
+  padding: 3px 6px;
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: var(--fs-meta);
+}
+.facet-span-unit {
+  padding: 3px 4px;
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: var(--fs-meta);
+}
+.facet-span-amount:focus-visible,
+.facet-span-unit:focus-visible { outline: none; border-color: var(--accent); }
+
+/* Issue age, shown only while a recency filter is active.
+   Positioned OUTSIDE the card, like the chain-root star: absolutely
+   positioned children do not count toward offsetHeight, which is what
+   GraphCanvas measures and feeds to dagre — so switching the filter on can
+   never make the graph re-lay-out.
+   A rounded rectangle rather than a pill, deliberately: the pills inside the
+   card are the issue's own properties, and this is an annotation the current
+   filter added. */
+.issue-age {
+  position: absolute;
+  top: -10px;
+  right: -6px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 1px 6px;
+  background: var(--bg-elev);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  font-size: var(--fs-chip);
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+/* Every card repeats the same mode, so it recedes and the number — the part
+   that differs card to card — carries the weight. Deliberately uncoloured:
+   this is a neutral fact, and tinting it would compete with the overdue chip,
+   where colour means "needs attention". */
+.issue-age-mode { color: var(--fg-muted); font-weight: 400; }

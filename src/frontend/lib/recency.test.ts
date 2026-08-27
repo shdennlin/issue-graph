@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { passesRecency, recencyCutoff, type RecencyMode, type RecencyWindow } from './recency'
+import {
+  MAX_DAYS,
+  MAX_HOURS,
+  parseRecencyWindow,
+  passesRecency,
+  recencyCutoff,
+  type RecencyMode,
+  type RecencyWindow,
+} from './recency'
 
 // Fixed clock — 2026-08-25T14:30:00 local time. Every assertion is relative to
 // this, so the suite never depends on the real time of day.
@@ -79,5 +87,59 @@ describe('passesRecency', () => {
     const i = issue(NOW - DAY, NOW - DAY)
     expect(passesRecency(i, mode, '7d', NOW)).toBe(true)
     expect(passesRecency(i, mode, 'today', NOW)).toBe(false)
+  })
+})
+
+describe('parseRecencyWindow', () => {
+  it.each(['any', 'today', '1h', '24h', '7d', '30d', '365d'])('accepts %s', (raw) => {
+    expect(parseRecencyWindow(raw)).toBe(raw)
+  })
+
+  // The type says `${number}h`, which also admits 1.5, -2 and 1e3 — so the
+  // type is a guardrail and this is the gate.
+  it.each([
+    ['a bare number', '7'],
+    ['an unknown unit', '7w'],
+    ['a fraction', '1.5h'],
+    ['a negative', '-2d'],
+    ['exponent notation', '1e3h'],
+    ['zero', '0d'],
+    ['empty', ''],
+    ['null', null],
+    ['a number', 7],
+  ])('rejects %s', (_name, raw) => {
+    expect(parseRecencyWindow(raw)).toBeNull()
+  })
+
+  it('rejects spans past the cap but accepts the cap itself', () => {
+    expect(parseRecencyWindow(`${MAX_HOURS}h`)).toBe(`${MAX_HOURS}h`)
+    expect(parseRecencyWindow(`${MAX_HOURS + 1}h`)).toBeNull()
+    expect(parseRecencyWindow(`${MAX_DAYS}d`)).toBe(`${MAX_DAYS}d`)
+    expect(parseRecencyWindow(`${MAX_DAYS + 1}d`)).toBeNull()
+  })
+})
+
+describe('recencyCutoff — arbitrary spans', () => {
+  it.each([
+    ['1h', 3600_000],
+    ['6h', 6 * 3600_000],
+    ['24h', 24 * 3600_000],
+    ['3d', 3 * DAY],
+    ['90d', 90 * DAY],
+  ] as [RecencyWindow, number][])('%s reaches back the right distance', (w, back) => {
+    expect(recencyCutoff(w, NOW)).toBe(NOW - back)
+  })
+
+  // "today" at 14:30 covers 14.5 hours; "24h" reaches into yesterday. They
+  // answer different questions, so neither stands in for the other.
+  it('keeps today and 24h distinct', () => {
+    expect(recencyCutoff('today', NOW)).not.toBe(recencyCutoff('24h', NOW))
+    expect(recencyCutoff('24h', NOW)).toBeLessThan(recencyCutoff('today', NOW) as number)
+  })
+
+  // Fails open: a bad value must not hide every issue.
+  it('treats an unparseable window as no filter', () => {
+    expect(recencyCutoff('7w' as RecencyWindow, NOW)).toBeNull()
+    expect(passesRecency(issue(0, 0), 'updated', '7w' as RecencyWindow, NOW)).toBe(true)
   })
 })

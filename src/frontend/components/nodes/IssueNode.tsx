@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useMemo } from 'react'
 import { AlertTriangle, ArrowLeft, ArrowRight, ListTree, MessageSquare, Minus, Star } from 'lucide-react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import type { AnnotationDTO, NormalizedIssue } from '@shared/types.js'
@@ -16,7 +16,8 @@ import {
 import { priorityClass, priorityLabel, stateColorVar, stateIcon, stateLabel } from '../../lib/colors'
 import { isOverdueIssue } from '../../lib/dueDate'
 import type { HierarchyCounts } from '../../views/hierarchy'
-import { useT } from '../../i18n'
+import { compactAge } from '../../lib/relativeTime'
+import { useT, type DictKey } from '../../i18n'
 
 function formatDueDate(iso: string): string {
   // Render as locale-short ("MMM D") for the chip; full ISO stays on hover.
@@ -74,6 +75,15 @@ function truncate(s: string, n: number): string {
 // `s.graph` is non-null, but as soon as anything sets it to null (e.g. the
 // tab snapshot/restore layer), the selector spirals into "Maximum update
 // depth exceeded" because every forced re-render re-allocates the fallback.
+/** Age units, translated rather than concatenated — both existing
+ *  relative-time helpers hardcoded English, so a zh-TW session read
+ *  "updated 3d ago". */
+const AGE_UNIT_KEYS: Record<'m' | 'h' | 'd', DictKey> = {
+  m: 'issueNode.ageMinutes',
+  h: 'issueNode.ageHours',
+  d: 'issueNode.ageDays',
+}
+
 const EMPTY_ANNOTATIONS: AnnotationDTO[] = []
 
 function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
@@ -97,6 +107,32 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
 
   const isCompact = density === 'compact'
   const isVerbose = density === 'verbose'
+
+  const recencyWindow = useViewStore((s) => s.filters.recencyWindow)
+  const recencyMode = useViewStore((s) => s.filters.recencyMode)
+  // Verbose density has always shown an updated-at line; it now goes through
+  // the same translatable formatter instead of a local English-only helper.
+  const verboseAge = useMemo(() => {
+    const { value, unit } = compactAge(new Date(issue.updatedAt).getTime())
+    return t(AGE_UNIT_KEYS[unit], { count: value })
+  }, [issue.updatedAt, t])
+
+  const age = useMemo(() => {
+    if (recencyWindow === 'any') return null
+    const iso = recencyMode === 'created' ? issue.createdAt : issue.updatedAt
+    const ts = new Date(iso).getTime()
+    if (!Number.isFinite(ts)) return null
+    const { value, unit } = compactAge(ts)
+    return {
+      text: t(AGE_UNIT_KEYS[unit], { count: value }),
+      mode: t(
+        recencyMode === 'created'
+          ? 'filterPanel.recencyModeCreated'
+          : 'filterPanel.recencyModeUpdated',
+      ),
+      title: iso,
+    }
+  }, [recencyWindow, recencyMode, issue.createdAt, issue.updatedAt, t])
 
   // The badge renders when there is anything at all to report — edge counts
   // OR sub-issues. An issue can have children without touching a single
@@ -150,6 +186,22 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
           }}
         >
           <Star size={11} fill="currentColor" />
+        </span>
+      )}
+      {age && (
+        // Outside the card, like the chain-root star above. Absolutely
+        // positioned children do not count toward offsetHeight, which is what
+        // GraphCanvas measures and feeds back to dagre — so this cannot make
+        // the graph re-lay-out when the filter is switched on.
+        //
+        // Only rendered while a recency filter is active. The timestamp is
+        // worth the space precisely when you are asking a time question, and
+        // is noise on forty cards when you are not. It also reports the
+        // timestamp the filter is using, so it can never be ambiguous about
+        // whether it means created or updated.
+        <span className="issue-age" title={age.title}>
+          <span className="issue-age-mode">{age.mode}</span>
+          {age.text}
         </span>
       )}
       {!isCompact && (hasEdgeCounts || hasSubIssues) && (
@@ -403,23 +455,18 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
           )}
         </div>
       )}
-      {isVerbose && (
+      {isVerbose && !age && (
+        // Verbose already carried an updated-at line. It is redundant while the
+        // badge is up, which is why it steps aside rather than duplicating it.
         <div className="meta" style={{ marginTop: 6 }}>
-          <span title={issue.updatedAt}>updated {timeAgo(issue.updatedAt)}</span>
+          <span title={issue.updatedAt}>
+            {t('filterPanel.recencyModeUpdated')} {verboseAge}
+          </span>
         </div>
       )}
       <Handle type="source" position={Position.Right} />
     </div>
   )
-}
-
-function timeAgo(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime()
-  const m = Math.floor(ms / 60000)
-  if (m < 60) return `${m}m ago`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h ago`
-  return `${Math.floor(h / 24)}d ago`
 }
 
 export const IssueNode = memo(IssueNodeImpl)
