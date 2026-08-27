@@ -9,7 +9,7 @@
 // because vitest runs `environment: 'node'` with no DOM.
 
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ChevronRight, Pin, PinOff, Plus, RotateCcw, X } from 'lucide-react'
+import { Check, ChevronRight, Pin, PinOff, Plus, RotateCcw, X } from 'lucide-react'
 import type { IssueStateType } from '@shared/types.js'
 import { useGraphStore } from '../../store/graphStore'
 import { defaultFilters, useViewStore } from '../../store/viewStore'
@@ -22,7 +22,7 @@ import { stateColorVar, stateLabelFor } from '../../lib/colors'
 import { useLocale, useT } from '../../i18n'
 import { useSavedViewsStore } from '../../store/savedViewsStore'
 import { savedViewStatus } from '../../lib/savedViewMatch'
-import { applySavedQuery } from '../../store/urlSync'
+import { applySavedQuery, currentQuery } from '../../store/urlSync'
 import { SavedViewsChip } from './SavedViewsChip'
 import { useFilterCounts } from './useFilterCounts'
 import {
@@ -152,10 +152,15 @@ export function FacetBar() {
   const anyNonDefault = facets.some((f) => !isFacetAtDefault(filters, f, defaultFilters))
 
   // The view to revert TO: one that was applied and has since been edited.
+  // Whole-store subscription: currentQuery() serializes view, chain, related
+  // and more besides the filters, and any of them changes whether this state
+  // still matches a saved view.
+  useViewStore()
   const savedViews = useSavedViewsStore((s) => s.views)
   const appliedId = useViewStore((s) => s.appliedSavedViewId)
   const setAppliedId = useViewStore((s) => s.setAppliedSavedViewId)
-  const { view: statusView, dirty } = savedViewStatus(window.location.search, savedViews, appliedId)
+  const updateSavedView = useSavedViewsStore((s) => s.update)
+  const { view: statusView, dirty } = savedViewStatus(currentQuery(), savedViews, appliedId)
   const dirtyView = dirty ? statusView : null
 
   // Being ON a saved view is itself a state worth being able to leave, even
@@ -289,14 +294,27 @@ export function FacetBar() {
           include constraints live at their defaults, so it never hid, and
           wiping every filter is rarely what you want after tweaking a view. */}
       {dirtyView && (
-        <button
-          type="button"
-          className="facet-clear-all"
-          onClick={() => applySavedQuery(dirtyView.query)}
-          title={dirtyView.name}
-        >
-          <RotateCcw size={11} /> {t('savedViews.revert')}
-        </button>
+        <>
+          {/* Both directions out of a dirty view. Offering only the undo made
+              the edit feel like a mistake to be taken back, when committing it
+              is at least as likely to be what you meant. */}
+          <button
+            type="button"
+            className="facet-clear-all is-primary"
+            onClick={() => void updateSavedView(dirtyView.id, currentQuery())}
+            title={dirtyView.name}
+          >
+            <Check size={11} /> {t('savedViews.saveChanges')}
+          </button>
+          <button
+            type="button"
+            className="facet-clear-all"
+            onClick={() => applySavedQuery(dirtyView.query)}
+            title={dirtyView.name}
+          >
+            <RotateCcw size={11} /> {t('savedViews.revert')}
+          </button>
+        </>
       )}
       {canReset && (
         <button

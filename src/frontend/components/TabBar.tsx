@@ -52,6 +52,9 @@ export function TabBar() {
   const profiles = useWorkspaceStore((s) => s.profiles)
   // Every tab can be labelled now that the applied view is per-tab state:
   // the active one reads the live store, the rest read their own snapshot.
+  // Same reason as FacetBar: the tab's label depends on the whole serialized
+  // query, not only the filters.
+  useViewStore()
   const savedViews = useSavedViewsStore((s) => s.views)
   const liveAppliedId = useViewStore((s) => s.appliedSavedViewId)
   const savedViewName = (tab: Tab, isActive: boolean): string | null => {

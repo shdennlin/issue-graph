@@ -2946,3 +2946,10 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   margin: 0 5px 0 4px;
   opacity: 0.6;
 }
+
+/* The committing action among the panel's trailing buttons. Slightly forward
+   of its neighbours, which undo or reset. */
+.facet-clear-all.is-primary { color: var(--accent); }
+.facet-clear-all.is-primary:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}

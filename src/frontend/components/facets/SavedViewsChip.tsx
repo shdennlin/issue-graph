@@ -13,7 +13,7 @@ import { useClickOutside } from '../../hooks/useClickOutside'
 import { useSavedViewsStore } from '../../store/savedViewsStore'
 import { useViewStore } from '../../store/viewStore'
 import { useWorkspaceStore } from '../../store/workspaceStore'
-import { applySavedQuery, flushUrlSync } from '../../store/urlSync'
+import { applySavedQuery, currentQuery } from '../../store/urlSync'
 import { apiErrorMessage } from '../../lib/apiErrorMessage'
 import { documentTitle, savedViewStatus } from '../../lib/savedViewMatch'
 import { formatRelative } from '../../lib/relativeTime'
@@ -55,18 +55,14 @@ export function SavedViewsChip() {
   // remembered, so it survives a reload, recognises a shared link that happens
   // to match, and stops claiming a view the moment you edit away from it.
   //
-  // These two store reads exist to SUBSCRIBE: window.location is not reactive,
-  // so without them a filter change would not re-render and the name would go
-  // stale. Same `void` idiom as useHistoryAvailability in urlSync. Left
-  // unmemoized deliberately — a handful of string comparisons is cheaper than
-  // a dependency array the linter cannot verify.
-  const filters = useViewStore((s) => s.filters)
-  const activeView = useViewStore((s) => s.activeView)
-  void filters
-  void activeView
+  // Subscribes to the WHOLE view store on purpose: currentQuery() serializes
+  // far more than the filters — view, chain, related, hierarchy, mixby — and
+  // any of them changing changes whether this state matches a saved view.
+  // Selecting a few fields would leave the name stale after the others moved.
+  useViewStore()
   const appliedId = useViewStore((s) => s.appliedSavedViewId)
   const setAppliedId = useViewStore((s) => s.setAppliedSavedViewId)
-  const { view: current, dirty } = savedViewStatus(window.location.search, views, appliedId)
+  const { view: current, dirty } = savedViewStatus(currentQuery(), views, appliedId)
 
   // Adopt an exact match as the reference point, so edits made after arriving
   // on a shared link that equals a saved view still show as divergence.
@@ -87,13 +83,6 @@ export function SavedViewsChip() {
   useEffect(() => {
     if (workspaceId) void load()
   }, [workspaceId, load])
-
-  const currentQuery = () => {
-    // The URL write is debounced by 200ms, so a filter changed a moment ago
-    // would otherwise be missing from what we capture.
-    flushUrlSync()
-    return window.location.search
-  }
 
   const submitNew = () => {
     const name = draft.trim()
