@@ -30,6 +30,8 @@ import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { useHistoryAvailability } from '../store/urlSync'
 import { forgetTab, snapshotTab } from '../store/tabStateStore'
+import { useSavedViewsStore } from '../store/savedViewsStore'
+import { savedViewStatus } from '../lib/savedViewMatch'
 import { MOD_GLYPH, formatShortcut } from '../lib/platform'
 
 function colorClass(ageMinutes: number): string {
@@ -49,6 +51,17 @@ function formatAge(age: number): string {
 export function TabBar() {
   // workspace store
   const profiles = useWorkspaceStore((s) => s.profiles)
+  // Only the ACTIVE tab can be labelled with a saved view: the applied-view
+  // reference point is a single value, not one per tab, so an inactive tab's
+  // view identity genuinely is not known. Labelling only what we know beats
+  // guessing, and "current view" is a property of the current tab anyway.
+  const savedViews = useSavedViewsStore((s) => s.views)
+  const appliedId = useSavedViewsStore((s) => s.appliedId)
+  const { view: activeView, dirty: activeDirty } = savedViewStatus(
+    window.location.search,
+    savedViews,
+    appliedId,
+  )
   const unconfigured = useWorkspaceStore((s) => s.unconfigured)
   const tabs = useWorkspaceStore((s) => s.tabs)
   const activeTabId = useWorkspaceStore((s) => s.activeTabId)
@@ -284,6 +297,7 @@ export function TabBar() {
   }
 
   const profileById = new Map(profiles.map((p) => [p.id, p]))
+
   const canClose = tabs.length > 1
   const showTabs = !unconfigured && profiles.length > 0
   const showPicker = !unconfigured && profiles.length >= 2
@@ -355,6 +369,12 @@ export function TabBar() {
               >
                 {shortcut && <span className="tabbar-shortcut">{shortcut}</span>}
                 <span className="tabbar-label">{name}</span>
+                {isActive && activeView && (
+                  <span className="tabbar-view" title={activeView.name}>
+                    {activeView.name}
+                    {activeDirty ? ' *' : ''}
+                  </span>
+                )}
                 {canClose && (
                   <span
                     role="button"

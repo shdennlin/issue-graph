@@ -2929,3 +2929,21 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* The saved view a tab is on, shown after the workspace name. Only the active
+   tab carries one — the applied-view reference is a single value, so an
+   inactive tab's view identity is genuinely unknown. Recessive, because the
+   workspace is what the tab is FOR; the view is what it currently shows. */
+.tabbar-view {
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-muted);
+  font-size: var(--fs-meta);
+}
+.tabbar-view::before {
+  content: '·';
+  margin: 0 5px 0 4px;
+  opacity: 0.6;
+}

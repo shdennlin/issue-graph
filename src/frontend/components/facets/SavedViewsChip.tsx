@@ -15,9 +15,14 @@ import { useViewStore } from '../../store/viewStore'
 import { useWorkspaceStore } from '../../store/workspaceStore'
 import { applySavedQuery, flushUrlSync } from '../../store/urlSync'
 import { apiErrorMessage } from '../../lib/apiErrorMessage'
-import { savedViewStatus } from '../../lib/savedViewMatch'
+import { documentTitle, savedViewStatus } from '../../lib/savedViewMatch'
 import { formatRelative } from '../../lib/relativeTime'
 import { useT } from '../../i18n'
+
+/** The app name as index.html shipped it, captured once at module load.
+ *  Read per-component it would re-capture a title this code had already
+ *  rewritten, and each remount would nest another segment. */
+const BASE_TITLE = typeof document === 'undefined' ? '' : document.title
 
 export function SavedViewsChip() {
   const t = useT()
@@ -68,6 +73,15 @@ export function SavedViewsChip() {
   useEffect(() => {
     if (current && !dirty && current.id !== appliedId) setAppliedId(current.id)
   }, [current, dirty, appliedId, setAppliedId])
+
+  // Only named when there is more than one workspace — repeating the sole
+  // workspace's name on every window distinguishes nothing.
+  const profiles = useWorkspaceStore((s) => s.profiles)
+  const workspaceName =
+    profiles.length > 1 ? (profiles.find((p) => p.id === workspaceId)?.name ?? null) : null
+  useEffect(() => {
+    document.title = documentTitle(current, dirty, workspaceName, BASE_TITLE)
+  }, [current, dirty, workspaceName])
 
   // Views are per workspace (each has its own graph.db), so refetch on switch.
   useEffect(() => {

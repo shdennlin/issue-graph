@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { canonicalQuery, matchSavedView, savedViewStatus } from './savedViewMatch'
+import {
+  canonicalQuery,
+  documentTitle,
+  matchSavedView,
+  savedViewStatus,
+} from './savedViewMatch'
 
 const view = (id: number, query: string) => ({ id, query })
 
@@ -82,5 +87,38 @@ describe('savedViewStatus', () => {
 
   it('names nothing when the applied view has since been deleted', () => {
     expect(savedViewStatus('?view=dependency', views, 99)).toEqual({ view: null, dirty: false })
+  })
+})
+
+describe('documentTitle', () => {
+  const week = { name: 'This week' }
+
+  it('is just the app name with neither a view nor a workspace', () => {
+    expect(documentTitle(null, false, null, 'Issue Graph')).toBe('Issue Graph')
+  })
+
+  // Browsers truncate a narrow tab from the END, so the identifying part has
+  // to lead and the app name is what gets cut.
+  it('leads with the view, then the workspace', () => {
+    expect(documentTitle(week, false, 'OneLegion', 'Issue Graph')).toBe(
+      'This week · OneLegion — Issue Graph',
+    )
+  })
+
+  it.each([
+    ['view only', week, null, 'This week — Issue Graph'],
+    ['workspace only', null, 'OneLegion', 'OneLegion — Issue Graph'],
+  ] as [string, { name: string } | null, string | null, string][])(
+    'handles %s',
+    (_name, view, workspace, expected) => {
+      expect(documentTitle(view, false, workspace, 'Issue Graph')).toBe(expected)
+    },
+  )
+
+  // Agrees with the panel rather than claiming you are still on a clean view.
+  it('carries the dirty marker', () => {
+    expect(documentTitle(week, true, 'OneLegion', 'Issue Graph')).toBe(
+      'This week * · OneLegion — Issue Graph',
+    )
   })
 })

@@ -70,3 +70,30 @@ export function savedViewStatus<T extends { id: number; query: string }>(
   const applied = appliedId === null ? null : (views.find((v) => v.id === appliedId) ?? null)
   return { view: applied, dirty: applied !== null }
 }
+
+/**
+ * The browser tab / window title: what you are looking at, then where.
+ *
+ * Matters most as an installed PWA, where the window title is the only thing
+ * distinguishing two windows in the OS switcher — and where the app name alone
+ * is identical on every one of them.
+ *
+ * Ordered most- to least-specific because browsers truncate a narrow tab from
+ * the END: the view name is the part that identifies this window, so it goes
+ * first and the app name is what gets cut.
+ *
+ * The dirty marker is carried through so the title agrees with the panel
+ * rather than claiming you are on a view you have edited away from.
+ */
+export function documentTitle(
+  view: { name: string } | null,
+  dirty: boolean,
+  workspace: string | null,
+  base: string,
+): string {
+  const label = view ? `${view.name}${dirty ? ' *' : ''}` : null
+  // Both parts are optional: a fresh session has no view, and a
+  // single-workspace install has no name worth repeating.
+  const lead = [label, workspace].filter(Boolean).join(' · ')
+  return lead ? `${lead} — ${base}` : base
+}
