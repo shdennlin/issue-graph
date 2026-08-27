@@ -64,8 +64,8 @@ export function SavedViewsChip() {
   const activeView = useViewStore((s) => s.activeView)
   void filters
   void activeView
-  const appliedId = useSavedViewsStore((s) => s.appliedId)
-  const setAppliedId = useSavedViewsStore((s) => s.setAppliedId)
+  const appliedId = useViewStore((s) => s.appliedSavedViewId)
+  const setAppliedId = useViewStore((s) => s.setAppliedSavedViewId)
   const { view: current, dirty } = savedViewStatus(window.location.search, views, appliedId)
 
   // Adopt an exact match as the reference point, so edits made after arriving
@@ -144,6 +144,9 @@ export function SavedViewsChip() {
                       type="button"
                       className="facet-view-action is-danger"
                       onClick={() => {
+                        // A deleted view can no longer be this tab's reference
+                        // point; the store only owns the list now.
+                        if (appliedId === v.id) setAppliedId(null)
                         void remove(v.id)
                         setConfirmingId(null)
                       }}

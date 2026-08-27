@@ -160,6 +160,14 @@ export interface ViewState {
   highlightedNodeId: string | null // when set, the node + its connected edges/neighbors stay opaque
   contextMenu: { x: number; y: number; targetIdentifier: string } | null
   staleDays: number
+  /**
+   * The saved view this tab is on — the reference point for "you have since
+   * edited it". Per-tab rather than global: each tab carries its own filters,
+   * so each is on its own view, and a single shared value could only ever
+   * describe whichever tab happened to be active.
+   */
+  appliedSavedViewId: number | null
+  setAppliedSavedViewId: (id: number | null) => void
   // Session panel visibility. The persistent preference is
   // `detailPanelAutoOpen` below; that flag decides whether selecting a new
   // issue *automatically* opens the panel. detailPanelOpen tracks the actual
@@ -335,6 +343,8 @@ export const useViewStore = create<ViewState>((set) => ({
   highlightedNodeId: null,
   contextMenu: null,
   staleDays: readStaleDays(),
+  appliedSavedViewId: null,
+  setAppliedSavedViewId: (id) => set({ appliedSavedViewId: id }),
   // Decouples "I want to focus this issue" (for chain mode, find, etc.)
   // from "I want to read its details". When OFF, clicking an issue still
   // sets focusedId but DetailPanel doesn't render — the canvas stays

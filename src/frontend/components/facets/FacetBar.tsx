@@ -153,8 +153,8 @@ export function FacetBar() {
 
   // The view to revert TO: one that was applied and has since been edited.
   const savedViews = useSavedViewsStore((s) => s.views)
-  const appliedId = useSavedViewsStore((s) => s.appliedId)
-  const setAppliedId = useSavedViewsStore((s) => s.setAppliedId)
+  const appliedId = useViewStore((s) => s.appliedSavedViewId)
+  const setAppliedId = useViewStore((s) => s.setAppliedSavedViewId)
   const { view: statusView, dirty } = savedViewStatus(window.location.search, savedViews, appliedId)
   const dirtyView = dirty ? statusView : null
 

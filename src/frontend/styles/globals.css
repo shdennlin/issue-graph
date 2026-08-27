@@ -2930,10 +2930,9 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   white-space: nowrap;
 }
 
-/* The saved view a tab is on, shown after the workspace name. Only the active
-   tab carries one — the applied-view reference is a single value, so an
-   inactive tab's view identity is genuinely unknown. Recessive, because the
-   workspace is what the tab is FOR; the view is what it currently shows. */
+/* The saved view a tab is on, shown after the workspace name. Recessive,
+   because the workspace is what the tab is FOR; the view is what it currently
+   shows. */
 .tabbar-view {
   max-width: 12ch;
   overflow: hidden;

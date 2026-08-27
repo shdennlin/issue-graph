@@ -1,6 +1,9 @@
 // Saved views: named snapshots of the URL's view + filter state, stored on the
 // server so everyone reaching this instance sees the same list.
 //
+// Holds the LIST only. Which view a tab is on lives in viewStore, because it
+// is per-tab state like the filters it describes — see appliedSavedViewId.
+//
 // Much smaller than notesStore because saved views need none of what makes that
 // one complex: no debounced autosave (a view is written on an explicit click),
 // no undo window, no assets. Optimistic updates with a refetch on failure are
@@ -17,14 +20,6 @@ interface SavedViewsState {
    *  belongs to the component tree — translating here would freeze the string
    *  at the locale that happened to be active when the request failed. */
   error: unknown
-  /**
-   * The view this session last applied — the reference point for "you have
-   * diverged from it". Cannot be derived from the URL: after one edit the
-   * state matches nothing, and that is indistinguishable from never having
-   * applied one. Session-only; a reload legitimately forgets.
-   */
-  appliedId: number | null
-  setAppliedId: (id: number | null) => void
   load: () => Promise<void>
   create: (name: string, query: string) => Promise<void>
   rename: (id: number, name: string) => Promise<void>
@@ -36,8 +31,6 @@ export const useSavedViewsStore = create<SavedViewsState>((set, get) => ({
   views: [],
   status: 'idle',
   error: null,
-  appliedId: null,
-  setAppliedId: (id) => set({ appliedId: id }),
 
   async load() {
     set({ status: 'loading', error: null })
@@ -84,10 +77,7 @@ export const useSavedViewsStore = create<SavedViewsState>((set, get) => ({
 
   async remove(id) {
     const prev = get().views
-    set((s) => ({
-      views: s.views.filter((v) => v.id !== id),
-      appliedId: s.appliedId === id ? null : s.appliedId,
-    }))
+    set((s) => ({ views: s.views.filter((v) => v.id !== id) }))
     try {
       await api.deleteSavedView(id)
     } catch (e) {

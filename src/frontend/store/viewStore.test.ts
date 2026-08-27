@@ -194,3 +194,23 @@ describe('viewStore.toggleStateType — the state tree', () => {
     expect(useViewStore.getState().filters.activeOnly).toBe(true)
   })
 })
+
+describe('viewStore.appliedSavedViewId — per-tab view identity', () => {
+  beforeEach(() => {
+    useViewStore.setState({ appliedSavedViewId: null })
+  })
+
+  // Lives here rather than in savedViewsStore because it describes THIS tab's
+  // filters, so tabStateStore snapshots it alongside them. A single global
+  // value could only ever have described whichever tab was active.
+  it('is null until a view is applied', () => {
+    expect(useViewStore.getState().appliedSavedViewId).toBeNull()
+  })
+
+  it('round-trips through its setter', () => {
+    useViewStore.getState().setAppliedSavedViewId(7)
+    expect(useViewStore.getState().appliedSavedViewId).toBe(7)
+    useViewStore.getState().setAppliedSavedViewId(null)
+    expect(useViewStore.getState().appliedSavedViewId).toBeNull()
+  })
+})

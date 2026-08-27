@@ -42,6 +42,9 @@ interface PerTabView {
   selection: string[]
   highlightedEdgeId: string | null
   highlightedNodeId: string | null
+  /** Which saved view this tab is on. Snapshotted with the rest of the
+   *  per-tab state so a tab keeps its identity across switches. */
+  appliedSavedViewId: number | null
 }
 
 interface TabSnapshot {
@@ -69,6 +72,7 @@ const defaultView: PerTabView = {
   selection: [],
   highlightedEdgeId: null,
   highlightedNodeId: null,
+  appliedSavedViewId: null,
 }
 
 const snapshots: Map<string, TabSnapshot> = new Map()
@@ -211,6 +215,7 @@ function captureCurrentView(): PerTabView {
     selection: v.selection,
     highlightedEdgeId: v.highlightedEdgeId,
     highlightedNodeId: v.highlightedNodeId,
+    appliedSavedViewId: v.appliedSavedViewId,
   }
 }
 
@@ -310,6 +315,12 @@ export function restoreViewportOnly(tabId: string): void {
  * tab has no snapshot yet. Mirrors restoreViewportOnly's "URL wins, but this one
  * piece isn't in the URL" rationale — just for the view instead of the viewport.
  */
+/** Which saved view another tab is on, without switching to it. Lets the tab
+ *  bar label every tab rather than only the active one. */
+export function peekTabSavedViewId(tabId: string): number | null {
+  return snapshots.get(tabId)?.view.appliedSavedViewId ?? null
+}
+
 export function peekTabView(tabId: string): ViewId | null {
   return snapshots.get(tabId)?.view.activeView ?? null
 }
