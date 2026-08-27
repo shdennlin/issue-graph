@@ -43,7 +43,6 @@ const emptyFilters: Filters = {
   prefixSelections: {},
   groupSelections: {},
   orphanValues: [],
-  tagIds: [],
   designdocFilter: 'all',
   dueFilter: 'any',
   projectIds: [],

@@ -47,7 +47,6 @@ describe('filterCodec round-trip', () => {
         prefixSelections: { horizon: ['h-1', 'h-2'], affects: ['a-1'] },
         groupSelections: { Risk: ['r-1'] },
         orphanValues: ['orph-1'],
-        tagIds: ['tag-1', 'tag-2'],
         designdocFilter: 'missing',
         dueFilter: 'overdue',
         recencyWindow: '7d',
@@ -65,7 +64,6 @@ describe('filterCodec round-trip', () => {
     ['projectIds', { projectIds: ['proj-1'] }, 'proj'],
     ['milestoneIds', { milestoneIds: ['proj-1::ms-1'] }, 'ms'],
     ['stateNames', { stateNames: ['Review Spec'] }, 'sname'],
-    ['tagIds', { tagIds: ['tag-1'] }, 'tag'],
     ['recencyWindow', { recencyWindow: '30d' }, 'recent'],
     ['recencyMode', { recencyMode: 'created' }, 'recentby'],
     ['negated', { negated: ['assignee'] }, 'neg'],
@@ -124,11 +122,8 @@ describe('filterSignatureParts', () => {
     expect(filterSignatureParts(a)).toEqual(filterSignatureParts(b))
   })
 
-  // tagIds was in the URL but missing from the signature, so tag-only changes
-  // replaced the history entry instead of pushing a new step.
   const sigCases: Array<[string, Partial<Filters>]> = [
     ['milestoneIds', { milestoneIds: ['p::m'] }],
-    ['tagIds', { tagIds: ['t-1'] }],
     ['projectIds', { projectIds: ['p-1'] }],
     ['stateNames', { stateNames: ['Review Spec'] }],
     ['recencyWindow', { recencyWindow: 'today' }],

@@ -47,7 +47,6 @@ export type FacetKind =
   | 'designdoc'
   | 'due'
   | 'time'
-  | 'tag'
 
 export interface FacetOption {
   value: string
@@ -430,8 +429,6 @@ export function selectedValues(filters: Filters, facet: FacetDef): string[] {
       return filters.groupSelections[facet.id.slice('group:'.length)] ?? []
     case 'orphan':
       return filters.orphanValues
-    case 'tag':
-      return filters.tagIds
     case 'designdoc':
       return filters.designdocFilter === 'all' ? [] : [filters.designdocFilter]
     case 'due':
@@ -639,8 +636,6 @@ function clearFacetValues(facet: FacetDef, filters: Filters): Partial<Filters> {
     }
     case 'orphan':
       return { orphanValues: [] }
-    case 'tag':
-      return { tagIds: [] }
     case 'designdoc':
       return { designdocFilter: 'all' }
     case 'due':

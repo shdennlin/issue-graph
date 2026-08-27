@@ -40,7 +40,6 @@ export interface Filters {
   // anything else the schema failed to classify. Flat id list — there is no
   // group name to key on.
   orphanValues: string[]
-  tagIds: string[]
   designdocFilter: 'all' | 'has' | 'missing'
   // Due-date filter:
   //   'any'      — no filter (default)
@@ -264,7 +263,6 @@ export const defaultFilters: Filters = {
   prefixSelections: {},
   groupSelections: {},
   orphanValues: [],
-  tagIds: [],
   designdocFilter: 'all',
   dueFilter: 'any',
   projectIds: [],

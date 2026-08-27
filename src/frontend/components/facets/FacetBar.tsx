@@ -381,7 +381,6 @@ function useFacetPick(facet: FacetDef) {
       case 'designdoc': setFilter('designdocFilter', value as 'all' | 'has' | 'missing'); break
       case 'due': setFilter('dueFilter', value as typeof filters.dueFilter); break
       case 'time': setFilter('recencyWindow', value as typeof filters.recencyWindow); break
-      case 'tag': break
     }
   }
 

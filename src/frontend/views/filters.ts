@@ -133,11 +133,6 @@ export const NEGATABLE_FACETS = [
   'assignee',
   'project',
   'orphan',
-  // NOT 'tag': `Filters.tagIds` is stored, serialized and present in the URL
-  // signature, but applyFilters never reads it — the tag dimension has no
-  // engine implementation at all, so `?tag=x` currently filters nothing.
-  // Negating a filter that does not apply would be meaningless. Pre-existing;
-  // out of scope here.
 ] as const
 
 /** Whether a facet's selection is inverted. `?? []` guards tab snapshots

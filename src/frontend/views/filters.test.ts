@@ -20,7 +20,6 @@ function baseFilters(overrides: Partial<Filters> = {}): Filters {
     prefixSelections: {},
     groupSelections: {},
     orphanValues: [],
-    tagIds: [],
     designdocFilter: 'all',
     dueFilter: 'any',
     projectIds: [],
