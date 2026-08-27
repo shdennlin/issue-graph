@@ -11,6 +11,7 @@ import {
   isNegated,
   toggleNegated,
   locateOption,
+  orderByOptions,
   partitionPinned,
   searchFacetValues,
   selectedValues,
@@ -496,5 +497,42 @@ describe('negation', () => {
   it('leaves the negated list untouched when clearing a facet that has none', () => {
     const f = filters({ negated: ['assignee'] })
     expect(clearFacetPatch(state, f, defaultFilters).negated).toBeUndefined()
+  })
+})
+
+describe('orderByOptions', () => {
+  const facets = buildFacets(input({ showDueFilter: true }))
+  const due = byId(facets, 'due')
+
+  // Filters store selections in toggle order, which is an artefact of how they
+  // were clicked: unchecking and rechecking one moves it to the end. The chip
+  // would then silently change which value it named.
+  it('sorts by list position, not by when each was picked', () => {
+    expect(orderByOptions(due, ['soon30', 'has', 'any'])).toEqual(['any', 'has', 'soon30'])
+  })
+
+  it('ranks a child by its position under its parent', () => {
+    const withState = buildFacets(
+      input({
+        stateNamesByType: {
+          ...EMPTY_STATE_NAMES,
+          started: [{ name: 'In Progress', count: 1, position: 1 }],
+        } as never,
+      }),
+    )
+    const state = byId(withState, 'state')
+    // 'started' is the first option; its child follows immediately, ahead of
+    // the next top-level type.
+    expect(orderByOptions(state, ['unstarted', 'started::In Progress', 'started'])).toEqual([
+      'started',
+      'started::In Progress',
+      'unstarted',
+    ])
+  })
+
+  // A stale id or a bare legacy state name must survive rather than vanish
+  // from the chip's count.
+  it('keeps unknown values, in their original order, at the end', () => {
+    expect(orderByOptions(due, ['ghost', 'has', 'other'])).toEqual(['has', 'ghost', 'other'])
   })
 })

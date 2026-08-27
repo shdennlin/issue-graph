@@ -441,6 +441,27 @@ export function selectedValues(filters: Filters, facet: FacetDef): string[] {
   }
 }
 
+/**
+ * Sort selected values into the order their options appear in the facet.
+ *
+ * `Filters` keeps selections in toggle order — an implementation detail of
+ * how they were clicked — which is not something a reader can see or predict.
+ * Values with no matching option (a stale id, a bare legacy state name) keep
+ * their relative order at the end rather than being dropped.
+ */
+export function orderByOptions(facet: FacetDef, values: string[]): string[] {
+  const rank = new Map<string, number>()
+  let n = 0
+  for (const o of facet.options) {
+    rank.set(o.value, n++)
+    for (const c of o.children ?? []) rank.set(c.value, n++)
+  }
+  const known = values.filter((v) => rank.has(v))
+  const unknown = values.filter((v) => !rank.has(v))
+  known.sort((a, b) => (rank.get(a) ?? 0) - (rank.get(b) ?? 0))
+  return [...known, ...unknown]
+}
+
 /** Look up an option's display label anywhere in a facet, including children. */
 function labelFor(facet: FacetDef, value: string): string {
   for (const o of facet.options) {
@@ -524,7 +545,13 @@ export function chipsFromFilters(
       continue
     }
 
-    const first = selected[0]
+    // Ordered by where the values sit in the list, not by when they were
+    // clicked. Filters store selections in toggle order, so the "first" value
+    // was whichever the user happened to pick first — unchecking and
+    // rechecking one moved it to the end and silently changed what the chip
+    // said. Display order is what the reader can actually verify.
+    const ordered = orderByOptions(facet, selected)
+    const first = ordered[0]
     chips.push({
       facetId: facet.id,
       title: facet.title,
@@ -534,11 +561,11 @@ export function chipsFromFilters(
       summary:
         first === undefined
           ? ''
-          : selected.length === 1
+          : ordered.length === 1
             ? labelFor(facet, first)
             : t('filterPanel.chipPlusMore', {
                 first: labelFor(facet, first),
-                rest: selected.length - 1,
+                rest: ordered.length - 1,
               }),
       operator:
         facet.selection === 'multi'

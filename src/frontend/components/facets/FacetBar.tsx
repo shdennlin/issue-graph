@@ -9,7 +9,7 @@
 // because vitest runs `environment: 'node'` with no DOM.
 
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, Pin, PinOff, Plus, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, Pin, PinOff, Plus, RotateCcw, X } from 'lucide-react'
 import type { IssueStateType } from '@shared/types.js'
 import { useGraphStore } from '../../store/graphStore'
 import { defaultFilters, useViewStore } from '../../store/viewStore'
@@ -20,6 +20,9 @@ import { useClickOutside } from '../../hooks/useClickOutside'
 import { fuzzyScore } from '../quickSwitcher/fuzzyMatch'
 import { stateColorVar, stateLabelFor } from '../../lib/colors'
 import { useLocale, useT } from '../../i18n'
+import { useSavedViewsStore } from '../../store/savedViewsStore'
+import { savedViewStatus } from '../../lib/savedViewMatch'
+import { applySavedQuery } from '../../store/urlSync'
 import { SavedViewsChip } from './SavedViewsChip'
 import { useFilterCounts } from './useFilterCounts'
 import {
@@ -144,6 +147,16 @@ export function FacetBar() {
     return m
   }, [facets, filters])
 
+  // Only offered when something actually differs from the defaults — unlike
+  // the chips, which deliberately surface non-neutral defaults too.
+  const anyNonDefault = facets.some((f) => !isFacetAtDefault(filters, f, defaultFilters))
+
+  // The view to revert TO: one that was applied and has since been edited.
+  const savedViews = useSavedViewsStore((s) => s.views)
+  const appliedId = useSavedViewsStore((s) => s.appliedId)
+  const { view: statusView, dirty } = savedViewStatus(window.location.search, savedViews, appliedId)
+  const dirtyView = dirty ? statusView : null
+
   const chips = useMemo(
     () => chipsFromFilters(filters, facets, t),
     [filters, facets, t],
@@ -265,10 +278,25 @@ export function FacetBar() {
         )
       })}
 
-      {chips.length > 0 && (
-        <button type="button" className="facet-clear-all" onClick={resetFilters}>
-          {t('filterPanel.clearAll')}
+      {/* "Clear all" was wrong twice over: chips now include constraints that
+          are live at their defaults, so it was always showing, and wiping
+          everything is rarely what you want after tweaking a saved view.
+          Reverts to that view when one is applied, to the defaults otherwise. */}
+      {dirtyView ? (
+        <button
+          type="button"
+          className="facet-clear-all"
+          onClick={() => applySavedQuery(dirtyView.query)}
+          title={dirtyView.name}
+        >
+          <RotateCcw size={11} /> {t('savedViews.revert')}
         </button>
+      ) : (
+        anyNonDefault && (
+          <button type="button" className="facet-clear-all" onClick={resetFilters}>
+            <RotateCcw size={11} /> {t('filterPanel.resetDefaults')}
+          </button>
+        )
       )}
     </div>
   )

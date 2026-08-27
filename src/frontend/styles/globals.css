@@ -2602,6 +2602,9 @@ body[data-detail-wide='1'] .inline-search { display: none; }
 
 .facet-add { border-style: dashed; }
 .facet-clear-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   flex-shrink: 0;
   padding: 2px 8px;
   font-size: var(--fs-meta);
@@ -2610,6 +2613,8 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   border: 0;
   text-align: left;
 }
+.facet-clear-all:hover { color: var(--accent); background: transparent; border: 0; }
+.facet-clear-all svg { flex-shrink: 0; }
 
 .facet-popover {
   position: absolute;

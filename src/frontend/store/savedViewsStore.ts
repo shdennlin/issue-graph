@@ -17,6 +17,14 @@ interface SavedViewsState {
    *  belongs to the component tree — translating here would freeze the string
    *  at the locale that happened to be active when the request failed. */
   error: unknown
+  /**
+   * The view this session last applied — the reference point for "you have
+   * diverged from it". Cannot be derived from the URL: after one edit the
+   * state matches nothing, and that is indistinguishable from never having
+   * applied one. Session-only; a reload legitimately forgets.
+   */
+  appliedId: number | null
+  setAppliedId: (id: number | null) => void
   load: () => Promise<void>
   create: (name: string, query: string) => Promise<void>
   rename: (id: number, name: string) => Promise<void>
@@ -28,6 +36,8 @@ export const useSavedViewsStore = create<SavedViewsState>((set, get) => ({
   views: [],
   status: 'idle',
   error: null,
+  appliedId: null,
+  setAppliedId: (id) => set({ appliedId: id }),
 
   async load() {
     set({ status: 'loading', error: null })
@@ -74,7 +84,10 @@ export const useSavedViewsStore = create<SavedViewsState>((set, get) => ({
 
   async remove(id) {
     const prev = get().views
-    set((s) => ({ views: s.views.filter((v) => v.id !== id) }))
+    set((s) => ({
+      views: s.views.filter((v) => v.id !== id),
+      appliedId: s.appliedId === id ? null : s.appliedId,
+    }))
     try {
       await api.deleteSavedView(id)
     } catch (e) {

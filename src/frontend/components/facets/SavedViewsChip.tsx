@@ -11,9 +11,11 @@ import { useEffect, useRef, useState } from 'react'
 import { Bookmark, Check, Pencil, Trash2 } from 'lucide-react'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import { useSavedViewsStore } from '../../store/savedViewsStore'
+import { useViewStore } from '../../store/viewStore'
 import { useWorkspaceStore } from '../../store/workspaceStore'
 import { applySavedQuery, flushUrlSync } from '../../store/urlSync'
 import { apiErrorMessage } from '../../lib/apiErrorMessage'
+import { savedViewStatus } from '../../lib/savedViewMatch'
 import { formatRelative } from '../../lib/relativeTime'
 import { useT } from '../../i18n'
 
@@ -38,6 +40,28 @@ export function SavedViewsChip() {
   const update = useSavedViewsStore((s) => s.update)
   const remove = useSavedViewsStore((s) => s.remove)
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  // Naming the view you are actually on. Recomputed from the URL rather than
+  // remembered, so it survives a reload, recognises a shared link that happens
+  // to match, and stops claiming a view the moment you edit away from it.
+  //
+  // These two store reads exist to SUBSCRIBE: window.location is not reactive,
+  // so without them a filter change would not re-render and the name would go
+  // stale. Same `void` idiom as useHistoryAvailability in urlSync. Left
+  // unmemoized deliberately — a handful of string comparisons is cheaper than
+  // a dependency array the linter cannot verify.
+  const filters = useViewStore((s) => s.filters)
+  const activeView = useViewStore((s) => s.activeView)
+  void filters
+  void activeView
+  const appliedId = useSavedViewsStore((s) => s.appliedId)
+  const setAppliedId = useSavedViewsStore((s) => s.setAppliedId)
+  const { view: current, dirty } = savedViewStatus(window.location.search, views, appliedId)
+
+  // Adopt an exact match as the reference point, so edits made after arriving
+  // on a shared link that equals a saved view still show as divergence.
+  useEffect(() => {
+    if (current && !dirty && current.id !== appliedId) setAppliedId(current.id)
+  }, [current, dirty, appliedId, setAppliedId])
 
   // Views are per workspace (each has its own graph.db), so refetch on switch.
   useEffect(() => {
@@ -54,6 +78,9 @@ export function SavedViewsChip() {
   const submitNew = () => {
     const name = draft.trim()
     if (!name) return
+    // Not setting appliedId here: create() resolves asynchronously, and the
+    // new view matches the current state exactly, so the adopt-effect above
+    // picks it up as soon as the list refreshes.
     void create(name, currentQuery())
     setDraft('')
     setNaming(false)
@@ -67,8 +94,13 @@ export function SavedViewsChip() {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
-        <Bookmark size={11} /> {t('savedViews.label')}
-        {views.length > 0 && <span className="facet-option-count">{views.length}</span>}
+        <Bookmark size={11} />
+        <span className="facet-option-label">
+          {current ? `${current.name}${dirty ? ' *' : ''}` : t('savedViews.label')}
+        </span>
+        {views.length > 0 && !current && (
+          <span className="facet-option-count">{views.length}</span>
+        )}
       </button>
 
       {open && (
@@ -101,9 +133,10 @@ export function SavedViewsChip() {
                   <>
                     <button
                       type="button"
-                      className="facet-option"
+                      className={`facet-option${current?.id === v.id ? ' is-selected' : ''}`}
                       onClick={() => {
                         applySavedQuery(v.query)
+                        setAppliedId(v.id)
                         setOpen(false)
                       }}
                       title={t('savedViews.updatedAt', { when: formatRelative(v.updatedAt) })}
