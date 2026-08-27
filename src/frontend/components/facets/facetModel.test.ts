@@ -8,7 +8,10 @@ import {
   buildFacets,
   chipsFromFilters,
   clearFacetPatch,
+  isNegated,
+  toggleNegated,
   locateOption,
+  orderByOptions,
   partitionPinned,
   searchFacetValues,
   selectedValues,
@@ -141,7 +144,9 @@ describe('buildFacets — details that would silently regress', () => {
       }),
     )
     const started = byId(f, 'state').options.find((o) => o.value === 'started')
-    expect(started?.children?.[0]).toMatchObject({ value: 'In Progress', count: 3 })
+    // Composite key: the child carries its own type so applyFilters can tell
+    // which branch a name refines without a lookup table.
+    expect(started?.children?.[0]).toMatchObject({ value: 'started::In Progress', count: 3 })
   })
 
   it('nests milestones under projects and keeps the no-project token', () => {
@@ -166,12 +171,18 @@ describe('buildFacets — details that would silently regress', () => {
 })
 
 describe('selectedValues — shadowing rules match applyFilters', () => {
-  it('stateNames shadows stateTypes when non-empty', () => {
+  // Both levels are checked at once: a type selects its branch, a name refines
+  // within it. Returning only the names made the tree look mutually exclusive,
+  // blanking every parent checkbox the moment a child was picked.
+  it('reports state types and names together', () => {
     const f = byId(buildFacets(input()), 'state')
     expect(selectedValues(filters({ stateTypes: ['started'] }), f)).toEqual(['started'])
     expect(
-      selectedValues(filters({ stateTypes: ['started'], stateNames: ['Review Spec'] }), f),
-    ).toEqual(['Review Spec'])
+      selectedValues(
+        filters({ stateTypes: ['started'], stateNames: ['unstarted::Review Spec'] }),
+        f,
+      ),
+    ).toEqual(['started', 'unstarted::Review Spec'])
   })
 
   it('milestoneIds shadows projectIds when non-empty', () => {
@@ -195,33 +206,55 @@ describe('selectedValues — shadowing rules match applyFilters', () => {
 describe('chipsFromFilters', () => {
   const facets = buildFacets(input({ showDueFilter: true }))
 
-  it('renders no chips at the default filter state', () => {
-    // The whole premise of the bar: an unused dimension takes zero space.
-    expect(chipsFromFilters(defaultFilters, facets, t, defaultFilters)).toEqual([])
+  const chipFor = (f: Filters, id: string) =>
+    chipsFromFilters(f, facets, t).find((c) => c.facetId === id)
+
+  // Chips key off "is this excluding anything", not "is this non-default".
+  // Two defaults here are not neutral: activeOnly starts TRUE and stateTypes
+  // starts as four of six types, so a default panel is hiding a third of the
+  // state space. Showing nothing claimed otherwise.
+  it('shows the constraints that are live at the default filter state', () => {
+    expect(chipsFromFilters(defaultFilters, facets, t).map((c) => c.facetId).sort()).toEqual([
+      'quick:active',
+      'state',
+    ])
   })
 
-  // activeOnly defaults to TRUE, so its chip must appear when it is FALSE.
-  // Getting this backwards would show a chip permanently and hide the one
-  // state the user actually needs to notice.
-  it('shows the activeOnly chip only when it is switched OFF', () => {
-    expect(chipsFromFilters(filters({ activeOnly: true }), facets, t, defaultFilters)).toEqual([])
-    const chips = chipsFromFilters(filters({ activeOnly: false }), facets, t, defaultFilters)
-    expect(chips).toHaveLength(1)
-    expect(chips[0]?.title).toBe('filterPanel.includingDone')
+  it('drops the activeOnly chip once it stops excluding anything', () => {
+    expect(chipFor(filters({ activeOnly: false }), 'quick:active')).toBeUndefined()
+    const on = chipFor(filters({ activeOnly: true }), 'quick:active')
     // A boolean has no operator or value — the title carries the whole meaning.
-    expect(chips[0]?.operator).toBeNull()
+    expect(on?.operator).toBeNull()
+    // Names the constraint in force. It used to read "Including done", which
+    // was the opposite of the state that now makes the chip appear.
+    expect(on?.title).toBe('filterPanel.activeOnly')
+  })
+
+  it('drops the state chip when every type is selected', () => {
+    const all: Filters['stateTypes'] = [
+      'started', 'unstarted', 'backlog', 'triage', 'completed', 'canceled',
+    ]
+    expect(chipFor(filters({ stateTypes: all }), 'state')).toBeUndefined()
+  })
+
+  // A facet that genuinely does nothing still costs no space.
+  it('shows no chip for a facet with an empty selection', () => {
+    expect(chipFor(defaultFilters, 'priority')).toBeUndefined()
+    expect(chipFor(defaultFilters, 'due')).toBeUndefined()
   })
 
   it('summarizes one value by its label and many by a count', () => {
-    const one = chipsFromFilters(filters({ dueFilter: 'overdue' }), facets, t, defaultFilters)
-    expect(one[0]?.summary).toBe('filterPanel.dueDateOverdue')
-    expect(one[0]?.operator).toBe('is')
-    const many = chipsFromFilters(filters({ priorities: [1, 2, 3] }), facets, t, defaultFilters)
-    expect(many[0]?.summary).toBe('filterPanel.chipCount:3')
-    expect(many[0]?.selectedCount).toBe(3)
+    const one = chipFor(filters({ dueFilter: 'overdue' }), 'due')
+    expect(one?.summary).toBe('filterPanel.dueDateOverdue')
+    expect(one?.operator).toBe('is')
+    // Shows what is applied, not just how much — a bare count made you open
+    // the menu to learn what the chip was already there to tell you.
+    const many = chipFor(filters({ priorities: [1, 2, 3] }), 'priority')
+    expect(many?.summary).toBe('filterPanel.chipPlusMore:filterPanel.priorityUrgent,2')
+    expect(many?.selectedCount).toBe(3)
     // Multi-select facets match ANY of their values; saying so removes the
     // ambiguity in a chip that just reads "Priority 3".
-    expect(many[0]?.operator).toBe('isAnyOf')
+    expect(many?.operator).toBe('isAnyOf')
   })
 
   it('emits one chip per active facet', () => {
@@ -229,9 +262,12 @@ describe('chipsFromFilters', () => {
       filters({ priorities: [1], dueFilter: 'overdue', myIssuesOnly: true }),
       facets,
       t,
-      defaultFilters,
     )
-    expect(chips.map((c) => c.facetId).sort()).toEqual(['due', 'priority', 'quick:mine'])
+    // quick:active and state are present too — both constrain at their
+    // defaults, which is exactly what the default-state test above pins down.
+    expect(chips.map((c) => c.facetId).sort()).toEqual([
+      'due', 'priority', 'quick:active', 'quick:mine', 'state',
+    ])
   })
 })
 
@@ -248,31 +284,36 @@ describe('clearFacetPatch', () => {
 
   // Both of these clear TWO fields, because one shadows the other. Clearing
   // only the shadowing field would leave a filter applied that no chip shows.
-  it('clears both stateNames and stateTypes', () => {
-    const patch = clearFacetPatch(byId(facets, 'state'), filters(), defaultFilters)
-    expect(patch).toEqual({ stateTypes: defaultFilters.stateTypes, stateNames: [] })
-  })
-
   it('clears both projectIds and milestoneIds', () => {
-    const patch = clearFacetPatch(byId(facets, 'project'), filters(), defaultFilters)
+    const patch = clearFacetPatch(byId(facets, 'project'), filters())
     expect(patch).toEqual({ projectIds: [], milestoneIds: [] })
   })
 
-  it('restores activeOnly to its true default rather than false', () => {
-    expect(clearFacetPatch(byId(facets, 'quick:active'), filters(), defaultFilters)).toEqual({
-      activeOnly: true,
+  // Clearing means "remove this constraint". For the two facets whose defaults
+  // are not neutral, restoring the default left the chip exactly where it was
+  // and the X appeared to do nothing.
+  it('switches activeOnly off rather than back to its default', () => {
+    expect(clearFacetPatch(byId(facets, 'quick:active'), filters())).toEqual({
+      activeOnly: false,
+    })
+  })
+
+  it('empties the state types rather than restoring the four active ones', () => {
+    expect(clearFacetPatch(byId(facets, 'state'), filters())).toEqual({
+      stateTypes: [],
+      stateNames: [],
     })
   })
 
   it('empties only the cleared prefix group, preserving its siblings', () => {
     const f = filters({ prefixSelections: { horizon: ['h1'], affects: ['a1'] } })
-    expect(clearFacetPatch(byId(facets, 'prefix:horizon'), f, defaultFilters)).toEqual({
+    expect(clearFacetPatch(byId(facets, 'prefix:horizon'), f)).toEqual({
       prefixSelections: { horizon: [], affects: ['a1'] },
     })
   })
 
   it('resets both recency fields', () => {
-    expect(clearFacetPatch(byId(facets, 'time'), filters(), defaultFilters)).toEqual({
+    expect(clearFacetPatch(byId(facets, 'time'), filters())).toEqual({
       recencyWindow: 'any',
       recencyMode: 'updated',
     })
@@ -417,5 +458,89 @@ describe('toggleValue', () => {
     expect(toggleValue(filters({ myIssuesOnly: true }), byId(facets, 'quick:mine'))).toBe(true)
     expect(toggleValue(filters({ staleOnly: true }), byId(facets, 'quick:stale'))).toBe(true)
     expect(toggleValue(defaultFilters, byId(facets, 'quick:stale'))).toBe(false)
+  })
+})
+
+describe('negation', () => {
+  const facets = buildFacets(input({ showDueFilter: true }))
+  const state = byId(facets, 'state')
+  const due = byId(facets, 'due')
+
+  it('reports a multi facet as negated when its id is listed', () => {
+    expect(isNegated(filters({ negated: ['state'] }), state)).toBe(true)
+    expect(isNegated(defaultFilters, state)).toBe(false)
+  })
+
+  // Negating a boolean is a double negative; a single-select enum's negation
+  // is already expressible by picking the other values.
+  it('refuses to negate a single-select facet even if listed', () => {
+    expect(isNegated(filters({ negated: ['due'] }), due)).toBe(false)
+  })
+
+  it('toggles an id on and off', () => {
+    expect(toggleNegated(defaultFilters, state)).toEqual(['state'])
+    expect(toggleNegated(filters({ negated: ['state'] }), state)).toEqual([])
+  })
+
+  it('leaves other negated facets alone when toggling one', () => {
+    const f = filters({ negated: ['assignee', 'state'] })
+    expect(toggleNegated(f, state)).toEqual(['assignee'])
+  })
+
+  it('renders the inverted operator on the chip', () => {
+    const f = filters({ stateTypes: ['started'], negated: ['state'] })
+    // Found by id, not [0]: quick:active constrains at its default, so it is
+    // legitimately first in the list.
+    const chip = chipsFromFilters(f, facets, t).find((c) => c.facetId === 'state')
+    expect(chip?.operator).toBe('isNotAnyOf')
+  })
+
+  // An "is not" left parked on a facet with nothing selected is invisible, and
+  // would silently flip meaning the next time a value was picked.
+  it('drops the negation when the facet is cleared', () => {
+    const f = filters({ stateTypes: ['started'], negated: ['state', 'assignee'] })
+    expect(clearFacetPatch(state, f).negated).toEqual(['assignee'])
+  })
+
+  it('leaves the negated list untouched when clearing a facet that has none', () => {
+    const f = filters({ negated: ['assignee'] })
+    expect(clearFacetPatch(state, f).negated).toBeUndefined()
+  })
+})
+
+describe('orderByOptions', () => {
+  const facets = buildFacets(input({ showDueFilter: true }))
+  const due = byId(facets, 'due')
+
+  // Filters store selections in toggle order, which is an artefact of how they
+  // were clicked: unchecking and rechecking one moves it to the end. The chip
+  // would then silently change which value it named.
+  it('sorts by list position, not by when each was picked', () => {
+    expect(orderByOptions(due, ['soon30', 'has', 'any'])).toEqual(['any', 'has', 'soon30'])
+  })
+
+  it('ranks a child by its position under its parent', () => {
+    const withState = buildFacets(
+      input({
+        stateNamesByType: {
+          ...EMPTY_STATE_NAMES,
+          started: [{ name: 'In Progress', count: 1, position: 1 }],
+        } as never,
+      }),
+    )
+    const state = byId(withState, 'state')
+    // 'started' is the first option; its child follows immediately, ahead of
+    // the next top-level type.
+    expect(orderByOptions(state, ['unstarted', 'started::In Progress', 'started'])).toEqual([
+      'started',
+      'started::In Progress',
+      'unstarted',
+    ])
+  })
+
+  // A stale id or a bare legacy state name must survive rather than vanish
+  // from the chip's count.
+  it('keeps unknown values, in their original order, at the end', () => {
+    expect(orderByOptions(due, ['ghost', 'has', 'other'])).toEqual(['has', 'ghost', 'other'])
   })
 })

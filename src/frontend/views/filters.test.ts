@@ -9,6 +9,7 @@ function baseFilters(overrides: Partial<Filters> = {}): Filters {
     stateNames: [],
     recencyWindow: 'any',
     recencyMode: 'updated',
+    negated: [],
     activeOnly: false,
     myIssuesOnly: false,
     staleOnly: false,
@@ -19,7 +20,6 @@ function baseFilters(overrides: Partial<Filters> = {}): Filters {
     prefixSelections: {},
     groupSelections: {},
     orphanValues: [],
-    tagIds: [],
     designdocFilter: 'all',
     dueFilter: 'any',
     projectIds: [],
@@ -265,5 +265,150 @@ describe('recency filter', () => {
       'OLD',
       'NEW',
     ])
+  })
+})
+
+describe('negated facets', () => {
+  const a = makeIssue({
+    identifier: 'A',
+    state: { name: 'In Progress', type: 'started' },
+    priority: 1,
+    assignee: { displayName: 'shawn' },
+    labels: [{ id: 'l1', name: 'Bug', color: '#f00', group: null }],
+    project: { id: 'p1', name: 'Core' },
+  })
+  const b = makeIssue({
+    identifier: 'B',
+    state: { name: 'Todo', type: 'unstarted' },
+    priority: 2,
+    assignee: null,
+    labels: [{ id: 'l2', name: 'Chore', color: '#0f0', group: null }],
+    project: { id: 'p2', name: 'Side' },
+  })
+  const all = [a, b]
+  const ids = (out: NormalizedIssue[]) => out.map((i) => i.identifier)
+
+  it('inverts a state selection', () => {
+    const f = baseFilters({ stateTypes: ['started'] })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['A'])
+    expect(ids(applyFilters(all, { ...f, negated: ['state'] }, 365, null))).toEqual(['B'])
+  })
+
+  it.each([
+    ['priority', { priorities: [1] }, 'priority'],
+    ['assignee', { assignees: ['shawn'] }, 'assignee'],
+    ['primary label', { primaryValues: ['l1'] }, 'primary'],
+    ['orphan label', { orphanValues: ['l1'] }, 'orphan'],
+    ['project', { projectIds: ['p1'] }, 'project'],
+  ] as [string, Partial<Filters>, string][])('inverts %s', (_name, sel, facetId) => {
+    const f = baseFilters(sel)
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['A'])
+    expect(ids(applyFilters(all, { ...f, negated: [facetId] }, 365, null))).toEqual(['B'])
+  })
+
+  it('inverts a dynamic prefix group by its composed id', () => {
+    const f = baseFilters({ prefixSelections: { horizon: ['l1'] } })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['A'])
+    expect(
+      ids(applyFilters(all, { ...f, negated: ['prefix:horizon'] }, 365, null)),
+    ).toEqual(['B'])
+  })
+
+  it('negates only the named facet, leaving the others positive', () => {
+    const f = baseFilters({ priorities: [1], assignees: ['shawn'], negated: ['priority'] })
+    // priority NOT 1 excludes A; assignee IS shawn excludes B. Nothing left.
+    expect(ids(applyFilters(all, f, 365, null))).toEqual([])
+  })
+
+  // "Not in the empty set" matches everything, which is the same as no filter —
+  // so a negation with nothing selected must not hide anything.
+  it('is inert when the dimension has no selection', () => {
+    const f = baseFilters({ negated: ['priority', 'assignee', 'state'] })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['A', 'B'])
+  })
+
+  // "Not in these milestones" is true of an issue that is in no milestone at
+  // all, so a project-less issue passes under negation rather than being
+  // dropped by the milestone guard.
+  it('keeps project-less issues when a milestone selection is negated', () => {
+    const loose = makeIssue({ identifier: 'C' })
+    const f = baseFilters({ milestoneIds: ['p1::m1'], negated: ['project'] })
+    expect(ids(applyFilters([a, loose], f, 365, null))).toEqual(['A', 'C'])
+  })
+
+  it('tolerates a tab snapshot written before the field existed', () => {
+    const legacy = { ...baseFilters({ priorities: [1] }) } as Filters
+    delete (legacy as Partial<Filters>).negated
+    expect(ids(applyFilters(all, legacy, 365, null))).toEqual(['A'])
+  })
+})
+
+describe('state tree — names refine within their own type', () => {
+  const inProgress = makeIssue({
+    identifier: 'INP',
+    state: { name: 'In Progress', type: 'started' },
+  })
+  const review = makeIssue({ identifier: 'REV', state: { name: 'Review', type: 'started' } })
+  const todo = makeIssue({ identifier: 'TODO', state: { name: 'Todo', type: 'unstarted' } })
+  const spec = makeIssue({ identifier: 'SPEC', state: { name: 'Review Spec', type: 'unstarted' } })
+  const done = makeIssue({ identifier: 'DONE', state: { name: 'Done', type: 'completed' } })
+  const all = [inProgress, review, todo, spec, done]
+  const ids = (out: NormalizedIssue[]) => out.map((i) => i.identifier)
+
+  // The behaviour this replaced made any named pick shadow every type at once,
+  // which read as the tree being mutually exclusive.
+  it('narrows only the named type, leaving sibling types whole', () => {
+    const f = baseFilters({
+      stateTypes: ['started', 'unstarted'],
+      stateNames: ['unstarted::Todo'],
+    })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['INP', 'REV', 'TODO'])
+  })
+
+  it('refines two types independently', () => {
+    const f = baseFilters({
+      stateTypes: ['started', 'unstarted'],
+      stateNames: ['unstarted::Todo', 'started::Review'],
+    })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['REV', 'TODO'])
+  })
+
+  // Naming a state implies wanting its type, so activeOnly must not veto it —
+  // otherwise picking a completed state with activeOnly on matches nothing.
+  it('bypasses activeOnly for an explicitly named archival state', () => {
+    // The realistic shape: the four active types still checked, plus one
+    // named completed state. Tree semantics give "everything active, AND
+    // Done" — and activeOnly must not veto the part the user named.
+    const f = baseFilters({
+      activeOnly: true,
+      stateTypes: ['started', 'unstarted', 'backlog', 'triage'],
+      stateNames: ['completed::Done'],
+    })
+    expect(ids(applyFilters(all, f, 365, null))).toContain('DONE')
+  })
+
+  it('still hides archival states that were not named', () => {
+    const cancelled = makeIssue({
+      identifier: 'CAN',
+      state: { name: 'Cancelled', type: 'canceled' },
+    })
+    const f = baseFilters({
+      activeOnly: true,
+      stateTypes: ['started', 'unstarted', 'backlog', 'triage'],
+      stateNames: ['completed::Done'],
+    })
+    expect(ids(applyFilters([...all, cancelled], f, 365, null))).not.toContain('CAN')
+  })
+
+  it('falls back to the coarse type selection when no name is picked', () => {
+    const f = baseFilters({ stateTypes: ['unstarted'] })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['TODO', 'SPEC'])
+  })
+
+  // Keys became composite only after `sname` started being serialized, so any
+  // bare name comes from a tab snapshot written earlier the same day.
+  it('still honours a bare legacy name, matching on name alone', () => {
+    const f = baseFilters({ stateTypes: [], stateNames: ['Todo'] })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['TODO'])
   })
 })

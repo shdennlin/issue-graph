@@ -40,7 +40,6 @@ export interface Filters {
   // anything else the schema failed to classify. Flat id list — there is no
   // group name to key on.
   orphanValues: string[]
-  tagIds: string[]
   designdocFilter: 'all' | 'has' | 'missing'
   // Due-date filter:
   //   'any'      — no filter (default)
@@ -68,6 +67,21 @@ export interface Filters {
   // clears the window but keeps the mode).
   recencyWindow: RecencyWindow
   recencyMode: RecencyMode
+  /**
+   * Facet ids whose selection is INVERTED — "is not any of" rather than
+   * "is any of". Stored as a list of ids rather than a boolean per dimension
+   * so a new dimension is negatable for free and the whole thing serializes
+   * to one URL param.
+   *
+   * Only multi-select facets appear here. Negating a boolean quick-filter is a
+   * double negative, and negating a single-select enum ("not overdue") is
+   * expressible by picking the other values.
+   *
+   * Inert while the dimension has no values selected: every check is guarded
+   * on a non-empty selection, and "not in the empty set" matches everything —
+   * i.e. the same as no filter.
+   */
+  negated: string[]
 }
 
 export interface ViewState {
@@ -146,6 +160,14 @@ export interface ViewState {
   highlightedNodeId: string | null // when set, the node + its connected edges/neighbors stay opaque
   contextMenu: { x: number; y: number; targetIdentifier: string } | null
   staleDays: number
+  /**
+   * The saved view this tab is on — the reference point for "you have since
+   * edited it". Per-tab rather than global: each tab carries its own filters,
+   * so each is on its own view, and a single shared value could only ever
+   * describe whichever tab happened to be active.
+   */
+  appliedSavedViewId: number | null
+  setAppliedSavedViewId: (id: number | null) => void
   // Session panel visibility. The persistent preference is
   // `detailPanelAutoOpen` below; that flag decides whether selecting a new
   // issue *automatically* opens the panel. detailPanelOpen tracks the actual
@@ -249,7 +271,6 @@ export const defaultFilters: Filters = {
   prefixSelections: {},
   groupSelections: {},
   orphanValues: [],
-  tagIds: [],
   designdocFilter: 'all',
   dueFilter: 'any',
   projectIds: [],
@@ -258,6 +279,7 @@ export const defaultFilters: Filters = {
   // 'updated' answers "what moved lately", the more common question, and
   // matches the timestamp staleOnly already reads.
   recencyMode: 'updated',
+  negated: [],
 }
 
 function toggle<T>(arr: T[], v: T): T[] {
@@ -321,6 +343,8 @@ export const useViewStore = create<ViewState>((set) => ({
   highlightedNodeId: null,
   contextMenu: null,
   staleDays: readStaleDays(),
+  appliedSavedViewId: null,
+  setAppliedSavedViewId: (id) => set({ appliedSavedViewId: id }),
   // Decouples "I want to focus this issue" (for chain mode, find, etc.)
   // from "I want to read its details". When OFF, clicking an issue still
   // sets focusedId but DetailPanel doesn't render — the canvas stays
@@ -348,7 +372,15 @@ export const useViewStore = create<ViewState>((set) => ({
       const isAdding = nextTypes.includes(t) && !s.filters.stateTypes.includes(t)
       const isNonActive = t === 'completed' || t === 'canceled'
       const activeOnly = isAdding && isNonActive ? false : s.filters.activeOnly
-      return { filters: { ...s.filters, stateTypes: nextTypes, activeOnly } }
+      // Names refine within their own type, so unchecking a type must take its
+      // children with it — leaving them behind would keep matching issues of a
+      // type the user just switched off. Other types' names are untouched;
+      // that independence is the whole point of the tree.
+      const removingType = !nextTypes.includes(t) && s.filters.stateTypes.includes(t)
+      const stateNames = removingType
+        ? s.filters.stateNames.filter((k) => !k.startsWith(`${t}::`))
+        : s.filters.stateNames
+      return { filters: { ...s.filters, stateTypes: nextTypes, stateNames, activeOnly } }
     }),
   toggleStateName: (name) => set((s) => ({ filters: { ...s.filters, stateNames: toggle(s.filters.stateNames, name) } })),
   togglePrimary: (id) => set((s) => ({ filters: { ...s.filters, primaryValues: toggle(s.filters.primaryValues, id) } })),

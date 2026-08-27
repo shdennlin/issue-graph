@@ -213,6 +213,59 @@ Direction, not commitment. Issues and PRs welcome on anything below.
 - React-hooks v7 recommended preset adopted
 - Opt-in bundle-composition report via `rollup-plugin-visualizer`
 
+## Unreleased — filter panel rebuild
+
+**Filter panel — from sidebar to floating facet bar**
+- The fixed-width sidebar is gone. A compact panel floats over the canvas's
+  top-left corner, one row per applied filter, so an unused dimension costs
+  no vertical space at all
+- `+ Filter` opens a cascading menu: dimensions on the left, that dimension's
+  values flying out beside the hovered row with checkboxes and counts
+- The menu's search box fuzzy-matches **values across every dimension**, not
+  just dimension names — `bug` finds `Type › Bug`. Capped at 12 ranked results
+- Chips render as aligned rows rather than pills: dimension, operator, value,
+  clear. Structure comes from column alignment, so the panel carries one border
+
+**Negatable conditions**
+- Any multi-select filter can be inverted (`is` ↔ `is not`), stored as
+  `Filters.negated` and serialized as one `neg=` URL param, so a new dimension
+  is negatable for free
+- Value counts hide while inverted — they are leave-one-out ("pick this and N
+  remain"), which answers the wrong question once picking excludes
+
+**Saved views**
+- Named view + filter snapshots in a new `saved_view` table, per workspace and
+  shared by everyone reaching the instance. Survive a cache reset
+- Stores the URL query string, not structured JSON, so `urlSync` stays the
+  single codec and a view cannot drift from what the URL can express
+- The panel names the active view, marks divergence with `*`, and offers Save
+  changes / Discard changes. Name also carried in the window title and tab label
+
+**Recent activity filter**
+- `any / today / 7d / 30d` against either `createdAt` or `updatedAt`.
+  `today` means since local midnight; the rolling windows match `staleDays`
+
+**Pinned filter values**
+- Pinned values sort to the top of their dimension's list. localStorage, keyed
+  per workspace — pins hold raw label/project ids that mean nothing elsewhere
+
+**Fixes**
+- Four filter dimensions (project, milestone, state name, search) were never
+  written to the URL: shared links dropped them and Back cleared them silently.
+  A pure `filterCodec` now owns all three registration points with a round-trip
+  test over every dimension
+- Specific Linear states used to shadow every canonical type at once, making
+  the state tree behave as though it were mutually exclusive. Names now refine
+  within their own type
+- Clicking the canvas failed to dismiss any dropdown in the app — d3-drag stops
+  propagation on the pane, so a bubble-phase listener never fired
+- Constraints live at their defaults (active-only, four of six state types) now
+  appear as clearable rows instead of an empty panel implying no filters
+
+**Removed**
+- `Filters.tagIds`, stored and serialized since the first release but never
+  read by `applyFilters`. Its intended role shipped as `orphanValues`
+
 ## v1.5 — next
 - [x] **Linear push-style updates** — `POST /api/webhooks/linear` accepts Linear's
       HMAC-signed deliveries, debounces a burst into one sync, and broadcasts

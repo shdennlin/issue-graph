@@ -20,6 +20,7 @@
 import type { IssueStateType } from '@shared/types.js'
 import type { Filters } from '../../store/viewStore'
 import type { DictKey } from '../../i18n'
+import { stateNameKey } from '../../views/filters'
 import type { ProjectRow, StateNameRow } from './useFilterCounts'
 
 /** How a facet's values combine. Drives both the popover widget and whether
@@ -46,7 +47,6 @@ export type FacetKind =
   | 'designdoc'
   | 'due'
   | 'time'
-  | 'tag'
 
 export interface FacetOption {
   value: string
@@ -76,8 +76,9 @@ export interface ChipDescriptor {
   facetId: string
   /** Reads as "Status | is any of | 3 selected". Multi-select facets match any
    *  of their values, single-select match exactly one — saying so removes a
-   *  real ambiguity about what a multi-value chip means. */
-  operator: 'is' | 'isAnyOf' | null
+   *  real ambiguity about what a multi-value chip means. `isNotAnyOf` is the
+   *  negated form and, unlike the others, is a control the user can flip. */
+  operator: 'is' | 'isAnyOf' | 'isNotAnyOf' | null
   /** Facet title, e.g. 'Assignee'. */
   title: string
   /** Value summary: the single selected label, or a count for multi-selects. */
@@ -196,8 +197,10 @@ export function buildFacets(input: BuildFacetsInput): FacetDef[] {
       label: input.stateLabel(type),
       count: counts.byState[type] ?? 0,
       tint: input.stateColor(type),
+      // Composite `<type>::<name>` so applyFilters can tell which type a name
+      // refines without a lookup table — same convention as milestone keys.
       children: (input.stateNamesByType[type] ?? []).map((s: StateNameRow) => ({
-        value: s.name,
+        value: stateNameKey(type, s.name),
         label: s.name,
         count: s.count,
       })),
@@ -380,6 +383,24 @@ export function toggleValue(filters: Filters, facet: FacetDef): boolean {
   return filters.staleOnly
 }
 
+/**
+ * Whether a facet's selection is inverted.
+ *
+ * Only multi-select facets can be: negating a boolean is a double negative, and
+ * a single-select enum's negation is expressible by picking the other values.
+ */
+export function isNegated(filters: Filters, facet: FacetDef): boolean {
+  return facet.selection === 'multi' && (filters.negated ?? []).includes(facet.id)
+}
+
+/** Toggle a facet's negation, returning the new list. */
+export function toggleNegated(filters: Filters, facet: FacetDef): string[] {
+  const cur = filters.negated ?? []
+  return cur.includes(facet.id)
+    ? cur.filter((id) => id !== facet.id)
+    : [...cur, facet.id]
+}
+
 /** The values currently selected for a facet, as raw Filters tokens. */
 export function selectedValues(filters: Filters, facet: FacetDef): string[] {
   switch (facet.kind) {
@@ -388,9 +409,10 @@ export function selectedValues(filters: Filters, facet: FacetDef): string[] {
       if (facet.id === 'quick:mine') return filters.myIssuesOnly ? ['on'] : []
       return filters.staleOnly ? ['on'] : []
     case 'state':
-      // stateNames takes precedence over stateTypes when non-empty — the same
-      // rule applyFilters uses, so the chip reflects what is actually applied.
-      return filters.stateNames.length > 0 ? filters.stateNames : filters.stateTypes
+      // Both levels are genuinely checked: a type selects its whole branch, a
+      // name refines within it. Returning only one made the tree look mutually
+      // exclusive — picking a name blanked every parent checkbox.
+      return [...filters.stateTypes, ...filters.stateNames]
     case 'primary':
       return filters.primaryValues
     case 'type':
@@ -407,8 +429,6 @@ export function selectedValues(filters: Filters, facet: FacetDef): string[] {
       return filters.groupSelections[facet.id.slice('group:'.length)] ?? []
     case 'orphan':
       return filters.orphanValues
-    case 'tag':
-      return filters.tagIds
     case 'designdoc':
       return filters.designdocFilter === 'all' ? [] : [filters.designdocFilter]
     case 'due':
@@ -416,6 +436,27 @@ export function selectedValues(filters: Filters, facet: FacetDef): string[] {
     case 'time':
       return filters.recencyWindow === 'any' ? [] : [filters.recencyWindow]
   }
+}
+
+/**
+ * Sort selected values into the order their options appear in the facet.
+ *
+ * `Filters` keeps selections in toggle order — an implementation detail of
+ * how they were clicked — which is not something a reader can see or predict.
+ * Values with no matching option (a stale id, a bare legacy state name) keep
+ * their relative order at the end rather than being dropped.
+ */
+export function orderByOptions(facet: FacetDef, values: string[]): string[] {
+  const rank = new Map<string, number>()
+  let n = 0
+  for (const o of facet.options) {
+    rank.set(o.value, n++)
+    for (const c of o.children ?? []) rank.set(c.value, n++)
+  }
+  const known = values.filter((v) => rank.has(v))
+  const unknown = values.filter((v) => !rank.has(v))
+  known.sort((a, b) => (rank.get(a) ?? 0) - (rank.get(b) ?? 0))
+  return [...known, ...unknown]
 }
 
 /** Look up an option's display label anywhere in a facet, including children. */
@@ -434,12 +475,36 @@ function sameSet(a: string[], b: string[]): boolean {
 }
 
 /**
- * Whether a facet is at its resting value and should therefore render no chip.
+ * Whether a facet is currently excluding anything.
  *
- * NOT the same as "no values selected": `stateTypes` defaults to the four
- * active states, so an empty check would pin a State chip to the bar forever.
- * (The identical assumption is why `state=` is the one URL param written even
- * at the default — see filterCodec.)
+ * NOT "is it at its default". Two defaults in this app are not neutral:
+ * `activeOnly` starts TRUE (hiding everything completed or canceled) and
+ * `stateTypes` starts as four of the six types. Keying the chips off
+ * "non-default" therefore showed an empty panel while two real constraints
+ * were in force — the UI claimed nothing was filtered when a third of the
+ * state space was hidden.
+ *
+ * A facet that genuinely does nothing (dueFilter 'any', an empty assignee
+ * list) still renders no chip, so unused dimensions keep costing no space.
+ */
+export function facetConstrains(filters: Filters, facet: FacetDef): boolean {
+  switch (facet.kind) {
+    case 'quick':
+      // activeOnly constrains when ON; the other two are plain opt-ins.
+      return toggleValue(filters, facet)
+    case 'state':
+      return (
+        filters.stateNames.length > 0 ||
+        (filters.stateTypes.length > 0 && filters.stateTypes.length < ALL_STATES.length)
+      )
+    default:
+      return selectedValues(filters, facet).length > 0
+  }
+}
+
+/**
+ * Whether a facet is at its resting value. Used for the "already in use"
+ * marker in the picker; chips key off facetConstrains instead.
  */
 export function isFacetAtDefault(filters: Filters, facet: FacetDef, defaults: Filters): boolean {
   if (facet.kind === 'state') {
@@ -457,19 +522,20 @@ export function chipsFromFilters(
   filters: Filters,
   facets: FacetDef[],
   t: Translate,
-  defaults: Filters,
 ): ChipDescriptor[] {
   const chips: ChipDescriptor[] = []
   for (const facet of facets) {
-    if (isFacetAtDefault(filters, facet, defaults)) continue
+    if (!facetConstrains(filters, facet)) continue
     const selected = selectedValues(filters, facet)
 
     if (facet.selection === 'toggle') {
       chips.push({
         facetId: facet.id,
-        // `activeOnly` defaults to TRUE, so its noteworthy state is being OFF.
-        // The chip therefore reads "Including done" rather than "Active only".
-        title: facet.id === 'quick:active' ? t('filterPanel.includingDone') : facet.title,
+        // Reads as the constraint it applies. It used to say "Including done"
+        // because the chip only appeared when activeOnly was OFF; chips now
+        // appear when a facet EXCLUDES something, so this one shows while
+        // activeOnly is ON and the old label said the opposite of the truth.
+        title: facet.title,
         // A boolean has no operator or value — the title says everything.
         operator: null,
         summary: '',
@@ -478,17 +544,34 @@ export function chipsFromFilters(
       continue
     }
 
-    const first = selected[0]
+    // Ordered by where the values sit in the list, not by when they were
+    // clicked. Filters store selections in toggle order, so the "first" value
+    // was whichever the user happened to pick first — unchecking and
+    // rechecking one moved it to the end and silently changed what the chip
+    // said. Display order is what the reader can actually verify.
+    const ordered = orderByOptions(facet, selected)
+    const first = ordered[0]
     chips.push({
       facetId: facet.id,
       title: facet.title,
-      // One value reads as itself; several collapse to a count, because
-      // spelling out five state names makes the bar unscannable.
+      // One value reads as itself; several show the first plus a remainder.
+      // A bare count ("5 selected") forced you to open the menu to learn what
+      // was applied, which is the one thing the chip exists to tell you.
       summary:
-        selected.length === 1 && first !== undefined
-          ? labelFor(facet, first)
-          : t('filterPanel.chipCount', { count: selected.length }),
-      operator: facet.selection === 'multi' ? 'isAnyOf' : 'is',
+        first === undefined
+          ? ''
+          : ordered.length === 1
+            ? labelFor(facet, first)
+            : t('filterPanel.chipPlusMore', {
+                first: labelFor(facet, first),
+                rest: ordered.length - 1,
+              }),
+      operator:
+        facet.selection === 'multi'
+          ? isNegated(filters, facet)
+            ? 'isNotAnyOf'
+            : 'isAnyOf'
+          : 'is',
       selectedCount: selected.length,
       tint:
         selected.length === 1 && first !== undefined
@@ -507,18 +590,29 @@ export function chipsFromFilters(
  * and `project` because milestoneIds shadows projectIds — clearing only the
  * shadowing field would leave a stale filter silently applied.
  */
-export function clearFacetPatch(
-  facet: FacetDef,
-  filters: Filters,
-  defaults: Filters,
-): Partial<Filters> {
+export function clearFacetPatch(facet: FacetDef, filters: Filters): Partial<Filters> {
+  // Clearing a facet drops its negation as well. Leaving it behind would park
+  // an invisible "is not" on a facet with nothing selected, which then flips
+  // meaning the next time a value is picked.
+  const dropNegation: Partial<Filters> = (filters.negated ?? []).includes(facet.id)
+    ? { negated: (filters.negated ?? []).filter((id) => id !== facet.id) }
+    : {}
+  return { ...dropNegation, ...clearFacetValues(facet, filters) }
+}
+
+function clearFacetValues(facet: FacetDef, filters: Filters): Partial<Filters> {
   switch (facet.kind) {
+    // Clearing a chip means "remove this constraint", which is not the same as
+    // "restore the default" for the two facets whose defaults are not neutral.
+    // Returning activeOnly to true, or stateTypes to the four active types,
+    // left the chip exactly where it was — the X appeared to do nothing.
     case 'quick':
-      if (facet.id === 'quick:active') return { activeOnly: true }
+      if (facet.id === 'quick:active') return { activeOnly: false }
       if (facet.id === 'quick:mine') return { myIssuesOnly: false }
       return { staleOnly: false }
     case 'state':
-      return { stateTypes: defaults.stateTypes, stateNames: [] }
+      // Empty means "no type filter", so nothing is excluded.
+      return { stateTypes: [], stateNames: [] }
     case 'primary':
       return { primaryValues: [] }
     case 'type':
@@ -542,8 +636,6 @@ export function clearFacetPatch(
     }
     case 'orphan':
       return { orphanValues: [] }
-    case 'tag':
-      return { tagIds: [] }
     case 'designdoc':
       return { designdocFilter: 'all' }
     case 'due':

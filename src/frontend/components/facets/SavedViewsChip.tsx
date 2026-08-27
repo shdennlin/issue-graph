@@ -8,14 +8,21 @@
 // delete any view, exactly as with notes and annotations today.
 
 import { useEffect, useRef, useState } from 'react'
-import { Bookmark, Check, Pencil, Trash2 } from 'lucide-react'
+import { Check, ChevronDown, Pencil, Trash2 } from 'lucide-react'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import { useSavedViewsStore } from '../../store/savedViewsStore'
+import { useViewStore } from '../../store/viewStore'
 import { useWorkspaceStore } from '../../store/workspaceStore'
-import { applySavedQuery, flushUrlSync } from '../../store/urlSync'
+import { applySavedQuery, currentQuery } from '../../store/urlSync'
 import { apiErrorMessage } from '../../lib/apiErrorMessage'
+import { documentTitle, savedViewStatus } from '../../lib/savedViewMatch'
 import { formatRelative } from '../../lib/relativeTime'
 import { useT } from '../../i18n'
+
+/** The app name as index.html shipped it, captured once at module load.
+ *  Read per-component it would re-capture a title this code had already
+ *  rewritten, and each remount would nest another segment. */
+const BASE_TITLE = typeof document === 'undefined' ? '' : document.title
 
 export function SavedViewsChip() {
   const t = useT()
@@ -23,11 +30,17 @@ export function SavedViewsChip() {
   const [naming, setNaming] = useState(false)
   const [draft, setDraft] = useState('')
   const [renamingId, setRenamingId] = useState<number | null>(null)
+  // Inline rather than window.confirm(): a browser that has had "prevent this
+  // page from creating additional dialogs" ticked suppresses confirm() and
+  // returns false forever, which presents as a delete button that silently
+  // does nothing. An in-page step cannot be switched off.
+  const [confirmingId, setConfirmingId] = useState<number | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   useClickOutside(ref, open, () => {
     setOpen(false)
     setNaming(false)
     setRenamingId(null)
+    setConfirmingId(null)
   })
 
   const views = useSavedViewsStore((s) => s.views)
@@ -38,22 +51,45 @@ export function SavedViewsChip() {
   const update = useSavedViewsStore((s) => s.update)
   const remove = useSavedViewsStore((s) => s.remove)
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  // Naming the view you are actually on. Recomputed from the URL rather than
+  // remembered, so it survives a reload, recognises a shared link that happens
+  // to match, and stops claiming a view the moment you edit away from it.
+  //
+  // Subscribes to the WHOLE view store on purpose: currentQuery() serializes
+  // far more than the filters — view, chain, related, hierarchy, mixby — and
+  // any of them changing changes whether this state matches a saved view.
+  // Selecting a few fields would leave the name stale after the others moved.
+  useViewStore()
+  const appliedId = useViewStore((s) => s.appliedSavedViewId)
+  const setAppliedId = useViewStore((s) => s.setAppliedSavedViewId)
+  const { view: current, dirty } = savedViewStatus(currentQuery(), views, appliedId)
+
+  // Adopt an exact match as the reference point, so edits made after arriving
+  // on a shared link that equals a saved view still show as divergence.
+  useEffect(() => {
+    if (current && !dirty && current.id !== appliedId) setAppliedId(current.id)
+  }, [current, dirty, appliedId, setAppliedId])
+
+  // Only named when there is more than one workspace — repeating the sole
+  // workspace's name on every window distinguishes nothing.
+  const profiles = useWorkspaceStore((s) => s.profiles)
+  const workspaceName =
+    profiles.length > 1 ? (profiles.find((p) => p.id === workspaceId)?.name ?? null) : null
+  useEffect(() => {
+    document.title = documentTitle(current, dirty, workspaceName, BASE_TITLE)
+  }, [current, dirty, workspaceName])
 
   // Views are per workspace (each has its own graph.db), so refetch on switch.
   useEffect(() => {
     if (workspaceId) void load()
   }, [workspaceId, load])
 
-  const currentQuery = () => {
-    // The URL write is debounced by 200ms, so a filter changed a moment ago
-    // would otherwise be missing from what we capture.
-    flushUrlSync()
-    return window.location.search
-  }
-
   const submitNew = () => {
     const name = draft.trim()
     if (!name) return
+    // Not setting appliedId here: create() resolves asynchronously, and the
+    // new view matches the current state exactly, so the adopt-effect above
+    // picks it up as soon as the list refreshes.
     void create(name, currentQuery())
     setDraft('')
     setNaming(false)
@@ -67,8 +103,18 @@ export function SavedViewsChip() {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
-        <Bookmark size={11} /> {t('savedViews.label')}
-        {views.length > 0 && <span className="facet-option-count">{views.length}</span>}
+        {/* No leading icon. A bookmark glyph restated the row's category,
+            which its position and weight already say, while pinning the name
+            away from the left edge the rows below align to. The trailing
+            chevron replaces it and carries information the icon did not:
+            that this opens something. */}
+        <span className="facet-option-label">
+          {current ? `${current.name}${dirty ? ' *' : ''}` : t('savedViews.label')}
+        </span>
+        {views.length > 0 && !current && (
+          <span className="facet-option-count">{views.length}</span>
+        )}
+        <ChevronDown size={12} className="facet-views-caret" />
       </button>
 
       {open && (
@@ -83,7 +129,33 @@ export function SavedViewsChip() {
             )}
             {views.map((v) => (
               <div className="facet-option-row" key={v.id}>
-                {renamingId === v.id ? (
+                {confirmingId === v.id ? (
+                  <>
+                    <span className="facet-confirm-text">
+                      {t('savedViews.confirmDelete', { name: v.name })}
+                    </span>
+                    <button
+                      type="button"
+                      className="facet-view-action is-danger"
+                      onClick={() => {
+                        // A deleted view can no longer be this tab's reference
+                        // point; the store only owns the list now.
+                        if (appliedId === v.id) setAppliedId(null)
+                        void remove(v.id)
+                        setConfirmingId(null)
+                      }}
+                    >
+                      {t('savedViews.confirmYes')}
+                    </button>
+                    <button
+                      type="button"
+                      className="facet-view-action"
+                      onClick={() => setConfirmingId(null)}
+                    >
+                      {t('common.cancel')}
+                    </button>
+                  </>
+                ) : renamingId === v.id ? (
                   <input
                     className="facet-search"
                     defaultValue={v.name}
@@ -101,9 +173,10 @@ export function SavedViewsChip() {
                   <>
                     <button
                       type="button"
-                      className="facet-option"
+                      className={`facet-option${current?.id === v.id ? ' is-selected' : ''}`}
                       onClick={() => {
                         applySavedQuery(v.query)
+                        setAppliedId(v.id)
                         setOpen(false)
                       }}
                       title={t('savedViews.updatedAt', { when: formatRelative(v.updatedAt) })}
@@ -112,7 +185,7 @@ export function SavedViewsChip() {
                     </button>
                     <button
                       type="button"
-                      className="facet-pin"
+                      className="facet-view-action"
                       onClick={() => void update(v.id, currentQuery())}
                       aria-label={t('savedViews.updateToCurrent')}
                       title={t('savedViews.updateToCurrent')}
@@ -121,7 +194,7 @@ export function SavedViewsChip() {
                     </button>
                     <button
                       type="button"
-                      className="facet-pin"
+                      className="facet-view-action"
                       onClick={() => setRenamingId(v.id)}
                       aria-label={t('savedViews.rename')}
                       title={t('savedViews.rename')}
@@ -130,15 +203,8 @@ export function SavedViewsChip() {
                     </button>
                     <button
                       type="button"
-                      className="facet-pin"
-                      onClick={() => {
-                        // Anyone can delete anyone's view — no auth by design —
-                        // so a confirm is the only guard, and enough for a
-                        // localhost-scale tool.
-                        if (window.confirm(t('savedViews.confirmDelete', { name: v.name }))) {
-                          void remove(v.id)
-                        }
-                      }}
+                      className="facet-view-action"
+                      onClick={() => setConfirmingId(v.id)}
                       aria-label={t('savedViews.delete')}
                       title={t('savedViews.delete')}
                     >

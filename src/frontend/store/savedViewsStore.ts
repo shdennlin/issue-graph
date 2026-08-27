@@ -1,6 +1,9 @@
 // Saved views: named snapshots of the URL's view + filter state, stored on the
 // server so everyone reaching this instance sees the same list.
 //
+// Holds the LIST only. Which view a tab is on lives in viewStore, because it
+// is per-tab state like the filters it describes — see appliedSavedViewId.
+//
 // Much smaller than notesStore because saved views need none of what makes that
 // one complex: no debounced autosave (a view is written on an explicit click),
 // no undo window, no assets. Optimistic updates with a refetch on failure are

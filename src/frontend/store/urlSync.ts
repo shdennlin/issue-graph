@@ -142,8 +142,7 @@ function significantSignature(): string {
   ].join('|')
 }
 
-// The body of a scheduled push, factored out so flushUrlSync can run it
-// synchronously without duplicating the push/replace decision.
+// The body of a scheduled push.
 function pushNow(): void {
   const url = buildUrl()
   if (url === lastPushedUrl) return
@@ -177,17 +176,21 @@ function schedulePush(): void {
 }
 
 /**
- * Force any debounced URL write to land right now.
+ * The query string the current store state serializes to, computed rather than
+ * read back from `window.location`.
  *
- * schedulePush waits 200ms, so a filter changed just before "save view" is
- * clicked would still be missing from `location.search`. Saved-view capture
- * calls this first so it records what the user actually sees.
+ * Reading location.search for this is wrong twice over: schedulePush debounces
+ * the write by 200ms, so it lags the store by up to one change, and a
+ * pushState does not re-render React, so nothing recomputes once it catches
+ * up. Anything comparing "where am I" against a stored query — naming the
+ * active saved view, deciding whether it has been edited — was therefore
+ * describing a different state from the one the panel was showing beside it.
+ *
+ * buildUrl is the canonical serializer, so this is exact by construction.
  */
-export function flushUrlSync(): void {
-  if (!pending) return
-  window.clearTimeout(pending)
-  pending = undefined
-  pushNow()
+export function currentQuery(): string {
+  const url = buildUrl()
+  return url.startsWith('?') ? url.slice(1) : ''
 }
 
 /**

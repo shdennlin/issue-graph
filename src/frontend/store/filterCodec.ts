@@ -4,10 +4,9 @@
 // urlSync.ts all read `window` and are module-private, so none of them can be
 // exercised under vitest (`environment: 'node'` for every suite). Every filter
 // dimension therefore had to be verified by hand — and five of them had
-// silently drifted out of sync (projectIds, milestoneIds, stateNames and
-// search were never serialized at all; tagIds was missing from the
-// signature). The round-trip test beside this file is what makes that class
-// of bug impossible to reintroduce.
+// silently drifted out of sync — projectIds, milestoneIds, stateNames and
+// search were never serialized at all. The round-trip test beside this file
+// is what makes that class of bug impossible to reintroduce.
 //
 // The invariant this module owns: **every `Filters` key appears in all three
 // of `serializeFilters`, `parseFilters`, and `filterSignatureParts`** — or is
@@ -91,13 +90,18 @@ export function serializeFilters(state: CodecState): URLSearchParams {
     if (ids.length) params.set(`grp_${group}`, ids.join(','))
   }
   if (f.orphanValues.length) params.set('label', f.orphanValues.join(','))
-  if (f.tagIds.length) params.set('tag', f.tagIds.join(','))
 
   if (f.designdocFilter !== 'all') params.set('designdoc', f.designdocFilter)
   if (f.dueFilter !== 'any') params.set('due', f.dueFilter)
 
   if (f.recencyWindow !== 'any') params.set('recent', f.recencyWindow)
   if (f.recencyMode !== 'updated') params.set('recentby', f.recencyMode)
+
+  // Inverted facets, as one param rather than a flag per dimension — see
+  // Filters.negated. Facet ids may contain ':' (prefix:horizon), which
+  // round-trips through URLSearchParams as %3A.
+  const neg = csv(f.negated)
+  if (neg) params.set('neg', neg)
 
   if (state.search) params.set('q', state.search)
 
@@ -144,7 +148,6 @@ export function parseFilters(params: URLSearchParams): CodecState {
     prefixSelections,
     groupSelections,
     orphanValues: list(params.get('label')),
-    tagIds: list(params.get('tag')),
     designdocFilter: ((): 'all' | 'has' | 'missing' => {
       const dd = params.get('designdoc')
       return dd === 'has' || dd === 'missing' ? dd : 'all'
@@ -161,6 +164,7 @@ export function parseFilters(params: URLSearchParams): CodecState {
       const m = params.get('recentby')
       return RECENCY_MODES.includes(m as RecencyMode) ? (m as RecencyMode) : 'updated'
     })(),
+    negated: list(params.get('neg')),
   }
 
   return { filters, search: params.get('q') ?? '' }
@@ -188,7 +192,6 @@ export function filterSignatureParts(state: CodecState): string[] {
     f.assignees.slice().sort().join(','),
     f.projectIds.slice().sort().join(','),
     f.milestoneIds.slice().sort().join(','),
-    f.tagIds.slice().sort().join(','),
     f.designdocFilter,
     f.dueFilter,
     f.recencyWindow,
@@ -196,6 +199,7 @@ export function filterSignatureParts(state: CodecState): string[] {
     // visible effect — keeping the signature a faithful mirror of the URL is
     // worth more than suppressing one no-op history entry.
     f.recencyMode,
+    (f.negated ?? []).slice().sort().join(','),
     Object.entries(f.prefixSelections)
       .map(([k, v]) => `${k}:${v.slice().sort().join(',')}`)
       .sort()

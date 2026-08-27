@@ -29,7 +29,8 @@ import { useWorkspaceStore, type Tab } from '../store/workspaceStore'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { useHistoryAvailability } from '../store/urlSync'
-import { forgetTab, snapshotTab } from '../store/tabStateStore'
+import { forgetTab, peekTabSavedViewId, snapshotTab } from '../store/tabStateStore'
+import { useSavedViewsStore } from '../store/savedViewsStore'
 import { MOD_GLYPH, formatShortcut } from '../lib/platform'
 
 function colorClass(ageMinutes: number): string {
@@ -49,6 +50,18 @@ function formatAge(age: number): string {
 export function TabBar() {
   // workspace store
   const profiles = useWorkspaceStore((s) => s.profiles)
+  // Every tab can be labelled now that the applied view is per-tab state:
+  // the active one reads the live store, the rest read their own snapshot.
+  // Same reason as FacetBar: the tab's label depends on the whole serialized
+  // query, not only the filters.
+  useViewStore()
+  const savedViews = useSavedViewsStore((s) => s.views)
+  const liveAppliedId = useViewStore((s) => s.appliedSavedViewId)
+  const savedViewName = (tab: Tab, isActive: boolean): string | null => {
+    const id = isActive ? liveAppliedId : peekTabSavedViewId(tab.id)
+    if (id === null) return null
+    return savedViews.find((v) => v.id === id)?.name ?? null
+  }
   const unconfigured = useWorkspaceStore((s) => s.unconfigured)
   const tabs = useWorkspaceStore((s) => s.tabs)
   const activeTabId = useWorkspaceStore((s) => s.activeTabId)
@@ -284,6 +297,7 @@ export function TabBar() {
   }
 
   const profileById = new Map(profiles.map((p) => [p.id, p]))
+
   const canClose = tabs.length > 1
   const showTabs = !unconfigured && profiles.length > 0
   const showPicker = !unconfigured && profiles.length >= 2
@@ -327,6 +341,7 @@ export function TabBar() {
             const profile = profileById.get(tab.workspaceId)
             const name = profile?.name ?? tab.workspaceId
             const isActive = tab.id === activeTabId
+            const viewName = savedViewName(tab, isActive)
             const shortcut = idx < 9 ? `${MOD_GLYPH}${idx + 1}` : null
             const isDragging = draggingId === tab.id
             return (
@@ -355,6 +370,17 @@ export function TabBar() {
               >
                 {shortcut && <span className="tabbar-shortcut">{shortcut}</span>}
                 <span className="tabbar-label">{name}</span>
+                {viewName && (
+                  // No dirty marker here. Whether you have edited away from
+                  // the view is only knowable for the active tab, and a
+                  // marker that appears on one tab and not the others would
+                  // read as a difference between the tabs rather than a limit
+                  // of what this label can say. The panel and the window
+                  // title carry it, where it is accurate.
+                  <span className="tabbar-view" title={viewName}>
+                    {viewName}
+                  </span>
+                )}
                 {canClose && (
                   <span
                     role="button"
