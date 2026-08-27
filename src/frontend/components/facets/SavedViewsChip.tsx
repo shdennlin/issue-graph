@@ -8,7 +8,7 @@
 // delete any view, exactly as with notes and annotations today.
 
 import { useEffect, useRef, useState } from 'react'
-import { Bookmark, Check, Pencil, Trash2 } from 'lucide-react'
+import { Check, ChevronDown, Pencil, Trash2 } from 'lucide-react'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import { useSavedViewsStore } from '../../store/savedViewsStore'
 import { useViewStore } from '../../store/viewStore'
@@ -103,13 +103,18 @@ export function SavedViewsChip() {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
-        <Bookmark size={11} />
+        {/* No leading icon. A bookmark glyph restated the row's category,
+            which its position and weight already say, while pinning the name
+            away from the left edge the rows below align to. The trailing
+            chevron replaces it and carries information the icon did not:
+            that this opens something. */}
         <span className="facet-option-label">
           {current ? `${current.name}${dirty ? ' *' : ''}` : t('savedViews.label')}
         </span>
         {views.length > 0 && !current && (
           <span className="facet-option-count">{views.length}</span>
         )}
+        <ChevronDown size={12} className="facet-views-caret" />
       </button>
 
       {open && (

@@ -2708,7 +2708,12 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   font-size: var(--fs-base);
   font-weight: 600;
   padding: 2px 4px;
+  /* Buttons centre their text by default, which pushed the name off the left
+     edge every row below it aligns to — the alignment IS the panel's
+     structure now that the boxes are gone. */
+  text-align: left;
 }
+.facet-views-caret { color: var(--fg-muted); flex-shrink: 0; }
 .facet-chip.facet-views:hover { background: var(--chip-bg); color: var(--fg); }
 .facet-sep {
   height: 1px;
