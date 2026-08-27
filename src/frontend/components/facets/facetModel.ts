@@ -534,9 +534,11 @@ export function chipsFromFilters(
     if (facet.selection === 'toggle') {
       chips.push({
         facetId: facet.id,
-        // `activeOnly` defaults to TRUE, so its noteworthy state is being OFF.
-        // The chip therefore reads "Including done" rather than "Active only".
-        title: facet.id === 'quick:active' ? t('filterPanel.includingDone') : facet.title,
+        // Reads as the constraint it applies. It used to say "Including done"
+        // because the chip only appeared when activeOnly was OFF; chips now
+        // appear when a facet EXCLUDES something, so this one shows while
+        // activeOnly is ON and the old label said the opposite of the truth.
+        title: facet.title,
         // A boolean has no operator or value — the title says everything.
         operator: null,
         summary: '',
@@ -591,32 +593,29 @@ export function chipsFromFilters(
  * and `project` because milestoneIds shadows projectIds — clearing only the
  * shadowing field would leave a stale filter silently applied.
  */
-export function clearFacetPatch(
-  facet: FacetDef,
-  filters: Filters,
-  defaults: Filters,
-): Partial<Filters> {
+export function clearFacetPatch(facet: FacetDef, filters: Filters): Partial<Filters> {
   // Clearing a facet drops its negation as well. Leaving it behind would park
   // an invisible "is not" on a facet with nothing selected, which then flips
   // meaning the next time a value is picked.
   const dropNegation: Partial<Filters> = (filters.negated ?? []).includes(facet.id)
     ? { negated: (filters.negated ?? []).filter((id) => id !== facet.id) }
     : {}
-  return { ...dropNegation, ...clearFacetValues(facet, filters, defaults) }
+  return { ...dropNegation, ...clearFacetValues(facet, filters) }
 }
 
-function clearFacetValues(
-  facet: FacetDef,
-  filters: Filters,
-  defaults: Filters,
-): Partial<Filters> {
+function clearFacetValues(facet: FacetDef, filters: Filters): Partial<Filters> {
   switch (facet.kind) {
+    // Clearing a chip means "remove this constraint", which is not the same as
+    // "restore the default" for the two facets whose defaults are not neutral.
+    // Returning activeOnly to true, or stateTypes to the four active types,
+    // left the chip exactly where it was — the X appeared to do nothing.
     case 'quick':
-      if (facet.id === 'quick:active') return { activeOnly: true }
+      if (facet.id === 'quick:active') return { activeOnly: false }
       if (facet.id === 'quick:mine') return { myIssuesOnly: false }
       return { staleOnly: false }
     case 'state':
-      return { stateTypes: defaults.stateTypes, stateNames: [] }
+      // Empty means "no type filter", so nothing is excluded.
+      return { stateTypes: [], stateNames: [] }
     case 'primary':
       return { primaryValues: [] }
     case 'type':

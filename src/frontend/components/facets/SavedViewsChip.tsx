@@ -25,11 +25,17 @@ export function SavedViewsChip() {
   const [naming, setNaming] = useState(false)
   const [draft, setDraft] = useState('')
   const [renamingId, setRenamingId] = useState<number | null>(null)
+  // Inline rather than window.confirm(): a browser that has had "prevent this
+  // page from creating additional dialogs" ticked suppresses confirm() and
+  // returns false forever, which presents as a delete button that silently
+  // does nothing. An in-page step cannot be switched off.
+  const [confirmingId, setConfirmingId] = useState<number | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   useClickOutside(ref, open, () => {
     setOpen(false)
     setNaming(false)
     setRenamingId(null)
+    setConfirmingId(null)
   })
 
   const views = useSavedViewsStore((s) => s.views)
@@ -115,7 +121,30 @@ export function SavedViewsChip() {
             )}
             {views.map((v) => (
               <div className="facet-option-row" key={v.id}>
-                {renamingId === v.id ? (
+                {confirmingId === v.id ? (
+                  <>
+                    <span className="facet-confirm-text">
+                      {t('savedViews.confirmDelete', { name: v.name })}
+                    </span>
+                    <button
+                      type="button"
+                      className="facet-view-action is-danger"
+                      onClick={() => {
+                        void remove(v.id)
+                        setConfirmingId(null)
+                      }}
+                    >
+                      {t('savedViews.confirmYes')}
+                    </button>
+                    <button
+                      type="button"
+                      className="facet-view-action"
+                      onClick={() => setConfirmingId(null)}
+                    >
+                      {t('common.cancel')}
+                    </button>
+                  </>
+                ) : renamingId === v.id ? (
                   <input
                     className="facet-search"
                     defaultValue={v.name}
@@ -145,7 +174,7 @@ export function SavedViewsChip() {
                     </button>
                     <button
                       type="button"
-                      className="facet-pin"
+                      className="facet-view-action"
                       onClick={() => void update(v.id, currentQuery())}
                       aria-label={t('savedViews.updateToCurrent')}
                       title={t('savedViews.updateToCurrent')}
@@ -154,7 +183,7 @@ export function SavedViewsChip() {
                     </button>
                     <button
                       type="button"
-                      className="facet-pin"
+                      className="facet-view-action"
                       onClick={() => setRenamingId(v.id)}
                       aria-label={t('savedViews.rename')}
                       title={t('savedViews.rename')}
@@ -163,15 +192,8 @@ export function SavedViewsChip() {
                     </button>
                     <button
                       type="button"
-                      className="facet-pin"
-                      onClick={() => {
-                        // Anyone can delete anyone's view — no auth by design —
-                        // so a confirm is the only guard, and enough for a
-                        // localhost-scale tool.
-                        if (window.confirm(t('savedViews.confirmDelete', { name: v.name }))) {
-                          void remove(v.id)
-                        }
-                      }}
+                      className="facet-view-action"
+                      onClick={() => setConfirmingId(v.id)}
                       aria-label={t('savedViews.delete')}
                       title={t('savedViews.delete')}
                     >

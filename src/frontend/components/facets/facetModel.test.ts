@@ -225,6 +225,9 @@ describe('chipsFromFilters', () => {
     const on = chipFor(filters({ activeOnly: true }), 'quick:active')
     // A boolean has no operator or value — the title carries the whole meaning.
     expect(on?.operator).toBeNull()
+    // Names the constraint in force. It used to read "Including done", which
+    // was the opposite of the state that now makes the chip appear.
+    expect(on?.title).toBe('filterPanel.activeOnly')
   })
 
   it('drops the state chip when every type is selected', () => {
@@ -281,31 +284,36 @@ describe('clearFacetPatch', () => {
 
   // Both of these clear TWO fields, because one shadows the other. Clearing
   // only the shadowing field would leave a filter applied that no chip shows.
-  it('clears both stateNames and stateTypes', () => {
-    const patch = clearFacetPatch(byId(facets, 'state'), filters(), defaultFilters)
-    expect(patch).toEqual({ stateTypes: defaultFilters.stateTypes, stateNames: [] })
-  })
-
   it('clears both projectIds and milestoneIds', () => {
-    const patch = clearFacetPatch(byId(facets, 'project'), filters(), defaultFilters)
+    const patch = clearFacetPatch(byId(facets, 'project'), filters())
     expect(patch).toEqual({ projectIds: [], milestoneIds: [] })
   })
 
-  it('restores activeOnly to its true default rather than false', () => {
-    expect(clearFacetPatch(byId(facets, 'quick:active'), filters(), defaultFilters)).toEqual({
-      activeOnly: true,
+  // Clearing means "remove this constraint". For the two facets whose defaults
+  // are not neutral, restoring the default left the chip exactly where it was
+  // and the X appeared to do nothing.
+  it('switches activeOnly off rather than back to its default', () => {
+    expect(clearFacetPatch(byId(facets, 'quick:active'), filters())).toEqual({
+      activeOnly: false,
+    })
+  })
+
+  it('empties the state types rather than restoring the four active ones', () => {
+    expect(clearFacetPatch(byId(facets, 'state'), filters())).toEqual({
+      stateTypes: [],
+      stateNames: [],
     })
   })
 
   it('empties only the cleared prefix group, preserving its siblings', () => {
     const f = filters({ prefixSelections: { horizon: ['h1'], affects: ['a1'] } })
-    expect(clearFacetPatch(byId(facets, 'prefix:horizon'), f, defaultFilters)).toEqual({
+    expect(clearFacetPatch(byId(facets, 'prefix:horizon'), f)).toEqual({
       prefixSelections: { horizon: [], affects: ['a1'] },
     })
   })
 
   it('resets both recency fields', () => {
-    expect(clearFacetPatch(byId(facets, 'time'), filters(), defaultFilters)).toEqual({
+    expect(clearFacetPatch(byId(facets, 'time'), filters())).toEqual({
       recencyWindow: 'any',
       recencyMode: 'updated',
     })
@@ -491,12 +499,12 @@ describe('negation', () => {
   // would silently flip meaning the next time a value was picked.
   it('drops the negation when the facet is cleared', () => {
     const f = filters({ stateTypes: ['started'], negated: ['state', 'assignee'] })
-    expect(clearFacetPatch(state, f, defaultFilters).negated).toEqual(['assignee'])
+    expect(clearFacetPatch(state, f).negated).toEqual(['assignee'])
   })
 
   it('leaves the negated list untouched when clearing a facet that has none', () => {
     const f = filters({ negated: ['assignee'] })
-    expect(clearFacetPatch(state, f, defaultFilters).negated).toBeUndefined()
+    expect(clearFacetPatch(state, f).negated).toBeUndefined()
   })
 })
 

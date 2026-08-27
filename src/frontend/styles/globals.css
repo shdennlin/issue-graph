@@ -2600,7 +2600,14 @@ body[data-detail-wide='1'] .inline-search { display: none; }
 .facet-chip-x:focus-visible { opacity: 1; pointer-events: auto; }
 .facet-chip-x:hover { color: var(--accent); background: transparent; border: 0; }
 
-.facet-add { border-style: dashed; }
+/* An invitation, not applied state — quiet, dashed, left-aligned with the
+   rows it adds to. */
+.facet-add {
+  border-style: dashed;
+  justify-content: flex-start;
+  color: var(--fg-muted);
+}
+.facet-add:hover { color: var(--accent); }
 .facet-clear-all {
   display: inline-flex;
   align-items: center;
@@ -2692,9 +2699,17 @@ body[data-detail-wide='1'] .inline-search { display: none; }
 .facet-pin.is-pinned { color: var(--accent); }
 .facet-pin:hover { color: var(--accent); background: transparent; border: 0; }
 
-/* Saved views live at the head of the bar — a view sets everything to its
-   right, so the separator marks it as a different kind of control. */
-.facet-chip.facet-views { border-style: solid; }
+/* Saved views head the panel and name what you are looking at, so this row
+   reads as the title rather than as one more control: no border, heavier
+   type, separated from the rows below by the panel's only hairline. */
+.facet-chip.facet-views {
+  border: 0;
+  background: transparent;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  padding: 2px 4px;
+}
+.facet-chip.facet-views:hover { background: var(--chip-bg); color: var(--fg); }
 .facet-sep {
   height: 1px;
   flex-shrink: 0;
@@ -2763,68 +2778,103 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   transform: none;
 }
 
-/* ── Segmented filter chip ─────────────────────────────────────────────────
-   Reads as one sentence: dimension | operator | value | clear. The operator
-   segment earns its width — "Status 3" alone is ambiguous between "any of
-   three" and "exactly three". */
-.facet-chip-group {
+/* ── Filter rows ───────────────────────────────────────────────────────────
+   Stacked full-width in a narrow panel, a pill is the wrong shape: rounded
+   caps are a horizontal-flow device, and six outlines compete with the
+   panel's own border. These are rows of a small table — dimension, operator,
+   value, remove — held together by column alignment rather than by boxes, so
+   the panel carries exactly one border. */
+.facet-row {
   --chip-tint: var(--fg-muted);
-  display: flex;
-  align-items: stretch;
-  width: 100%;
-  border: 1px solid color-mix(in srgb, var(--chip-tint) 40%, transparent);
-  border-radius: 999px;
-  font-size: var(--fs-meta);
-  background: color-mix(in srgb, var(--chip-tint) 10%, transparent);
-}
-/* Round the end segments individually rather than clipping the group with
-   `overflow: hidden` — the popover renders INSIDE this element, and a clipping
-   ancestor made clicking the value segment appear to do nothing. Third time
-   this trap has bitten in this feature; a non-visible overflow anywhere up the
-   tree beats any amount of z-index.
-   Targeted by class, not :first-child/:last-child: the popover becomes the
-   last child while it is open, which would strip the clear button's rounding
-   exactly when the chip is being interacted with. */
-.facet-seg-title { border-radius: 999px 0 0 999px; }
-.facet-seg-x { border-radius: 0 999px 999px 0; }
-.facet-seg {
-  display: inline-flex;
+  display: grid;
+  /* Fixed label column so every row's value starts on the same line. Without
+     it the eye has to re-find the value on each row. */
+  grid-template-columns: var(--facet-label-w, 4.4em) auto 1fr auto;
   align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
+  gap: 2px;
+  width: 100%;
+  padding: 1px 2px;
+  border-radius: var(--radius-sm);
+}
+.facet-row:hover { background: color-mix(in srgb, var(--fg-muted) 8%, transparent); }
+
+.facet-row-label {
+  color: var(--fg-muted);
+  font-size: var(--fs-meta);
   overflow: hidden;
   text-overflow: ellipsis;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  color: var(--fg);
-  font-size: inherit;
   white-space: nowrap;
 }
-/* Hairline dividers instead of gaps, so the segments read as one control. */
-.facet-seg + .facet-seg {
-  border-left: 1px solid color-mix(in srgb, var(--chip-tint) 30%, transparent);
-}
-.facet-seg-op { color: var(--fg-muted); }
-.facet-seg-value {
-  font-weight: 600;
+
+/* Legible only when it deviates. "is any of" is the resting state, so a
+   permanent label restated what the absence of a marker already says — and in
+   a 264px panel it cost a third of the row. */
+.facet-row-op {
+  padding: 1px 4px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-meta);
+  color: color-mix(in srgb, var(--fg-muted) 55%, transparent);
   cursor: pointer;
-  /* Takes the slack so every row's clear button lines up on the right edge. */
-  flex: 1;
-  justify-content: space-between;
+}
+.facet-row-op:hover { color: var(--accent); background: var(--chip-bg); }
+.facet-row-op[aria-pressed='true'] {
+  color: var(--danger, #dc2626);
+  font-weight: 600;
+}
+/* The one loud thing in the panel: an inverted condition reads differently at
+   a glance, not just on close reading. */
+.facet-row.is-negated {
+  box-shadow: inset 2px 0 0 var(--danger, #dc2626);
+  background: color-mix(in srgb, var(--danger, #dc2626) 7%, transparent);
+}
+
+.facet-row-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   min-width: 0;
+  padding: 1px 4px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
 }
-.facet-seg-value:hover,
-.facet-seg-x:hover {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--chip-tint) 30%, transparent);
+.facet-row-value:hover { color: var(--accent); background: var(--chip-bg); }
+.facet-row-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.facet-row-dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--chip-tint);
 }
-.facet-seg-value svg { color: var(--fg-muted); }
-.facet-seg-x { color: var(--fg-muted); cursor: pointer; padding: 3px 7px; }
-.facet-seg:focus-visible {
+
+.facet-row-x {
+  display: inline-flex;
+  padding: 2px 3px;
+  background: transparent;
+  border: 0;
+  color: var(--fg-muted);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+.facet-row:hover .facet-row-x,
+.facet-row-x:focus-visible { opacity: 1; pointer-events: auto; }
+.facet-row-x:hover { color: var(--accent); background: transparent; border: 0; }
+
+.facet-row-op:focus-visible,
+.facet-row-value:focus-visible,
+.facet-row-x:focus-visible {
   outline: none;
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 /* Divider between pinned values and the rest of a list, and between dimension
@@ -2847,14 +2897,35 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   font-weight: 600;
 }
 
-/* The operator is a control only where it can actually change — multi-select
-   facets, which can be inverted. Elsewhere it stays inert text. */
-.facet-seg-op.is-toggle { cursor: pointer; }
-.facet-seg-op.is-toggle:hover {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  color: var(--accent);
+
+/* Saved-view row actions. Visible rather than hover-only: these are the only
+   route to renaming or deleting a view, and an action you cannot find is the
+   same as one that does not work. */
+.facet-view-action {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 3px 5px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  font-size: var(--fs-meta);
+  cursor: pointer;
 }
-.facet-seg-op[aria-pressed='true'] {
+.facet-view-action:hover { color: var(--accent); background: var(--chip-bg); border: 0; }
+.facet-view-action.is-danger { color: var(--danger, #dc2626); font-weight: 600; }
+.facet-view-action.is-danger:hover {
+  background: color-mix(in srgb, var(--danger, #dc2626) 14%, transparent);
   color: var(--danger, #dc2626);
-  font-weight: 600;
+}
+.facet-confirm-text {
+  flex: 1;
+  min-width: 0;
+  padding: 0 6px;
+  font-size: var(--fs-meta);
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

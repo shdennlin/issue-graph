@@ -9,7 +9,7 @@
 // because vitest runs `environment: 'node'` with no DOM.
 
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, Pin, PinOff, Plus, RotateCcw, X } from 'lucide-react'
+import { ChevronRight, Pin, PinOff, Plus, RotateCcw, X } from 'lucide-react'
 import type { IssueStateType } from '@shared/types.js'
 import { useGraphStore } from '../../store/graphStore'
 import { defaultFilters, useViewStore } from '../../store/viewStore'
@@ -154,8 +154,14 @@ export function FacetBar() {
   // The view to revert TO: one that was applied and has since been edited.
   const savedViews = useSavedViewsStore((s) => s.views)
   const appliedId = useSavedViewsStore((s) => s.appliedId)
+  const setAppliedId = useSavedViewsStore((s) => s.setAppliedId)
   const { view: statusView, dirty } = savedViewStatus(window.location.search, savedViews, appliedId)
   const dirtyView = dirty ? statusView : null
+
+  // Being ON a saved view is itself a state worth being able to leave, even
+  // when that view's filters happen to equal the defaults — which is exactly
+  // when the old `anyNonDefault` test hid the button and left no way out.
+  const canReset = anyNonDefault || statusView !== null
 
   const chips = useMemo(
     () => chipsFromFilters(filters, facets, t),
@@ -165,7 +171,7 @@ export function FacetBar() {
   const facetById = (id: string) => facets.find((f) => f.id === id)
 
   const clearFacet = (facet: FacetDef) => {
-    const patch = clearFacetPatch(facet, filters, defaultFilters)
+    const patch = clearFacetPatch(facet, filters)
     for (const [k, v] of Object.entries(patch)) {
       setFilter(k as keyof typeof filters, v as never)
     }
@@ -215,51 +221,51 @@ export function FacetBar() {
         const facet = facetById(chip.facetId)
         if (!facet) return null
         return (
-          // Segmented pill: dimension | operator | value | clear. The operator
-          // is not decoration — without it a chip reading "Status 3" is
-          // ambiguous between "any of three" and "exactly three".
+          // A row, not a pill. Pills are a horizontal-flow device — stacked
+          // full-width in a narrow panel their rounded caps mean nothing and
+          // six outlines compete with the panel's own. Structure comes from
+          // column alignment instead, so the panel carries one border total.
           <div
-            className="facet-chip-wrap facet-chip-group"
+            className={`facet-chip-wrap facet-row${chip.operator === 'isNotAnyOf' ? ' is-negated' : ''}`}
             key={chip.facetId}
             style={chip.tint ? { ['--chip-tint' as string]: chip.tint } : undefined}
           >
-            <span className="facet-seg facet-seg-title">{chip.title}</span>
-            {chip.operator &&
-              (facet.selection === 'multi' ? (
-                // Multi-select facets can be inverted, so the operator is a
-                // control rather than a label. Single-select and boolean facets
-                // have no second reading, so theirs stays inert text — an
-                // operator you cannot change carries no information.
-                <button
-                  type="button"
-                  className="facet-seg facet-seg-op is-toggle"
-                  onClick={() => setFilter('negated', toggleNegated(filters, facet))}
-                  title={t('filterPanel.toggleNegate')}
-                  aria-pressed={chip.operator === 'isNotAnyOf'}
-                >
-                  {t(
-                    chip.operator === 'isNotAnyOf'
-                      ? 'filterPanel.chipIsNotAnyOf'
-                      : 'filterPanel.chipIsAnyOf',
-                  )}
-                </button>
-              ) : (
-                <span className="facet-seg facet-seg-op">{t('filterPanel.chipIs')}</span>
-              ))}
+            <span className="facet-row-label" title={chip.title}>
+              {chip.title}
+            </span>
+            {chip.operator && facet.selection === 'multi' && (
+              // Only legible when it deviates. "is any of" is the default, so
+              // showing it always spent a third of the row's width restating
+              // what the absence of a marker already says.
+              <button
+                type="button"
+                className="facet-row-op"
+                onClick={() => setFilter('negated', toggleNegated(filters, facet))}
+                title={t(
+                  chip.operator === 'isNotAnyOf'
+                    ? 'filterPanel.chipIsNotAnyOf'
+                    : 'filterPanel.chipIsAnyOf',
+                )}
+                aria-pressed={chip.operator === 'isNotAnyOf'}
+                aria-label={t('filterPanel.toggleNegate')}
+              >
+                {chip.operator === 'isNotAnyOf' ? t('filterPanel.opNot') : t('filterPanel.opIs')}
+              </button>
+            )}
             {chip.summary && (
               <button
                 type="button"
-                className="facet-seg facet-seg-value"
+                className="facet-row-value"
                 onClick={() => setOpenFacetId(openFacetId === facet.id ? null : facet.id)}
                 aria-expanded={openFacetId === facet.id}
               >
-                {chip.summary}
-                <ChevronDown size={11} />
+                {chip.tint && <span className="facet-row-dot" />}
+                <span className="facet-row-text">{chip.summary}</span>
               </button>
             )}
             <button
               type="button"
-              className="facet-seg facet-seg-x"
+              className="facet-row-x"
               onClick={() => clearFacet(facet)}
               aria-label={t('filterPanel.removeChip')}
               title={t('filterPanel.removeChip')}
@@ -278,11 +284,11 @@ export function FacetBar() {
         )
       })}
 
-      {/* "Clear all" was wrong twice over: chips now include constraints that
-          are live at their defaults, so it was always showing, and wiping
-          everything is rarely what you want after tweaking a saved view.
-          Reverts to that view when one is applied, to the defaults otherwise. */}
-      {dirtyView ? (
+      {/* Two different destinations, so they are two buttons rather than one
+          that changes meaning. "Clear all" used to be neither: chips now
+          include constraints live at their defaults, so it never hid, and
+          wiping every filter is rarely what you want after tweaking a view. */}
+      {dirtyView && (
         <button
           type="button"
           className="facet-clear-all"
@@ -291,12 +297,21 @@ export function FacetBar() {
         >
           <RotateCcw size={11} /> {t('savedViews.revert')}
         </button>
-      ) : (
-        anyNonDefault && (
-          <button type="button" className="facet-clear-all" onClick={resetFilters}>
-            <RotateCcw size={11} /> {t('filterPanel.resetDefaults')}
-          </button>
-        )
+      )}
+      {canReset && (
+        <button
+          type="button"
+          className="facet-clear-all"
+          onClick={() => {
+            resetFilters()
+            // Leaving the view deliberately, so drop it as the reference point
+            // rather than reporting "temp *" — the name reverts to the generic
+            // label, which is the honest description of where you now are.
+            setAppliedId(null)
+          }}
+        >
+          <RotateCcw size={11} /> {t('filterPanel.resetDefaults')}
+        </button>
       )}
     </div>
   )
