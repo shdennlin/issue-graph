@@ -14,6 +14,44 @@ Self-hosted, read-only graph viewer for issue dependencies. Fetches from Linear,
 - **Design-doc view** — issues with linked design-doc changes only.
 - **Sub-issue hierarchy** — Linear's parent/sub-issue links, shown as violet edges in the dependency view (toggle with `h`, off by default) and as a `3/7 done` progress badge on every parent card. The detail panel lists the parent and each sub-issue.
 
+## Filtering
+
+Filters live in a small panel floating over the top-left of the graph. It lists
+one row per filter you actually have applied, so a dimension you are not using
+costs no space.
+
+- **`+ Filter`** opens a cascading menu — dimensions on the left, that
+  dimension's values flying out beside it with checkboxes and live counts.
+  The search box searches **values across every dimension at once**, so typing
+  `bug` finds `Type › Bug` without you needing to recall where it lives.
+- **`is` / `is not`** — click the operator in any multi-select row to invert it.
+  Value counts hide while a filter is inverted: they mean "pick this and N
+  remain", which stops being the right question once picking excludes.
+- **Recent activity** filters by *when* rather than *what* — today / 7 days /
+  30 days, against either the created or updated timestamp.
+- **Pin** a value (the pin icon on any option) and it sorts to the top of its
+  dimension's list. Pins are per browser and per workspace.
+
+Two filters are on by default and appear as rows you can clear like any other:
+completed and cancelled issues are hidden, and four of the six state types are
+shown.
+
+### Saved views
+
+Name the current view + filter combination and return to it in one click.
+Saved views live **on the server**, so everyone reaching the same instance sees
+the same list — this is how you hand a teammate "the board I look at every
+morning".
+
+The panel names the view you are on and marks it `*` once you edit away from
+it, offering **Save changes** and **Discard changes** at that point. The window
+title and tab label carry the name too, which matters with several windows
+open.
+
+> Saved views are stored in the workspace's `graph.db` and survive a cache
+> reset. There is no authentication (see the warning below), so anyone who can
+> reach the server can edit or delete any view.
+
 ## Five-minute setup
 
 ```bash
@@ -242,12 +280,13 @@ For full design rationale, see [`docs/PRD.md`](docs/PRD.md).
 The active workspace, view, every filter, the focused node, and the theme are encoded in the URL:
 
 ```
-http://localhost:31415/?w=team_a&view=project&bucket=svc1,svc2&priority=1,2&focus=PROJ-123&theme=dark
+http://localhost:31415/?w=team_a&view=project&proj=p1&priority=1,2&recent=7d&neg=priority&q=auth&focus=PROJ-123
 ```
 
 Share a link in chat — your teammate sees the same view. Valid `view=`
-values are `dependency`, `mix`, `project`, `designdoc`. The `w=`
-parameter selects a workspace profile by id.
+values are `dependency`, `mix`, `project`, `milestone`, `designdoc`. The `w=`
+parameter selects a workspace profile by id, `neg=` lists the dimensions whose
+selection is inverted, and `q=` carries the search box.
 
 ## Keyboard
 

@@ -67,7 +67,14 @@ src/
                           views delegate to dependencyView.build via chainLayout.ts so
                           chains render consistently regardless of the outer view.
     components/           Presentational + interaction. nodes/ is the per-card UI;
-                          notes/, quickSwitcher/ are feature folders.
+                          notes/, quickSwitcher/, facets/ are feature folders.
+      facets/             The filter panel. facetModel.ts is pure derivation (which
+                          facets exist, their options, which chips to draw) and holds
+                          the tests; the JSX is a thin shell, because vitest runs
+                          `environment: 'node'` with no DOM and React components in
+                          this repo cannot be tested at all. Mutation goes through
+                          viewStore's toggle actions, which carry semantics that are
+                          not a function of `Filters` alone.
     i18n/                 en + zh-TW. Locale dicts are typed; DictKey is derived from
                           the English dict shape so missing translations surface as
                           type errors, not runtime fallthroughs.
@@ -105,8 +112,10 @@ with no options, and no `react-compiler` ESLint rule is configured. The ~36 manu
 memos across `src/frontend/components/` are all load-bearing.
 
 So: memoize by hand where it pays — `GraphCanvas.tsx` (node/edge derivation runs on
-every hover and pan) and `FilterPanel.tsx` (counts over every issue) are the ones
-that matter. Keep dependency arrays honest; `eslint-plugin-react-hooks` is enabled
+every hover and pan) and `facets/useFilterCounts.ts` (five leave-one-out passes over
+every issue, recomputed on each filter toggle) are the ones that matter. That hook is
+where `FilterPanel.tsx` used to be; it was extracted verbatim precisely so the memos
+survived the move to the chip bar. Keep dependency arrays honest; `eslint-plugin-react-hooks` is enabled
 and its `exhaustive-deps` warnings are real in both directions, including a
 *spurious* dep that makes a memo recompute for nothing.
 
@@ -120,6 +129,7 @@ and its `exhaustive-deps` warnings are real in both directions, including a
 ## Conventions
 
 - Tests are co-located beside source as `*.test.ts` / `*.test.tsx`. Grep for the existing nearest test before adding a new one.
+- **Two filter defaults are not neutral, and they break the unwritten "empty means unfiltered" assumption everywhere.** `Filters.activeOnly` starts `true` (hiding completed + canceled) and `Filters.stateTypes` starts as four of the six types. Six separate defects came from code that reasoned "at default ⇒ not filtering": a State chip pinned to the bar forever, `state=` being the one URL param written at its default, an Active-only checkbox that ticked when switched off, a panel claiming nothing was filtered while a third of the state space was hidden, and a clear button that "restored the default" and so cleared nothing. When touching filter state, ask whether the field *constrains*, not whether it *differs from its default* — they are opposite for these two.
 - Migrations are append-only entries in the `MIGRATIONS` array in `src/backend/db.ts` (per-workspace schema) or `CONTROL_MIGRATIONS` in `src/backend/controlDb.ts` (the roster). Never edit a past entry — write a new ALTER.
 - User-overridable settings go in `SETTING_SPECS` (`src/backend/lib/settingSpecs.ts`), which owns the bounds *and* the `stored > env > default` precedence; read them via `settingInt()`. Do not hand-wire a reader against the `setting` table — that pattern is how eight of nine settings ended up accepted, validated, stored, and then ignored. A setting with no consumer should not be in the registry at all.
 - The shared type module is the contract: changing `src/shared/types.ts` will propagate type errors to both sides; that's the intended signal.
