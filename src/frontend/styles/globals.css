@@ -3064,3 +3064,49 @@ body[data-detail-wide='1'] .inline-search { display: none; }
 }
 /* The total is context for the first number, not a second fact. */
 .facet-count-total { color: var(--fg-muted); font-weight: 400; }
+
+/* Collapsed filter panel. Still reports the number of active filters: hiding
+   the panel must not hide the fact that it is filtering, or "where did my
+   issues go" becomes a puzzle with no visible cause. */
+.facet-handle {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+.facet-handle:hover { color: var(--accent); border-color: var(--accent); }
+.facet-handle-count {
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Pin toggle. Filled while pinned, struck through while the panel auto-hides,
+   so the current mode reads without hovering for a tooltip. */
+.facet-pin-panel {
+  display: inline-flex;
+  flex-shrink: 0;
+  padding: 3px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+.facet-pin-panel:hover { color: var(--accent); background: var(--chip-bg); border: 0; }
+.facet-pin-panel.is-pinned { color: var(--accent); }

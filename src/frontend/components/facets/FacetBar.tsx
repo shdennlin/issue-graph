@@ -8,8 +8,8 @@
 // `activeOnly`. Anything written into this JSX is untestable by construction,
 // because vitest runs `environment: 'node'` with no DOM.
 
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronRight, Pin, PinOff, Plus, RotateCcw, X } from 'lucide-react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Check, ChevronRight, Pin, PinOff, Plus, RotateCcw, SlidersHorizontal, X } from 'lucide-react'
 import type { IssueStateType } from '@shared/types.js'
 import { useGraphStore } from '../../store/graphStore'
 import { defaultFilters, useViewStore } from '../../store/viewStore'
@@ -60,6 +60,23 @@ export function FacetBar() {
   // so the total rides along whenever the two differ. When nothing is filtered
   // out the second half would only repeat the first, so it is dropped.
   const visibleCount = useViewStore((s) => s.visibleIssueCount)
+
+  const pinned = useViewStore((s) => s.filterPanelPinned)
+  const togglePinned = useViewStore((s) => s.toggleFilterPanelPinned)
+  const [hovering, setHovering] = useState(false)
+  const hideTimer = useRef<number | undefined>(undefined)
+  const expanded = pinned || hovering
+  const show = () => {
+    window.clearTimeout(hideTimer.current)
+    setHovering(true)
+  }
+  // Delayed, so a diagonal sweep toward a submenu does not snap the panel shut
+  // mid-gesture.
+  const hide = () => {
+    window.clearTimeout(hideTimer.current)
+    hideTimer.current = window.setTimeout(() => setHovering(false), 220)
+  }
+  useEffect(() => () => window.clearTimeout(hideTimer.current), [])
 
   const {
     counts,
@@ -199,14 +216,51 @@ export function FacetBar() {
   const availableFacets = facets
 
 
+  // Collapsed, the panel is a handle that still reports how many filters are
+  // on. Hiding the panel must not hide the fact that it is filtering — that
+  // would turn "where did my issues go" into a puzzle.
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        className="facet-handle"
+        onMouseEnter={show}
+        onFocus={show}
+        onClick={show}
+        aria-label={t('filterPanel.expandPanel')}
+        title={t('filterPanel.expandPanel')}
+      >
+        <SlidersHorizontal size={13} />
+        {chips.length > 0 && <span className="facet-handle-count">{chips.length}</span>}
+      </button>
+    )
+  }
+
   return (
-    <div className="facet-bar">
+    <div
+      className="facet-bar"
+      onMouseEnter={show}
+      onMouseLeave={hide}
+      // Popovers render inside this subtree, so hovering one still counts as
+      // hovering the panel and it cannot collapse out from under a menu.
+      onFocusCapture={show}
+    >
       {/* Leads the panel: a saved view sets everything below it. The count is
           a SIBLING of that control, not part of it — the row is a button that
           opens the views menu, and folding a non-interactive number into it
           would blur what clicking does. */}
       <div className="facet-title-row">
         <SavedViewsChip />
+        <button
+          type="button"
+          className={`facet-pin-panel${pinned ? ' is-pinned' : ''}`}
+          onClick={togglePinned}
+          aria-pressed={pinned}
+          aria-label={t(pinned ? 'filterPanel.unpinPanel' : 'filterPanel.pinPanel')}
+          title={t(pinned ? 'filterPanel.unpinPanel' : 'filterPanel.pinPanel')}
+        >
+          {pinned ? <Pin size={11} /> : <PinOff size={11} />}
+        </button>
         {visibleCount !== null && (
           <span className="facet-count" title={t('filterPanel.countTitle')}>
             {totalCount !== null && visibleCount !== totalCount ? (

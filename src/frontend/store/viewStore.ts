@@ -177,6 +177,17 @@ export interface ViewState {
    */
   visibleIssueCount: number | null
   setVisibleIssueCount: (n: number | null) => void
+  /**
+   * Whether the filter panel stays open. Unpinned it collapses to a handle
+   * and expands on hover, giving the graph the corner back.
+   *
+   * Per-browser preference, like theme and density — not per tab and not in
+   * the URL, so opening someone's shared link never rearranges your chrome.
+   * Defaults to pinned: this changes how the app behaves, so it should be
+   * opted into rather than sprung on anyone who updates.
+   */
+  filterPanelPinned: boolean
+  toggleFilterPanelPinned: () => void
   // Session panel visibility. The persistent preference is
   // `detailPanelAutoOpen` below; that flag decides whether selecting a new
   // issue *automatically* opens the panel. detailPanelOpen tracks the actual
@@ -356,6 +367,18 @@ export const useViewStore = create<ViewState>((set) => ({
   setAppliedSavedViewId: (id) => set({ appliedSavedViewId: id }),
   visibleIssueCount: null,
   setVisibleIssueCount: (n) => set({ visibleIssueCount: n }),
+  filterPanelPinned:
+    typeof window !== 'undefined' && window.localStorage?.getItem('ig-filter-pinned') === '0'
+      ? false
+      : true,
+  toggleFilterPanelPinned: () =>
+    set((s) => {
+      const next = !s.filterPanelPinned
+      if (typeof window !== 'undefined') {
+        window.localStorage?.setItem('ig-filter-pinned', next ? '1' : '0')
+      }
+      return { filterPanelPinned: next }
+    }),
   // Decouples "I want to focus this issue" (for chain mode, find, etc.)
   // from "I want to read its details". When OFF, clicking an issue still
   // sets focusedId but DetailPanel doesn't render — the canvas stays
