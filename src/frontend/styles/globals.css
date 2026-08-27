@@ -2640,7 +2640,31 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   display: flex;
   flex-direction: column;
 }
-.facet-option-list { max-height: 320px; overflow-y: auto; }
+/* Viewport-relative rather than a fixed 320px: the dimension list is about
+   fourteen rows and fits on any normal screen, but the old cap scrolled it
+   anyway — and scrolling a list you could simply see is pure friction. Still
+   scrolls when the screen genuinely cannot hold it. */
+.facet-option-list { max-height: min(62vh, 560px); overflow-y: auto; }
+
+/* Section separation in the picker.
+   The heading alone could not do this job: it is set smaller and dimmer than
+   the rows it introduces, so it read as the weakest thing on screen rather
+   than as a divider. A hairline and the space around it carry the separation;
+   the heading only has to name the section. */
+.facet-group + .facet-group {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--fg-muted) 20%, transparent);
+}
+.facet-group-title {
+  padding: 0 8px 4px;
+  color: var(--fg-muted);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  /* Tracking rather than uppercase: uppercase does nothing to CJK, so it
+     would make the English and Chinese builds feel different. */
+  letter-spacing: 0.06em;
+}
 .facet-option {
   display: inline-flex;
   align-items: center;

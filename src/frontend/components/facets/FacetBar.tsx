@@ -30,6 +30,7 @@ import {
   buildFacets,
   chipsFromFilters,
   clearFacetPatch,
+  groupFacets,
   isFacetAtDefault,
   isNegated,
   partitionPinned,
@@ -597,6 +598,7 @@ function FacetPicker({
   const q = query.trim().toLowerCase()
   const visible = q ? facets.filter((f) => f.title.toLowerCase().includes(q)) : facets
   const openFacet = visible.find((f) => f.id === openId) ?? null
+  const sections = groupFacets(visible, t)
 
   // A query searches VALUES across every facet, not just dimension names — the
   // dimension is the part you already know, and you open this menu because you
@@ -623,7 +625,12 @@ function FacetPicker({
         {visible.length === 0 && hits.length === 0 && (
           <div className="facet-empty">{t('filterPanel.noFacetMatch')}</div>
         )}
-        {visible.map((f) => (
+        {sections.map((section) => (
+          <div className="facet-group" key={section.group}>
+            {/* Headings only when there is more than one section to tell
+                apart — a lone heading labels nothing. */}
+            {sections.length > 1 && <div className="facet-group-title">{section.title}</div>}
+            {section.facets.map((f) => (
           <button
             type="button"
             role="menuitem"
@@ -657,6 +664,8 @@ function FacetPicker({
               ))}
             {f.options.length > 0 && <ChevronRight size={12} />}
           </button>
+            ))}
+          </div>
         ))}
 
         {hits.length > 0 && (

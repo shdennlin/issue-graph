@@ -8,6 +8,7 @@ import {
   buildFacets,
   chipsFromFilters,
   clearFacetPatch,
+  groupFacets,
   isNegated,
   toggleNegated,
   locateOption,
@@ -566,5 +567,46 @@ describe('recency options', () => {
     expect(recencyWindowLabel('6h', t)).toBe('filterPanel.recencyHours:6')
     expect(recencyWindowLabel('90d', t)).toBe('filterPanel.recencyDays:90')
     expect(recencyWindowLabel('any', t)).toBe('filterPanel.recencyAny')
+  })
+})
+
+describe('groupFacets', () => {
+  const facets = buildFacets(
+    input({
+      schema: { primaryGroup: 'Horizon', typeGroup: 'Kind', prefixes: [] },
+      primaryLabels: [{ id: 'l1', name: 'active' }],
+      typeLabels: [{ id: 'l2', name: 'Bug' }],
+      prefixSections: [{ token: 'horizon', labels: [{ id: 'h1', name: 'active' }] }],
+      showDueFilter: true,
+    }),
+  )
+
+  it('orders sections coarse to specific', () => {
+    expect(groupFacets(facets, t).map((s) => s.group)).toEqual([
+      'quick', 'attribute', 'label', 'time',
+    ])
+  })
+
+  // The reason grouping exists: primary/type are built early and prefix groups
+  // late, so one kind of thing was split across the list by construction order.
+  it('collects every label-derived facet into one section', () => {
+    const label = groupFacets(facets, t).find((s) => s.group === 'label')
+    expect(label?.facets.map((f) => f.id)).toEqual(['primary', 'type', 'prefix:horizon'])
+  })
+
+  it('keeps each facet in its original order within a section', () => {
+    const attrs = groupFacets(facets, t).find((s) => s.group === 'attribute')
+    expect(attrs?.facets.map((f) => f.id)).toEqual(['state', 'priority', 'assignee'])
+  })
+
+  it('drops a section with nothing in it', () => {
+    // No label groups detected in this workspace at all.
+    const bare = buildFacets(input())
+    expect(groupFacets(bare, t).map((s) => s.group)).not.toContain('label')
+  })
+
+  it('covers every facet exactly once', () => {
+    const grouped = groupFacets(facets, t).flatMap((s) => s.facets.map((f) => f.id))
+    expect(grouped.sort()).toEqual(facets.map((f) => f.id).sort())
   })
 })

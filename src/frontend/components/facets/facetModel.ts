@@ -60,11 +60,22 @@ export interface FacetOption {
   children?: FacetOption[]
 }
 
+/**
+ * Which section of the picker a facet belongs to.
+ *
+ * Label-derived facets were the reason this exists: `primary` and `type` are
+ * built from label groups and appeared near the top, while `prefix:*` and the
+ * remaining label groups appeared much further down, so one kind of thing was
+ * scattered across the list with unrelated dimensions in between.
+ */
+export type FacetGroup = 'quick' | 'attribute' | 'label' | 'time'
+
 export interface FacetDef {
   /** Stable id: 'state', 'prefix:horizon', 'group:Risk'. Used as the React key,
    *  the chip's facetId, and the popover's identity. */
   id: string
   kind: FacetKind
+  group: FacetGroup
   selection: FacetSelection
   /** Translated title. Prefix facets have no i18n key — their title is the
    *  literal token (e.g. 'horizon:'), which is why this is a string and not a
@@ -168,6 +179,7 @@ export function buildFacets(input: BuildFacetsInput): FacetDef[] {
   facets.push({
     id: 'quick:active',
     kind: 'quick',
+    group: 'quick',
     selection: 'toggle',
     title: t('filterPanel.activeOnly'),
     options: [],
@@ -175,6 +187,7 @@ export function buildFacets(input: BuildFacetsInput): FacetDef[] {
   facets.push({
     id: 'quick:mine',
     kind: 'quick',
+    group: 'quick',
     selection: 'toggle',
     title: t('filterPanel.myIssues'),
     options: [],
@@ -182,6 +195,7 @@ export function buildFacets(input: BuildFacetsInput): FacetDef[] {
   facets.push({
     id: 'quick:stale',
     kind: 'quick',
+    group: 'quick',
     selection: 'toggle',
     title: t('filterPanel.staleOnly'),
     options: [],
@@ -191,6 +205,7 @@ export function buildFacets(input: BuildFacetsInput): FacetDef[] {
   facets.push({
     id: 'state',
     kind: 'state',
+    group: 'attribute',
     selection: 'multi',
     title: t('filterPanel.state'),
     options: ALL_STATES.map((type) => ({
@@ -213,6 +228,7 @@ export function buildFacets(input: BuildFacetsInput): FacetDef[] {
     facets.push({
       id: 'primary',
       kind: 'primary',
+      group: 'label',
       selection: 'multi',
       title: input.primaryGroupSingular
         ? `${input.primaryGroupSingular}s`
@@ -228,6 +244,7 @@ export function buildFacets(input: BuildFacetsInput): FacetDef[] {
     facets.push({
       id: 'type',
       kind: 'type',
+      group: 'label',
       selection: 'multi',
       title: input.schema.typeGroup ?? t('filterPanel.type'),
       options: input.typeLabels.map((l) => ({
@@ -242,6 +259,7 @@ export function buildFacets(input: BuildFacetsInput): FacetDef[] {
   facets.push({
     id: 'priority',
     kind: 'priority',
+    group: 'attribute',
     selection: 'multi',
     title: t('filterPanel.priority'),
     options: PRIORITIES.map((p) => ({
@@ -255,6 +273,7 @@ export function buildFacets(input: BuildFacetsInput): FacetDef[] {
   facets.push({
     id: 'assignee',
     kind: 'assignee',
+    group: 'attribute',
     selection: 'multi',
     title: t('filterPanel.assignee'),
     // Capped exactly as the sidebar did. Uncapping here would be a silent
@@ -271,6 +290,7 @@ export function buildFacets(input: BuildFacetsInput): FacetDef[] {
     facets.push({
       id: 'project',
       kind: 'project',
+      group: 'attribute',
       selection: 'multi',
       title: t('filterPanel.projectMilestone'),
       options: input.projectsWithMilestones.map((p) => ({
@@ -292,6 +312,7 @@ export function buildFacets(input: BuildFacetsInput): FacetDef[] {
     facets.push({
       id: `prefix:${g.token}`,
       kind: 'prefix',
+      group: 'label',
       selection: 'multi',
       // Literal, not translated: the token comes from the workspace's own
       // label names, so there is no key to look up.
@@ -309,6 +330,7 @@ export function buildFacets(input: BuildFacetsInput): FacetDef[] {
     facets.push({
       id: `${sec.kind}:${sec.key}`,
       kind: sec.kind === 'orphan' ? 'orphan' : 'group',
+      group: 'label',
       // An exclusive group behaves like a radio: picking a second value
       // replaces the first, and re-picking the selected one clears it.
       selection: sec.exclusive ? 'single' : 'multi',
@@ -326,6 +348,7 @@ export function buildFacets(input: BuildFacetsInput): FacetDef[] {
     facets.push({
       id: 'designdoc',
       kind: 'designdoc',
+      group: 'attribute',
       selection: 'single',
       title: t('filterPanel.designDoc'),
       options: [
@@ -339,6 +362,7 @@ export function buildFacets(input: BuildFacetsInput): FacetDef[] {
     facets.push({
       id: 'due',
       kind: 'due',
+      group: 'time',
       selection: 'single',
       title: t('filterPanel.dueDate'),
       options: [
@@ -355,6 +379,7 @@ export function buildFacets(input: BuildFacetsInput): FacetDef[] {
   facets.push({
     id: 'time',
     kind: 'time',
+    group: 'time',
     selection: 'single',
     title: t('filterPanel.recency'),
     // Presets, plus the current value when it was typed rather than picked —
@@ -777,4 +802,44 @@ export function searchFacetValues(
 
   scored.sort((a, b) => b.score - a.score)
   return scored.slice(0, limit).map((s) => s.hit)
+}
+
+/** Section order in the picker, coarse to specific. */
+const GROUP_ORDER: FacetGroup[] = ['quick', 'attribute', 'label', 'time']
+
+const GROUP_TITLE_KEYS: Record<FacetGroup, DictKey> = {
+  quick: 'filterPanel.groupQuick',
+  attribute: 'filterPanel.groupAttribute',
+  label: 'filterPanel.groupLabel',
+  time: 'filterPanel.groupTime',
+}
+
+export interface FacetSection {
+  group: FacetGroup
+  title: string
+  facets: FacetDef[]
+}
+
+/**
+ * Bucket facets into the picker's sections, preserving each facet's order
+ * within its own section and dropping sections with nothing in them.
+ *
+ * Grouping is what makes the label facets findable: `primary` and `type` are
+ * label groups that were built early and so listed near the top, while
+ * `prefix:*` and the other label groups were built later and listed much
+ * further down — one kind of thing split across the list by an ordering that
+ * reflected construction order rather than meaning.
+ */
+export function groupFacets(facets: FacetDef[], t: Translate): FacetSection[] {
+  const byGroup = new Map<FacetGroup, FacetDef[]>()
+  for (const f of facets) {
+    const list = byGroup.get(f.group) ?? []
+    list.push(f)
+    byGroup.set(f.group, list)
+  }
+  return GROUP_ORDER.flatMap((group) => {
+    const inGroup = byGroup.get(group)
+    if (!inGroup || inGroup.length === 0) return []
+    return [{ group, title: t(GROUP_TITLE_KEYS[group]), facets: inGroup }]
+  })
 }
