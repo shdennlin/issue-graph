@@ -68,6 +68,13 @@ export interface Filters {
   recencyWindow: RecencyWindow
   recencyMode: RecencyMode
   /**
+   * Drop issues whose `updatedAt` moved only because a relation was pointed
+   * AT them. Defaults to TRUE, so like `activeOnly` it constrains at its
+   * default — code asking "is anything filtered?" must count it in even when
+   * untouched. Inert unless `recencyWindow` is set and the mode is 'updated'.
+   */
+  recencyIgnoreLinked: boolean
+  /**
    * Facet ids whose selection is INVERTED — "is not any of" rather than
    * "is any of". Stored as a list of ids rather than a boolean per dimension
    * so a new dimension is negatable for free and the whole thing serializes
@@ -299,6 +306,10 @@ export const defaultFilters: Filters = {
   // 'updated' answers "what moved lately", the more common question, and
   // matches the timestamp staleOnly already reads.
   recencyMode: 'updated',
+  // True by default because it is not a refinement — measured against a live
+  // workspace, link-only bumps were 63-70% of every window, so reading
+  // updatedAt raw makes the filter admit more bystanders than movers.
+  recencyIgnoreLinked: true,
   negated: [],
 }
 

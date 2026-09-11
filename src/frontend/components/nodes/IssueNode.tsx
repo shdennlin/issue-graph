@@ -17,6 +17,7 @@ import { priorityClass, priorityLabel, stateColorVar, stateIcon, stateLabel } fr
 import { isOverdueIssue } from '../../lib/dueDate'
 import type { HierarchyCounts } from '../../views/hierarchy'
 import { compactAge } from '../../lib/relativeTime'
+import { getLinkTouchIndex, linkOnlyTouchAt } from '../../lib/linkTouch'
 import { useT, type DictKey } from '../../i18n'
 
 function formatDueDate(iso: string): string {
@@ -117,22 +118,36 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
     return t(AGE_UNIT_KEYS[unit], { count: value })
   }, [issue.updatedAt, t])
 
+  // Only read while a window is active, which is also the only time the age
+  // badge renders — see the `age` memo's own early return.
+  const allIssues = useGraphStore((s) => s.graph?.data.issues)
+
   const age = useMemo(() => {
     if (recencyWindow === 'any') return null
     const iso = recencyMode === 'created' ? issue.createdAt : issue.updatedAt
     const ts = new Date(iso).getTime()
     if (!Number.isFinite(ts)) return null
+    // A bump that was only somebody pointing a link at this issue says
+    // nothing about the issue itself. The badge names it for what it is
+    // rather than calling it an update — otherwise a card sitting in a
+    // "last 24h" view looks like work happened on it when none did.
+    const linkOnly =
+      recencyMode === 'updated' && allIssues
+        ? linkOnlyTouchAt({ identifier: issue.identifier, updatedAt: issue.updatedAt }, getLinkTouchIndex(allIssues))
+        : null
     const { value, unit } = compactAge(ts)
     return {
       text: t(AGE_UNIT_KEYS[unit], { count: value }),
       mode: t(
-        recencyMode === 'created'
-          ? 'filterPanel.recencyModeCreated'
-          : 'filterPanel.recencyModeUpdated',
+        linkOnly
+          ? 'filterPanel.recencyModeLinked'
+          : recencyMode === 'created'
+            ? 'filterPanel.recencyModeCreated'
+            : 'filterPanel.recencyModeUpdated',
       ),
       title: iso,
     }
-  }, [recencyWindow, recencyMode, issue.createdAt, issue.updatedAt, t])
+  }, [recencyWindow, recencyMode, issue.identifier, issue.createdAt, issue.updatedAt, allIssues, t])
 
   // The badge renders when there is anything at all to report — edge counts
   // OR sub-issues. An issue can have children without touching a single

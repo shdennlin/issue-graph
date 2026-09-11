@@ -96,6 +96,11 @@ export function serializeFilters(state: CodecState): URLSearchParams {
 
   if (f.recencyWindow !== 'any') params.set('recent', f.recencyWindow)
   if (f.recencyMode !== 'updated') params.set('recentby', f.recencyMode)
+  // Written only when OFF, because it defaults to on. The param means "keep
+  // the link-only bumps", which is the departure from the default — writing
+  // it at its default would put `links=1` in every shared URL forever, the
+  // same mistake `state=` made.
+  if (!f.recencyIgnoreLinked) params.set('recentlinks', '1')
 
   // Inverted facets, as one param rather than a flag per dimension — see
   // Filters.negated. Facet ids may contain ':' (prefix:horizon), which
@@ -163,6 +168,9 @@ export function parseFilters(params: URLSearchParams): CodecState {
       const m = params.get('recentby')
       return RECENCY_MODES.includes(m as RecencyMode) ? (m as RecencyMode) : 'updated'
     })(),
+    // Absent means on — a link shared before this param existed keeps the
+    // default rather than silently opting out of it.
+    recencyIgnoreLinked: params.get('recentlinks') !== '1',
     negated: list(params.get('neg')),
   }
 
@@ -198,6 +206,7 @@ export function filterSignatureParts(state: CodecState): string[] {
     // visible effect — keeping the signature a faithful mirror of the URL is
     // worth more than suppressing one no-op history entry.
     f.recencyMode,
+    f.recencyIgnoreLinked ? '1' : '0',
     (f.negated ?? []).slice().sort().join(','),
     Object.entries(f.prefixSelections)
       .map(([k, v]) => `${k}:${v.slice().sort().join(',')}`)

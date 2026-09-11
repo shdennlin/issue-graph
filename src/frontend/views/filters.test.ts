@@ -9,6 +9,7 @@ function baseFilters(overrides: Partial<Filters> = {}): Filters {
     stateNames: [],
     recencyWindow: 'any',
     recencyMode: 'updated',
+    recencyIgnoreLinked: true,
     negated: [],
     activeOnly: false,
     myIssuesOnly: false,
@@ -410,5 +411,57 @@ describe('state tree — names refine within their own type', () => {
   it('still honours a bare legacy name, matching on name alone', () => {
     const f = baseFilters({ stateTypes: [], stateNames: ['Todo'] })
     expect(ids(applyFilters(all, f, 365, null))).toEqual(['TODO'])
+  })
+})
+
+describe('recency ignores bumps that were only a link', () => {
+  // A single moment, used both as the link's timestamp and as the bumped
+  // issue's updatedAt — which is what the real backend produces.
+  const linkedAt = new Date(Date.now() - 3600 * 1000).toISOString()
+  const long_ago = '2026-01-01T00:00:00.000Z'
+
+  // SRC drew a link at `linkedAt`; TGT was on the receiving end and has not
+  // been touched in months otherwise. MOVER was genuinely edited.
+  const src = makeIssue({
+    identifier: 'SRC',
+    updatedAt: long_ago,
+    relations: [{ type: 'related', targetIdentifier: 'TGT', createdAt: linkedAt }],
+  })
+  const tgt = makeIssue({ identifier: 'TGT', updatedAt: linkedAt })
+  const mover = makeIssue({ identifier: 'MOVER', updatedAt: linkedAt })
+  const all = [src, tgt, mover]
+  const ids = (out: NormalizedIssue[]) => out.map((i) => i.identifier)
+
+  it('keeps the real mover and drops the merely-linked issue', () => {
+    const f = baseFilters({ recencyWindow: '24h', recencyIgnoreLinked: true })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['MOVER'])
+  })
+
+  it('admits the linked issue again when switched off', () => {
+    const f = baseFilters({ recencyWindow: '24h', recencyIgnoreLinked: false })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['TGT', 'MOVER'])
+  })
+
+  it('never removes anything while no window is set', () => {
+    // The flag defaults to on, so without this guard turning the recency
+    // filter OFF would still hide issues from the whole graph.
+    const f = baseFilters({ recencyWindow: 'any', recencyIgnoreLinked: true })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['SRC', 'TGT', 'MOVER'])
+  })
+
+  it('stays out of the way in created mode', () => {
+    const fresh = makeIssue({ identifier: 'NEW', createdAt: linkedAt, updatedAt: linkedAt })
+    const f = baseFilters({
+      recencyWindow: '24h',
+      recencyMode: 'created',
+      recencyIgnoreLinked: true,
+    })
+    expect(ids(applyFilters([...all, fresh], f, 365, null))).toEqual(['NEW'])
+  })
+
+  it('leaves the issue that drew the link visible when it is the one that moved', () => {
+    const activeSrc = { ...src, updatedAt: linkedAt }
+    const f = baseFilters({ recencyWindow: '24h', recencyIgnoreLinked: true })
+    expect(ids(applyFilters([activeSrc, tgt], f, 365, null))).toEqual(['SRC'])
   })
 })

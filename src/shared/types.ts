@@ -64,6 +64,17 @@ export interface NormalizedAssignee {
 export interface NormalizedRelation {
   type: RelationType
   targetIdentifier: string
+  /**
+   * When the link itself was drawn. Optional because rows cached before this
+   * field existed carry no value, and because a backend adapter need not
+   * expose it.
+   *
+   * Load-bearing for recency: the backend bumps an issue's `updatedAt` when
+   * someone merely points a relation *at* it, so an issue nobody touched can
+   * look freshly active. Comparing `updatedAt` against this timestamp is what
+   * tells the two apart — see `frontend/lib/linkTouch.ts`.
+   */
+  createdAt?: string
 }
 
 export interface NormalizedIssue {

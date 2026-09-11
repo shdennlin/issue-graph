@@ -682,7 +682,7 @@ function clearFacetValues(facet: FacetDef, filters: Filters): Partial<Filters> {
     case 'due':
       return { dueFilter: 'any' }
     case 'time':
-      return { recencyWindow: 'any', recencyMode: 'updated' }
+      return { recencyWindow: 'any', recencyMode: 'updated', recencyIgnoreLinked: true }
   }
 }
 

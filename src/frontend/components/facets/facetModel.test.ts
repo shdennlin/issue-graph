@@ -314,10 +314,11 @@ describe('clearFacetPatch', () => {
     })
   })
 
-  it('resets both recency fields', () => {
+  it('resets every recency field, including the one whose default is on', () => {
     expect(clearFacetPatch(byId(facets, 'time'), filters())).toEqual({
       recencyWindow: 'any',
       recencyMode: 'updated',
+      recencyIgnoreLinked: true,
     })
   })
 })

@@ -3015,6 +3015,11 @@ body[data-detail-wide='1'] .inline-search { display: none; }
 .facet-span-amount:focus-visible,
 .facet-span-unit:focus-visible { outline: none; border-color: var(--accent); }
 
+/* Shares the span row's geometry so the two controls under the recency
+   options read as one block rather than two stacked widgets. */
+.facet-linked { cursor: pointer; padding-top: 0; }
+.facet-linked input { margin: 0; accent-color: var(--accent); }
+
 /* Issue age, shown only while a recency filter is active.
    Positioned OUTSIDE the card, like the chain-root star: absolutely
    positioned children do not count toward offsetHeight, which is what

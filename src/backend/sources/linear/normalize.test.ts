@@ -42,6 +42,22 @@ describe('normalizeRelations', () => {
     ])
   })
 
+  it('carries the link timestamp through, which recency uses to spot link-only bumps', () => {
+    const out = normalizeRelations([
+      { type: 'related', createdAt: '2026-09-11T07:55:06.552Z', relatedIssue: { identifier: 'PROJ-5' } },
+    ])
+    expect(out).toEqual([
+      { type: 'related', targetIdentifier: 'PROJ-5', createdAt: '2026-09-11T07:55:06.552Z' },
+    ])
+  })
+
+  it('omits the key entirely when the backend sent no timestamp', () => {
+    // Not null, not '' — absent, so cached rows written before the field
+    // existed and rows from a backend that lacks it look identical.
+    const out = normalizeRelations([{ type: 'related', relatedIssue: { identifier: 'PROJ-6' } }])
+    expect(out[0]).not.toHaveProperty('createdAt')
+  })
+
   it('dedupes within the same issue', () => {
     const out = normalizeRelations([
       { type: 'blocks', relatedIssue: { identifier: 'PROJ-2' } },

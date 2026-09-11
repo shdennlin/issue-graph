@@ -68,6 +68,9 @@ describe('filterCodec round-trip', () => {
     ['a typed recency span', { recencyWindow: '6h' }, 'recent'],
     ['recencyMode', { recencyMode: 'created' }, 'recentby'],
     ['negated', { negated: ['assignee'] }, 'neg'],
+    // Written when OFF, because it defaults to on — see the note in
+    // serializeFilters. The test names the departure, not the value.
+    ['recencyIgnoreLinked turned off', { recencyIgnoreLinked: false }, 'recentlinks'],
   ]
   it.each(droppedCases)('%s survives the round-trip and writes ?%s', (_name, overrides, param) => {
     const s = state(overrides)
@@ -169,5 +172,25 @@ describe('recency windows in the URL', () => {
 
   it.each(['7w', '1.5h', '-2d', '0d', 'nonsense'])('falls back to any for %s', (raw) => {
     expect(parseFilters(new URLSearchParams(`recent=${raw}`)).filters.recencyWindow).toBe('any')
+  })
+})
+
+describe('recencyIgnoreLinked defaults the other way round', () => {
+  it('stays out of the URL while it holds its default', () => {
+    // Its default is `true`, which CONSTRAINS. Writing it at the default
+    // would stamp `recentlinks` into every link ever shared — the mistake
+    // `state=` made, and the reason this param spells the opt-out.
+    const params = serializeFilters(state({ recencyIgnoreLinked: true }))
+    expect(params.has('recentlinks')).toBe(false)
+  })
+
+  it('reads a link written before the param existed as opted in', () => {
+    expect(parseFilters(new URLSearchParams('recent=7d')).filters.recencyIgnoreLinked).toBe(true)
+  })
+
+  it('is a significant change, so Back steps over it', () => {
+    const on = filterSignatureParts(state({ recencyIgnoreLinked: true }))
+    const off = filterSignatureParts(state({ recencyIgnoreLinked: false }))
+    expect(on).not.toEqual(off)
   })
 })

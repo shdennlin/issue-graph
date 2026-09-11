@@ -582,6 +582,7 @@ function FacetOptionList({
         />
       )}
       {facet.kind === 'time' && <RecencySpanInput />}
+      {facet.kind === 'time' && <IgnoreLinkedToggle />}
       <div className="facet-option-list">
         {visiblePinned.length + visibleRest.length === 0 && (
           <div className="facet-empty">{t('filterPanel.noFacetMatch')}</div>
@@ -792,6 +793,36 @@ function FacetSearchRow({ hit }: { hit: FacetSearchHit }) {
         <span className="facet-option-count">{hit.option.count}</span>
       )}
     </button>
+  )
+}
+
+/**
+ * "Ignore issues that were only linked to."
+ *
+ * Rendered only once a window is set, and only in 'updated' mode, because
+ * those are exactly the conditions under which it changes an answer. A
+ * checkbox that is present but inert would be the fifth variant of the
+ * mistake this codebase keeps making around filters whose default is not
+ * neutral — better to not draw it than to draw a lie.
+ */
+function IgnoreLinkedToggle() {
+  const t = useT()
+  const window = useViewStore((s) => s.filters.recencyWindow)
+  const mode = useViewStore((s) => s.filters.recencyMode)
+  const ignoreLinked = useViewStore((s) => s.filters.recencyIgnoreLinked)
+  const setFilter = useViewStore((s) => s.setFilter)
+
+  if (window === 'any' || mode !== 'updated') return null
+
+  return (
+    <label className="facet-span facet-linked" title={t('filterPanel.recencyIgnoreLinkedHint')}>
+      <input
+        type="checkbox"
+        checked={ignoreLinked}
+        onChange={() => setFilter('recencyIgnoreLinked', !ignoreLinked)}
+      />
+      <span className="facet-span-label">{t('filterPanel.recencyIgnoreLinked')}</span>
+    </label>
   )
 }
 

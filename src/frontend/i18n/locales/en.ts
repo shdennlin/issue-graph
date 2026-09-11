@@ -378,6 +378,10 @@ export const en = {
     noFacetMatch: 'No match',
     recencyModeUpdated: 'Updated',
     recencyModeCreated: 'Created',
+    recencyModeLinked: 'Linked',
+    recencyIgnoreLinked: 'Ignore issues only linked to',
+    recencyIgnoreLinkedHint:
+      'Linear marks an issue as updated when someone points a link at it, even though nothing about the issue changed. Off shows those too, labelled "Linked".',
     recencyAny: 'any time',
     recencyToday: 'today',
     recencyHours: 'last {count}h',

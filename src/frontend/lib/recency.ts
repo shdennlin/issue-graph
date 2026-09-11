@@ -92,9 +92,20 @@ export function passesRecency(
   mode: RecencyMode,
   window: RecencyWindow,
   now: number,
+  /**
+   * When the issue's `updatedAt` is explained entirely by a link being pointed
+   * at it, the moment that happened — see `linkOnlyTouchAt`. Pass null (or
+   * omit) to read `updatedAt` at face value.
+   *
+   * Ordered after the cutoff check on purpose: with the window at 'any' the
+   * filter is off, and a link-only bump must not then remove the issue from
+   * the graph altogether.
+   */
+  linkOnlyAt?: string | null,
 ): boolean {
   const cutoff = recencyCutoff(window, now)
   if (cutoff === null) return true
+  if (mode === 'updated' && linkOnlyAt) return false
   const raw = mode === 'created' ? issue.createdAt : issue.updatedAt
   const t = new Date(raw).getTime()
   if (!Number.isFinite(t)) return false

@@ -378,6 +378,10 @@ export const zhTW: Dict = {
     noFacetMatch: '沒有符合項目',
     recencyModeUpdated: '更新時間',
     recencyModeCreated: '建立時間',
+    recencyModeLinked: '被連結',
+    recencyIgnoreLinked: '忽略只是被連結的 issue',
+    recencyIgnoreLinkedHint:
+      '有人把關聯指向某個 issue 時，Linear 會把它標記為已更新，即使那個 issue 本身毫無變化。關閉後這些也會顯示，並標記為「被連結」。',
     recencyAny: '不限時間',
     recencyToday: '今天',
     recencyHours: '過去 {count} 小時',

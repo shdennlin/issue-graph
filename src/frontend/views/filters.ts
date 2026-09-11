@@ -4,6 +4,7 @@ import type { NormalizedIssue } from '@shared/types.js'
 import type { Filters } from '../store/viewStore'
 import { isDueWithin, isOverdueIssue } from '../lib/dueDate'
 import { passesRecency } from '../lib/recency'
+import { getLinkTouchIndex, linkOnlyTouchAt } from '../lib/linkTouch'
 
 // Filter-panel "leave-one-out" counting: when showing the count next to e.g.
 // "(unassigned)", we want it to reflect "if you click this, how many issues
@@ -162,6 +163,14 @@ export function applyFilters(
   const now = Date.now()
   const cutoff = now - staleDays * 24 * 3600 * 1000
   const q = (search ?? '').trim().toLowerCase()
+  // Built once per call, and only when it can change an answer: the index is
+  // useless without an active window, and 'created' mode never reads
+  // updatedAt. Hoisted out of the predicate so leave-one-out counting does
+  // not rebuild it per issue.
+  const linkIndex =
+    filters.recencyIgnoreLinked && filters.recencyWindow !== 'any' && filters.recencyMode === 'updated'
+      ? getLinkTouchIndex(issues)
+      : null
   return issues.filter((i) => {
     if (q.length > 0) {
       // Match against identifier, title, or assignee. Case-insensitive substring.
@@ -224,7 +233,8 @@ export function applyFilters(
     // Adjacent to staleOnly because they are complements: staleOnly keeps
     // issues updated *before* its cutoff, recency keeps those touched *after*
     // one. Enabling both is legal but almost always yields an empty set.
-    if (!passesRecency(i, filters.recencyMode, filters.recencyWindow, now)) return false
+    const linkOnlyAt = linkIndex ? linkOnlyTouchAt(i, linkIndex) : null
+    if (!passesRecency(i, filters.recencyMode, filters.recencyWindow, now, linkOnlyAt)) return false
     if (filters.primaryValues.length > 0) {
       const hit = i.labels.some((l) => filters.primaryValues.includes(l.id))
       if (!passes(hit, negated(filters, 'primary'))) return false

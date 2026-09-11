@@ -28,13 +28,17 @@ costs no space.
   Value counts hide while a filter is inverted: they mean "pick this and N
   remain", which stops being the right question once picking excludes.
 - **Recent activity** filters by *when* rather than *what* — today / 7 days /
-  30 days, against either the created or updated timestamp.
+  30 days, or any span you type, against either the created or updated
+  timestamp. Linear marks an issue as updated when someone merely points a
+  link at it, which on a real workspace was two-thirds of every window, so
+  those are left out by default; untick *Ignore issues only linked to* and
+  they come back labelled "Linked" on the card.
 - **Pin** a value (the pin icon on any option) and it sorts to the top of its
   dimension's list. Pins are per browser and per workspace.
 
-Two filters are on by default and appear as rows you can clear like any other:
-completed and cancelled issues are hidden, and four of the six state types are
-shown.
+Three filters are on by default and appear as rows you can clear like any
+other: completed and cancelled issues are hidden, four of the six state types
+are shown, and link-only bumps are ignored while a recency window is set.
 
 ### Saved views
 

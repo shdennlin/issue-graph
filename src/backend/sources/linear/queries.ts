@@ -32,6 +32,7 @@ export const ISSUES_QUERY = /* GraphQL */ `
         relations(first: 30) {
           nodes {
             type
+            createdAt
             relatedIssue { identifier }
           }
         }
@@ -76,7 +77,7 @@ export const ISSUE_DETAIL_QUERY = /* GraphQL */ `
       parent { identifier }
       children(first: 20) { nodes { identifier } }
       relations(first: 30) {
-        nodes { type relatedIssue { identifier } }
+        nodes { type createdAt relatedIssue { identifier } }
       }
       createdAt
       updatedAt

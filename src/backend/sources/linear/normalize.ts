@@ -95,7 +95,8 @@ export function normalizeRelations(rawRelations: any[] | undefined | null): Norm
     const key = `${canonical}:${target}`
     if (seen.has(key)) continue
     seen.add(key)
-    out.push({ type: canonical, targetIdentifier: String(target) })
+    const createdAt = typeof r?.createdAt === 'string' ? r.createdAt : undefined
+    out.push({ type: canonical, targetIdentifier: String(target), ...(createdAt ? { createdAt } : {}) })
   }
   return out
 }

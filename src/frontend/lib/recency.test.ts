@@ -90,6 +90,33 @@ describe('passesRecency', () => {
   })
 })
 
+describe('passesRecency — a bump that was only a link', () => {
+  const bumped = issue(NOW - 90 * DAY, NOW - 3600 * 1000)
+  const linkedAt = new Date(NOW - 3600 * 1000).toISOString()
+
+  it('drops an issue whose only recent change was being pointed at', () => {
+    expect(passesRecency(bumped, 'updated', 'today', NOW, linkedAt)).toBe(false)
+    expect(passesRecency(bumped, 'updated', 'today', NOW, null)).toBe(true)
+  })
+
+  it('does not touch "created" mode, which never reads updatedAt', () => {
+    const born = issue(NOW - 3600 * 1000, NOW - 3600 * 1000)
+    expect(passesRecency(born, 'created', 'today', NOW, linkedAt)).toBe(true)
+  })
+
+  it('never hides anything while the window is "any"', () => {
+    // The guard that keeps this a recency concern rather than a global one:
+    // with no window set the filter is off, so a link-only bump must not
+    // remove the issue from the graph entirely.
+    expect(passesRecency(bumped, 'updated', 'any', NOW, linkedAt)).toBe(true)
+  })
+
+  it('still rejects an issue that falls outside the window regardless', () => {
+    const old = issue(NOW - 90 * DAY, NOW - 30 * DAY)
+    expect(passesRecency(old, 'updated', 'today', NOW, null)).toBe(false)
+  })
+})
+
 describe('parseRecencyWindow', () => {
   it.each(['any', 'today', '1h', '24h', '7d', '30d', '365d'])('accepts %s', (raw) => {
     expect(parseRecencyWindow(raw)).toBe(raw)
