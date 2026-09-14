@@ -120,6 +120,16 @@ export interface NormalizedIssue {
   raw?: unknown
   /** Set when Phase 3 comment-count fetch is enabled. */
   commentsCount?: number
+  /**
+   * When the newest comment was posted, or absent when the issue has none.
+   *
+   * Load-bearing for recency, and the reason it rides along in the bulk query
+   * rather than waiting for the detail fetch: a comment bumps `updatedAt`, but
+   * a later link pointed AT the issue overwrites that bump, and `updatedAt` has
+   * only one slot. Without this field the comment becomes unprovable and a card
+   * somebody was talking on 45 seconds earlier drops out of "recent activity".
+   */
+  lastCommentAt?: string
 }
 
 export interface ViewerOrganization {

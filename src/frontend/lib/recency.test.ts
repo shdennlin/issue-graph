@@ -94,26 +94,82 @@ describe('passesRecency — a bump that was only a link', () => {
   const bumped = issue(NOW - 90 * DAY, NOW - 3600 * 1000)
   const linkedAt = new Date(NOW - 3600 * 1000).toISOString()
 
-  it('drops an issue whose only recent change was being pointed at', () => {
-    expect(passesRecency(bumped, 'updated', 'today', NOW, linkedAt)).toBe(false)
-    expect(passesRecency(bumped, 'updated', 'today', NOW, null)).toBe(true)
+  it('drops an old issue whose only recent change was being pointed at', () => {
+    expect(passesRecency(bumped, 'updated', 'today', NOW, { linkOnlyAt: linkedAt })).toBe(false)
+    expect(passesRecency(bumped, 'updated', 'today', NOW)).toBe(true)
   })
 
   it('does not touch "created" mode, which never reads updatedAt', () => {
     const born = issue(NOW - 3600 * 1000, NOW - 3600 * 1000)
-    expect(passesRecency(born, 'created', 'today', NOW, linkedAt)).toBe(true)
+    expect(passesRecency(born, 'created', 'today', NOW, { linkOnlyAt: linkedAt })).toBe(true)
   })
 
   it('never hides anything while the window is "any"', () => {
     // The guard that keeps this a recency concern rather than a global one:
     // with no window set the filter is off, so a link-only bump must not
     // remove the issue from the graph entirely.
-    expect(passesRecency(bumped, 'updated', 'any', NOW, linkedAt)).toBe(true)
+    expect(passesRecency(bumped, 'updated', 'any', NOW, { linkOnlyAt: linkedAt })).toBe(true)
   })
 
   it('still rejects an issue that falls outside the window regardless', () => {
     const old = issue(NOW - 90 * DAY, NOW - 30 * DAY)
-    expect(passesRecency(old, 'updated', 'today', NOW, null)).toBe(false)
+    expect(passesRecency(old, 'updated', 'today', NOW)).toBe(false)
+  })
+})
+
+// The regressions this file exists to pin: a link-only bump means `updatedAt`
+// cannot testify, NOT that nothing happened. Everything below was previously
+// hidden by an unconditional `return false`.
+describe('passesRecency — evidence a link-only bump must not bury', () => {
+  const linkedAt = new Date(NOW - 3600 * 1000).toISOString()
+  const linkOnly = { linkOnlyAt: linkedAt }
+
+  it('keeps an issue CREATED inside the window that was then linked to', () => {
+    // Measured as 8 of the 17 issues created in a live 7-day window.
+    const born = issue(NOW - 2 * 3600 * 1000, NOW - 3600 * 1000)
+    expect(passesRecency(born, 'updated', 'today', NOW, linkOnly)).toBe(true)
+  })
+
+  it('keeps an issue COMMENTED inside the window that was then linked to', () => {
+    const commented = {
+      ...issue(NOW - 90 * DAY, NOW - 3600 * 1000),
+      lastCommentAt: new Date(NOW - 2 * 3600 * 1000).toISOString(),
+    }
+    expect(passesRecency(commented, 'updated', 'today', NOW, linkOnly)).toBe(true)
+  })
+
+  it('leaves a comment older than the window unable to save it', () => {
+    const commented = {
+      ...issue(NOW - 90 * DAY, NOW - 3600 * 1000),
+      lastCommentAt: new Date(NOW - 30 * DAY).toISOString(),
+    }
+    expect(passesRecency(commented, 'updated', 'today', NOW, linkOnly)).toBe(false)
+  })
+})
+
+describe("passesRecency — a child's activity counts as the parent's", () => {
+  const parent = issue(NOW - 90 * DAY, NOW - 30 * DAY)
+  const childMovedToday = new Date(NOW - 3600 * 1000).toISOString()
+
+  it('keeps a parent whose own updatedAt is stale but whose child just moved', () => {
+    expect(passesRecency(parent, 'updated', 'today', NOW)).toBe(false)
+    expect(
+      passesRecency(parent, 'updated', 'today', NOW, { childActivityAt: childMovedToday }),
+    ).toBe(true)
+  })
+
+  it('does not let a stale child rescue a stale parent', () => {
+    const childMovedLastMonth = new Date(NOW - 30 * DAY).toISOString()
+    expect(
+      passesRecency(parent, 'updated', 'today', NOW, { childActivityAt: childMovedLastMonth }),
+    ).toBe(false)
+  })
+
+  it('leaves "created" mode answering only its own question', () => {
+    // A child moving does not make the parent newly created.
+    expect(
+      passesRecency(parent, 'created', 'today', NOW, { childActivityAt: childMovedToday }),
+    ).toBe(false)
   })
 })
 

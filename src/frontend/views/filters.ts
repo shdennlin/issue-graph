@@ -4,6 +4,7 @@ import type { NormalizedIssue } from '@shared/types.js'
 import type { Filters } from '../store/viewStore'
 import { isDueWithin, isOverdueIssue } from '../lib/dueDate'
 import { passesRecency } from '../lib/recency'
+import { getChildActivityIndex } from '../lib/childActivity'
 import { getLinkTouchIndex, linkOnlyTouchAt } from '../lib/linkTouch'
 
 // Filter-panel "leave-one-out" counting: when showing the count next to e.g.
@@ -171,6 +172,13 @@ export function applyFilters(
     filters.recencyIgnoreLinked && filters.recencyWindow !== 'any' && filters.recencyMode === 'updated'
       ? getLinkTouchIndex(issues)
       : null
+  // Same build-only-when-it-matters rule, minus the ignore-linked condition:
+  // a parent whose child moved counts as active whether or not anyone has been
+  // drawing links, so this one is not tied to that toggle.
+  const childIndex =
+    filters.recencyWindow !== 'any' && filters.recencyMode === 'updated'
+      ? getChildActivityIndex(issues)
+      : null
   return issues.filter((i) => {
     if (q.length > 0) {
       // Match against identifier, title, or assignee. Case-insensitive substring.
@@ -234,7 +242,9 @@ export function applyFilters(
     // issues updated *before* its cutoff, recency keeps those touched *after*
     // one. Enabling both is legal but almost always yields an empty set.
     const linkOnlyAt = linkIndex ? linkOnlyTouchAt(i, linkIndex) : null
-    if (!passesRecency(i, filters.recencyMode, filters.recencyWindow, now, linkOnlyAt)) return false
+    const childActivityAt = childIndex?.get(i.identifier) ?? null
+    const evidence = { linkOnlyAt, childActivityAt }
+    if (!passesRecency(i, filters.recencyMode, filters.recencyWindow, now, evidence)) return false
     if (filters.primaryValues.length > 0) {
       const hit = i.labels.some((l) => filters.primaryValues.includes(l.id))
       if (!passes(hit, negated(filters, 'primary'))) return false
