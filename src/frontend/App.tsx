@@ -4,8 +4,8 @@ import { useNotesStore } from './store/notesStore'
 import { useSchemaStore } from './store/schemaStore'
 import { useViewStore } from './store/viewStore'
 import { makeTabId, useWorkspaceStore } from './store/workspaceStore'
-import { loadTab, peekTabView, restoreViewportOnly, snapshotTab } from './store/tabStateStore'
-import { useUrlSync } from './store/urlSync'
+import { loadTab, peekTabFilters, peekTabView, restoreViewportOnly, snapshotTab } from './store/tabStateStore'
+import { arrivedViaBareDeepLink, useUrlSync } from './store/urlSync'
 import { useTheme } from './hooks/useTheme'
 import { useFontSize } from './hooks/useFontSize'
 import { api } from './lib/api'
@@ -168,15 +168,34 @@ export function App() {
       // Tab switched: snapshot/restore the new tab's view state.
       restored = loadTab(activeTabId)
     } else if (prev === null && activeTabId) {
-      // First mount. A focus deep link that triggered a FULL page load (Raycast
+      // First mount. A deep link that triggered a FULL page load (Raycast
       // protocol launch, shared URL) lands here with a cold store: parseUrl set
-      // focusedId from the URL but, with no ?view=, defaulted activeView to
-      // dependency. That exact fingerprint — focused issue + dependency — means
-      // "restore the view this tab was last in" (the soft-nav path keeps it via
-      // onExternalNav; this is the reload counterpart). URL stays authoritative
-      // for focus/filters; we only adopt the remembered view, then re-arm the
-      // same fallback so an issue absent from that view still drops to dependency.
+      // focusedId from the URL but nothing restored the pieces the URL doesn't
+      // carry. This is the reload counterpart of the soft-nav path, which keeps
+      // them in the store via onExternalNav.
       const vs = useViewStore.getState()
+
+      // Filters, for a *bare* deep link only (it pinned an issue and said
+      // nothing about filters — see arrivedViaBareDeepLink). Without this the
+      // launcher shortcut silently resets whatever the user had filtered to,
+      // which is the whole complaint this pair of mechanisms exists to fix. The
+      // focused issue stays visible under the restored filters because
+      // applyFilters exempts it (`alwaysInclude`). The snapshot is written by
+      // the beforeunload handler further down, so the filters restored here are
+      // the ones that were on screen when the link navigated this window away.
+      // Like the view restore below, it is keyed by tab rather than workspace —
+      // a link into a *different* workspace therefore adopts filters naming
+      // things that workspace may not have, which over-filters the background
+      // but never hides the pinned issue.
+      if (arrivedViaBareDeepLink()) {
+        const snap = peekTabFilters(activeTabId)
+        if (snap) useViewStore.setState({ filters: snap.filters, search: snap.search })
+      }
+
+      // View: with no ?view=, parseUrl defaulted activeView to dependency. That
+      // exact fingerprint — focused issue + dependency — means "restore the view
+      // this tab was last in", then re-arm the fallback so an issue absent from
+      // that view still drops to dependency.
       if (vs.focusedId && vs.activeView === 'dependency') {
         const lastView = peekTabView(activeTabId)
         if (lastView && lastView !== 'dependency') {

@@ -31,7 +31,7 @@ and jump straight to one — either focused inside the graph or in Linear.
 | Action | Shortcut | What it does |
 | --- | --- | --- |
 | Open in Issue Graph (PWA) | `↵` | Opens `web+issuegraph://<workspace>/<id>` — the OS routes it **straight into the installed PWA** (like Linear's `linear://`) and the app focuses the issue + opens its detail panel |
-| Open in Browser | `⌥↵` | Opens `…/?focus=<id>&detail=1&active=0&state=<all>` in a browser — centered + highlighted + detail panel, **regardless of status** |
+| Open in Browser | `⌥↵` | Opens `…/?focus=<id>&detail=1` in a browser — centered + highlighted + detail panel, **regardless of status**, and without disturbing the filters already on screen |
 | Open in Chain Mode (PWA) | `⌘⇧↵` | Opens `web+issuegraph://…?mode=chain` — isolates the issue's combined upstream/downstream dependency chain in the PWA |
 | Open Chain in Browser | `⌥⌘↵` | Same chain view, but `…/?chain=<id>&…` in a browser (fallback when no PWA) |
 | Open in Linear | `⌘↵` | Opens the issue's Linear URL |
@@ -63,13 +63,33 @@ one `GET /api/graph?w=<id>` per workspace in parallel — and merges the results
 tagging each issue with its workspace. With a handful of workspaces this is a few
 fast cached reads.
 
-## Why the extra `active=0&state=…` params?
+## Why deep links carry no filter params
 
-Issue Graph hides non-active issues behind **two independent filters**: the
-"Active only" quick toggle and the explicit state filter. A bare `?focus=<id>`
-only works for in-progress/backlog issues; completed and canceled issues need
-both filters defeated or the camera lands on nothing. The extension always
-emits the full recipe so any issue is reachable.
+Issue Graph's filter defaults are not neutral: "Active only" starts on and the
+state filter starts at four of the six types, so a bare `?focus=<id>` used to
+miss completed and canceled issues entirely — the camera would land on nothing.
+The extension worked around that by appending `active=0&state=<all six>`, which
+made every issue reachable at the cost of wiping whatever filters the user had
+on screen (params absent from the URL reset to their defaults, so the link
+replaced the whole filter state rather than relaxing it).
+
+The app handles both halves itself now, so the workaround is gone:
+
+- the focused issue is **exempt from filtering** (`applyFilters`' `alwaysInclude`),
+  so it renders whatever the filters say;
+- a link carrying **no filter params at all** makes the app **keep the filters
+  already in effect** instead of resetting them (`preserveFiltersOnFocus`).
+
+That second rule is why these links must stay bare. Any filter param — even one
+at its default — marks the URL as authoritative and hands filter state back to
+the link, which is correct for a URL copied out of the address bar and wrong for
+a launcher shortcut. A link copied from the browser still shares exactly, since
+the app always writes its own filters into the address bar.
+
+Both arrival paths are covered: a soft-nav into an already-open window keeps the
+filters straight out of the store, and a link that **cold-starts** the app (a
+full page load, which is what the `web+issuegraph://` protocol launch does)
+restores them from that tab's `localStorage` snapshot instead.
 
 ## Configuration
 

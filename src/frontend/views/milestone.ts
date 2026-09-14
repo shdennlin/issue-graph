@@ -92,7 +92,7 @@ export const milestoneView: ViewDefinition = {
       })
     }
     const NODE_H = issueNodeHeight(density)
-    const issues = applyFilters(data.issues, filters, staleDays, myUserName, search)
+    const issues = applyFilters(data.issues, filters, staleDays, myUserName, search, focusedId)
     const conn = computeConnectivity(data.issues)
     const hier = computeHierarchyCounts(data.issues)
     const heightFor = (id: string): number => measuredHeights?.get(id) ?? NODE_H

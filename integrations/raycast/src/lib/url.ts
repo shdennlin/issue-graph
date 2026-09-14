@@ -1,11 +1,13 @@
 // URL builders for the Issue Graph HTTP API and deep links.
 //
-// The deep-link recipe was validated against a live instance: focusing an
-// arbitrary issue requires defeating BOTH filters that hide non-active issues —
-// the "Active only" quick toggle (`active=0`) AND the explicit state filter
-// (`state=<all six types>`). Without both, completed/canceled issues silently
-// fail to render and the camera lands on nothing.
-const ALL_STATES = "backlog,unstarted,started,triage,completed,canceled";
+// Deep links deliberately carry NO filter params. They used to force
+// `active=0` + `state=<all six types>`, because the app's filter defaults are
+// not neutral and a completed/canceled issue would otherwise fail to render
+// with the camera landing on nothing. The app now handles that itself: the
+// focused issue is exempt from filtering (applyFilters' `alwaysInclude`), and
+// a link carrying no filter params leaves the user's own filters in place
+// instead of resetting them (urlSync's `preserveFiltersOnFocus`). Adding a
+// filter param back here would opt out of both.
 
 /** Strip a trailing slash so we can append paths predictably. */
 export function normalizeBaseUrl(raw: string | undefined): string {
@@ -51,8 +53,9 @@ export function syncEndpoint(baseUrl: string, workspaceId?: string): string {
 }
 
 /**
- * Deep link that pans to + highlights `identifier` (regardless of its status)
- * and opens its detail panel (`detail=1`).
+ * Deep link that pans to + highlights `identifier` (regardless of its status —
+ * the app exempts the focused issue from its filters) and opens its detail
+ * panel (`detail=1`).
  */
 export function focusUrl(
   baseUrl: string,
@@ -63,8 +66,6 @@ export function focusUrl(
   if (workspaceId) u.searchParams.set("w", workspaceId);
   u.searchParams.set("focus", identifier);
   u.searchParams.set("detail", "1");
-  u.searchParams.set("active", "0");
-  u.searchParams.set("state", ALL_STATES);
   return u.toString();
 }
 
@@ -82,7 +83,5 @@ export function chainUrl(
   const u = new URL(`${baseUrl}/`);
   if (workspaceId) u.searchParams.set("w", workspaceId);
   u.searchParams.set("chain", identifier);
-  u.searchParams.set("active", "0");
-  u.searchParams.set("state", ALL_STATES);
   return u.toString();
 }

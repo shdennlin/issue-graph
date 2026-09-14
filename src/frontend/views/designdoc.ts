@@ -28,7 +28,7 @@ export const designdocView: ViewDefinition = {
       })
       baseIssues = data.issues.filter((i) => members.has(i.identifier))
     } else {
-      baseIssues = applyFilters(data.issues, filters, staleDays, myUserName, search)
+      baseIssues = applyFilters(data.issues, filters, staleDays, myUserName, search, focusedId)
     }
     const visible = baseIssues.filter((i) => {
       const docs = getDesignDocsForIssue(i, data.designdocs)

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { defaultFilters, type Filters } from './viewStore'
 import {
   filterSignatureParts,
+  hasFilterParams,
   parseFilters,
   serializeFilters,
   type CodecState,
@@ -192,5 +193,70 @@ describe('recencyIgnoreLinked defaults the other way round', () => {
     const on = filterSignatureParts(state({ recencyIgnoreLinked: true }))
     const off = filterSignatureParts(state({ recencyIgnoreLinked: false }))
     expect(on).not.toEqual(off)
+  })
+})
+
+// The gate urlSync's preserveFiltersOnFocus reads. It decides whether a
+// `?focus=` URL is a bare deep link (Raycast / protocol handler — keep the
+// user's filters) or a link the app itself produced (URL wins, so a shared
+// link renders the same for sender and recipient).
+describe('hasFilterParams', () => {
+  it('says no for a bare Raycast-style deep link', () => {
+    expect(hasFilterParams(new URLSearchParams('w=eng&focus=ENG-1&detail=1'))).toBe(false)
+  })
+
+  it('says no for the non-filter params that share the query string', () => {
+    const nonFilter = 'w=eng&view=milestone&chain=ENG-1&cdu=2&cdd=1&related=1&hier=1'
+      + '&theme=dark&density=compact&mixby=label&expand=a,b&notes=1&note=3&detail=1'
+    expect(hasFilterParams(new URLSearchParams(nonFilter))).toBe(false)
+  })
+
+  // The load-bearing half: `state=` is written at the default too, so an
+  // otherwise-unfiltered URL from the app still trips this — which is what
+  // keeps shared links authoritative.
+  it('says yes for a default URL, on the strength of state= alone', () => {
+    expect(hasFilterParams(serializeFilters(state()))).toBe(true)
+  })
+
+  // The documented blind spot. csv([]) omits the param, so "every state
+  // unchecked and nothing else set" serializes to nothing and reads as bare.
+  // The consequence is non-destructive — a follower keeps their own filters
+  // rather than having them cleared — so this pins the behavior rather than
+  // asserting it is desirable.
+  it('cannot see an emptied state list', () => {
+    expect(hasFilterParams(serializeFilters(state({ stateTypes: [] })))).toBe(false)
+    // Any other dimension is enough to make it visible again.
+    expect(hasFilterParams(serializeFilters(state({ stateTypes: [], assignees: ['me'] })))).toBe(true)
+  })
+
+  it.each([
+    'active=0', 'mine=1', 'stale=1', 'state=started', 'sname=started::Todo',
+    'bucket=a', 'type=b', 'priority=1', 'assignee=me', 'proj=p', 'ms=p::m',
+    'label=x', 'designdoc=has', 'due=overdue', 'recent=7d', 'recentby=created',
+    'recentlinks=1', 'neg=assignee', 'q=hello',
+    'pfx_horizon=now', 'grp_area=core',
+  ])('detects %s', (qs) => {
+    expect(hasFilterParams(new URLSearchParams(`focus=ENG-1&${qs}`))).toBe(true)
+  })
+
+  // Guards against a new dimension being added to serializeFilters without
+  // being registered here — the failure mode would be silent: a shared link
+  // carrying only that dimension would be treated as bare and discarded.
+  it('covers every param serializeFilters can write', () => {
+    const everything = serializeFilters(state({
+      activeOnly: false, myIssuesOnly: true, staleOnly: true,
+      stateTypes: ['started'], stateNames: ['started::Todo'],
+      primaryValues: ['a'], typeValues: ['b'], priorities: [1], assignees: ['me'],
+      projectIds: ['p'], milestoneIds: ['p::m'],
+      prefixSelections: { horizon: ['now'] }, groupSelections: { area: ['core'] },
+      orphanValues: ['x'], designdocFilter: 'has', dueFilter: 'overdue',
+      recencyWindow: '7d', recencyMode: 'created', recencyIgnoreLinked: false,
+      negated: ['assignee'],
+    }, 'hello'))
+    for (const key of everything.keys()) {
+      const one = new URLSearchParams()
+      one.set(key, everything.get(key) as string)
+      expect(hasFilterParams(one), `unregistered filter param: ${key}`).toBe(true)
+    }
   })
 })

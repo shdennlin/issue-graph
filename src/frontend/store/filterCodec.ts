@@ -113,6 +113,49 @@ export function serializeFilters(state: CodecState): URLSearchParams {
   return params
 }
 
+/** Every fixed param name serializeFilters can write. Kept adjacent to it so
+ *  the two cannot drift; the dynamic `pfx_*` / `grp_*` families are matched by
+ *  prefix in hasFilterParams below. */
+const FILTER_PARAM_KEYS = [
+  'active', 'mine', 'stale',
+  'state', 'sname',
+  'bucket', 'type', 'priority', 'assignee',
+  'proj', 'ms',
+  'label', 'designdoc', 'due',
+  'recent', 'recentby', 'recentlinks',
+  'neg', 'q',
+] as const
+
+/**
+ * Does this URL say anything about filters at all?
+ *
+ * Used to tell two kinds of `?focus=` link apart. A link the app produced (or a
+ * user copied from the address bar) normally carries at least `state=` — it is
+ * written at the default and at every non-empty value, because stateTypes
+ * constrains whatever it holds — so the URL is authoritative and must win, or a
+ * shared link would render differently for the sender and the recipient. A bare
+ * deep link (Raycast, the `web+issuegraph://` handler) carries none of them, and
+ * there applying the URL wholesale would silently reset the filters the user
+ * already had on screen.
+ *
+ * The one blind spot is an EMPTY stateTypes (every state unchecked): csv() omits
+ * the param, so a URL with all filters cleared and the state list emptied looks
+ * bare. Following such a link keeps the follower's own filters instead of
+ * clearing them — a worse-than-ideal but strictly non-destructive outcome, and
+ * it needs a `focus`/`chain` plus an already-open window to happen at all.
+ *
+ * See preserveFiltersOnFocus in urlSync.ts for the consumer.
+ */
+export function hasFilterParams(params: URLSearchParams): boolean {
+  for (const k of FILTER_PARAM_KEYS) {
+    if (params.has(k)) return true
+  }
+  for (const k of params.keys()) {
+    if (k.startsWith('pfx_') || k.startsWith('grp_')) return true
+  }
+  return false
+}
+
 /**
  * Rebuild filters + search from URL params.
  *

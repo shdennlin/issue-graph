@@ -1,20 +1,29 @@
 import { describe, expect, it } from 'vitest'
+import { hasFilterParams } from './filterCodec'
 import { resolveActiveView, translateProtocol } from './urlSync'
 
 // `translateProtocol` turns a `web+issuegraph://` protocol-handler payload into
 // the canonical focus query params. The OS routing into the PWA can't be tested
 // here; this locks down the pure translation the app performs on arrival.
 describe('translateProtocol', () => {
-  const all = 'backlog,unstarted,started,triage,completed,canceled'
-
   it('parses workspace + identifier', () => {
     const p = translateProtocol('web+issuegraph://onelegion/ONE-230')
     expect(p).not.toBeNull()
     expect(p?.get('w')).toBe('onelegion')
     expect(p?.get('focus')).toBe('ONE-230')
     expect(p?.get('detail')).toBe('1')
-    expect(p?.get('active')).toBe('0')
-    expect(p?.get('state')).toBe(all)
+  })
+
+  // The payload used to force `active=0` + all six state types to defeat the
+  // non-neutral filter defaults. It must not: carrying no filter param is what
+  // makes parseUrl preserve the filters the user already had (hasFilterParams
+  // / preserveFiltersOnFocus), and the focused issue stays visible via
+  // applyFilters' `alwaysInclude` instead.
+  it('carries no filter params', () => {
+    const p = translateProtocol('web+issuegraph://onelegion/ONE-230')
+    expect(p?.get('active')).toBeNull()
+    expect(p?.get('state')).toBeNull()
+    expect(hasFilterParams(p!)).toBe(false)
   })
 
   it('lowercases the workspace but preserves identifier case', () => {
@@ -29,7 +38,7 @@ describe('translateProtocol', () => {
     expect(p?.get('focus')).toBeNull()
     expect(p?.get('detail')).toBeNull()
     expect(p?.get('w')).toBe('onelegion')
-    expect(p?.get('state')).toBe(all)
+    expect(hasFilterParams(p!)).toBe(false)
   })
 
   it('handles a bare identifier with no workspace', () => {

@@ -154,12 +154,26 @@ function passes(hit: boolean, isNegated: boolean): boolean {
   return hit !== isNegated
 }
 
+/**
+ * `alwaysInclude` is a deep-link escape hatch: the identifier of the focused
+ * issue survives every filter. A link from Raycast (or a shared URL) pins one
+ * issue, and the filters in effect on arrival have no idea it is coming — an
+ * `activeOnly` default or an `assignee` pick would drop it and the camera would
+ * land on nothing. Relaxing the filters to compensate is what the Raycast link
+ * used to do; exempting the one node instead leaves the rest of the graph
+ * exactly as the user had it.
+ *
+ * Deliberately NOT applied by applyFiltersExcluding: that path computes the
+ * filter panel's leave-one-out counts, and an exempt issue would inflate every
+ * facet by one.
+ */
 export function applyFilters(
   issues: NormalizedIssue[],
   filters: Filters,
   staleDays: number,
   myUserName: string | null,
   search?: string,
+  alwaysInclude?: string | null,
 ): NormalizedIssue[] {
   const now = Date.now()
   const cutoff = now - staleDays * 24 * 3600 * 1000
@@ -180,6 +194,9 @@ export function applyFilters(
       ? getChildActivityIndex(issues)
       : null
   return issues.filter((i) => {
+    // Before anything else, including search: the pinned issue is the reason
+    // the user navigated here.
+    if (alwaysInclude && i.identifier === alwaysInclude) return true
     if (q.length > 0) {
       // Match against identifier, title, or assignee. Case-insensitive substring.
       const hay = `${i.identifier} ${i.title} ${i.assignee?.displayName ?? ''}`.toLowerCase()

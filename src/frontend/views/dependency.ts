@@ -25,7 +25,7 @@ export const dependencyView: ViewDefinition = {
       })
       issues = data.issues.filter((i) => members.has(i.identifier))
     } else {
-      issues = applyFilters(data.issues, filters, staleDays, myUserName, search)
+      issues = applyFilters(data.issues, filters, staleDays, myUserName, search, focusedId)
     }
     const ids = new Set(issues.map((i) => i.identifier))
     const NODE_H = issueNodeHeight(density)

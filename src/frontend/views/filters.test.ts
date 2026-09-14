@@ -465,3 +465,48 @@ describe('recency ignores bumps that were only a link', () => {
     expect(ids(applyFilters([activeSrc, tgt], f, 365, null))).toEqual(['SRC'])
   })
 })
+
+// The deep-link escape hatch. A Raycast / shared-URL launch pins one issue and
+// no longer relaxes the filters to make it visible — the pinned identifier is
+// simply exempt, so the rest of the graph stays exactly as the user had it.
+describe('alwaysInclude (focused deep-link target)', () => {
+  const ids = (out: NormalizedIssue[]) => out.map((i) => i.identifier)
+  const target = makeIssue({ identifier: 'ENG-1', state: { name: 'Done', type: 'completed' } })
+  const other = makeIssue({ identifier: 'ENG-2', state: { name: 'Done', type: 'completed' } })
+  const active = makeIssue({ identifier: 'ENG-3', state: { name: 'In Progress', type: 'started' } })
+  const all = [target, other, active]
+
+  it('is dropped like anything else when no target is named', () => {
+    const f = baseFilters({ activeOnly: true })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['ENG-3'])
+  })
+
+  it('survives activeOnly without dragging its peers along', () => {
+    const f = baseFilters({ activeOnly: true })
+    expect(ids(applyFilters(all, f, 365, null, undefined, 'ENG-1'))).toEqual(['ENG-1', 'ENG-3'])
+  })
+
+  it('survives a dimension the target could never satisfy', () => {
+    // The exact case that makes this pair with preserveFiltersOnFocus: keeping
+    // the user's assignee filter would otherwise hide the issue they clicked.
+    const f = baseFilters({ assignees: ['Someone Else'] })
+    expect(ids(applyFilters(all, f, 365, null, undefined, 'ENG-1'))).toEqual(['ENG-1'])
+  })
+
+  it('survives the search box too', () => {
+    const f = baseFilters()
+    expect(ids(applyFilters(all, f, 365, null, 'zzzz', 'ENG-1'))).toEqual(['ENG-1'])
+  })
+
+  it('is inert when the named issue is not in the data', () => {
+    const f = baseFilters({ activeOnly: true })
+    expect(ids(applyFilters(all, f, 365, null, undefined, 'NOPE-9'))).toEqual(['ENG-3'])
+  })
+
+  // Leave-one-out counts must not see the exemption, or every facet in the
+  // panel would read one higher than the graph actually shows.
+  it('does not leak into applyFiltersExcluding', () => {
+    const f = baseFilters({ activeOnly: true, assignees: ['Someone Else'] })
+    expect(ids(applyFiltersExcluding(all, f, 365, null, undefined, 'state'))).toEqual([])
+  })
+})

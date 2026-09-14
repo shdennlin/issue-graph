@@ -19,7 +19,7 @@ import type { Viewport } from 'reactflow'
 import { useViewStore, type ViewId, type ThemeMode, type Density } from './viewStore'
 import { useWorkspaceStore } from './workspaceStore'
 import { DEFAULT_VIEW, readDefaultView } from '../lib/preferences'
-import { filterSignatureParts, parseFilters, serializeFilters } from './filterCodec'
+import { filterSignatureParts, hasFilterParams, parseFilters, serializeFilters } from './filterCodec'
 
 interface HistoryEntryState {
   seq: number
@@ -229,9 +229,10 @@ export function applySavedQuery(query: string): void {
 // Translate a `web+issuegraph://<workspace>/<identifier>[?mode=chain]`
 // protocol-handler payload into the equivalent query params. Returns null when
 // the payload isn't a recognizable protocol URL. `mode=chain` opens the issue's
-// dependency chain; otherwise it focuses the issue + opens its detail panel. The
-// `active=0` + full state list mirror focusUrl so any issue (incl.
-// completed/canceled) is reachable.
+// dependency chain; otherwise it focuses the issue + opens its detail panel.
+// Carries no filter params, mirroring focusUrl — see preserveFiltersOnFocus
+// below and applyFilters' `alwaysInclude` for how the target stays reachable
+// without touching the user's filters.
 export function translateProtocol(raw: string): URLSearchParams | null {
   const m = raw.match(/^web\+issuegraph:(?:\/\/)?(.*)$/i)
   if (!m) return null
@@ -259,8 +260,6 @@ export function translateProtocol(raw: string): URLSearchParams | null {
     p.set('focus', identifier)
     p.set('detail', '1')
   }
-  p.set('active', '0')
-  p.set('state', 'backlog,unstarted,started,triage,completed,canceled')
   return p
 }
 
@@ -287,7 +286,20 @@ export function resolveActiveView(
   return defaultView
 }
 
-function parseUrl({ preserveViewOnFocus = false }: { preserveViewOnFocus?: boolean } = {}): void {
+// Whether the URL parsed most recently was a *bare* deep link — it pinned an
+// issue (`focus`/`chain`) and said nothing about filters. parseUrl acts on this
+// itself when told to preserve; App.tsx reads it on first mount, where the store
+// is cold and the filters have to come from the tab snapshot instead. Recorded
+// on every parse so it can never describe a stale navigation.
+let bareDeepLinkArrival = false
+export function arrivedViaBareDeepLink(): boolean {
+  return bareDeepLinkArrival
+}
+
+function parseUrl({
+  preserveViewOnFocus = false,
+  preserveFiltersOnFocus = false,
+}: { preserveViewOnFocus?: boolean; preserveFiltersOnFocus?: boolean } = {}): void {
   lastAppliedSearch = window.location.search
   let params = new URLSearchParams(window.location.search)
 
@@ -380,8 +392,37 @@ function parseUrl({ preserveViewOnFocus = false }: { preserveViewOnFocus?: boole
   // Filters + search: rebuilt wholesale from the URL, so a field whose param is
   // absent resets to its default instead of sticking. `search` is assigned
   // unconditionally for the same reason — otherwise Back cannot clear it.
-  const decoded = parseFilters(params)
-  set({ filters: decoded.filters, search: decoded.search })
+  //
+  // The one exception is a *bare* deep link — a Raycast launch or the
+  // `web+issuegraph://` handler, which pins an issue (`focus`, or `chain` for
+  // the chain-mode variant) and says nothing about filters. Rebuilding
+  // wholesale there resets every filter the user had on screen, which reads as
+  // "the link wiped my filters". So we keep the store's filters instead, on the
+  // same "URL wins, but this piece isn't in the URL" rationale as
+  // preserveViewOnFocus and restoreViewportOnly.
+  //
+  // Three guards keep this from eating the URL's authority:
+  //   - popstate never passes the flag, so Back/Forward stays a full replay;
+  //   - it needs a `focus` or a `chain`, so an ordinary navigation is
+  //     unaffected (and a chain link matters here even though chain mode does
+  //     not filter: the filters must still be intact when the user exits it);
+  //   - hasFilterParams means any URL that mentions filters at all still wins,
+  //     which covers the links the app itself produces (buildUrl writes `state=`
+  //     at the default and at every non-empty value) and so keeps shared links
+  //     rendering identically for everyone. Its one blind spot — an emptied
+  //     state list — is documented there.
+  // Whatever is preserved is written straight back into the address bar by the
+  // caller's replaceState(buildUrl()), so the URL is authoritative again the
+  // moment we are done here.
+  //
+  // `search` rides along with the filters on both branches — it is the same
+  // kind of URL state, and a deep link that cleared the search box would be as
+  // surprising as one that cleared the filters.
+  bareDeepLinkArrival = (focus !== null || chain !== null) && !hasFilterParams(params)
+  if (!(preserveFiltersOnFocus && bareDeepLinkArrival)) {
+    const decoded = parseFilters(params)
+    set({ filters: decoded.filters, search: decoded.search })
+  }
 
   set({ expandedBuckets: (params.get('expand')?.split(',') ?? []) })
 
@@ -455,9 +496,16 @@ export function useUrlSync(): void {
       // visibility — re-parsing is idempotent and the search-equality guard
       // already makes this a no-op for ordinary focus/visibility flips.
       if (window.location.search === lastAppliedSearch) return
-      // A Raycast focus link carries no ?view=, but parseUrl now KEEPS the
-      // current view instead of resetting to dependency. Preserve it here too.
-      parseUrl({ preserveViewOnFocus: true })
+      // A Raycast focus link carries no ?view= and no filter params, but
+      // parseUrl now KEEPS the current view and filters instead of resetting
+      // them. This is the one call site where preserving filters can actually
+      // do anything: the window is already up, so the store holds the user's
+      // real filters. (Mount is always a cold store — defaults either way — and
+      // popstate must stay a full replay, so neither passes the flag. A bare
+      // deep link that cold-starts the app therefore still lands on default
+      // filters; restoring those would mean reading the tabStateStore snapshot,
+      // the way App.tsx does for the view.)
+      parseUrl({ preserveViewOnFocus: true, preserveFiltersOnFocus: true })
       // The externally-applied search (e.g. `?w=…&focus=…`) omits the view we
       // just preserved, so the address bar would disagree with the store and a
       // reload/share would drop the view. Rewrite it to the canonical URL.

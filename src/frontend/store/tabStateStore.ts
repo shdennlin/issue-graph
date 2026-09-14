@@ -307,22 +307,41 @@ export function restoreViewportOnly(tabId: string): void {
   }
 }
 
-/**
- * Read a tab's last active view WITHOUT applying the rest of its snapshot.
- * Used on a fresh focus-deep-link load (Raycast / shared URL): the URL pins the
- * issue but carries no `?view=`, so we restore the view the user was last in
- * while the URL stays authoritative for focus/filters. Returns null when the
- * tab has no snapshot yet. Mirrors restoreViewportOnly's "URL wins, but this one
- * piece isn't in the URL" rationale — just for the view instead of the viewport.
- */
 /** Which saved view another tab is on, without switching to it. Lets the tab
  *  bar label every tab rather than only the active one. */
 export function peekTabSavedViewId(tabId: string): number | null {
   return snapshots.get(tabId)?.view.appliedSavedViewId ?? null
 }
 
+/**
+ * Read a tab's last active view WITHOUT applying the rest of its snapshot.
+ * Used on a fresh focus-deep-link load (Raycast / shared URL): the URL pins the
+ * issue but carries no `?view=`, so we restore the view the user was last in
+ * while the URL stays authoritative for everything it does carry. Returns null
+ * when the tab has no snapshot yet. Mirrors restoreViewportOnly's "URL wins, but
+ * this one piece isn't in the URL" rationale — just for the view instead of the
+ * viewport.
+ */
 export function peekTabView(tabId: string): ViewId | null {
   return snapshots.get(tabId)?.view.activeView ?? null
+}
+
+/**
+ * Same idea, for the filters. A *bare* deep link (Raycast launch, the
+ * `web+issuegraph://` handler) pins an issue and says nothing about filters; on
+ * a full page load the store is cold, so there is nothing for urlSync's
+ * preserveFiltersOnFocus to preserve and the user's filters would come back as
+ * defaults. This is where they actually live across a reload — snapshots are
+ * hydrated from localStorage at module load, before any effect runs.
+ *
+ * Only meaningful when the arrival really was a bare deep link; see
+ * arrivedViaBareDeepLink() in urlSync.ts for the guard, and App.tsx for the
+ * caller. Returns null when the tab has no snapshot yet.
+ */
+export function peekTabFilters(tabId: string): { filters: Filters; search: string } | null {
+  const snap = snapshots.get(tabId)
+  if (!snap) return null
+  return { filters: snap.view.filters, search: snap.view.search }
 }
 
 /** Forget a tab's snapshot (called on tab close). */
