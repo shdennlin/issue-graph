@@ -82,32 +82,73 @@ export function recencyCutoff(window: RecencyWindow, now: number): number | null
   return now - amount * (m[2] === 'h' ? HOUR_MS : DAY_MS)
 }
 
+/** Facts about an issue's activity that its own `updatedAt` cannot express. */
+export interface ActivityEvidence {
+  /**
+   * When the issue's `updatedAt` is explained entirely by a link being pointed
+   * at it, the moment that happened — see `linkOnlyTouchAt`. Null or omitted
+   * reads `updatedAt` at face value.
+   */
+  linkOnlyAt?: string | null
+  /**
+   * The newest `updatedAt` among this issue's children — see
+   * `childActivityIndex`. Linear does not roll a sub-issue's activity up to its
+   * parent, so without this a parent whose children are all moving reads as
+   * untouched.
+   */
+  childActivityAt?: string | null
+}
+
+function timestamp(raw: string | null | undefined): number | null {
+  if (!raw) return null
+  const t = new Date(raw).getTime()
+  return Number.isFinite(t) ? t : null
+}
+
 /**
- * Whether an issue falls inside the recency window. An unparseable timestamp
- * fails the filter rather than passing it — a filtered view should not be
- * padded with issues whose date we could not read.
+ * Whether an issue falls inside the recency window.
+ *
+ * In 'updated' mode this asks "when did something last actually happen here",
+ * which is NOT the same question as "what does `updatedAt` say". That field has
+ * one slot, and a link pointed at the issue overwrites it — so a link-only bump
+ * does not mean nothing happened, it means `updatedAt` can no longer testify to
+ * what did. The other evidence is consulted instead: when the issue was
+ * created, when it was last commented on, when a child last moved. The newest
+ * of them wins.
+ *
+ * (Before this, a link-only bump returned false outright. Measured on a live
+ * workspace, that hid 8 of the 17 issues created in the last 7 days, plus cards
+ * with comments as recent as 45 seconds before the link landed.)
+ *
+ * 'created' mode is left alone: it is an explicit "show me new issues" request,
+ * and widening it with other evidence would stop it answering that question.
+ *
+ * A timestamp that cannot be read is not evidence, so an issue with no readable
+ * evidence at all fails the filter rather than padding a filtered view.
  */
 export function passesRecency(
-  issue: Pick<NormalizedIssue, 'createdAt' | 'updatedAt'>,
+  issue: Pick<NormalizedIssue, 'createdAt' | 'updatedAt' | 'lastCommentAt'>,
   mode: RecencyMode,
   window: RecencyWindow,
   now: number,
   /**
-   * When the issue's `updatedAt` is explained entirely by a link being pointed
-   * at it, the moment that happened — see `linkOnlyTouchAt`. Pass null (or
-   * omit) to read `updatedAt` at face value.
-   *
-   * Ordered after the cutoff check on purpose: with the window at 'any' the
-   * filter is off, and a link-only bump must not then remove the issue from
-   * the graph altogether.
+   * Checked after the cutoff: with the window at 'any' the filter is off, and
+   * evidence must not then be able to remove an issue from the graph.
    */
-  linkOnlyAt?: string | null,
+  evidence: ActivityEvidence = {},
 ): boolean {
   const cutoff = recencyCutoff(window, now)
   if (cutoff === null) return true
-  if (mode === 'updated' && linkOnlyAt) return false
-  const raw = mode === 'created' ? issue.createdAt : issue.updatedAt
-  const t = new Date(raw).getTime()
-  if (!Number.isFinite(t)) return false
-  return t >= cutoff
+  if (mode === 'created') {
+    const created = timestamp(issue.createdAt)
+    return created !== null && created >= cutoff
+  }
+  // `updatedAt` testifies only when a link is not the whole story behind it;
+  // when it is, creation is what the issue can still prove about itself.
+  const own = evidence.linkOnlyAt ? timestamp(issue.createdAt) : timestamp(issue.updatedAt)
+  let newest: number | null = null
+  for (const t of [own, timestamp(issue.lastCommentAt), timestamp(evidence.childActivityAt)]) {
+    if (t !== null && (newest === null || t > newest)) newest = t
+  }
+  return newest !== null && newest >= cutoff
 }

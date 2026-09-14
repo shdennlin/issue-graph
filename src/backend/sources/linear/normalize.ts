@@ -209,6 +209,11 @@ export function normalizeIssue(raw: any): NormalizedIssue {
     relations,
     createdAt: String(raw.createdAt ?? new Date().toISOString()),
     updatedAt: String(raw.updatedAt ?? new Date().toISOString()),
+    // Absent rather than empty when there are no comments: the field means
+    // "the newest comment was at", and '' would read as a 1970 timestamp.
+    ...(typeof raw.comments?.nodes?.[0]?.createdAt === 'string'
+      ? { lastCommentAt: String(raw.comments.nodes[0].createdAt) }
+      : {}),
     completedAt: raw.completedAt ?? null,
   }
 }
