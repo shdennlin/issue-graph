@@ -561,6 +561,7 @@ export const en = {
     namePlaceholder: 'Name this view…',
     rename: 'Rename',
     delete: 'Delete',
+    reorder: 'Drag to reorder',
     updateToCurrent: 'Update to the current view',
     updatedAt: 'Updated {when}',
     confirmDelete: 'Delete "{name}"?',

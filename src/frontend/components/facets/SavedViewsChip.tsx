@@ -7,22 +7,16 @@
 // tool by design, so there is no author and no ownership — anyone can rename or
 // delete any view, exactly as with notes and annotations today.
 
-import { useEffect, useRef, useState } from 'react'
-import { Check, ChevronDown, Pencil, Trash2 } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Check, ChevronDown, GripVertical, Pencil, Trash2 } from 'lucide-react'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import { useSavedViewsStore } from '../../store/savedViewsStore'
 import { useViewStore } from '../../store/viewStore'
-import { useWorkspaceStore } from '../../store/workspaceStore'
 import { applySavedQuery, currentQuery } from '../../store/urlSync'
 import { apiErrorMessage } from '../../lib/apiErrorMessage'
-import { documentTitle, savedViewStatus } from '../../lib/savedViewMatch'
+import { activeViewLabel, useActiveSavedView } from '../../hooks/useActiveSavedView'
 import { formatRelative } from '../../lib/relativeTime'
 import { useT } from '../../i18n'
-
-/** The app name as index.html shipped it, captured once at module load.
- *  Read per-component it would re-capture a title this code had already
- *  rewritten, and each remount would nest another segment. */
-const BASE_TITLE = typeof document === 'undefined' ? '' : document.title
 
 export function SavedViewsChip() {
   const t = useT()
@@ -35,6 +29,11 @@ export function SavedViewsChip() {
   // returns false forever, which presents as a delete button that silently
   // does nothing. An in-page step cannot be switched off.
   const [confirmingId, setConfirmingId] = useState<number | null>(null)
+  // Only the grip is draggable, so the row's primary button stays a plain
+  // click-to-apply target — no press-and-hold arming state, and no chance of a
+  // stray drag swallowing a click on the name.
+  const [dragId, setDragId] = useState<number | null>(null)
+  const [dragOverId, setDragOverId] = useState<number | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   useClickOutside(ref, open, () => {
     setOpen(false)
@@ -45,51 +44,28 @@ export function SavedViewsChip() {
 
   const views = useSavedViewsStore((s) => s.views)
   const error = useSavedViewsStore((s) => s.error)
-  const load = useSavedViewsStore((s) => s.load)
   const create = useSavedViewsStore((s) => s.create)
   const rename = useSavedViewsStore((s) => s.rename)
   const update = useSavedViewsStore((s) => s.update)
+  const reorder = useSavedViewsStore((s) => s.reorder)
   const remove = useSavedViewsStore((s) => s.remove)
-  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
-  // Naming the view you are actually on. Recomputed from the URL rather than
-  // remembered, so it survives a reload, recognises a shared link that happens
-  // to match, and stops claiming a view the moment you edit away from it.
-  //
-  // Subscribes to the WHOLE view store on purpose: currentQuery() serializes
-  // far more than the filters — view, chain, related, hierarchy, mixby — and
-  // any of them changing changes whether this state matches a saved view.
-  // Selecting a few fields would leave the name stale after the others moved.
-  useViewStore()
+  // Which view is in play, and whether we have edited away from it. Fetching
+  // the list, adopting an exact match and the window title all moved to
+  // SavedViewSync — they have to keep happening while this menu is unmounted,
+  // which is most of the time now that the panel auto-hides.
+  const status = useActiveSavedView()
+  const { view: current } = status
+  const label = activeViewLabel(status)
   const appliedId = useViewStore((s) => s.appliedSavedViewId)
   const setAppliedId = useViewStore((s) => s.setAppliedSavedViewId)
-  const { view: current, dirty } = savedViewStatus(currentQuery(), views, appliedId)
-
-  // Adopt an exact match as the reference point, so edits made after arriving
-  // on a shared link that equals a saved view still show as divergence.
-  useEffect(() => {
-    if (current && !dirty && current.id !== appliedId) setAppliedId(current.id)
-  }, [current, dirty, appliedId, setAppliedId])
-
-  // Only named when there is more than one workspace — repeating the sole
-  // workspace's name on every window distinguishes nothing.
-  const profiles = useWorkspaceStore((s) => s.profiles)
-  const workspaceName =
-    profiles.length > 1 ? (profiles.find((p) => p.id === workspaceId)?.name ?? null) : null
-  useEffect(() => {
-    document.title = documentTitle(current, dirty, workspaceName, BASE_TITLE)
-  }, [current, dirty, workspaceName])
-
-  // Views are per workspace (each has its own graph.db), so refetch on switch.
-  useEffect(() => {
-    if (workspaceId) void load()
-  }, [workspaceId, load])
+  const dragIdx = dragId === null ? -1 : views.findIndex((v) => v.id === dragId)
 
   const submitNew = () => {
     const name = draft.trim()
     if (!name) return
     // Not setting appliedId here: create() resolves asynchronously, and the
-    // new view matches the current state exactly, so the adopt-effect above
-    // picks it up as soon as the list refreshes.
+    // new view matches the current state exactly, so SavedViewSync's
+    // adopt-effect picks it up as soon as the list refreshes.
     void create(name, currentQuery())
     setDraft('')
     setNaming(false)
@@ -108,9 +84,7 @@ export function SavedViewsChip() {
             away from the left edge the rows below align to. The trailing
             chevron replaces it and carries information the icon did not:
             that this opens something. */}
-        <span className="facet-option-label">
-          {current ? `${current.name}${dirty ? ' *' : ''}` : t('savedViews.label')}
-        </span>
+        <span className="facet-option-label">{label ?? t('savedViews.label')}</span>
         {views.length > 0 && !current && (
           <span className="facet-option-count">{views.length}</span>
         )}
@@ -127,8 +101,53 @@ export function SavedViewsChip() {
             {views.length === 0 && !naming && (
               <div className="facet-empty">{t('savedViews.empty')}</div>
             )}
-            {views.map((v) => (
-              <div className="facet-option-row" key={v.id}>
+            {views.map((v, idx) => (
+              <div
+                className={[
+                  'facet-option-row',
+                  dragId === v.id ? 'is-dragging' : '',
+                  // Which EDGE of the target row gets the line depends on the
+                  // direction of travel: dragging down lands the row after the
+                  // target, dragging up lands it before. A line on the wrong
+                  // side is worse than no line — it predicts the wrong result.
+                  dragOverId === v.id && dragId !== v.id
+                    ? dragIdx > idx
+                      ? 'is-drop-above'
+                      : 'is-drop-below'
+                    : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                key={v.id}
+                onDragOver={(e) => {
+                  if (dragId === null || dragId === v.id) return
+                  // preventDefault is what marks this a valid drop target;
+                  // without it the browser refuses the drop and the gesture
+                  // ends in the snap-back animation with nothing happening.
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                  setDragOverId(v.id)
+                }}
+                onDragLeave={(e) => {
+                  // dragleave fires when the cursor crosses onto a CHILD of
+                  // this row too, which would blink the drop line off and on
+                  // as the pointer passes over the buttons. Only a leave that
+                  // actually exits the row counts.
+                  if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
+                  setDragOverId((id) => (id === v.id ? null : id))
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  const from = dragId
+                  setDragId(null)
+                  setDragOverId(null)
+                  // `idx` is this row's index in the CURRENT list. Dropping on
+                  // a row below means "go where it is", which after lifting the
+                  // dragged row out lands just past it — the behaviour a drop
+                  // onto the last row has to have to mean "put it last".
+                  if (from !== null && from !== v.id) void reorder(from, idx)
+                }}
+              >
                 {confirmingId === v.id ? (
                   <>
                     <span className="facet-confirm-text">
@@ -171,6 +190,28 @@ export function SavedViewsChip() {
                   />
                 ) : (
                   <>
+                    {views.length > 1 && (
+                      <span
+                        className="facet-view-grip"
+                        draggable
+                        role="button"
+                        tabIndex={-1}
+                        aria-label={t('savedViews.reorder')}
+                        title={t('savedViews.reorder')}
+                        onDragStart={(e) => {
+                          setDragId(v.id)
+                          e.dataTransfer.effectAllowed = 'move'
+                          // Firefox ignores a drag that carries no payload.
+                          e.dataTransfer.setData('text/plain', String(v.id))
+                        }}
+                        onDragEnd={() => {
+                          setDragId(null)
+                          setDragOverId(null)
+                        }}
+                      >
+                        <GripVertical size={11} />
+                      </span>
+                    )}
                     <button
                       type="button"
                       className={`facet-option${current?.id === v.id ? ' is-selected' : ''}`}

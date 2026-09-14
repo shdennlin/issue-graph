@@ -14,6 +14,7 @@ import { TabBar } from './components/TabBar'
 import { Toolbar } from './components/Toolbar'
 import { FacetBar } from './components/facets/FacetBar'
 import { SyncBanner } from './components/SyncBanner'
+import { SavedViewSync } from './components/SavedViewSync'
 import { Onboarding } from './components/Onboarding'
 import { ContextMenu } from './components/ContextMenu'
 import { QuickSwitcher } from './components/QuickSwitcher'
@@ -669,6 +670,10 @@ export function App() {
 
   return (
     <div className="app-shell">
+      {/* Renders nothing. Owns the saved-view list, the applied-view identity
+          and the window title — all of which must survive the filter panel
+          collapsing, which is what unmounts SavedViewsChip. */}
+      <SavedViewSync />
       <SyncBanner />
       <TabBar />
       <Toolbar />

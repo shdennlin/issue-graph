@@ -25,6 +25,7 @@ import { useSavedViewsStore } from '../../store/savedViewsStore'
 import { savedViewStatus } from '../../lib/savedViewMatch'
 import { applySavedQuery, currentQuery } from '../../store/urlSync'
 import { SavedViewsChip } from './SavedViewsChip'
+import { activeViewLabel, useActiveSavedView } from '../../hooks/useActiveSavedView'
 import { useFilterCounts } from './useFilterCounts'
 import {
   buildFacets,
@@ -48,6 +49,22 @@ import {
 const SEARCH_THRESHOLD = 8
 /** Cross-facet search results are capped — see searchFacetValues for why. */
 const SEARCH_RESULT_LIMIT = 12
+
+/** The active saved view's name, for the collapsed handle.
+ *
+ *  Its own component because useActiveSavedView subscribes to the whole view
+ *  store: inlining it would re-render FacetBar — and re-run the five
+ *  leave-one-out passes behind its chips — on every hover and highlight. A leaf
+ *  with no children confines that to a span. */
+function ActiveViewLabel() {
+  const label = activeViewLabel(useActiveSavedView())
+  if (!label) return null
+  return (
+    <span className="facet-handle-view" title={label}>
+      {label}
+    </span>
+  )
+}
 
 export function FacetBar() {
   const t = useT()
@@ -216,6 +233,7 @@ export function FacetBar() {
   const availableFacets = facets
 
 
+
   // Collapsed, the panel is a handle that still reports how many filters are
   // on. Hiding the panel must not hide the fact that it is filtering — that
   // would turn "where did my issues go" into a puzzle.
@@ -231,6 +249,10 @@ export function FacetBar() {
         title={t('filterPanel.expandPanel')}
       >
         <SlidersHorizontal size={13} />
+        {/* Collapsed, this handle is the only thing on screen that can say
+            which saved view you are in — the tab strip names it too, but only
+            once you look up there. */}
+        <ActiveViewLabel />
         {chips.length > 0 && <span className="facet-handle-count">{chips.length}</span>}
       </button>
     )

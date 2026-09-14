@@ -186,7 +186,7 @@ export const api = {
   fetchSavedViews: () => http<{ entries: SavedViewDTO[] }>('/api/saved-views'),
   createSavedView: (name: string, query: string) =>
     http<SavedViewDTO>('/api/saved-views', { method: 'POST', body: JSON.stringify({ name, query }) }),
-  patchSavedView: (id: number, patch: { name?: string; query?: string }) =>
+  patchSavedView: (id: number, patch: { name?: string; query?: string; sortOrder?: number }) =>
     http<SavedViewDTO>(`/api/saved-views/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   deleteSavedView: (id: number) =>
     fetch(withWorkspaceParam(`/api/saved-views/${id}`), { method: 'DELETE' }).then((r) => {

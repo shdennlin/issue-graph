@@ -2951,6 +2951,26 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   background: color-mix(in srgb, var(--danger, #dc2626) 14%, transparent);
   color: var(--danger, #dc2626);
 }
+/* Drag handle for reordering saved views. Only the grip is draggable, so the
+   row's name stays an ordinary click target; it sits always-visible for the
+   same reason the actions beside it do — a hover-only affordance for an
+   operation nobody expects is an operation nobody finds. */
+.facet-view-grip {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 3px 1px 3px 3px;
+  color: var(--fg-subtle, var(--fg-muted));
+  cursor: grab;
+}
+.facet-view-grip:active { cursor: grabbing; }
+.facet-option-row:hover .facet-view-grip { color: var(--fg-muted); }
+.facet-option-row.is-dragging { opacity: 0.45; }
+/* A line, not a box: it says where the row will land, which an outline around
+   the whole target row does not. Which edge follows the direction of travel. */
+.facet-option-row.is-drop-above { box-shadow: inset 0 2px 0 0 var(--accent); }
+.facet-option-row.is-drop-below { box-shadow: inset 0 -2px 0 0 var(--accent); }
+
 .facet-confirm-text {
   flex: 1;
   min-width: 0;
@@ -3091,6 +3111,20 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   cursor: pointer;
 }
 .facet-handle:hover { color: var(--accent); border-color: var(--accent); }
+/* The saved view's name, collapsed. Capped rather than allowed to set the
+   handle's width: a long view name would otherwise turn a small puck into a
+   bar across the canvas, which is the thing collapsing the panel was for. */
+.facet-handle-view {
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+}
+.facet-handle:hover .facet-handle-view { color: inherit; }
+
 .facet-handle-count {
   padding: 0 5px;
   border-radius: 999px;

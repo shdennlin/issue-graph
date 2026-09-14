@@ -12,6 +12,7 @@
 import { create } from 'zustand'
 import type { SavedViewDTO } from '@shared/types.js'
 import { api } from '../lib/api'
+import { moveInOrder, reorderPatches } from './savedViewsOrder'
 
 interface SavedViewsState {
   views: SavedViewDTO[]
@@ -24,6 +25,7 @@ interface SavedViewsState {
   create: (name: string, query: string) => Promise<void>
   rename: (id: number, name: string) => Promise<void>
   update: (id: number, query: string) => Promise<void>
+  reorder: (id: number, toIndex: number) => Promise<void>
   remove: (id: number) => Promise<void>
 }
 
@@ -72,6 +74,31 @@ export const useSavedViewsStore = create<SavedViewsState>((set, get) => ({
       set((s) => ({ views: s.views.map((v) => (v.id === id ? dto : v)) }))
     } catch (e) {
       set({ views: prev, status: 'error', error: e })
+    }
+  },
+
+  async reorder(id, toIndex) {
+    const prev = get().views
+    const next = moveInOrder(prev, id, toIndex)
+    const patches = reorderPatches(prev, next)
+    if (patches.length === 0) return
+    // Optimistic, like rename: the list must follow the cursor, and a round
+    // trip per row would otherwise show the drop snapping back first.
+    set({ views: next, error: null })
+    try {
+      // Sequential rather than Promise.all: there is no bulk-order endpoint,
+      // and N concurrent writes to the same table give the server no reason to
+      // apply them in any particular order. The list is a handful of rows.
+      for (const p of patches) await api.patchSavedView(p.id, { sortOrder: p.sortOrder })
+    } catch (e) {
+      // A partial failure leaves the server holding some of the new numbering,
+      // so restoring `prev` locally would be a guess. Refetch instead — the
+      // server's order is the only order that is actually true. The error is
+      // re-set AFTER the refetch because load() clears it on success, and an
+      // order that silently springs back with no message is the one outcome
+      // worse than the failure itself.
+      await get().load()
+      set({ status: 'error', error: e })
     }
   },
 
