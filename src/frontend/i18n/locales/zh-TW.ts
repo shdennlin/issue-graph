@@ -558,6 +558,7 @@ export const zhTW: Dict = {
     namePlaceholder: '為這個檢視命名…',
     rename: '重新命名',
     delete: '刪除',
+    reorder: '拖曳以排序',
     updateToCurrent: '更新為目前檢視',
     updatedAt: '{when}更新',
     confirmDelete: '刪除「{name}」？',
