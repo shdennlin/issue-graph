@@ -880,6 +880,34 @@ a:hover { text-decoration: underline; }
   border-color: var(--accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
 }
+
+/* The secondary verb on an editable row ("show only these"). Borderless on
+   purpose: it sits beside a bordered <select>, and giving it a matching pill
+   would recreate the two-identical-controls problem the row layout exists to
+   solve. Reads as available, not as the main event. */
+.detail-filter-only {
+  background: none;
+  border: none;
+  padding: 1px 4px;
+  font: inherit;
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.4;
+  border-radius: 6px;
+  transition: color 120ms ease, background 120ms ease;
+}
+.detail-filter-only:hover {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.detail-filter-only:focus-visible {
+  outline: none;
+  color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
 .issue-node {
   background: var(--node-bg);
   border: 1px solid var(--node-border);
@@ -3154,20 +3182,120 @@ body[data-detail-wide='1'] .inline-search { display: none; }
    The select sits beside the existing filter pill: the pill still filters to
    that value, the select changes it. Sized to the row rather than the content
    so a long state name does not stretch the metadata column. */
-.detail-write-select {
-  margin-left: 8px;
-  max-width: 180px;
-  font: inherit;
-  font-size: 12px;
-  padding: 2px 4px;
+/* An editable value that still looks like the chip it replaced.
+   Geometry mirrors .state-pill deliberately, so a row where writes are off
+   (plain pill) and one where they are on (this) line up to the pixel. */
+.detail-write-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 1px var(--sp-2);
+  border-radius: 999px;
+  font-size: var(--fs-chip);
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  max-width: 100%;
+  cursor: pointer;
+  position: relative;
+  /* Neutral by default — priority and assignee carry no colour of their own,
+     matching the chips beside them. */
   color: var(--fg);
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  background: color-mix(in srgb, var(--fg-muted) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fg-muted) 18%, transparent);
+  transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+/* Toned: the caller set `color` to the state-type colour, so every mix below
+   derives from it — the same trick .state-pill uses. */
+.detail-write-pill.is-toned {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  border-color: color-mix(in srgb, currentColor 45%, transparent);
+}
+[data-theme='dark'] .detail-write-pill.is-toned {
+  background: color-mix(in srgb, currentColor 18%, transparent);
+  border-color: color-mix(in srgb, currentColor 55%, transparent);
+}
+.detail-write-pill:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  transform: translateY(-1px);
+}
+.detail-write-pill.is-toned:hover {
+  border-color: currentColor;
+  background: color-mix(in srgb, currentColor 26%, var(--bg-elev));
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, currentColor 24%, transparent),
+    0 2px 8px color-mix(in srgb, currentColor 18%, transparent);
+}
+/* Focus lives on the pill, not the select: the select has no border of its
+   own any more, so a default focus ring would draw inside the pill. */
+.detail-write-pill:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.detail-write-pill.is-toned:focus-within {
+  border-color: currentColor;
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 36%, transparent);
+}
+/* Still readable: the point of the locked state is that you can see the value
+   and cannot change it, so this dims rather than hides. */
+.detail-write-pill.is-locked {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.detail-write-pill.is-locked:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: color-mix(in srgb, var(--fg-muted) 18%, transparent);
+  background: color-mix(in srgb, var(--fg-muted) 10%, transparent);
+}
+.detail-write-pill .glyph {
+  font-size: var(--fs-meta);
+  line-height: 1;
+}
+.detail-write-caret {
+  position: absolute;
+  right: var(--sp-2);
+  font-size: 9px;
+  opacity: 0.7;
+  line-height: 1;
+  /* Laid over the select's own right padding, not placed beside it. As a
+     sibling in the flex row, `pointer-events: none` would drop the click onto
+     the wrapping span instead of the select — the caret would look like part
+     of the control and do nothing when clicked. Overlapping it makes the whole
+     pill open the menu. */
+  pointer-events: none;
+}
+
+/* The select keeps every native behaviour and gives up every native pixel. */
+.detail-write-select {
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  margin: 0;
+  /* Room for the caret laid over this edge. */
+  padding: 0 14px 0 0;
+  max-width: 174px;
+  text-overflow: ellipsis;
+  cursor: inherit;
+  outline: none;
 }
 .detail-write-select:disabled {
-  opacity: 0.55;
   cursor: not-allowed;
+  /* No opacity here — the pill already dims as a whole, and stacking the two
+     made the value unreadable. */
+  color: inherit;
+  opacity: 1;
+}
+/* The open menu is drawn by the OS and does not inherit the pill's colour;
+   without this the options can come out unreadable on a tinted pill. */
+.detail-write-select option {
+  color: var(--fg);
+  background: var(--bg-elev);
+  font-weight: 400;
 }
 
 .detail-write-error {

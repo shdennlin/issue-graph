@@ -23,6 +23,7 @@ import {
   LabelRemoveButton,
   PriorityControl,
   StatusControl,
+  useWriteGate,
   WriteLockedHint,
 } from './detail/IssueWriteControls'
 
@@ -42,6 +43,26 @@ const WIDE_MODE_KEY = 'ig-detail-wide-v1'
 const TEXT_SIZE_KEY = 'ig-detail-text-size-v1'
 type TextSize = 'sm' | 'md' | 'lg' | 'xl'
 
+/**
+ * The quiet half of an editable row: "show only issues like this one".
+ *
+ * Deliberately not another pill. The row already carries one control with a
+ * border; a second would read as two peers competing for the same job, which
+ * is the confusion this replaced. Muted text that picks up the accent on hover
+ * says "also available" without arguing with the dropdown beside it.
+ *
+ * The value it filters on lives in `title`, not in the label — the label is a
+ * verb precisely so the row stops printing the same words twice.
+ */
+function FilterOnlyButton({ onClick, title }: { onClick: () => void; title: string }) {
+  const t = useT()
+  return (
+    <button type="button" className="detail-filter-only" onClick={onClick} title={title}>
+      {t('detailPanel.filterOnly')}
+    </button>
+  )
+}
+
 export function DetailPanel() {
   const focusedId = useViewStore((s) => s.focusedId)
   const setDetailPanelOpen = useViewStore((s) => s.setDetailPanelOpen)
@@ -51,6 +72,11 @@ export function DetailPanel() {
   const { schema } = useSchemaStore()
   const t = useT()
   const locale = useLocale()
+  // Decides the shape of the three editable rows, not whether they appear.
+  // When the server has no OAuth application the write controls render
+  // nothing, so the value has to stay on the filter chip — otherwise a
+  // read-only deployment gets a row with a label and no value in it.
+  const { show: writable } = useWriteGate()
   const [description, setDescription] = useState<string | null>(null)
   const [descLoading, setDescLoading] = useState(false)
   const [comments, setComments] = useState<IssueComment[] | null>(null)
@@ -391,45 +417,77 @@ export function DetailPanel() {
         {/* Above the fields it explains, and only while the fix is in the
             user's hands — see WriteLockedHint. */}
         <WriteLockedHint />
+        {/* Two verbs share each of these rows: change this issue, and show
+            only issues like it. The editable control leads, because the row is
+            labelled "State" and the first thing after that label should be the
+            state itself — not an action that happens to be spelled the same.
+            Filtering keeps its place but says what it does instead of
+            repeating the value a second time, which is what made the old row
+            read as two identical controls. */}
         <div className="row">
           <span className="k">{t('detailPanel.state')}</span>
-          <button
-            type="button"
-            className={`state-pill detail-state-pill is-${issue.state.type}`}
-            style={{ color: stateColorVar(issue.state.type) }}
-            onClick={() => { setFilter('stateTypes', [issue.state.type]); setDetailPanelOpen(false) }}
-            title={t('detailPanel.filterByState', { value: stateLabelFor(issue.state.type, locale) })}
-          >
-            <span className="glyph" aria-hidden>{stateIcon(issue.state.type)}</span>
-            <span>{issue.state.name}</span>
-          </button>
-          {/* The pill above stays: it is how you filter to this state. The
-              control changes it. Two verbs, two affordances. */}
-          <StatusControl issue={issue} />
+          {writable ? (
+            <>
+              <StatusControl issue={issue} />
+              <FilterOnlyButton
+                onClick={() => { setFilter('stateTypes', [issue.state.type]); setDetailPanelOpen(false) }}
+                title={t('detailPanel.filterByState', { value: stateLabelFor(issue.state.type, locale) })}
+              />
+            </>
+          ) : (
+            <button
+              type="button"
+              className={`state-pill detail-state-pill is-${issue.state.type}`}
+              style={{ color: stateColorVar(issue.state.type) }}
+              onClick={() => { setFilter('stateTypes', [issue.state.type]); setDetailPanelOpen(false) }}
+              title={t('detailPanel.filterByState', { value: stateLabelFor(issue.state.type, locale) })}
+            >
+              <span className="glyph" aria-hidden>{stateIcon(issue.state.type)}</span>
+              <span>{issue.state.name}</span>
+            </button>
+          )}
         </div>
         <div className="row">
           <span className="k">{t('detailPanel.priority')}</span>
-          <button
-            type="button"
-            className="detail-filter-link"
-            onClick={() => { setFilter('priorities', [issue.priority]); setDetailPanelOpen(false) }}
-            title={t('detailPanel.filterByPriority', { value: priorityLabelFor(issue.priority, locale) })}
-          >
-            {priorityLabelFor(issue.priority, locale)}
-          </button>
-          <PriorityControl issue={issue} />
+          {writable ? (
+            <>
+              <PriorityControl issue={issue} />
+              <FilterOnlyButton
+                onClick={() => { setFilter('priorities', [issue.priority]); setDetailPanelOpen(false) }}
+                title={t('detailPanel.filterByPriority', { value: priorityLabelFor(issue.priority, locale) })}
+              />
+            </>
+          ) : (
+            <button
+              type="button"
+              className="detail-filter-link"
+              onClick={() => { setFilter('priorities', [issue.priority]); setDetailPanelOpen(false) }}
+              title={t('detailPanel.filterByPriority', { value: priorityLabelFor(issue.priority, locale) })}
+            >
+              {priorityLabelFor(issue.priority, locale)}
+            </button>
+          )}
         </div>
         <div className="row">
           <span className="k">{t('detailPanel.assignee')}</span>
-          <button
-            type="button"
-            className="detail-filter-link"
-            onClick={() => { setFilter('assignees', [issue.assignee?.displayName ?? '(unassigned)']); setDetailPanelOpen(false) }}
-            title={t('detailPanel.filterByAssignee', { value: issue.assignee?.displayName ?? t('detailPanel.unassignedShort') })}
-          >
-            {issue.assignee?.displayName ?? t('detailPanel.unassignedShort')}
-          </button>
-          <AssigneeControl issue={issue} />
+          {writable ? (
+            <>
+              <AssigneeControl issue={issue} />
+              <FilterOnlyButton
+                onClick={() => { setFilter('assignees', [issue.assignee?.displayName ?? '(unassigned)']); setDetailPanelOpen(false) }}
+                title={t('detailPanel.filterByAssignee', { value: issue.assignee?.displayName ?? t('detailPanel.unassignedShort') })}
+              />
+            </>
+          ) : (
+            <button
+              type="button"
+              className="detail-filter-link"
+              onClick={() => { setFilter('assignees', [issue.assignee?.displayName ?? '(unassigned)']); setDetailPanelOpen(false) }}
+              title={t('detailPanel.filterByAssignee', { value: issue.assignee?.displayName ?? t('detailPanel.unassignedShort') })}
+            >
+              {issue.assignee?.displayName ?? t('detailPanel.unassignedShort')}
+            </button>
+          )}
         </div>
         <div className="row">
           <span className="k">{t('detailPanel.project')}</span>

@@ -470,6 +470,7 @@ export const zhTW: Dict = {
     addLabelPlaceholder: '＋ 標籤…',
     removeLabel: '移除標籤 {value}',
     changeAssignee: '變更負責人',
+    filterOnly: '只看這些',
     writeLocked: '連結你的 Linear 帳號才能修改。',
     writeLockedCta: '前往連結',
     commentPlaceholder: '撰寫留言（支援 markdown）…',

@@ -21,7 +21,7 @@ import {
   matchCurrentState,
   statusOptionsFor,
 } from '../../lib/writeOptions'
-import { priorityLabelFor } from '../../lib/colors'
+import { priorityLabelFor, stateColorVar, stateIcon } from '../../lib/colors'
 import { useLocale } from '../../i18n'
 import { apiErrorMessage } from '../../lib/apiErrorMessage'
 import { useT } from '../../i18n'
@@ -31,12 +31,49 @@ import { useViewStore } from '../../store/viewStore'
  *  reaches a URL, unlike the facet filter's '(unassigned)'. */
 const UNASSIGNED = '__none__'
 
-function useWriteGate() {
+export function useWriteGate() {
   const writeEnabled = useCapabilityStore((s) => s.writeEnabled)
   // Subscribed, not read from localStorage at render time: returning from the
   // Linear authorize redirect must re-enable these controls without a reload.
   const unlocked = useCapabilityStore((s) => s.unlocked)
   return { show: writeEnabled === true, unlocked }
+}
+
+/**
+ * The pill that a write control wears.
+ *
+ * The controls replaced a coloured `.state-pill` and two chips, and a bare
+ * `<select>` next to them looked like a form had leaked into a card. This puts
+ * the appearance back: `appearance: none` strips the browser's border and
+ * arrow, leaving the select as focusable text inside a pill we draw, so the
+ * native menu, keyboard handling and screen-reader semantics all survive.
+ *
+ * `tone` carries the state-type colour through `currentColor`, the same way
+ * `.state-pill` does — which is why the caller passes a colour rather than a
+ * class. Everything else is neutral, matching the chips it sits beside.
+ */
+function WritePill({
+  children,
+  tone,
+  locked,
+  glyph,
+}: {
+  children: React.ReactNode
+  tone?: string
+  locked: boolean
+  glyph?: string
+}) {
+  return (
+    <span
+      className={`detail-write-pill${tone ? ' is-toned' : ''}${locked ? ' is-locked' : ''}`}
+      style={tone ? { color: tone } : undefined}
+    >
+      {glyph && <span className="glyph" aria-hidden>{glyph}</span>}
+      {children}
+      {/* pointer-events:none in CSS — the click must reach the select under it. */}
+      <span className="detail-write-caret" aria-hidden>▾</span>
+    </span>
+  )
 }
 
 function WriteError({ identifier }: { identifier: string }) {
@@ -67,26 +104,37 @@ export function StatusControl({ issue }: { issue: NormalizedIssue }) {
 
   return (
     <>
-      <select
-        className="detail-write-select"
-        aria-label={t('detailPanel.changeState')}
-        title={t('detailPanel.changeState')}
-        disabled={!unlocked || saving}
-        value={current?.id ?? ''}
-        onChange={(e) => {
-          const next = options.find((o) => o.id === e.target.value)
-          if (!next || next.id === current?.id) return
-          void setState(issue.identifier, { id: next.id, name: next.name, type: next.type })
-        }}
+      {/* The glyph and colour used to ride on the filter pill. Now that the
+          select leads the row, they come with it: the workflow state's *name*
+          is free text per team, while the type is what says backlog vs started
+          vs done — losing it to a plain dropdown would cost real information,
+          and the glyph carries it for anyone the colour does not reach. */}
+      <WritePill
+        tone={stateColorVar(issue.state.type)}
+        glyph={stateIcon(issue.state.type)}
+        locked={!unlocked}
       >
-        {/* Only present when the current state could not be matched — a state
-            renamed upstream since the last sync. Showing an empty selection is
-            honest; silently selecting a neighbour would not be. */}
-        {!current && <option value="">{issue.state.name}</option>}
-        {options.map((o) => (
-          <option key={o.id} value={o.id}>{o.name}</option>
-        ))}
-      </select>
+        <select
+          className="detail-write-select"
+          aria-label={t('detailPanel.changeState')}
+          title={t('detailPanel.changeState')}
+          disabled={!unlocked || saving}
+          value={current?.id ?? ''}
+          onChange={(e) => {
+            const next = options.find((o) => o.id === e.target.value)
+            if (!next || next.id === current?.id) return
+            void setState(issue.identifier, { id: next.id, name: next.name, type: next.type })
+          }}
+        >
+          {/* Only present when the current state could not be matched — a state
+              renamed upstream since the last sync. Showing an empty selection is
+              honest; silently selecting a neighbour would not be. */}
+          {!current && <option value="">{issue.state.name}</option>}
+          {options.map((o) => (
+            <option key={o.id} value={o.id}>{o.name}</option>
+          ))}
+        </select>
+      </WritePill>
       <WriteError identifier={issue.identifier} />
     </>
   )
@@ -113,24 +161,26 @@ export function AssigneeControl({ issue }: { issue: NormalizedIssue }) {
 
   return (
     <>
-      <select
-        className="detail-write-select"
-        aria-label={t('detailPanel.changeAssignee')}
-        title={t('detailPanel.changeAssignee')}
-        disabled={!unlocked || saving}
-        value={currentId ?? UNASSIGNED}
-        onChange={(e) => {
-          const v = e.target.value
-          if (v === (currentId ?? UNASSIGNED)) return
-          const next = v === UNASSIGNED ? null : (withCurrent.find((o) => o.id === v) ?? null)
-          void setAssignee(issue.identifier, next)
-        }}
-      >
-        <option value={UNASSIGNED}>{t('detailPanel.unassignedShort')}</option>
-        {withCurrent.map((a) => (
-          <option key={a.id} value={a.id}>{a.displayName}</option>
-        ))}
-      </select>
+      <WritePill locked={!unlocked}>
+        <select
+          className="detail-write-select"
+          aria-label={t('detailPanel.changeAssignee')}
+          title={t('detailPanel.changeAssignee')}
+          disabled={!unlocked || saving}
+          value={currentId ?? UNASSIGNED}
+          onChange={(e) => {
+            const v = e.target.value
+            if (v === (currentId ?? UNASSIGNED)) return
+            const next = v === UNASSIGNED ? null : (withCurrent.find((o) => o.id === v) ?? null)
+            void setAssignee(issue.identifier, next)
+          }}
+        >
+          <option value={UNASSIGNED}>{t('detailPanel.unassignedShort')}</option>
+          {withCurrent.map((a) => (
+            <option key={a.id} value={a.id}>{a.displayName}</option>
+          ))}
+        </select>
+      </WritePill>
       <WriteError identifier={issue.identifier} />
     </>
   )
@@ -201,22 +251,24 @@ export function PriorityControl({ issue }: { issue: NormalizedIssue }) {
 
   return (
     <>
-      <select
-        className="detail-write-select"
-        aria-label={t('detailPanel.changePriority')}
-        title={t('detailPanel.changePriority')}
-        disabled={!unlocked || saving}
-        value={String(issue.priority ?? 0)}
-        onChange={(e) => {
-          const next = Number(e.target.value) as Priority
-          if (next === (issue.priority ?? 0)) return
-          void setPriority(issue.identifier, next)
-        }}
-      >
-        {PRIORITIES.map((p) => (
-          <option key={p} value={p}>{priorityLabelFor(p, locale)}</option>
-        ))}
-      </select>
+      <WritePill locked={!unlocked}>
+        <select
+          className="detail-write-select"
+          aria-label={t('detailPanel.changePriority')}
+          title={t('detailPanel.changePriority')}
+          disabled={!unlocked || saving}
+          value={String(issue.priority ?? 0)}
+          onChange={(e) => {
+            const next = Number(e.target.value) as Priority
+            if (next === (issue.priority ?? 0)) return
+            void setPriority(issue.identifier, next)
+          }}
+        >
+          {PRIORITIES.map((p) => (
+            <option key={p} value={p}>{priorityLabelFor(p, locale)}</option>
+          ))}
+        </select>
+      </WritePill>
       <WriteError identifier={issue.identifier} />
     </>
   )

@@ -476,6 +476,9 @@ export const en = {
     addLabelPlaceholder: '+ label…',
     removeLabel: 'Remove label {value}',
     changeAssignee: 'Change assignee',
+    // A verb, not the value. The dropdown beside it already shows the value;
+    // printing it twice is what made the row read as two identical controls.
+    filterOnly: 'Only these',
     writeLocked: 'Connect your Linear account to make changes.',
     writeLockedCta: 'Connect',
     commentPlaceholder: 'Write a comment (markdown)…',
