@@ -52,7 +52,11 @@ function list(raw: string | null): string[] {
  * URLSearchParams; the caller merges it into the full URL so non-filter params
  * (w, view, focus, …) keep their position in the query string.
  *
- * Params are omitted at their default value so shared URLs stay short.
+ * Params are omitted at their default value so shared URLs stay short — with
+ * one deliberate exception. `state` is ALWAYS written, because `stateTypes` is
+ * the only list whose default is non-empty, so omission cannot distinguish "no
+ * constraint" from "the default four". Do not make it conditional again: that
+ * is what made a saved view holding no state constraint come back constrained.
  */
 export function serializeFilters(state: CodecState): URLSearchParams {
   const f = state.filters
@@ -61,8 +65,15 @@ export function serializeFilters(state: CodecState): URLSearchParams {
   if (f.myIssuesOnly) params.set('mine', '1')
   if (f.staleOnly) params.set('stale', '1')
 
-  const states = csv(f.stateTypes)
-  if (states) params.set('state', states)
+  // Always written, and `any` when the list is empty.
+  //
+  // `stateTypes` is the only list filter whose default is NOT empty, which is
+  // what makes omission ambiguous here and harmless everywhere else: an absent
+  // `assignee` means the same as an empty one, but an absent `state` used to be
+  // read back as the four default types — so "no state constraint" was a state
+  // no URL could express. A saved view holding it came back as a *constrained*
+  // view, which is how applying one could silently keep the filter you had.
+  params.set('state', csv(f.stateTypes) ?? STATE_ANY)
   const stateNames = csv(f.stateNames)
   if (stateNames) params.set('sname', stateNames)
 
@@ -109,6 +120,38 @@ export function serializeFilters(state: CodecState): URLSearchParams {
 
   if (state.search) params.set('q', state.search)
 
+  return params
+}
+
+/**
+ * The `state` value that means "no type constraint", as opposed to an absent
+ * param, which means "the default four".
+ *
+ * Spelled rather than left empty so it survives a URL being normalized by
+ * something in between, and named `any` to match `dueFilter` and
+ * `recencyWindow`, which already use that word for the same idea — note the
+ * inverse role, though: for those two `any` IS the default and is omitted,
+ * while here it is the non-default value and is always written. A parser that
+ * predates this reads it as an unknown type and drops it, arriving at the same
+ * empty list — so old builds handle new links correctly by accident.
+ */
+export const STATE_ANY = 'any'
+
+/**
+ * Fill in `state` for a query written before `STATE_ANY` existed.
+ *
+ * The inference is sound for the whole history of this file: `state` was only
+ * ever omitted when the list was empty, never at the default — verified against
+ * the first commit, where the line already read `if (states) params.set(...)`.
+ * So an absent `state` in a stored query means the empty selection, which is
+ * what `any` spells.
+ *
+ * Mutates and returns `params` for the caller's convenience. Lives here rather
+ * than at its two call sites so the token and the rule that repairs it cannot
+ * drift apart.
+ */
+export function fillLegacyState(params: URLSearchParams): URLSearchParams {
+  if (!params.has('state')) params.set('state', STATE_ANY)
   return params
 }
 
@@ -182,7 +225,10 @@ export function parseFilters(params: URLSearchParams): CodecState {
     staleOnly: params.get('stale') === '1',
     stateTypes: ((): IssueStateType[] => {
       const s = params.get('state')
-      if (!s) return defaultFilters.stateTypes
+      // Absent still means the default, for links written before `any` existed
+      // and for launcher links that name no filters at all.
+      if (s === null) return defaultFilters.stateTypes
+      if (s === STATE_ANY) return []
       return s
         .split(',')
         .filter((x): x is IssueStateType => STATE_TYPES.includes(x as IssueStateType))

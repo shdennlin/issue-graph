@@ -19,7 +19,13 @@ import type { Viewport } from 'reactflow'
 import { useViewStore, type ViewId, type ThemeMode, type Density } from './viewStore'
 import { useWorkspaceStore } from './workspaceStore'
 import { DEFAULT_VIEW, readDefaultView } from '../lib/preferences'
-import { filterSignatureParts, hasFilterParams, parseFilters, serializeFilters } from './filterCodec'
+import {
+  fillLegacyState,
+  filterSignatureParts,
+  hasFilterParams,
+  parseFilters,
+  serializeFilters,
+} from './filterCodec'
 import { consumeCallback } from '../lib/linearAuth'
 import { useCapabilityStore } from './capabilityStore'
 
@@ -210,6 +216,15 @@ export function currentQuery(): string {
  */
 export function applySavedQuery(query: string): void {
   const params = new URLSearchParams(query)
+  // A view saved before `state=any` existed and holding no state constraint
+  // stored no `state` param at all — and parseUrl reads an absent one as the
+  // default four types, so applying such a view quietly installed a filter it
+  // never had. The inference is safe: any NON-empty list serialized to a param,
+  // so an omitted `state` in a stored query can only mean the list was empty.
+  //
+  // Only ever fires for legacy views; everything saved from now on writes the
+  // param explicitly.
+  fillLegacyState(params)
   const wid = useWorkspaceStore.getState().currentWorkspaceId
   if (wid) params.set('w', wid)
   const qs = params.toString()

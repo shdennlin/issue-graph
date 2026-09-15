@@ -108,14 +108,21 @@ describe('filterCodec round-trip', () => {
     expect(filters.stateTypes).toEqual([])
   })
 
-  // Known pre-existing limitation, documented rather than silently accepted:
-  // an explicitly-emptied stateTypes selection is indistinguishable from an
-  // absent param, so it comes back as the default set. Encoding it would need
-  // a sentinel value; out of scope for the codec extraction.
-  it('cannot represent an explicitly empty stateTypes selection', () => {
+  // This used to be a documented limitation: an emptied stateTypes selection
+  // serialized to nothing and came back as the default four, so "no state
+  // constraint" was a state no URL could hold. It is the one list whose default
+  // is not empty, which is why only this one needed a word for it.
+  it('represents an explicitly empty stateTypes selection', () => {
     const s = state({ stateTypes: [] })
-    expect(serializeFilters(s).has('state')).toBe(false)
-    expect(roundTrip(s).filters.stateTypes).toEqual(defaultFilters.stateTypes)
+    expect(serializeFilters(s).get('state')).toBe('any')
+    expect(roundTrip(s).filters.stateTypes).toEqual([])
+  })
+
+  // The distinction the whole fix rests on.
+  it('still reads an absent param as the default, for links that name no filters', () => {
+    expect(parseFilters(new URLSearchParams('recent=3h')).filters.stateTypes).toEqual(
+      defaultFilters.stateTypes,
+    )
   })
 })
 
@@ -217,15 +224,18 @@ describe('hasFilterParams', () => {
     expect(hasFilterParams(serializeFilters(state()))).toBe(true)
   })
 
-  // The documented blind spot. csv([]) omits the param, so "every state
-  // unchecked and nothing else set" serializes to nothing and reads as bare.
-  // The consequence is non-destructive — a follower keeps their own filters
-  // rather than having them cleared — so this pins the behavior rather than
-  // asserting it is desirable.
-  it('cannot see an emptied state list', () => {
-    expect(hasFilterParams(serializeFilters(state({ stateTypes: [] })))).toBe(false)
-    // Any other dimension is enough to make it visible again.
-    expect(hasFilterParams(serializeFilters(state({ stateTypes: [], assignees: ['me'] })))).toBe(true)
+  // Formerly the documented blind spot: csv([]) omitted the param, so "every
+  // state unchecked and nothing else set" serialized to nothing and a copied
+  // link read as bare, leaving the follower with their own filters instead of
+  // the cleared ones. `state=any` closes it.
+  it('sees an emptied state list', () => {
+    expect(hasFilterParams(serializeFilters(state({ stateTypes: [] })))).toBe(true)
+  })
+
+  // Unchanged and load-bearing: a launcher link names no filters at all, and
+  // that is what lets it inherit the ones already on screen.
+  it('still says no for a link that carries no state param', () => {
+    expect(hasFilterParams(new URLSearchParams('w=eng&focus=ENG-1&detail=1'))).toBe(false)
   })
 
   // 'active=0' is deliberately not in this list: it was the removed activeOnly

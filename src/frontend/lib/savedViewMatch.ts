@@ -8,6 +8,8 @@
 // saved query gets all three right for free: diverge by one filter and the
 // match simply stops holding.
 
+import { fillLegacyState } from '../store/filterCodec'
+
 /** Params that never take part in the comparison. Mirrors the server's
  *  STRIPPED_PARAMS — a saved query has already had these removed, and the live
  *  URL still carries them, so both sides must drop them to line up.
@@ -30,6 +32,10 @@ const IGNORED = ['w', 'focus', 'detail', 'chain', 'note', 'notes', 'active']
 export function canonicalQuery(raw: string): string {
   const params = new URLSearchParams(raw.startsWith('?') ? raw.slice(1) : raw)
   for (const key of IGNORED) params.delete(key)
+  // The live URL always carries `state` now, so a view stored before that was
+  // true would never match again and would read as edited-away-from forever —
+  // the same trap `active` fell into.
+  fillLegacyState(params)
   const pairs = [...params.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
   return pairs.map(([k, v]) => `${k}=${v}`).join('&')
 }

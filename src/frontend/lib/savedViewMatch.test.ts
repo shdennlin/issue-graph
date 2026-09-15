@@ -147,3 +147,29 @@ describe('the retired `active` param', () => {
     expect(matchSavedView('?state=started', views)?.id).toBe(2)
   })
 })
+
+// Reported symptom: applying the saved view "Last 3h" kept the State filter
+// that was already on screen, showed 4 issues instead of 10, and marked the
+// view as edited the instant it was applied — so "Discard changes" re-applied
+// the same query and appeared to do nothing.
+//
+// The stored query is real, copied from the workspace that hit this.
+describe('a view saved with no state constraint', () => {
+  const LAST_3H = { id: 5, name: 'Last 3h', query: 'related=1&hier=1&recent=3h' }
+
+  // The live URL always carries `state` now. Without normalizing the stored
+  // side, this view could never match again and would read as dirty forever.
+  it('matches the live URL that applying it produces', () => {
+    expect(matchSavedView('?related=1&hier=1&recent=3h&state=any', [LAST_3H])?.id).toBe(5)
+  })
+
+  it('does not match a URL that really does constrain the state', () => {
+    expect(matchSavedView('?related=1&hier=1&recent=3h&state=started', [LAST_3H])).toBeNull()
+  })
+
+  // The inference the bridge rests on: any non-empty list serialized to a
+  // param, so an omitted `state` in a stored query can only mean "empty".
+  it('is treated as the empty selection, not the default four', () => {
+    expect(canonicalQuery(LAST_3H.query)).toContain('state=any')
+  })
+})
