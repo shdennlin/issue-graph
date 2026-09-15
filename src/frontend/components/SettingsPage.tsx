@@ -365,7 +365,7 @@ export function SettingsPage() {
         </label>
 
         <h4>{t('settings.backend')}</h4>
-        <div style={{ color: 'var(--fg-muted)', fontSize: 12 }}>
+        <div className="settings-help">
           {t('settings.profile')}{' '}
           {data?.workspace?.active ? (
             <>
@@ -460,28 +460,27 @@ export function SettingsPage() {
             {t('settings.cacheTtlSuffix', { minutes: Math.round(cacheTtl / 60) })}
           </span>
         </label>
-        <div style={{ marginTop: 10 }}>
+        <div className="settings-control-row">
           <button onClick={resetCache} disabled={resetting} title={t('settings.resetButtonTitle')}>
             {resetting ? t('settings.resetting') : t('settings.resetButton')}
           </button>
-          <div style={{ color: 'var(--fg-muted)', fontSize: 11, marginTop: 4 }}>
-            {t('settings.resetHelp')}
-          </div>
         </div>
+        <div className="settings-help">{t('settings.resetHelp')}</div>
 
         <h4>{t('settings.workspaces')}</h4>
         <WorkspaceSettings />
 
         <h4>{t('settings.annotations')}</h4>
-        <button onClick={exportAnnotations}>{t('settings.exportJson')}</button>{' '}
-        <button onClick={importAnnotations}>{t('settings.importJson')}</button>
+        <div className="settings-control-row">
+          <button onClick={exportAnnotations}>{t('settings.exportJson')}</button>
+          <button onClick={importAnnotations}>{t('settings.importJson')}</button>
+        </div>
 
         <h4>{t('settings.about')}</h4>
-        <div style={{ color: 'var(--fg-muted)', fontSize: 12 }}>
+        <div className="settings-help">
           {t('settings.backendValue', { value: env.backend as string })}
         </div>
 
-        </div>
         {/* Write access. Nothing here is saved to the server, and that is the
             whole design: the user authorises Linear directly, the resulting
             token stays in this browser, and the server borrows it for one call
@@ -489,11 +488,11 @@ export function SettingsPage() {
             store to leak, and no shared secret whose holder is anonymous —
             Linear attributes each change to the person who made it. */}
         <h4 id="settings-write-access" ref={writeAccessRef}>{t('settings.writeAccess')}</h4>
-        <div style={{ color: 'var(--fg-muted)', fontSize: 12, marginBottom: 8, maxWidth: '46em' }}>
+        <div className="settings-help">
           {oauthClientId ? t('settings.writeAccessHelp') : t('settings.writeAccessDisabled')}
         </div>
         {connectedAuth ? (
-          <>
+          <div className="settings-control-row">
             <span style={{ fontSize: 12 }}>
               ✅ {t('settings.writeAccessConnected')}{' '}
               <span style={{ color: 'var(--fg-muted)' }}>
@@ -514,9 +513,9 @@ export function SettingsPage() {
             >
               {t('settings.writeAccessDisconnect')}
             </button>
-          </>
+          </div>
         ) : (
-          <>
+          <div className="settings-control-row">
             <button
               type="button"
               className="primary"
@@ -540,7 +539,7 @@ export function SettingsPage() {
                 {t('settings.writeAccessExpired')}
               </span>
             )}
-          </>
+          </div>
         )}
         {(startError || roundTripError) && (
           <div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 6, maxWidth: '46em' }}>
@@ -556,17 +555,18 @@ export function SettingsPage() {
         {/* The scope of what the user is about to grant, on its own line: it is
             the one thing here they cannot undo by clicking Disconnect, because
             changes already made stay made. */}
-        <div style={{ color: 'var(--fg-muted)', fontSize: 12, marginTop: 8, maxWidth: '46em' }}>
+        <div className="settings-help">
           {t('settings.writeAccessAttribution')}
         </div>
 
         <h4>{t('settings.webhook')}</h4>
-        <div style={{ color: 'var(--fg-muted)', fontSize: 12, marginBottom: 6 }}>
+        <div className="settings-help">
           {t('settings.webhookHelp')}
         </div>
-        <label>
+        <label className="settings-field">
           {t('settings.webhookSecret')}{' '}
           <input
+            className="settings-secret-input"
             type="password"
             autoComplete="off"
             placeholder={
@@ -575,7 +575,7 @@ export function SettingsPage() {
             onChange={(e) => setDraft({ ...draft, linear_webhook_secret: e.target.value })}
           />
         </label>
-        <div style={{ color: 'var(--fg-muted)', fontSize: 12, marginTop: 6 }}>
+        <div className="settings-help">
           {/* Status matters more than it looks: a webhook that stops arriving
               fails silently — the graph just quietly goes stale. These counters
               are the only way to notice. */}
@@ -596,6 +596,8 @@ export function SettingsPage() {
           ) : (
             t('settings.webhookNever')
           )}
+        </div>
+
         </div>
 
         <div className="settings-footer">
