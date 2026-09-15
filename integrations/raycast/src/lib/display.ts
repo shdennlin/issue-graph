@@ -81,6 +81,23 @@ export function stateRank(type: IssueStateType): number {
   return i === -1 ? STATE_ORDER.length : i;
 }
 
+/**
+ * Whether a query is addressing one issue by its id rather than describing one.
+ *
+ * All digits ("393") or containing a dash ("one-393"). Identifiers are
+ * `TEAM-NNN`, so an alphabetic query is a word search however it is spelled,
+ * and the team prefix alone must not count — every issue starts with it.
+ *
+ * The same rule exists in the web app's fuzzyMatch.ts, for the same reason and
+ * deliberately duplicated: this package builds independently and cannot import
+ * from src/frontend. If one changes, change the other.
+ */
+export function isIdQuery(query: string): boolean {
+  const q = query.trim();
+  if (q.length === 0) return false;
+  return /^\d+$/.test(q) || q.includes("-");
+}
+
 export function stateSectionTitle(type: IssueStateType): string {
   return STATE_SECTION_TITLE[type] ?? type;
 }

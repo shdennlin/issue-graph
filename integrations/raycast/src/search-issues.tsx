@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 import {
   dueAccessory,
   formatShortDate,
+  isIdQuery,
   priorityIcon,
   priorityName,
   relationsByType,
@@ -73,6 +74,10 @@ export default function Command() {
 
   const [workspaceFilter, setWorkspaceFilter] = useState<string>(ALL);
   const [showDetail, setShowDetail] = useState(false);
+  // Tracked only to notice when the query is naming an issue. Raycast still
+  // does the filtering itself — `filtering` is set explicitly below, which it
+  // has to be, because supplying onSearchTextChange otherwise turns it off.
+  const [searchText, setSearchText] = useState("");
 
   const multiWorkspace = profiles.length > 1;
   const visible =
@@ -83,6 +88,14 @@ export default function Command() {
   // Partition into state sections (Triage → In Progress → Todo → Backlog →
   // Completed → Canceled), preserving the frecency order within each section.
   const sections = groupByState(visible);
+
+  // Naming an issue outranks the grouping. Sections are pinned in state order
+  // so finished work stays at the bottom while you browse — but that same
+  // pinning puts any In Progress issue above the one you just typed the number
+  // of, however much better the match. When the query is an id reference,
+  // drop the sections and let Raycast rank the whole list, so the issue you
+  // asked for is the first row.
+  const byIdentifier = isIdQuery(searchText);
 
   // Force a fresh pull from the upstream backend, then revalidate so the list
   // reflects it. Scope follows the workspace dropdown: "All" syncs every
@@ -149,6 +162,19 @@ export default function Command() {
     .filter(Boolean)
     .join(" · ");
 
+  const renderItem = (issue: IssueRow) => (
+    <IssueItem
+      key={issue.id}
+      issue={issue}
+      baseUrl={baseUrl}
+      opener={opener}
+      showDetail={showDetail}
+      onToggleDetail={() => setShowDetail((v) => !v)}
+      onVisit={() => visitItem(issue)}
+      onSync={handleSync}
+    />
+  );
+
   return (
     <List
       navigationTitle={navigationTitle}
@@ -158,6 +184,7 @@ export default function Command() {
       // keepSectionOrder pins the STATE_ORDER grouping so done work always
       // stays at the bottom; ranking still applies within each section.
       filtering={{ keepSectionOrder: true }}
+      onSearchTextChange={setSearchText}
       isLoading={isLoading}
       isShowingDetail={showDetail && visible.length > 0}
       searchBarPlaceholder="Search by id, title, assignee, or workspace…"
@@ -202,6 +229,8 @@ export default function Command() {
             </ActionPanel>
           }
         />
+      ) : byIdentifier ? (
+        visible.map((issue) => renderItem(issue))
       ) : (
         sections.map((section) => (
           <List.Section
@@ -209,18 +238,7 @@ export default function Command() {
             title={section.title}
             subtitle={String(section.rows.length)}
           >
-            {section.rows.map((issue) => (
-              <IssueItem
-                key={issue.id}
-                issue={issue}
-                baseUrl={baseUrl}
-                opener={opener}
-                showDetail={showDetail}
-                onToggleDetail={() => setShowDetail((v) => !v)}
-                onVisit={() => visitItem(issue)}
-                onSync={handleSync}
-              />
-            ))}
+            {section.rows.map((issue) => renderItem(issue))}
           </List.Section>
         ))
       )}
