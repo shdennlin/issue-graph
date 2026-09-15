@@ -6,14 +6,17 @@ import {
   type BackendAdapter,
   type FetchOpts,
   type IssueDetail,
+  type IssuePatch,
   type RateLimitInfo,
 } from '../types.js'
 import {
+  ADD_COMMENT_MUTATION,
   ISSUES_QUERY,
   ISSUE_DETAIL_QUERY,
   LABELS_QUERY,
   PROJECT_DETAIL_QUERY,
   RECONCILE_IDENTIFIERS_QUERY,
+  UPDATE_ISSUE_MUTATION,
   VIEWER_QUERY,
   WORKFLOW_STATES_QUERY,
 } from './queries.js'
@@ -23,6 +26,32 @@ interface LinearOptions {
   apiKey: string
   endpoint: string
   teamId?: string | undefined
+}
+
+/**
+ * Translate an IssuePatch into Linear's IssueUpdateInput.
+ *
+ * The whole point of this function is the difference between an absent key and
+ * an explicit null. `IssueUpdateInput` only touches the fields it is given, and
+ * a field set to null is *cleared* — so omitting `assigneeId` leaves the
+ * assignee alone while passing null unassigns. A truthiness check would
+ * collapse those two into one and make unassigning impossible, which is why
+ * this reads the key's presence rather than its value.
+ *
+ * Exported (like buildIssueFilter) so the mapping is testable without an API.
+ */
+export function buildIssuePatchInput(patch: IssuePatch): Record<string, unknown> {
+  const input: Record<string, unknown> = {}
+  if (patch.stateId !== undefined) input.stateId = patch.stateId
+  if ('assigneeId' in patch) input.assigneeId = patch.assigneeId ?? null
+  // 0 is "No priority" — a value the user can choose — so this cannot be a
+  // truthiness check without making that choice unreachable.
+  if (patch.priority !== undefined) input.priority = patch.priority
+  // Empty arrays are dropped: Linear accepts them but they mean "change
+  // nothing", and sending one would turn a no-op into a real mutation.
+  if (patch.addedLabelIds?.length) input.addedLabelIds = patch.addedLabelIds
+  if (patch.removedLabelIds?.length) input.removedLabelIds = patch.removedLabelIds
+  return input
 }
 
 /**
@@ -264,5 +293,23 @@ export class LinearBackend implements BackendAdapter {
       after = data.issueLabels.pageInfo.endCursor
     }
     return out
+  }
+
+  async updateIssue(id: string, patch: IssuePatch): Promise<void> {
+    const input = buildIssuePatchInput(patch)
+    // An empty patch would be a no-op round trip to Linear that still reports
+    // success, which would make the caller believe a change landed.
+    if (Object.keys(input).length === 0) throw new Error('Issue update requested with no fields.')
+    type Resp = { issueUpdate: { success: boolean } }
+    const data = await this.gql<Resp>(UPDATE_ISSUE_MUTATION, { id, input })
+    // Linear answers 200 with success:false for a rejected-but-well-formed
+    // mutation, so this is the only place the failure surfaces.
+    if (!data.issueUpdate?.success) throw new Error(`Linear declined the update to ${id}.`)
+  }
+
+  async addComment(issueId: string, body: string): Promise<void> {
+    type Resp = { commentCreate: { success: boolean } }
+    const data = await this.gql<Resp>(ADD_COMMENT_MUTATION, { input: { issueId, body } })
+    if (!data.commentCreate?.success) throw new Error(`Linear declined the comment on ${issueId}.`)
   }
 }

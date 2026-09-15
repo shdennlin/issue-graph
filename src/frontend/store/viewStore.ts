@@ -253,6 +253,14 @@ export interface ViewState {
   setInlineSearchQuery: (q: string) => void
   setInlineSearchActiveIdx: (i: number) => void
   setSettingsOpen: (b: boolean) => void
+  /**
+   * Which section the settings modal should land on when it opens. Cleared by
+   * SettingsPage once it has scrolled, so reopening from the keyboard does not
+   * jump to wherever the last deep link pointed.
+   */
+  settingsSection: string | null
+  openSettingsAt: (section: string) => void
+  clearSettingsSection: () => void
   setSyncHistoryOpen: (b: boolean) => void
   setCoverageOpen: (b: boolean) => void
   setShortcutsOpen: (b: boolean) => void
@@ -351,6 +359,7 @@ export const useViewStore = create<ViewState>((set) => ({
   search: '',
   inlineSearch: { open: false, query: '', activeIdx: 0 },
   settingsOpen: false,
+  settingsSection: null,
   syncHistoryOpen: false,
   coverageOpen: false,
   shortcutsOpen: false,
@@ -502,6 +511,8 @@ export const useViewStore = create<ViewState>((set) => ({
   setInlineSearchActiveIdx: (i) =>
     set((s) => ({ inlineSearch: { ...s.inlineSearch, activeIdx: i } })),
   setSettingsOpen: (b) => set({ settingsOpen: b }),
+  openSettingsAt: (section) => set({ settingsOpen: true, settingsSection: section }),
+  clearSettingsSection: () => set({ settingsSection: null }),
   setSyncHistoryOpen: (b) => set({ syncHistoryOpen: b }),
   setCoverageOpen: (b) => set({ coverageOpen: b }),
   setShortcutsOpen: (b) => set({ shortcutsOpen: b }),

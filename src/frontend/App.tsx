@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef } from 'react'
 import { useGraphStore } from './store/graphStore'
 import { useNotesStore } from './store/notesStore'
 import { useSchemaStore } from './store/schemaStore'
+import { useCapabilityStore } from './store/capabilityStore'
 import { useViewStore } from './store/viewStore'
 import { makeTabId, useWorkspaceStore } from './store/workspaceStore'
 import { loadTab, peekTabFilters, peekTabView, restoreViewportOnly, snapshotTab } from './store/tabStateStore'
@@ -9,6 +10,7 @@ import { arrivedViaBareDeepLink, useUrlSync } from './store/urlSync'
 import { useTheme } from './hooks/useTheme'
 import { useFontSize } from './hooks/useFontSize'
 import { api } from './lib/api'
+import { isTypingTarget } from './lib/isTypingTarget'
 import { GraphCanvas } from './components/GraphCanvas'
 import { TabBar } from './components/TabBar'
 import { Toolbar } from './components/Toolbar'
@@ -130,6 +132,10 @@ export function App() {
       } finally {
         if (!cancelled) useWorkspaceStore.getState().setInitialized(true)
       }
+      // Whether this server allows writes at all. Asked once — it is a property
+      // of the process, not of the workspace, so it does not belong in the
+      // per-tab reload below.
+      if (!cancelled) void useCapabilityStore.getState().load()
     })()
     return () => {
       cancelled = true
@@ -397,9 +403,7 @@ export function App() {
       // Snapshots the previous tab's state before the switch so coming back
       // via Cmd+N feels instant.
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && /^[1-9]$/.test(e.key)) {
-        const target = e.target as HTMLElement | null
-        const tag = target?.tagName?.toLowerCase()
-        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        if (isTypingTarget(e.target as HTMLElement | null)) return
         const ws = useWorkspaceStore.getState()
         if (ws.unconfigured || ws.tabs.length === 0) return
         const idx = parseInt(e.key, 10) - 1
@@ -417,9 +421,7 @@ export function App() {
       // occasionally wants to peek at an issue's details. No-op if panel
       // is already open, or if no issue is focused.
       if ((e.key === ' ' || e.key === 'Enter') && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
-        const target = e.target as HTMLElement | null
-        const tag = target?.tagName?.toLowerCase()
-        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        if (isTypingTarget(e.target as HTMLElement | null)) return
         const s = useViewStore.getState()
         if (!s.focusedId) return
         if (s.detailPanelOpen) return
@@ -436,9 +438,7 @@ export function App() {
       // set to the connected blocks component regardless of view.
       if (e.key === 'c' || e.key === 'C') {
         if (e.metaKey || e.ctrlKey || e.altKey) return
-        const target = e.target as HTMLElement | null
-        const tag = target?.tagName?.toLowerCase()
-        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        if (isTypingTarget(e.target as HTMLElement | null)) return
         const s = useViewStore.getState()
         const roots = s.selection.length > 0 ? s.selection : s.focusedId ? [s.focusedId] : []
         if (roots.length === 0) return
@@ -451,9 +451,7 @@ export function App() {
       // inside an input. On most layouts '?' is Shift+/ — we accept the
       // resolved character regardless of which physical keys produced it.
       if (e.key === '?') {
-        const target = e.target as HTMLElement | null
-        const tag = target?.tagName?.toLowerCase()
-        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        if (isTypingTarget(e.target as HTMLElement | null)) return
         e.preventDefault()
         useViewStore.getState().setShortcutsOpen(true)
         return
@@ -464,9 +462,7 @@ export function App() {
       // editor). Use the in-modal Back / Esc to peel editor → grid.
       if (e.key === 'n') {
         if (e.metaKey || e.ctrlKey || e.altKey) return
-        const target = e.target as HTMLElement | null
-        const tag = target?.tagName?.toLowerCase()
-        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        if (isTypingTarget(e.target as HTMLElement | null)) return
         e.preventDefault()
         const s = useViewStore.getState()
         s.setNotesOpen(!s.notesOpen)
@@ -479,9 +475,7 @@ export function App() {
       // Same input-focus guards as the other letter shortcuts.
       if (e.key === 'd') {
         if (e.metaKey || e.ctrlKey || e.altKey) return
-        const target = e.target as HTMLElement | null
-        const tag = target?.tagName?.toLowerCase()
-        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        if (isTypingTarget(e.target as HTMLElement | null)) return
         const s = useViewStore.getState()
         if (s.focusedId === null) return
         e.preventDefault()
@@ -490,9 +484,7 @@ export function App() {
       }
       if (e.key === 'D') {
         if (e.metaKey || e.ctrlKey || e.altKey) return
-        const target = e.target as HTMLElement | null
-        const tag = target?.tagName?.toLowerCase()
-        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        if (isTypingTarget(e.target as HTMLElement | null)) return
         e.preventDefault()
         const s = useViewStore.getState()
         s.setDetailPanelAutoOpen(!s.detailPanelAutoOpen)
@@ -519,9 +511,7 @@ export function App() {
       // Same input-focus guards as the other letter shortcuts.
       if (e.key === 'r') {
         if (e.metaKey || e.ctrlKey || e.altKey) return
-        const target = e.target as HTMLElement | null
-        const tag = target?.tagName?.toLowerCase()
-        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        if (isTypingTarget(e.target as HTMLElement | null)) return
         const s = useViewStore.getState()
         if (s.activeView !== 'dependency' && s.chainRootIds.length === 0) return
         e.preventDefault()
@@ -533,9 +523,7 @@ export function App() {
       // in chain mode, so elsewhere the key falls through untouched.
       if (e.key === 'h') {
         if (e.metaKey || e.ctrlKey || e.altKey) return
-        const target = e.target as HTMLElement | null
-        const tag = target?.tagName?.toLowerCase()
-        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        if (isTypingTarget(e.target as HTMLElement | null)) return
         const s = useViewStore.getState()
         if (s.activeView !== 'dependency' && s.chainRootIds.length === 0) return
         e.preventDefault()
@@ -547,9 +535,7 @@ export function App() {
       // in any view, doesn't require a focused issue.
       if (e.key === 'R') {
         if (e.metaKey || e.ctrlKey || e.altKey) return
-        const target = e.target as HTMLElement | null
-        const tag = target?.tagName?.toLowerCase()
-        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        if (isTypingTarget(e.target as HTMLElement | null)) return
         e.preventDefault()
         bumpLayout()
         return

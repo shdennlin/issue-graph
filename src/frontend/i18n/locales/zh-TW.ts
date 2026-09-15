@@ -105,6 +105,25 @@ export const zhTW: Dict = {
     wsAdd: '新增工作區',
     webhook: 'Linear webhook',
     webhookHelp: '讓 Linear 主動推送變更，不必等下一次輪詢。需要一個公網可達的網址（見文件）。下面這組密鑰是用來證明進來的請求真的來自 Linear；沒設的話所有請求都會被拒絕。',
+    writeAccess: '寫入權限',
+    writeAccessHelp:
+      '連結你自己的 Linear 帳號，就能從這裡修改議題。系統會把你導到 Linear 授權；拿到的存取權杖只留在這個瀏覽器，伺服器不會保存。讀取不需要它 —— 這只用於修改。',
+    writeAccessDisabled:
+      '這台伺服器還沒有設定 Linear OAuth 應用程式，所以目前沒有人能修改。請在伺服器環境變數設定 LINEAR_OAUTH_CLIENT_ID 後重啟。',
+    writeAccessAttribution:
+      '你在這裡做的修改，在 Linear 上會記錄成你本人所為，就跟你直接在 Linear 操作一樣。授權大約維持一天，之後需要重新連結。',
+    writeAccessConnect: '連結 Linear',
+    writeAccessDisconnect: '解除連結',
+    writeAccessConnected: '已連結 Linear。',
+    writeAccessExpires: '授權到期時間：{value}。',
+    writeAccessExpired: '先前的授權已過期 —— 請重新連結才能修改。',
+    writeAccessFailed: '無法啟動 Linear 登入流程。請檢查伺服器的 OAuth client id 後再試一次。',
+    writeAccessInsecure:
+      '連結 Linear 需要安全的頁面 —— https 或 localhost。透過純 http 連到 IP 位址時，瀏覽器不會提供這個登入流程所需的加密功能。（這也是同一個限制讓 app 在那種情況下失去離線支援；請參考 README 關於在前面加一層 HTTPS 的說明。）',
+    writeAccessRejected:
+      '這次登入與這個瀏覽器發起的流程不符，已被捨棄。請在這個分頁重新連結。',
+    writeAccessExchangeFailed:
+      'Linear 已把你導回，但沒能取得存取權杖。請重新連結；若持續失敗，可能是伺服器的 OAuth 應用程式要求 client secret，而這套設定並未使用它。',
     webhookSecret: '簽章密鑰',
     webhookSecretSet: '（已設定 — 輸入以更換，留空則保持不變）',
     webhookSecretUnset: '（未設定 — webhook 停用中）',
@@ -230,6 +249,7 @@ export const zhTW: Dict = {
     unconfigured: '請先新增一個工作區。',
     switchInProgress: '另一個工作區變更正在進行中，請稍候再試。',
     switchFailed: '無法變更預設工作區，請查看伺服器 log。',
+    unauthenticated: '請先在設定中連結你的 Linear 帳號才能修改。',
   },
   onboarding: {
     submitting: '驗證金鑰中…',
@@ -444,6 +464,17 @@ export const zhTW: Dict = {
     annotations: '註解（{count}）',
     addAnnotationPlaceholder: '新增註解（Markdown）…',
     addAnnotation: '新增註解',
+    changeState: '變更狀態',
+    changePriority: '變更優先度',
+    addLabel: '新增標籤',
+    addLabelPlaceholder: '＋ 標籤…',
+    removeLabel: '移除標籤 {value}',
+    changeAssignee: '變更負責人',
+    writeLocked: '連結你的 Linear 帳號才能修改。',
+    writeLockedCta: '前往連結',
+    commentPlaceholder: '撰寫留言（支援 markdown）…',
+    commentSend: '留言',
+    commentSending: '傳送中…',
     comments: '留言（{count}）',
     commentsLoading: '載入留言中…',
     noComments: '目前沒有留言。',

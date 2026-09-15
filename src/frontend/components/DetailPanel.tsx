@@ -15,6 +15,16 @@ import { resolveHierarchy } from '../views/hierarchy'
 import { renderMarkdownHtml } from '../lib/markdown'
 import { MarkdownBody } from './MarkdownBody'
 import { translate, useLocale, useT } from '../i18n'
+import { isTypingTarget } from '../lib/isTypingTarget'
+import {
+  AssigneeControl,
+  CommentComposer,
+  LabelAddControl,
+  LabelRemoveButton,
+  PriorityControl,
+  StatusControl,
+  WriteLockedHint,
+} from './detail/IssueWriteControls'
 
 function timeAgo(iso: string, locale: ReturnType<typeof useLocale>): string {
   const ms = Date.now() - new Date(iso).getTime()
@@ -76,9 +86,7 @@ export function DetailPanel() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'm' && e.key !== 'M') return
       if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
-      const target = e.target as HTMLElement | null
-      const tag = target?.tagName?.toLowerCase()
-      if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+      if (isTypingTarget(e.target as HTMLElement | null)) return
       e.preventDefault()
       toggleWide()
     }
@@ -167,6 +175,12 @@ export function DetailPanel() {
   // references it directly. Avoids react-hooks/exhaustive-deps complaining
   // about deriving the dep from `issue?.identifier` inside the deps array.
   const issueId = issue?.identifier
+  // Bumped after a comment posts, to re-run the fetch below for the same issue.
+  // The effect keys on the identifier alone, so without this a new comment
+  // would not appear until the panel was closed and reopened — the server's
+  // detail cache is already busted by the write, so the refetch is cheap and
+  // returns the real comment (author, timestamp) instead of a local guess.
+  const [detailNonce, setDetailNonce] = useState(0)
   useEffect(() => {
     // react-hooks/set-state-in-effect: standard async-fetch pattern — clear
     // stale description, mark loading, then write the resolved value (or
@@ -194,7 +208,7 @@ export function DetailPanel() {
       })
       .finally(() => { if (!cancelled) setDescLoading(false) })
     return () => { cancelled = true }
-  }, [issueId])
+  }, [issueId, detailNonce])
 
   // Viewport-adaptive max: never wider than 75% of the window, never wider
   // than 1200px (long-form reading column ceiling). Re-derived on window
@@ -374,6 +388,9 @@ export function DetailPanel() {
       </a>
 
       <div className="section">
+        {/* Above the fields it explains, and only while the fix is in the
+            user's hands — see WriteLockedHint. */}
+        <WriteLockedHint />
         <div className="row">
           <span className="k">{t('detailPanel.state')}</span>
           <button
@@ -386,6 +403,9 @@ export function DetailPanel() {
             <span className="glyph" aria-hidden>{stateIcon(issue.state.type)}</span>
             <span>{issue.state.name}</span>
           </button>
+          {/* The pill above stays: it is how you filter to this state. The
+              control changes it. Two verbs, two affordances. */}
+          <StatusControl issue={issue} />
         </div>
         <div className="row">
           <span className="k">{t('detailPanel.priority')}</span>
@@ -397,6 +417,7 @@ export function DetailPanel() {
           >
             {priorityLabelFor(issue.priority, locale)}
           </button>
+          <PriorityControl issue={issue} />
         </div>
         <div className="row">
           <span className="k">{t('detailPanel.assignee')}</span>
@@ -408,6 +429,7 @@ export function DetailPanel() {
           >
             {issue.assignee?.displayName ?? t('detailPanel.unassignedShort')}
           </button>
+          <AssigneeControl issue={issue} />
         </div>
         <div className="row">
           <span className="k">{t('detailPanel.project')}</span>
@@ -524,8 +546,8 @@ export function DetailPanel() {
             </span>
             <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
               {sec.labels.map((l) => (
+                <span key={l.id} className="detail-label-chip">
                 <button
-                  key={l.id}
                   type="button"
                   className="detail-filter-link"
                   onClick={() => { applyLabelFilter(sec, l.id); setDetailPanelOpen(false) }}
@@ -540,10 +562,13 @@ export function DetailPanel() {
                 >
                   {sec.kind === 'prefix' ? shortPrefixDisplay(l.name, sec.key) : l.name}
                 </button>
+                <LabelRemoveButton issue={issue} label={l} />
+              </span>
               ))}
             </span>
           </div>
         ))}
+        <LabelAddControl issue={issue} />
       </div>
 
       {docs.length > 0 && (
@@ -746,6 +771,7 @@ export function DetailPanel() {
             <MarkdownBody body={cm.body} />
           </div>
         ))}
+        <CommentComposer identifier={issue.identifier} onPosted={() => setDetailNonce((n) => n + 1)} />
       </div>
     </aside>
   )

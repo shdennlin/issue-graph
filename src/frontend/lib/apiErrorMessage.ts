@@ -21,6 +21,10 @@ const BY_CODE: Record<string, DictKey> = {
   unconfigured: 'apiError.unconfigured',
   switch_in_progress: 'apiError.switchInProgress',
   switch_failed: 'apiError.switchFailed',
+  // The most likely error on a write, and the only one the reader can fix
+  // themselves — worth translating rather than falling through to the server's
+  // English sentence.
+  unauthenticated: 'apiError.unauthenticated',
 }
 
 export function apiErrorKey(code: string | null | undefined): DictKey | null {

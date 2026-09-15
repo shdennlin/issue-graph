@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useViewStore } from '../store/viewStore'
 import { useSchemaStore } from '../store/schemaStore'
 import { api, type SettingsResponse } from '../lib/api'
 import { ModalHeader } from './ModalHeader'
 import { WorkspaceSettings } from './WorkspaceSettings'
 import { readDefaultView, writeDefaultView } from '../lib/preferences'
+import { InsecureContextError, beginAuth, clearAuth, readAuth } from '../lib/linearAuth'
+import { useCapabilityStore } from '../store/capabilityStore'
 import type { ThemeMode, ViewId } from '../store/viewStore'
 import { LOCALES, useLocale, useSetLocale, useT, type Locale } from '../i18n'
 
@@ -24,6 +26,24 @@ export function SettingsPage() {
   const t = useT()
   const schema = useSchemaStore((s) => s.schema)
   const [data, setData] = useState<SettingsResponse | null>(null)
+  // Set only by beginAuth failing here; the round-trip failures live in the
+  // capability store, because they happen while this panel may be closed.
+  const [startError, setStartError] = useState<'insecure' | 'generic' | null>(null)
+  const roundTripError = useCapabilityStore((s) => s.authError)
+  // Subscribed here, above the `if (!open)` return, because it is a hook —
+  // and read rather than recomputed so "is this token usable" has one answer,
+  // shared with the controls in the detail panel that gate on it.
+  const unlocked = useCapabilityStore((s) => s.unlocked)
+  // Disconnecting an *already expired* token leaves `unlocked` false either
+  // way, so the store's change is not enough to re-render this section. This
+  // counter is what makes the expiry hint disappear on click.
+  const [authTick, setAuthTick] = useState(0)
+  // Deep-link target. The write-access section is the seventh block down, so a
+  // hint that says "go to Settings" and then drops the user at the top has not
+  // actually taken them anywhere.
+  const writeAccessRef = useRef<HTMLHeadingElement | null>(null)
+  const settingsSection = useViewStore((s) => s.settingsSection)
+  const clearSettingsSection = useViewStore((s) => s.clearSettingsSection)
   const [draft, setDraft] = useState<Record<string, unknown>>({})
   const [resetting, setResetting] = useState(false)
   // Phased progress for the reset flow. Each phase is visible to the user as
@@ -38,8 +58,37 @@ export function SettingsPage() {
     api.fetchSettings().then(setData).catch(() => setData(null))
   }, [open])
 
+  // Land on the section the caller asked for. No animation — the house style
+  // is a direct jump (see the note about programmatic scroll in CLAUDE.md), and
+  // a smooth scroll through six unrelated sections is worse than arriving.
+  // Cleared immediately so a later keyboard-opened settings modal starts at the
+  // top rather than wherever the last deep link pointed.
+  useEffect(() => {
+    if (!open || settingsSection !== 'write-access') return
+    writeAccessRef.current?.scrollIntoView({ block: 'start' })
+    clearSettingsSection()
+  }, [open, settingsSection, clearSettingsSection])
+
   if (!open) return null
 
+  // A value, not a boolean: the browser cannot start the authorize redirect
+  // without it. Empty means write-back is unconfigured on this server.
+  const oauthClientId =
+    typeof data?.env?.linear_oauth_client_id === 'string'
+      ? (data.env.linear_oauth_client_id as string)
+      : ''
+
+  // Read straight through on each render rather than memoised: it is a single
+  // localStorage hit, and a memo here would need `unlocked` and `authTick` as
+  // deps without using either — exactly the spurious dependency that makes a
+  // memo recompute for nothing while reading as if it were load-bearing.
+  // `authTick` is referenced only to tie this render to the disconnect click.
+  void authTick
+  const storedAuth = readAuth()
+  const connectedAuth = unlocked && storedAuth ? storedAuth : null
+  // Present but past its expiry — worth saying so, because the user's mental
+  // model is "I connected this already" while the controls sit disabled.
+  const expiredAuth = !unlocked && storedAuth !== null
   const env = data?.env ?? {}
   const stored = data?.stored ?? {}
 
@@ -433,6 +482,84 @@ export function SettingsPage() {
         </div>
 
         </div>
+        {/* Write access. Nothing here is saved to the server, and that is the
+            whole design: the user authorises Linear directly, the resulting
+            token stays in this browser, and the server borrows it for one call
+            per write without ever storing it. There is no server-side token
+            store to leak, and no shared secret whose holder is anonymous —
+            Linear attributes each change to the person who made it. */}
+        <h4 id="settings-write-access" ref={writeAccessRef}>{t('settings.writeAccess')}</h4>
+        <div style={{ color: 'var(--fg-muted)', fontSize: 12, marginBottom: 8, maxWidth: '46em' }}>
+          {oauthClientId ? t('settings.writeAccessHelp') : t('settings.writeAccessDisabled')}
+        </div>
+        {connectedAuth ? (
+          <>
+            <span style={{ fontSize: 12 }}>
+              ✅ {t('settings.writeAccessConnected')}{' '}
+              <span style={{ color: 'var(--fg-muted)' }}>
+                {t('settings.writeAccessExpires', {
+                  value: new Date(connectedAuth.expiresAt).toLocaleString(),
+                })}
+              </span>
+            </span>{' '}
+            <button
+              type="button"
+              onClick={() => {
+                clearAuth()
+                const cap = useCapabilityStore.getState()
+                cap.refreshUnlocked()
+                cap.setAuthError(null)
+                setAuthTick((n) => n + 1)
+              }}
+            >
+              {t('settings.writeAccessDisconnect')}
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="primary"
+              disabled={!oauthClientId}
+              onClick={() => {
+                setStartError(null)
+                useCapabilityStore.getState().setAuthError(null)
+                // Navigates away. Deliberately NOT routed through the `run()`
+                // helper the workspace fields use — that ends in
+                // window.location.reload(), which would discard the PKCE
+                // verifier this call has just stashed.
+                void beginAuth(oauthClientId).catch((err: unknown) =>
+                  setStartError(err instanceof InsecureContextError ? 'insecure' : 'generic'),
+                )
+              }}
+            >
+              {t('settings.writeAccessConnect')}
+            </button>{' '}
+            {expiredAuth && (
+              <span style={{ color: 'var(--fg-muted)', fontSize: 12 }}>
+                {t('settings.writeAccessExpired')}
+              </span>
+            )}
+          </>
+        )}
+        {(startError || roundTripError) && (
+          <div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 6, maxWidth: '46em' }}>
+            {startError === 'insecure'
+              ? t('settings.writeAccessInsecure')
+              : startError
+                ? t('settings.writeAccessFailed')
+                : roundTripError === 'rejected'
+                  ? t('settings.writeAccessRejected')
+                  : t('settings.writeAccessExchangeFailed')}
+          </div>
+        )}
+        {/* The scope of what the user is about to grant, on its own line: it is
+            the one thing here they cannot undo by clicking Disconnect, because
+            changes already made stay made. */}
+        <div style={{ color: 'var(--fg-muted)', fontSize: 12, marginTop: 8, maxWidth: '46em' }}>
+          {t('settings.writeAccessAttribution')}
+        </div>
+
         <h4>{t('settings.webhook')}</h4>
         <div style={{ color: 'var(--fg-muted)', fontSize: 12, marginBottom: 6 }}>
           {t('settings.webhookHelp')}

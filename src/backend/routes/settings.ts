@@ -60,6 +60,12 @@ settingsRoutes.get('/api/settings', (c) => {
       issue_scope: cfg.ISSUE_SCOPE,
       linear_team_id: cfg.LINEAR_TEAM_ID ?? null,
       linear_api_key_set: Boolean(cfg.LINEAR_API_KEY),
+      // The one credential-shaped field here shipped as a *value* rather than a
+      // `*_set` boolean, and deliberately: an OAuth client id is public, and the
+      // browser cannot start the authorize redirect without it. Null means
+      // write-back is unconfigured on this instance, which is what the frontend
+      // gates the write controls on.
+      linear_oauth_client_id: cfg.LINEAR_OAUTH_CLIENT_ID ?? null,
       cache_ttl_seconds: cfg.CACHE_TTL_SECONDS,
       daily_snapshot_hour: cfg.DAILY_SNAPSHOT_HOUR,
       snapshot_retention_days: cfg.SNAPSHOT_RETENTION_DAYS,

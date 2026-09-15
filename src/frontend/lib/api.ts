@@ -11,6 +11,7 @@ import type {
 } from '@shared/types.js'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { ApiError, extractApiError } from './apiError'
+import { authHeader } from './linearAuth'
 
 /**
  * Inject the current tab's workspace id as `?w=<id>` into a path. The
@@ -124,6 +125,41 @@ export const api = {
     http<{ data: import('@shared/types.js').NormalizedIssue & { description: string | null; comments: import('@shared/types.js').IssueComment[] } }>(
       `/api/issues/${encodeURIComponent(identifier)}`,
     ),
+  // ─── Write-back ───────────────────────────────────────────────────────────
+  // The only two calls that change something outside this app. They live on
+  // `api` for the same reason saved views do (see the note further down): this
+  // `http` helper throws a typed ApiError, which apiErrorMessage turns into a
+  // translated sentence — a hand-rolled client would surface the server's raw
+  // English instead.
+  //
+  // The Authorization header is attached per call rather than injected into
+  // `http`, so the shared secret rides along with the two requests that need
+  // it instead of every request the app makes.
+  //
+  // `assigneeId: null` means unassign; omitting the key leaves the assignee
+  // alone. JSON.stringify preserves that difference, which is the whole reason
+  // the patch is built by the caller rather than spread from a form.
+  updateIssue: (
+    identifier: string,
+    patch: {
+      stateId?: string
+      assigneeId?: string | null
+      priority?: number
+      addedLabelIds?: string[]
+      removedLabelIds?: string[]
+    },
+  ) =>
+    http<{ ok: true }>(`/api/issues/${encodeURIComponent(identifier)}`, {
+      method: 'PATCH',
+      headers: authHeader(),
+      body: JSON.stringify(patch),
+    }),
+  addIssueComment: (identifier: string, body: string) =>
+    http<{ ok: true }>(`/api/issues/${encodeURIComponent(identifier)}/comments`, {
+      method: 'POST',
+      headers: authHeader(),
+      body: JSON.stringify({ body }),
+    }),
   fetchProjectDetail: (projectId: string, opts?: { fresh?: boolean }) =>
     http<{ data: ProjectDetail }>(
       `/api/projects/${encodeURIComponent(projectId)}${opts?.fresh ? '?fresh=1' : ''}`,

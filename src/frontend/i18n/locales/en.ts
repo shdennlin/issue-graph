@@ -105,6 +105,31 @@ export const en = {
     wsAdd: 'Add workspace',
     webhook: 'Linear webhook',
     webhookHelp: 'Lets Linear push changes instead of waiting for the next poll. Needs a publicly reachable URL — see docs. The secret below is what proves an inbound request really came from Linear; without it every request is rejected.',
+    writeAccess: 'Write access',
+    writeAccessHelp:
+      'Connect your own Linear account to make changes from here. You are sent to Linear to approve it; the resulting access token is kept in this browser only, and this server never stores it. Reading does not need it — this is only for changes.',
+    writeAccessDisabled:
+      'This server has no Linear OAuth application configured, so nobody can make changes yet. Set LINEAR_OAUTH_CLIENT_ID in the server environment and restart.',
+    // Replaces, not rewords, the old shared-secret warning: that one said every
+    // change was attributed to the workspace key's owner, which is precisely
+    // what per-user authorisation fixes. Kept on its own line because it is the
+    // part Disconnect cannot undo — changes already made stay made, as yours.
+    writeAccessAttribution:
+      'Changes you make here are recorded in Linear as yours, exactly as if you had made them in Linear itself. Access lasts about a day, then you reconnect.',
+    writeAccessConnect: 'Connect Linear',
+    writeAccessDisconnect: 'Disconnect',
+    writeAccessConnected: 'Connected to Linear.',
+    writeAccessExpires: 'Access ends {value}.',
+    writeAccessExpired: 'Your previous access has expired — connect again to make changes.',
+    writeAccessFailed: 'Could not start the Linear sign-in. Check the server’s OAuth client id and try again.',
+    // A wrong diagnosis here is expensive: the reader goes hunting through the
+    // server config for a problem that is entirely about the page's URL.
+    writeAccessInsecure:
+      'Connecting Linear needs a secure page — https, or localhost. Over plain http to an IP address the browser withholds the cryptography this sign-in requires. (This is the same constraint that costs the app offline support there; see the README on putting HTTPS in front.)',
+    writeAccessRejected:
+      'That sign-in did not match one started in this browser, so it was discarded. Connect again from this tab.',
+    writeAccessExchangeFailed:
+      'Linear sent you back, but the access token could not be collected. Connect again; if it keeps failing, the server’s OAuth application may need a client secret, which this setup does not use.',
     webhookSecret: 'Signing secret',
     webhookSecretSet: '(set — type to replace, leave blank to keep)',
     webhookSecretUnset: '(not set — webhook disabled)',
@@ -230,6 +255,7 @@ export const en = {
     unconfigured: 'Add a workspace first.',
     switchInProgress: 'Another workspace change is already running. Try again in a moment.',
     switchFailed: 'Could not change the default workspace. Check the server logs.',
+    unauthenticated: 'Connect your Linear account in Settings to make changes.',
   },
   onboarding: {
     submitting: 'Checking the key…',
@@ -444,6 +470,17 @@ export const en = {
     annotations: 'Annotations ({count})',
     addAnnotationPlaceholder: 'Add annotation (markdown)…',
     addAnnotation: 'Add annotation',
+    changeState: 'Change status',
+    changePriority: 'Change priority',
+    addLabel: 'Add label',
+    addLabelPlaceholder: '+ label…',
+    removeLabel: 'Remove label {value}',
+    changeAssignee: 'Change assignee',
+    writeLocked: 'Connect your Linear account to make changes.',
+    writeLockedCta: 'Connect',
+    commentPlaceholder: 'Write a comment (markdown)…',
+    commentSend: 'Comment',
+    commentSending: 'Sending…',
     comments: 'Comments ({count})',
     commentsLoading: 'Loading comments…',
     noComments: 'No comments yet.',

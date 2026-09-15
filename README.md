@@ -93,6 +93,29 @@ browser; the API only ever reports whether one is set.
 > is HMAC-authenticated. Expose that path alone — e.g. `tailscale funnel --bg
 > --set-path=/linear-hook http://localhost:31415/api/webhooks/linear` — never the whole port.
 
+> [!IMPORTANT]
+> **Write-back is off by default, and each person authorises it with their own Linear
+> account.** Changing an issue's status, assignee, priority or labels, or posting a comment,
+> needs `LINEAR_OAUTH_CLIENT_ID` in the server environment; leave it unset and the write routes
+> answer 401, so upgrading does not grow a mutation surface.
+>
+> Setup is more work than a random string in `.env`: register an OAuth application at
+> **linear.app → Settings → API → Applications**, and add a redirect URI for **every origin you
+> browse the app from** — `http://localhost:31415/` for a built or Docker run,
+> `http://localhost:31414/` for `bun run dev`, plus your tailnet or proxy host. Linear matches
+> the redirect URI exactly, and a mismatch is the most likely first-run failure. Then put the
+> client id in the environment and restart. There is no client secret to configure: the browser
+> completes the exchange with PKCE, which is what keeps the server out of it.
+>
+> Each person then clicks **Settings → Write access → Connect Linear** once. The access token
+> lives in that browser and nowhere else — this server never stores it, and only borrows it for
+> the one call a write makes. **Changes are recorded in Linear as that person's**, which is the
+> difference from a shared secret: the tracker's history says who did what. Access lasts about a
+> day (the refresh token is deliberately not kept, so a stolen browser profile is worth a day,
+> not forever) and Disconnect clears it. Reads are untouched by any of this — they still use the
+> workspace's API key, because syncing is a background pull into a shared cache and not an act
+> by a person.
+
 ### Configuration
 
 There is nothing you must put in `.env`. Workspaces are managed in the app;

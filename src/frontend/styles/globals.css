@@ -3149,3 +3149,100 @@ body[data-detail-wide='1'] .inline-search { display: none; }
 }
 .facet-pin-panel:hover { color: var(--accent); background: var(--chip-bg); border: 0; }
 .facet-pin-panel.is-pinned { color: var(--accent); }
+
+/* ── Write-back controls (DetailPanel) ──────────────────────────────────────
+   The select sits beside the existing filter pill: the pill still filters to
+   that value, the select changes it. Sized to the row rather than the content
+   so a long state name does not stretch the metadata column. */
+.detail-write-select {
+  margin-left: 8px;
+  max-width: 180px;
+  font: inherit;
+  font-size: 12px;
+  padding: 2px 4px;
+  color: var(--fg);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.detail-write-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.detail-write-error {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--danger, #d9483b);
+}
+
+.detail-comment-composer {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.detail-comment-composer textarea {
+  font: inherit;
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  resize: vertical;
+}
+
+/* Label chip + its remove button. The chip still filters; the × removes.
+   Grouped so the × tracks its own chip when the row wraps. */
+.detail-label-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.detail-label-remove {
+  border: none;
+  background: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  border-radius: 3px;
+}
+.detail-label-remove:hover:not(:disabled) {
+  color: var(--danger, #d9483b);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+.detail-label-remove:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* "Why are these dead, and what do I do" — one line above the write controls.
+   Sits in the metadata section, so it matches the row rhythm rather than
+   announcing itself as a banner. */
+.detail-write-locked {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--fg-muted);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.detail-write-locked-cta {
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--accent, #3b6ff0);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+.detail-write-locked-cta:hover {
+  border-color: var(--accent, #3b6ff0);
+}
+

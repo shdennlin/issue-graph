@@ -86,6 +86,17 @@ const ConfigSchema = z.object({
   // Design-doc
   DESIGNDOC_ADAPTER: strDefault('auto'),
 
+  // Write-back. Unset means the write routes are closed — writes stay opt-in,
+  // so an existing deployment does not grow a mutation surface by upgrading.
+  //
+  // Unlike every other credential here this is **not** a secret and is reported
+  // to the browser as a real value, not a `*_set` boolean: an OAuth client id is
+  // public by design, and the browser cannot start the authorize redirect
+  // without it. There is no client secret to match it — PKCE exists precisely so
+  // a browser can complete the exchange without one, which is what keeps this
+  // server out of the business of holding anybody's token.
+  LINEAR_OAUTH_CLIENT_ID: optStr,
+
 })
 
 export type Config = z.infer<typeof ConfigSchema>

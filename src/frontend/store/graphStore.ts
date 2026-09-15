@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { GraphResponse, ProjectDetail } from '@shared/types.js'
 import { api } from '../lib/api'
+import { applyIssueDisplayPatch, type IssueDisplayPatch } from '../lib/optimisticIssue'
 
 /**
  * Stored value for a single project's lazy-loaded detail. String sentinels
@@ -18,6 +19,17 @@ interface GraphState {
   // server is actually re-fetching from Linear, not just returning cached data.
   syncing: boolean
   error: string | null
+  /**
+   * Repaint one issue's state / assignee in place, without a round trip.
+   *
+   * The single writer of `graph.data.issues` outside of a fetch. issueWriteStore
+   * drives it so a status change shows up immediately instead of after the
+   * ~3-4s the sync round trip takes; the next reload overwrites whatever this
+   * wrote with the server's version, which is the authority. Nothing here tries
+   * to remember what it changed — see issueWriteStore for why a failure reloads
+   * rather than rolling back.
+   */
+  applyIssuePatch: (identifier: string, patch: IssueDisplayPatch) => void
   load: () => Promise<void>
   /**
    * Silent re-fetch used by the background poller. Same network call as
@@ -54,6 +66,16 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   status: 'idle',
   syncing: false,
   error: null,
+  applyIssuePatch(identifier, patch) {
+    const current = get().graph
+    if (!current) return
+    const issues = applyIssueDisplayPatch(current.data.issues, identifier, patch)
+    // Same reference means the identifier was not in the list — a reload can
+    // land between the write and its response. Skip the store write and the
+    // re-render behind it rather than publishing an identical object.
+    if (issues === current.data.issues) return
+    set({ graph: { ...current, data: { ...current.data, issues } } })
+  },
   async load() {
     set({ status: 'loading', error: null })
     try {

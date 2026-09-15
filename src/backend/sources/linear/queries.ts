@@ -168,3 +168,19 @@ export const WORKFLOW_STATES_QUERY = /* GraphQL */ `
     }
   }
 `
+
+export const UPDATE_ISSUE_MUTATION = /* GraphQL */ `
+  mutation UpdateIssue($id: String!, $input: IssueUpdateInput!) {
+    issueUpdate(id: $id, input: $input) {
+      success
+    }
+  }
+`
+
+export const ADD_COMMENT_MUTATION = /* GraphQL */ `
+  mutation AddComment($input: CommentCreateInput!) {
+    commentCreate(input: $input) {
+      success
+    }
+  }
+`

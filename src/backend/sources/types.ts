@@ -42,6 +42,28 @@ export class RateLimitError extends Error {
   }
 }
 
+/**
+ * Fields a write-capable adapter can change on one issue. Absent means "leave
+ * alone"; an explicit `null` means "clear". The two are NOT the same, so build
+ * this object with `'assigneeId' in patch` rather than a truthiness check —
+ * Linear (and every tracker worth adapting) treats an explicit null as a clear.
+ */
+export interface IssuePatch {
+  stateId?: string
+  assigneeId?: string | null
+  /** 0 = none, 1 = urgent … 4 = low. 0 is a real value, not "unset", so this
+   *  one is guarded on `!== undefined` rather than truthiness. */
+  priority?: number
+  /**
+   * Labels are sent as a delta rather than a replacement set. `labelIds` would
+   * also work and is one field instead of two, but it clobbers any label added
+   * concurrently by someone else between our read and our write — the graph is
+   * a cache, so our idea of the current set is always a little stale.
+   */
+  addedLabelIds?: string[]
+  removedLabelIds?: string[]
+}
+
 export interface BackendAdapter {
   /** Identifier for sync_log.backend column. */
   readonly name: string
@@ -69,6 +91,23 @@ export interface BackendAdapter {
    * back to inferring states from cached issues.
    */
   fetchWorkflowStates?(teamId?: string): Promise<WorkflowState[]>
+  /**
+   * Optional — write one issue's state and/or assignee back to the backend.
+   * Optional for the same reason as fetchProjectDetail: an adapter for a
+   * read-only source (or one not yet taught to write) simply omits it, and the
+   * route answers 501 rather than the app pretending the control does nothing.
+   *
+   * Resolves on success; throws on failure. The caller treats a throw as "the
+   * change did not happen" and reloads from cache, so an adapter must not
+   * resolve on a partial write.
+   */
+  updateIssue?(idOrIdentifier: string, patch: IssuePatch): Promise<void>
+  /**
+   * Optional — append a comment. Separate from updateIssue because it is a
+   * different verb: it adds a new object rather than changing the issue's own
+   * fields, and it must not share a failure mode with a state change.
+   */
+  addComment?(idOrIdentifier: string, body: string): Promise<void>
   /** Last fetch's rate-limit info for sync_log. */
   lastRateLimit(): RateLimitInfo
 }

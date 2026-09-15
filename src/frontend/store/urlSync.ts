@@ -20,6 +20,8 @@ import { useViewStore, type ViewId, type ThemeMode, type Density } from './viewS
 import { useWorkspaceStore } from './workspaceStore'
 import { DEFAULT_VIEW, readDefaultView } from '../lib/preferences'
 import { filterSignatureParts, hasFilterParams, parseFilters, serializeFilters } from './filterCodec'
+import { consumeCallback } from '../lib/linearAuth'
+import { useCapabilityStore } from './capabilityStore'
 
 interface HistoryEntryState {
   seq: number
@@ -314,6 +316,49 @@ function parseUrl({
       lastAppliedSearch = window.location.search
       params = translated
     }
+  }
+
+  // OAuth callback entry point: `/?code=…&state=…`, where Linear drops the user
+  // after they authorise. Same shape as the `proto` branch above and for the
+  // same reason — consume the foreign params before any store write — but the
+  // two solve different problems, which is worth keeping straight:
+  //
+  //   - `proto` swaps in a *translated* query.
+  //   - this swaps in the *stashed pre-redirect* query, i.e. the user's own URL.
+  //
+  // That distinction is what makes two separate landmines harmless. parseUrl
+  // applies a URL wholesale (absent params reset to defaults), so returning to a
+  // bare `/?code=…` would clear filters, focus and view — restoring the stash
+  // prevents that. And OAuth's `state` is a CSRF nonce while `state` in this
+  // app's URLs is the state-type filter; the nonce never reaches parseFilters
+  // because the whole arrival query is discarded, not merged. There is no
+  // `state`-disambiguation step here, and none is needed.
+  //
+  // It must live here rather than in a component effect: onExternalNav re-parses
+  // and then unconditionally replaceStates buildUrl(), so a PWA
+  // `navigate-existing` launch would strip `?code=` before any effect ran.
+  const code = params.get('code')
+  if (code) {
+    const { returnTo, exchange, rejected } = consumeCallback(code, params.get('state'))
+    window.history.replaceState(window.history.state, '', returnTo || window.location.pathname)
+    lastAppliedSearch = window.location.search
+    params = new URLSearchParams(returnTo)
+    // Synchronous URL restoration, asynchronous token exchange.
+    //
+    // Whatever the outcome, the user is put back in the Settings section they
+    // started from. The restored query is their pre-redirect URL, which does not
+    // record that Settings was open, so without this a *successful* connection
+    // looks exactly like a failed one: consent, a redirect, and a graph that
+    // says nothing. Deferred into the continuation rather than run inline so
+    // the rest of parseUrl's store writes cannot clobber it.
+    const settle = (failure: 'rejected' | 'exchange' | null) => {
+      const cap = useCapabilityStore.getState()
+      cap.refreshUnlocked()
+      cap.setAuthError(failure)
+      useViewStore.getState().openSettingsAt('write-access')
+    }
+    if (rejected) settle('rejected')
+    else void exchange?.then(() => settle(null)).catch(() => settle('exchange'))
   }
 
   const set = useViewStore.setState
