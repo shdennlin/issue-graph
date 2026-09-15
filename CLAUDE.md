@@ -140,4 +140,6 @@ and its `exhaustive-deps` warnings are real in both directions, including a
 
 ## When in doubt
 
-`docs/PRD.md` is a historical pre-implementation snapshot (2026-05-01) — useful for design rationale (§16 has the decision log) but **not** for current capabilities. For what the app actually does today: `README.md`. For what's planned: `ROADMAP.md`.
+`docs/PRD.md` is a historical pre-implementation snapshot (2026-05-01) — useful for the reasoning of that era (§16 is its decision log) but **not** for current capabilities, and **not** somewhere to add anything. That log is frozen and already stale: #43 still describes a Node-compatible runtime on `better-sqlite3`, which reversed to a hard `bun:sqlite` requirement with nothing going back to amend it.
+
+For what the app actually does today: `README.md`. For what's planned: `ROADMAP.md`. For why something is the way it is, where the reason spans more than one file or there is no code to hang a comment on: `docs/adr/` — one record per decision, each naming the alternative it rejected and the condition that should make someone reconsider. Most reasoning still belongs in code comments and commit messages, which cannot drift from what they describe; a record earns its own file only when neither has anywhere to live.
