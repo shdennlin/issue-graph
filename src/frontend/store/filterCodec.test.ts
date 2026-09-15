@@ -34,7 +34,6 @@ describe('filterCodec round-trip', () => {
   it('round-trips every dimension simultaneously', () => {
     const s = state(
       {
-        activeOnly: false,
         myIssuesOnly: true,
         staleOnly: true,
         stateTypes: ['started', 'completed'],
@@ -229,8 +228,11 @@ describe('hasFilterParams', () => {
     expect(hasFilterParams(serializeFilters(state({ stateTypes: [], assignees: ['me'] })))).toBe(true)
   })
 
+  // 'active=0' is deliberately not in this list: it was the removed activeOnly
+  // boolean's param, nothing parses it now, so a URL carrying only that carries
+  // no filter. Pinned as its own case below.
   it.each([
-    'active=0', 'mine=1', 'stale=1', 'state=started', 'sname=started::Todo',
+    'mine=1', 'stale=1', 'state=started', 'sname=started::Todo',
     'bucket=a', 'type=b', 'priority=1', 'assignee=me', 'proj=p', 'ms=p::m',
     'label=x', 'designdoc=has', 'due=overdue', 'recent=7d', 'recentby=created',
     'recentlinks=1', 'neg=assignee', 'q=hello',
@@ -244,7 +246,7 @@ describe('hasFilterParams', () => {
   // carrying only that dimension would be treated as bare and discarded.
   it('covers every param serializeFilters can write', () => {
     const everything = serializeFilters(state({
-      activeOnly: false, myIssuesOnly: true, staleOnly: true,
+      myIssuesOnly: true, staleOnly: true,
       stateTypes: ['started'], stateNames: ['started::Todo'],
       primaryValues: ['a'], typeValues: ['b'], priorities: [1], assignees: ['me'],
       projectIds: ['p'], milestoneIds: ['p::m'],
@@ -258,5 +260,36 @@ describe('hasFilterParams', () => {
       one.set(key, everything.get(key) as string)
       expect(hasFilterParams(one), `unregistered filter param: ${key}`).toBe(true)
     }
+  })
+})
+
+// `active` was the URL half of the removed `activeOnly` boolean. Links, saved
+// views and tab snapshots written before the removal still carry it, so the
+// parser has to meet them without complaint — and must never write it again.
+describe('the retired `active` param', () => {
+  it('is never serialized', () => {
+    expect(serializeFilters(state({ stateTypes: ['completed'] })).has('active')).toBe(false)
+  })
+
+  // The symptom this whole change exists to remove: a URL naming an archival
+  // state used to parse into a filter set that matched nothing at all.
+  it('parses an archival state URL into exactly that state', () => {
+    expect(parseFilters(new URLSearchParams('state=completed')).filters.stateTypes).toEqual([
+      'completed',
+    ])
+  })
+
+  it('ignores an old link that still carries it, rather than failing', () => {
+    const f = parseFilters(new URLSearchParams('active=0&state=completed')).filters
+    expect(f.stateTypes).toEqual(['completed'])
+    expect('activeOnly' in f).toBe(false)
+  })
+
+  // The deep-link path asks "does this URL say anything about filters?" to
+  // decide whether to restore the tab's own. A dead param must not answer yes,
+  // or an old bookmark would suppress the restore and silently reset them.
+  it('does not count as a filter param on its own', () => {
+    expect(hasFilterParams(new URLSearchParams('active=0'))).toBe(false)
+    expect(hasFilterParams(new URLSearchParams('active=0&state=completed'))).toBe(true)
   })
 })

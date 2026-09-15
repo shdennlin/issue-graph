@@ -10,8 +10,15 @@
 
 /** Params that never take part in the comparison. Mirrors the server's
  *  STRIPPED_PARAMS — a saved query has already had these removed, and the live
- *  URL still carries them, so both sides must drop them to line up. */
-const IGNORED = ['w', 'focus', 'detail', 'chain', 'note', 'notes']
+ *  URL still carries them, so both sides must drop them to line up.
+ *
+ *  `active` is here for a different reason: it was the `activeOnly` boolean,
+ *  a second filter over the state dimension that has since been removed. The
+ *  serializer no longer writes it, but views saved before the removal still
+ *  carry `active=0` — and a string compare would never match them again, so
+ *  every one of those views would silently read as edited-away-from. Dropping
+ *  it on both sides retires the param without retiring the views. */
+const IGNORED = ['w', 'focus', 'detail', 'chain', 'note', 'notes', 'active']
 
 /**
  * Canonical form of a query string: ignored params removed, pairs sorted.

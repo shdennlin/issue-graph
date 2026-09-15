@@ -4,7 +4,6 @@
 // Deliberately DERIVATION ONLY — no toggling. The mutation semantics already
 // live in viewStore's dimension-specific actions and carry behavior that is
 // not expressible as a function of `Filters` alone:
-//   - `toggleStateType` auto-clears `activeOnly` when a completed/canceled
 //     state is switched ON (viewStore.ts), otherwise the click silently does
 //     nothing.
 //   - checking a completed/canceled state calls `graphStore.extendScope(365)`,
@@ -174,16 +173,15 @@ export function buildFacets(input: BuildFacetsInput): FacetDef[] {
   const facets: FacetDef[] = []
 
   // --- Quick toggles -------------------------------------------------------
-  // Three independent booleans rather than one facet, so each gets its own
-  // chip and can be dismissed on its own.
-  facets.push({
-    id: 'quick:active',
-    kind: 'quick',
-    group: 'quick',
-    selection: 'toggle',
-    title: t('filterPanel.activeOnly'),
-    options: [],
-  })
+  // Two independent booleans rather than one facet, so each gets its own chip
+  // and can be dismissed on its own.
+  //
+  // There used to be a third, "Active only". It is gone because it filtered the
+  // *state* dimension, which the State facet already owns: at the default it
+  // did nothing (the four default types exclude completed and canceled
+  // already), and the only way to make it do something was to put it at odds
+  // with the State facet — at which point it won and the result was an empty
+  // graph under a State panel showing Completed ticked.
   facets.push({
     id: 'quick:mine',
     kind: 'quick',
@@ -396,13 +394,12 @@ export function buildFacets(input: BuildFacetsInput): FacetDef[] {
  * The actual boolean behind a `toggle` facet.
  *
  * Distinct from `selectedValues`, which reports "is this facet away from its
- * default" so a chip appears at the right times. For `quick:active` those two
- * are OPPOSITE — activeOnly defaults to true, so it is away from its default
- * when false — and reading the checkbox off selectedValues showed
- * "Active only" ticked at the exact moment it had been switched off.
+ * default" so a chip appears at the right times. Both remaining toggles are
+ * plain opt-ins that default to false, so the two now agree; they did not when
+ * "Active only" was here, because that one defaulted to true and was therefore
+ * away from its default exactly when it was switched OFF.
  */
 export function toggleValue(filters: Filters, facet: FacetDef): boolean {
-  if (facet.id === 'quick:active') return filters.activeOnly
   if (facet.id === 'quick:mine') return filters.myIssuesOnly
   return filters.staleOnly
 }
@@ -446,7 +443,6 @@ function recencyOptions(current: RecencyWindow, t: Translate): FacetOption[] {
 export function selectedValues(filters: Filters, facet: FacetDef): string[] {
   switch (facet.kind) {
     case 'quick':
-      if (facet.id === 'quick:active') return filters.activeOnly ? [] : ['off']
       if (facet.id === 'quick:mine') return filters.myIssuesOnly ? ['on'] : []
       return filters.staleOnly ? ['on'] : []
     case 'state':
@@ -518,12 +514,10 @@ function sameSet(a: string[], b: string[]): boolean {
 /**
  * Whether a facet is currently excluding anything.
  *
- * NOT "is it at its default". Two defaults in this app are not neutral:
- * `activeOnly` starts TRUE (hiding everything completed or canceled) and
- * `stateTypes` starts as four of the six types. Keying the chips off
- * "non-default" therefore showed an empty panel while two real constraints
- * were in force — the UI claimed nothing was filtered when a third of the
- * state space was hidden.
+ * NOT "is it at its default". `stateTypes` starts as four of the six types, so
+ * keying the chips off "non-default" showed an empty panel while a real
+ * constraint was in force — the UI claimed nothing was filtered when a third of
+ * the state space was hidden.
  *
  * A facet that genuinely does nothing (dueFilter 'any', an empty assignee
  * list) still renders no chip, so unused dimensions keep costing no space.
@@ -531,7 +525,7 @@ function sameSet(a: string[], b: string[]): boolean {
 export function facetConstrains(filters: Filters, facet: FacetDef): boolean {
   switch (facet.kind) {
     case 'quick':
-      // activeOnly constrains when ON; the other two are plain opt-ins.
+      // Both are plain opt-ins: they constrain exactly when switched on.
       return toggleValue(filters, facet)
     case 'state':
       return (
@@ -572,10 +566,8 @@ export function chipsFromFilters(
     if (facet.selection === 'toggle') {
       chips.push({
         facetId: facet.id,
-        // Reads as the constraint it applies. It used to say "Including done"
-        // because the chip only appeared when activeOnly was OFF; chips now
-        // appear when a facet EXCLUDES something, so this one shows while
-        // activeOnly is ON and the old label said the opposite of the truth.
+        // Reads as the constraint it applies: chips appear when a facet
+        // EXCLUDES something, so the title must name what is being kept out.
         title: facet.title,
         // A boolean has no operator or value — the title says everything.
         operator: null,
@@ -644,11 +636,10 @@ export function clearFacetPatch(facet: FacetDef, filters: Filters): Partial<Filt
 function clearFacetValues(facet: FacetDef, filters: Filters): Partial<Filters> {
   switch (facet.kind) {
     // Clearing a chip means "remove this constraint", which is not the same as
-    // "restore the default" for the two facets whose defaults are not neutral.
-    // Returning activeOnly to true, or stateTypes to the four active types,
-    // left the chip exactly where it was — the X appeared to do nothing.
+    // "restore the default" for the facet whose default is not neutral.
+    // Returning stateTypes to the four active types left the chip exactly where
+    // it was — the X appeared to do nothing.
     case 'quick':
-      if (facet.id === 'quick:active') return { activeOnly: false }
       if (facet.id === 'quick:mine') return { myIssuesOnly: false }
       return { staleOnly: false }
     case 'state':

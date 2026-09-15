@@ -179,19 +179,20 @@ describe('viewStore.toggleStateType — the state tree', () => {
     expect(useViewStore.getState().filters.stateNames).toEqual(['unstarted::Todo'])
   })
 
-  // Pre-existing sibling behaviour, pinned here so the two clears stay together.
-  it('clears activeOnly when switching on a non-active state', () => {
-    useViewStore.setState({ filters: { ...defaultFilters, activeOnly: true, stateTypes: [] } })
+  // These two used to assert that toggling a non-active type also switched off
+  // an `activeOnly` boolean, because otherwise the click had no visible effect.
+  // That boolean is gone; what is left to pin is that turning a type on simply
+  // turns it on, with nothing else in the way.
+  it('switches on a non-active state with nothing left to veto it', () => {
+    useViewStore.setState({ filters: { ...defaultFilters, stateTypes: [] } })
     useViewStore.getState().toggleStateType('completed')
-    expect(useViewStore.getState().filters.activeOnly).toBe(false)
+    expect(useViewStore.getState().filters.stateTypes).toEqual(['completed'])
   })
 
-  it('keeps activeOnly when switching a non-active state back off', () => {
-    useViewStore.setState({
-      filters: { ...defaultFilters, activeOnly: true, stateTypes: ['completed'] },
-    })
+  it('switches it back off again', () => {
+    useViewStore.setState({ filters: { ...defaultFilters, stateTypes: ['completed'] } })
     useViewStore.getState().toggleStateType('completed')
-    expect(useViewStore.getState().filters.activeOnly).toBe(true)
+    expect(useViewStore.getState().filters.stateTypes).toEqual([])
   })
 })
 

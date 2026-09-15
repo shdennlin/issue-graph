@@ -58,7 +58,6 @@ export function serializeFilters(state: CodecState): URLSearchParams {
   const f = state.filters
   const params = new URLSearchParams()
 
-  if (!f.activeOnly) params.set('active', '0')
   if (f.myIssuesOnly) params.set('mine', '1')
   if (f.staleOnly) params.set('stale', '1')
 
@@ -117,7 +116,10 @@ export function serializeFilters(state: CodecState): URLSearchParams {
  *  the two cannot drift; the dynamic `pfx_*` / `grp_*` families are matched by
  *  prefix in hasFilterParams below. */
 const FILTER_PARAM_KEYS = [
-  'active', 'mine', 'stale',
+  // 'active' is deliberately absent. It was the `activeOnly` boolean's param;
+  // nothing parses it any more, so a URL carrying only `active=0` carries no
+  // filter at all and must not read as one here.
+  'mine', 'stale',
   'state', 'sname',
   'bucket', 'type', 'priority', 'assignee',
   'proj', 'ms',
@@ -176,7 +178,6 @@ export function parseFilters(params: URLSearchParams): CodecState {
   }
 
   const filters: Filters = {
-    activeOnly: params.get('active') !== '0',
     myIssuesOnly: params.get('mine') === '1',
     staleOnly: params.get('stale') === '1',
     stateTypes: ((): IssueStateType[] => {
@@ -231,7 +232,6 @@ export function filterSignatureParts(state: CodecState): string[] {
   const f = state.filters
   return [
     state.search,
-    f.activeOnly ? '1' : '0',
     f.myIssuesOnly ? '1' : '0',
     f.staleOnly ? '1' : '0',
     f.stateTypes.slice().sort().join(','),

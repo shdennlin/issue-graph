@@ -4,8 +4,9 @@
 // Intentionally thin. Which facets exist, what they contain and which chips to
 // draw all come from facetModel (pure, tested); mutation goes through
 // viewStore's existing toggle actions, which carry semantics that are not a
-// function of `Filters` alone — notably `toggleStateType` auto-clearing
-// `activeOnly`. Anything written into this JSX is untestable by construction,
+// function of `Filters` alone — notably checking a completed or canceled state
+// widening the sync window. Anything written into this JSX is untestable by
+// construction,
 // because vitest runs `environment: 'node'` with no DOM.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -441,9 +442,9 @@ export function FacetBar() {
 /**
  * Binds a facet's option clicks to the store actions that own its semantics.
  *
- * Not a pure reducer, deliberately: `toggleStateType` auto-clears `activeOnly`,
- * and checking a completed/canceled state has to widen the sync window or the
- * result looks empty. Neither is a function of `Filters`.
+ * Not a pure reducer, deliberately: checking a completed or canceled state has
+ * to widen the sync window, or the result looks empty. That is not a function
+ * of `Filters`.
  */
 function useFacetPick(facet: FacetDef) {
   const filters = useViewStore((s) => s.filters)
@@ -474,8 +475,7 @@ function useFacetPick(facet: FacetDef) {
   const pick = (value: string, isChild: boolean, parentValue?: string) => {
     switch (facet.kind) {
       case 'quick':
-        if (facet.id === 'quick:active') setFilter('activeOnly', !filters.activeOnly)
-        else if (facet.id === 'quick:mine') setFilter('myIssuesOnly', !filters.myIssuesOnly)
+        if (facet.id === 'quick:mine') setFilter('myIssuesOnly', !filters.myIssuesOnly)
         else setFilter('staleOnly', !filters.staleOnly)
         break
       case 'state':

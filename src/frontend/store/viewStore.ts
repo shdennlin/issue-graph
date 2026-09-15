@@ -22,7 +22,6 @@ export interface Filters {
   // stateTypes is used as the coarse filter. When non-empty, stateNames takes
   // precedence — only issues whose state.name is in this list pass.
   stateNames: string[]
-  activeOnly: boolean
   myIssuesOnly: boolean
   staleOnly: boolean
   primaryValues: string[]   // primary group label ids
@@ -69,7 +68,7 @@ export interface Filters {
   recencyMode: RecencyMode
   /**
    * Drop issues whose `updatedAt` moved only because a relation was pointed
-   * AT them. Defaults to TRUE, so like `activeOnly` it constrains at its
+   * AT them. Defaults to TRUE, so like `stateTypes` it constrains at its
    * default — code asking "is anything filtered?" must count it in even when
    * untouched. Inert unless `recencyWindow` is set and the mode is 'updated'.
    */
@@ -296,7 +295,6 @@ export const ACTIVE_STATES: IssueStateType[] = ['started', 'unstarted', 'backlog
 export const defaultFilters: Filters = {
   stateTypes: ACTIVE_STATES,
   stateNames: [],
-  activeOnly: true,
   myIssuesOnly: false,
   staleOnly: false,
   primaryValues: [],
@@ -419,13 +417,12 @@ export const useViewStore = create<ViewState>((set) => ({
   toggleStateType: (t) =>
     set((s) => {
       const nextTypes = toggle(s.filters.stateTypes, t)
-      // Auto-disable activeOnly when user explicitly turns ON a non-active
-      // state — otherwise the click silently has no effect because activeOnly
-      // would still filter the issue out. Only fires when ADDING the state
-      // (toggle direction = on); turning it off keeps activeOnly as-is.
-      const isAdding = nextTypes.includes(t) && !s.filters.stateTypes.includes(t)
-      const isNonActive = t === 'completed' || t === 'canceled'
-      const activeOnly = isAdding && isNonActive ? false : s.filters.activeOnly
+      // This used to also switch off an `activeOnly` boolean when the user
+      // turned ON completed or canceled, because otherwise the click silently
+      // did nothing. That boolean is gone: it was a second filter over the
+      // state dimension whose only possible effect was to contradict this one,
+      // so turning a type on now simply turns it on.
+      //
       // Names refine within their own type, so unchecking a type must take its
       // children with it — leaving them behind would keep matching issues of a
       // type the user just switched off. Other types' names are untouched;
@@ -434,7 +431,7 @@ export const useViewStore = create<ViewState>((set) => ({
       const stateNames = removingType
         ? s.filters.stateNames.filter((k) => !k.startsWith(`${t}::`))
         : s.filters.stateNames
-      return { filters: { ...s.filters, stateTypes: nextTypes, stateNames, activeOnly } }
+      return { filters: { ...s.filters, stateTypes: nextTypes, stateNames } }
     }),
   toggleStateName: (name) => set((s) => ({ filters: { ...s.filters, stateNames: toggle(s.filters.stateNames, name) } })),
   togglePrimary: (id) => set((s) => ({ filters: { ...s.filters, primaryValues: toggle(s.filters.primaryValues, id) } })),

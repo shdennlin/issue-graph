@@ -43,12 +43,12 @@ export function applyFiltersExcluding(
   const f: Filters = { ...filters }
   switch (exclude) {
     case 'state':
+      // Clearing both levels is the whole of the state dimension now. It used
+      // to need a third line for an `activeOnly` boolean, which was a second
+      // filter over this same dimension — without dropping that too, Completed
+      // and Canceled counted 0 no matter what.
       f.stateTypes = []
       f.stateNames = []
-      // activeOnly is a state-dimension shortcut ("state ∈ active set").
-      // Drop it too so counts for Canceled / Completed reflect reality
-      // instead of always showing 0 because activeOnly hides them.
-      f.activeOnly = false
       break
     case 'priority':
       f.priorities = []
@@ -84,7 +84,7 @@ export function applyFiltersExcluding(
       // Project and milestone are the same hierarchical dimension. Clearing
       // 'project' clears both so leave-one-out counts for any row in that
       // section share the same base (mirrors how 'state' clears stateTypes
-      // + stateNames + activeOnly together).
+      // + stateNames together).
       f.projectIds = []
       f.milestoneIds = []
       break
@@ -158,8 +158,8 @@ function passes(hit: boolean, isNegated: boolean): boolean {
  * `alwaysInclude` is a deep-link escape hatch: the identifier of the focused
  * issue survives every filter. A link from Raycast (or a shared URL) pins one
  * issue, and the filters in effect on arrival have no idea it is coming — an
- * `activeOnly` default or an `assignee` pick would drop it and the camera would
- * land on nothing. Relaxing the filters to compensate is what the Raycast link
+ * inherited state-type default or an `assignee` pick would drop it and the
+ * camera would land on nothing. Relaxing the filters to compensate is what the Raycast link
  * used to do; exempting the one node instead leaves the rest of the graph
  * exactly as the user had it.
  *
@@ -203,11 +203,8 @@ export function applyFilters(
       if (!hay.includes(q)) return false
     }
     // State filter precedence:
-    //   stateNames (explicit Linear state.name pick) > stateTypes + activeOnly
-    // When user explicitly picks named states, the activeOnly shortcut is
-    // overridden — it's a quick filter, not a hard gate. Without this, a
-    // user picking "Duplicate" (canonical=canceled) with activeOnly still
-    // on would silently see nothing.
+    //   stateNames (explicit Linear state.name pick) > stateTypes
+    // Naming a state is the more specific act, so it wins over the type list.
     // State is a two-level tree: canonical type, then the workspace's own state
     // names within it. Names REFINE their own type rather than replacing the
     // whole selection — picking "Todo" narrows Unstarted to Todo and leaves
@@ -221,9 +218,9 @@ export function applyFilters(
     const typePrefix = `${i.state.type}${STATE_NAME_SEP}`
     const refinedWithinType = filters.stateNames.some((k) => k.startsWith(typePrefix))
     if (refinedWithinType) {
-      // Naming a state implies its type is wanted, so activeOnly and the type
-      // list are both bypassed here — otherwise picking "Duplicate"
-      // (canonically canceled) with activeOnly on would silently match nothing.
+      // Naming a state implies its type is wanted, so the type list is
+      // bypassed here — otherwise picking "Duplicate" (canonically canceled)
+      // while the type list holds only the active four would match nothing.
       if (!passes(filters.stateNames.includes(`${typePrefix}${i.state.name}`), stateNegated)) {
         return false
       }
@@ -232,7 +229,6 @@ export function applyFilters(
       // the keys became composite. Matched by name alone, ignoring type.
       if (!passes(filters.stateNames.includes(i.state.name), stateNegated)) return false
     } else {
-      if (filters.activeOnly && (i.state.type === 'completed' || i.state.type === 'canceled')) return false
       if (
         filters.stateTypes.length > 0 &&
         !passes(filters.stateTypes.includes(i.state.type), stateNegated)

@@ -34,7 +34,6 @@ const emptyFilters: Filters = {
   recencyMode: 'updated',
   recencyIgnoreLinked: true,
   negated: [],
-  activeOnly: false,
   myIssuesOnly: false,
   staleOnly: false,
   primaryValues: [],

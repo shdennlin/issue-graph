@@ -122,3 +122,28 @@ describe('documentTitle', () => {
     )
   })
 })
+
+// `activeOnly` was a second filter over the state dimension, removed because
+// its only possible effect was to contradict the first. Views saved while it
+// existed still carry `active=0`, and matching is a string compare — so
+// without ignoring it, every pre-existing saved view would stop matching and
+// read as "edited away from" forever.
+describe('the retired `active` param', () => {
+  it('matches a view saved before the param was removed', () => {
+    const views = [{ id: 1, query: 'active=0&state=completed' }]
+    expect(matchSavedView('?state=completed', views)?.id).toBe(1)
+  })
+
+  it('matches in the other direction too', () => {
+    const views = [{ id: 1, query: 'state=completed' }]
+    expect(matchSavedView('?active=0&state=completed', views)?.id).toBe(1)
+  })
+
+  it('does not make two genuinely different views collide', () => {
+    const views = [
+      { id: 1, query: 'active=0&state=completed' },
+      { id: 2, query: 'state=started' },
+    ]
+    expect(matchSavedView('?state=started', views)?.id).toBe(2)
+  })
+})

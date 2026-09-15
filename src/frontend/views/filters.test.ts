@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { NormalizedIssue } from '@shared/types.js'
+import type { IssueStateType, NormalizedIssue } from '@shared/types.js'
 import type { Filters } from '../store/viewStore'
 import { applyFilters, applyFiltersExcluding } from './filters'
+
+/** What the removed `activeOnly` boolean used to stand for: the state types
+ *  that are not completed or canceled. It is a plain type selection now, which
+ *  is the point — one filter over the state dimension instead of two. */
+const ACTIVE: IssueStateType[] = ['started', 'unstarted', 'backlog', 'triage']
 
 function baseFilters(overrides: Partial<Filters> = {}): Filters {
   return {
@@ -11,7 +16,6 @@ function baseFilters(overrides: Partial<Filters> = {}): Filters {
     recencyMode: 'updated',
     recencyIgnoreLinked: true,
     negated: [],
-    activeOnly: false,
     myIssuesOnly: false,
     staleOnly: false,
     primaryValues: [],
@@ -374,14 +378,12 @@ describe('state tree — names refine within their own type', () => {
     expect(ids(applyFilters(all, f, 365, null))).toEqual(['REV', 'TODO'])
   })
 
-  // Naming a state implies wanting its type, so activeOnly must not veto it —
-  // otherwise picking a completed state with activeOnly on matches nothing.
-  it('bypasses activeOnly for an explicitly named archival state', () => {
+  // Naming a state implies wanting its type, so the type list must not veto it.
+  it('honours an explicitly named archival state outside the type list', () => {
     // The realistic shape: the four active types still checked, plus one
     // named completed state. Tree semantics give "everything active, AND
-    // Done" — and activeOnly must not veto the part the user named.
+    // Done" — the type list must not veto the part the user named.
     const f = baseFilters({
-      activeOnly: true,
       stateTypes: ['started', 'unstarted', 'backlog', 'triage'],
       stateNames: ['completed::Done'],
     })
@@ -394,7 +396,6 @@ describe('state tree — names refine within their own type', () => {
       state: { name: 'Cancelled', type: 'canceled' },
     })
     const f = baseFilters({
-      activeOnly: true,
       stateTypes: ['started', 'unstarted', 'backlog', 'triage'],
       stateNames: ['completed::Done'],
     })
@@ -477,12 +478,12 @@ describe('alwaysInclude (focused deep-link target)', () => {
   const all = [target, other, active]
 
   it('is dropped like anything else when no target is named', () => {
-    const f = baseFilters({ activeOnly: true })
+    const f = baseFilters({ stateTypes: ACTIVE })
     expect(ids(applyFilters(all, f, 365, null))).toEqual(['ENG-3'])
   })
 
-  it('survives activeOnly without dragging its peers along', () => {
-    const f = baseFilters({ activeOnly: true })
+  it('survives a state-type filter without dragging its peers along', () => {
+    const f = baseFilters({ stateTypes: ACTIVE })
     expect(ids(applyFilters(all, f, 365, null, undefined, 'ENG-1'))).toEqual(['ENG-1', 'ENG-3'])
   })
 
@@ -499,14 +500,55 @@ describe('alwaysInclude (focused deep-link target)', () => {
   })
 
   it('is inert when the named issue is not in the data', () => {
-    const f = baseFilters({ activeOnly: true })
+    const f = baseFilters({ stateTypes: ACTIVE })
     expect(ids(applyFilters(all, f, 365, null, undefined, 'NOPE-9'))).toEqual(['ENG-3'])
   })
 
   // Leave-one-out counts must not see the exemption, or every facet in the
   // panel would read one higher than the graph actually shows.
   it('does not leak into applyFiltersExcluding', () => {
-    const f = baseFilters({ activeOnly: true, assignees: ['Someone Else'] })
+    const f = baseFilters({ stateTypes: ACTIVE, assignees: ['Someone Else'] })
     expect(ids(applyFiltersExcluding(all, f, 365, null, undefined, 'state'))).toEqual([])
+  })
+})
+
+// The contradiction that removing `activeOnly` was really about. There used to
+// be a second filter over the state dimension, defaulting to ON, which hid
+// completed and canceled. At the default it did nothing — the four default
+// types exclude those already — so the only way to make it act was to put it at
+// odds with the type list, and then it won.
+describe('asking for an archival state actually shows it', () => {
+  const ids = (out: NormalizedIssue[]) => out.map((i) => i.identifier)
+  const done = makeIssue({ identifier: 'DONE-1', state: { name: 'Done', type: 'completed' } })
+  const cancelled = makeIssue({ identifier: 'CAN-1', state: { name: 'Cancelled', type: 'canceled' } })
+  const doing = makeIssue({ identifier: 'ENG-1', state: { name: 'In Progress', type: 'started' } })
+  const all = [done, cancelled, doing]
+
+  // Reachable from the UI, not only by hand-editing a URL: tick Completed in
+  // the State panel, then click the old "Active only" chip. The panel showed
+  // Completed selected and the graph showed nothing.
+  it('shows completed when completed is the selected type', () => {
+    expect(ids(applyFilters(all, baseFilters({ stateTypes: ['completed'] }), 365, null))).toEqual([
+      'DONE-1',
+    ])
+  })
+
+  it('shows canceled too', () => {
+    expect(ids(applyFilters(all, baseFilters({ stateTypes: ['canceled'] }), 365, null))).toEqual([
+      'CAN-1',
+    ])
+  })
+
+  it('still excludes them when they are not selected', () => {
+    expect(ids(applyFilters(all, baseFilters({ stateTypes: ACTIVE }), 365, null))).toEqual(['ENG-1'])
+  })
+
+  // The leave-one-out pass drops the whole state dimension. It used to need a
+  // third line for the boolean, without which these counted 0 no matter what.
+  it('counts archival states in the state facet’s leave-one-out', () => {
+    const f = baseFilters({ stateTypes: ACTIVE })
+    expect(ids(applyFiltersExcluding(all, f, 365, null, undefined, 'state')).sort()).toEqual([
+      'CAN-1', 'DONE-1', 'ENG-1',
+    ])
   })
 })

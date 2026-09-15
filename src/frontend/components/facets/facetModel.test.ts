@@ -70,7 +70,6 @@ const filters = (over: Partial<Filters> = {}): Filters => ({ ...defaultFilters, 
 describe('buildFacets — conditional facets cost zero space', () => {
   it('omits every conditional facet when there is nothing to show', () => {
     expect(ids(buildFacets(input()))).toEqual([
-      'quick:active',
       'quick:mine',
       'quick:stale',
       'state',
@@ -212,24 +211,18 @@ describe('chipsFromFilters', () => {
     chipsFromFilters(f, facets, t).find((c) => c.facetId === id)
 
   // Chips key off "is this excluding anything", not "is this non-default".
-  // Two defaults here are not neutral: activeOnly starts TRUE and stateTypes
-  // starts as four of six types, so a default panel is hiding a third of the
-  // state space. Showing nothing claimed otherwise.
+  // `stateTypes` starts as four of six types, so a default panel is hiding a
+  // third of the state space. Showing nothing claimed otherwise.
   it('shows the constraints that are live at the default filter state', () => {
     expect(chipsFromFilters(defaultFilters, facets, t).map((c) => c.facetId).sort()).toEqual([
-      'quick:active',
       'state',
     ])
   })
 
-  it('drops the activeOnly chip once it stops excluding anything', () => {
-    expect(chipFor(filters({ activeOnly: false }), 'quick:active')).toBeUndefined()
-    const on = chipFor(filters({ activeOnly: true }), 'quick:active')
-    // A boolean has no operator or value — the title carries the whole meaning.
-    expect(on?.operator).toBeNull()
-    // Names the constraint in force. It used to read "Including done", which
-    // was the opposite of the state that now makes the chip appear.
-    expect(on?.title).toBe('filterPanel.activeOnly')
+  // The "Active only" chip used to appear here too, saying the same thing as
+  // the State chip beside it. It is gone with the boolean behind it.
+  it('offers no second chip over the state dimension', () => {
+    expect(facets.some((f) => f.id === 'quick:active')).toBe(false)
   })
 
   it('drops the state chip when every type is selected', () => {
@@ -265,10 +258,10 @@ describe('chipsFromFilters', () => {
       facets,
       t,
     )
-    // quick:active and state are present too — both constrain at their
-    // defaults, which is exactly what the default-state test above pins down.
+    // `state` is present too: it constrains at its default, which is exactly
+    // what the default-state test above pins down.
     expect(chips.map((c) => c.facetId).sort()).toEqual([
-      'due', 'priority', 'quick:active', 'quick:mine', 'state',
+      'due', 'priority', 'quick:mine', 'state',
     ])
   })
 })
@@ -291,15 +284,9 @@ describe('clearFacetPatch', () => {
     expect(patch).toEqual({ projectIds: [], milestoneIds: [] })
   })
 
-  // Clearing means "remove this constraint". For the two facets whose defaults
-  // are not neutral, restoring the default left the chip exactly where it was
-  // and the X appeared to do nothing.
-  it('switches activeOnly off rather than back to its default', () => {
-    expect(clearFacetPatch(byId(facets, 'quick:active'), filters())).toEqual({
-      activeOnly: false,
-    })
-  })
-
+  // Clearing means "remove this constraint". For the facet whose default is not
+  // neutral, restoring the default left the chip exactly where it was and the X
+  // appeared to do nothing.
   it('empties the state types rather than restoring the four active ones', () => {
     expect(clearFacetPatch(byId(facets, 'state'), filters())).toEqual({
       stateTypes: [],
@@ -446,17 +433,6 @@ describe('locateOption', () => {
 
 describe('toggleValue', () => {
   const facets = buildFacets(input())
-  const active = byId(facets, 'quick:active')
-
-  // activeOnly defaults to TRUE, so "away from default" and "switched on" are
-  // opposite for this one facet. Reading the checkbox off selectedValues
-  // ticked "Active only" at the exact moment it had been switched off.
-  it('reports the real boolean, not the away-from-default signal', () => {
-    expect(toggleValue(filters({ activeOnly: true }), active)).toBe(true)
-    expect(toggleValue(filters({ activeOnly: false }), active)).toBe(false)
-    expect(selectedValues(filters({ activeOnly: false }), active)).toHaveLength(1)
-  })
-
   it('reads through for the facets whose default is false', () => {
     expect(toggleValue(filters({ myIssuesOnly: true }), byId(facets, 'quick:mine'))).toBe(true)
     expect(toggleValue(filters({ staleOnly: true }), byId(facets, 'quick:stale'))).toBe(true)
