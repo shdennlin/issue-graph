@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { hasFilterParams } from './filterCodec'
-import { resolveActiveView, translateProtocol } from './urlSync'
+import { resolveActiveView, translateProtocol, urlCarriesNoAppState } from './urlSync'
 
 // `translateProtocol` turns a `web+issuegraph://` protocol-handler payload into
 // the canonical focus query params. The OS routing into the PWA can't be tested
@@ -101,5 +101,46 @@ describe('resolveActiveView', () => {
 
   it('still preserves the current view for a focus deep link', () => {
     expect(resolveActiveView(null, true, 'milestone', true, 'mix')).toBe('milestone')
+  })
+})
+
+// A PWA relaunch (Cmd+Q, reopen) lands on the manifest's start_url — `/`, with
+// nothing in the query. parseUrl then applies that bare URL wholesale, so every
+// filter, the view and the saved-view identity reset to their defaults, and the
+// tab forgets where it was. The snapshot is on disk the whole time; nothing
+// reads it, because the only first-mount restore was gated on the URL having
+// pinned an issue.
+//
+// This is the predicate that tells those two arrivals apart: "the URL named
+// something worth protecting" vs "the URL said nothing at all".
+describe('urlCarriesNoAppState', () => {
+  const q = (s: string) => new URLSearchParams(s)
+
+  it('says yes for the PWA start_url', () => {
+    expect(urlCarriesNoAppState(q(''))).toBe(true)
+  })
+
+  // `w` alone still counts as silent: it picks which workspace the tab is on,
+  // which the snapshot does not contradict.
+  it('says yes when the query only picks a workspace', () => {
+    expect(urlCarriesNoAppState(q('w=onelegion'))).toBe(true)
+  })
+
+  it.each([
+    'state=started',
+    'w=onelegion&recent=3h',
+    'focus=ONE-243',
+    'chain=ONE-243',
+    'view=project',
+    'q=auth',
+    'w=onelegion&detail=1',
+  ])('says no for a URL that names something (%s)', (query) => {
+    expect(urlCarriesNoAppState(q(query))).toBe(false)
+  })
+
+  // The restore must not fire for a shared link, which is the whole reason the
+  // first mount skips it in the first place.
+  it('says no for a shared link carrying the full filter state', () => {
+    expect(urlCarriesNoAppState(q('w=onelegion&view=mix&state=started&priority=1'))).toBe(false)
   })
 })

@@ -309,6 +309,19 @@ export function restoreViewportOnly(tabId: string): void {
 
 /** Which saved view another tab is on, without switching to it. Lets the tab
  *  bar label every tab rather than only the active one. */
+/**
+ * Whether this tab has anything stored to come back to.
+ *
+ * Needed because `loadTab`'s no-snapshot branch applies `defaultView`, whose
+ * `activeView` is hardcoded to 'dependency' — while a cold start at a bare URL
+ * has already resolved the view through `readDefaultView()`, the preference the
+ * user set in Settings. Restoring unconditionally would therefore overwrite
+ * that preference with 'dependency' for anyone whose tab has no snapshot yet.
+ */
+export function hasTabSnapshot(tabId: string): boolean {
+  return snapshots.has(tabId)
+}
+
 export function peekTabSavedViewId(tabId: string): number | null {
   return snapshots.get(tabId)?.view.appliedSavedViewId ?? null
 }

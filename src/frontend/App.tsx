@@ -5,8 +5,15 @@ import { useSchemaStore } from './store/schemaStore'
 import { useCapabilityStore } from './store/capabilityStore'
 import { useViewStore } from './store/viewStore'
 import { makeTabId, useWorkspaceStore } from './store/workspaceStore'
-import { loadTab, peekTabFilters, peekTabView, restoreViewportOnly, snapshotTab } from './store/tabStateStore'
-import { arrivedViaBareDeepLink, useUrlSync } from './store/urlSync'
+import {
+  hasTabSnapshot,
+  loadTab,
+  peekTabFilters,
+  peekTabView,
+  restoreViewportOnly,
+  snapshotTab,
+} from './store/tabStateStore'
+import { arrivedViaBareDeepLink, arrivedWithEmptyUrl, useUrlSync } from './store/urlSync'
 import { useTheme } from './hooks/useTheme'
 import { useFontSize } from './hooks/useFontSize'
 import { api } from './lib/api'
@@ -173,12 +180,36 @@ export function App() {
     if (prev !== null && prev !== activeTabId && activeTabId) {
       // Tab switched: snapshot/restore the new tab's view state.
       restored = loadTab(activeTabId)
+    } else if (prev === null && activeTabId && arrivedWithEmptyUrl() && hasTabSnapshot(activeTabId)) {
+      // First mount from a URL that named nothing — the PWA's start_url after a
+      // quit and relaunch, or the bare host typed by hand.
+      //
+      // The first mount skips the restore so a URL that says something wins.
+      // Silence says nothing, so there is nothing to protect and the tab should
+      // come back where it was: same filters, same view, same saved view. The
+      // snapshot was on disk all along (beforeunload writes it below); what was
+      // missing was anyone reading it on this path.
+      //
+      // Deliberately the same loadTab the tab bar uses, rather than a second
+      // partial restore beside the one below: it is the only code that knows
+      // the whole of PerTabView. On this path it always takes the view-only
+      // branch — graph data is never persisted — so it returns false and the
+      // full loadGraph() below runs, which is what shows a spinner instead of a
+      // misleading empty canvas.
+      //
+      // Guarded on the snapshot EXISTING rather than letting loadTab fall back:
+      // its no-snapshot branch applies a defaultView whose activeView is
+      // hardcoded to 'dependency', while parseUrl has already resolved the bare
+      // URL through the user's own default-view preference. Without the guard,
+      // a tab with nothing stored would have that preference overwritten.
+      restored = loadTab(activeTabId)
     } else if (prev === null && activeTabId) {
-      // First mount. A deep link that triggered a FULL page load (Raycast
-      // protocol launch, shared URL) lands here with a cold store: parseUrl set
-      // focusedId from the URL but nothing restored the pieces the URL doesn't
-      // carry. This is the reload counterpart of the soft-nav path, which keeps
-      // them in the store via onExternalNav.
+      // First mount from a URL that DID name something. A deep link that
+      // triggered a FULL page load (Raycast protocol launch, shared URL) lands
+      // here with a cold store: parseUrl set focusedId from the URL but nothing
+      // restored the pieces the URL doesn't carry. This is the reload
+      // counterpart of the soft-nav path, which keeps them in the store via
+      // onExternalNav.
       const vs = useViewStore.getState()
 
       // Filters, for a *bare* deep link only (it pinned an issue and said

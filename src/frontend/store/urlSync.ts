@@ -313,6 +313,44 @@ export function arrivedViaBareDeepLink(): boolean {
   return bareDeepLinkArrival
 }
 
+/**
+ * Whether a query names nothing this app would have to honour.
+ *
+ * `w` does not count: it picks which workspace the tab is on, which is a fact
+ * about the tab, not a claim about how to look at it — and the snapshot being
+ * restored belongs to that same tab.
+ *
+ * Deliberately a whole-query check rather than a list of known params. A list
+ * would have to be maintained alongside every future param, and the failure of
+ * forgetting one is silent and bad: a URL that *did* say something would be
+ * treated as silent and overwritten by the snapshot.
+ */
+export function urlCarriesNoAppState(params: URLSearchParams): boolean {
+  for (const key of params.keys()) {
+    if (key !== 'w') return false
+  }
+  return true
+}
+
+/**
+ * Whether the URL that was parsed most recently said nothing at all.
+ *
+ * The PWA's manifest sets `start_url: '/'`, so relaunching after Cmd+Q lands
+ * here with an empty query — and parseUrl applies a URL wholesale, resetting
+ * every filter, the view and the saved-view identity to their defaults. The
+ * tab's snapshot is in localStorage the whole time; before this existed nothing
+ * read it on a cold start, because the only first-mount restore additionally
+ * required the URL to have pinned an issue (see arrivedViaBareDeepLink).
+ *
+ * Read by App.tsx on first mount only. Later parses — popstate, soft navs —
+ * must stay a faithful replay of the URL, or Back would restore a snapshot
+ * instead of going back.
+ */
+let emptyUrlArrival = false
+export function arrivedWithEmptyUrl(): boolean {
+  return emptyUrlArrival
+}
+
 function parseUrl({
   preserveViewOnFocus = false,
   preserveFiltersOnFocus = false,
@@ -479,6 +517,9 @@ function parseUrl({
   // kind of URL state, and a deep link that cleared the search box would be as
   // surprising as one that cleared the filters.
   bareDeepLinkArrival = (focus !== null || chain !== null) && !hasFilterParams(params)
+  // Recorded on every parse, like the flag above, so it can never describe a
+  // stale navigation.
+  emptyUrlArrival = urlCarriesNoAppState(params)
   if (!(preserveFiltersOnFocus && bareDeepLinkArrival)) {
     const decoded = parseFilters(params)
     set({ filters: decoded.filters, search: decoded.search })
