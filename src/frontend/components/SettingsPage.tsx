@@ -3,6 +3,7 @@ import { useViewStore } from '../store/viewStore'
 import { useSchemaStore } from '../store/schemaStore'
 import { api, type SettingsResponse } from '../lib/api'
 import { ModalHeader } from './ModalHeader'
+import { NotificationSettings } from './NotificationSettings'
 import { WorkspaceSettings } from './WorkspaceSettings'
 import { readDefaultView, writeDefaultView } from '../lib/preferences'
 import { InsecureContextError, beginAuth, clearAuth, readAuth } from '../lib/linearAuth'
@@ -558,6 +559,8 @@ export function SettingsPage() {
         <div className="settings-help">
           {t('settings.writeAccessAttribution')}
         </div>
+
+        <NotificationSettings webhookConfigured={data?.webhook?.secret_set ?? false} />
 
         <h4>{t('settings.webhook')}</h4>
         <div className="settings-help">

@@ -8,6 +8,13 @@ import {
   writeTheme,
 } from '../lib/preferences'
 import type { RecencyMode, RecencyWindow } from '../lib/recency'
+// The eleven dimension toggles below are one-liners here and the whole of
+// filterToggles.ts: the semantics moved out so the notification-scope editor
+// could reach them without a store to mutate. `toggle` comes along because
+// `toggleSelection` toggles issue ids, which is the same primitive over a
+// different kind of list.
+import * as ft from './filterToggles'
+import { toggle } from './filterToggles'
 
 export type ViewId = 'dependency' | 'mix' | 'project' | 'milestone' | 'designdoc'
 export type Density = 'compact' | 'default' | 'verbose'
@@ -128,6 +135,10 @@ export interface ViewState {
   syncHistoryOpen: boolean
   coverageOpen: boolean
   shortcutsOpen: boolean
+  /** Recent-changes popover, anchored to the toolbar bell. In the store
+   *  rather than local component state only because Esc has to reach it —
+   *  the other toolbar popovers dismiss on outside-click alone. */
+  notificationsOpen: boolean
   // Workspace notes modal. `notesOpen` controls the modal; `focusedNoteId`
   // null → grid view, number → editor view for that note.
   notesOpen: boolean
@@ -263,6 +274,7 @@ export interface ViewState {
   setSyncHistoryOpen: (b: boolean) => void
   setCoverageOpen: (b: boolean) => void
   setShortcutsOpen: (b: boolean) => void
+  setNotificationsOpen: (b: boolean) => void
   setNotesOpen: (b: boolean) => void
   setFocusedNoteId: (id: number | null) => void
   setNoteFindOpen: (b: boolean) => void
@@ -319,10 +331,6 @@ export const defaultFilters: Filters = {
   negated: [],
 }
 
-function toggle<T>(arr: T[], v: T): T[] {
-  return arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]
-}
-
 export const useViewStore = create<ViewState>((set) => ({
   // Where a fresh session lands. Per-browser preference; a `?view=` in the
   // URL overrides it for that visit without rewriting it.
@@ -361,6 +369,7 @@ export const useViewStore = create<ViewState>((set) => ({
   syncHistoryOpen: false,
   coverageOpen: false,
   shortcutsOpen: false,
+  notificationsOpen: false,
   notesOpen: false,
   focusedNoteId: null,
   noteFindOpen: false,
@@ -414,54 +423,17 @@ export const useViewStore = create<ViewState>((set) => ({
   // default is "where new sessions start" and is only written from Settings.
   setActiveView: (v) => set({ activeView: v }),
   setFilter: (k, v) => set((s) => ({ filters: { ...s.filters, [k]: v } })),
-  toggleStateType: (t) =>
-    set((s) => {
-      const nextTypes = toggle(s.filters.stateTypes, t)
-      // This used to also switch off an `activeOnly` boolean when the user
-      // turned ON completed or canceled, because otherwise the click silently
-      // did nothing. That boolean is gone: it was a second filter over the
-      // state dimension whose only possible effect was to contradict this one,
-      // so turning a type on now simply turns it on.
-      //
-      // Names refine within their own type, so unchecking a type must take its
-      // children with it — leaving them behind would keep matching issues of a
-      // type the user just switched off. Other types' names are untouched;
-      // that independence is the whole point of the tree.
-      const removingType = !nextTypes.includes(t) && s.filters.stateTypes.includes(t)
-      const stateNames = removingType
-        ? s.filters.stateNames.filter((k) => !k.startsWith(`${t}::`))
-        : s.filters.stateNames
-      return { filters: { ...s.filters, stateTypes: nextTypes, stateNames } }
-    }),
-  toggleStateName: (name) => set((s) => ({ filters: { ...s.filters, stateNames: toggle(s.filters.stateNames, name) } })),
-  togglePrimary: (id) => set((s) => ({ filters: { ...s.filters, primaryValues: toggle(s.filters.primaryValues, id) } })),
-  toggleType: (id) => set((s) => ({ filters: { ...s.filters, typeValues: toggle(s.filters.typeValues, id) } })),
-  togglePriority: (p) => set((s) => ({ filters: { ...s.filters, priorities: toggle(s.filters.priorities, p) } })),
-  toggleAssignee: (name) => set((s) => ({ filters: { ...s.filters, assignees: toggle(s.filters.assignees, name) } })),
-  togglePrefix: (token, id) =>
-    set((s) => {
-      const cur = s.filters.prefixSelections[token] ?? []
-      return {
-        filters: {
-          ...s.filters,
-          prefixSelections: { ...s.filters.prefixSelections, [token]: toggle(cur, id) },
-        },
-      }
-    }),
-  toggleGroupLabel: (group, id) =>
-    set((s) => {
-      const cur = s.filters.groupSelections[group] ?? []
-      return {
-        filters: {
-          ...s.filters,
-          groupSelections: { ...s.filters.groupSelections, [group]: toggle(cur, id) },
-        },
-      }
-    }),
-  toggleOrphan: (id) => set((s) => ({ filters: { ...s.filters, orphanValues: toggle(s.filters.orphanValues, id) } })),
-  toggleProject: (id) => set((s) => ({ filters: { ...s.filters, projectIds: toggle(s.filters.projectIds, id) } })),
-  toggleMilestone: (key) =>
-    set((s) => ({ filters: { ...s.filters, milestoneIds: toggle(s.filters.milestoneIds, key) } })),
+  toggleStateType: (t) => set((s) => ({ filters: ft.toggleStateType(s.filters, t) })),
+  toggleStateName: (name) => set((s) => ({ filters: ft.toggleStateName(s.filters, name) })),
+  togglePrimary: (id) => set((s) => ({ filters: ft.togglePrimary(s.filters, id) })),
+  toggleType: (id) => set((s) => ({ filters: ft.toggleType(s.filters, id) })),
+  togglePriority: (p) => set((s) => ({ filters: ft.togglePriority(s.filters, p) })),
+  toggleAssignee: (name) => set((s) => ({ filters: ft.toggleAssignee(s.filters, name) })),
+  togglePrefix: (token, id) => set((s) => ({ filters: ft.togglePrefix(s.filters, token, id) })),
+  toggleGroupLabel: (group, id) => set((s) => ({ filters: ft.toggleGroupLabel(s.filters, group, id) })),
+  toggleOrphan: (id) => set((s) => ({ filters: ft.toggleOrphan(s.filters, id) })),
+  toggleProject: (id) => set((s) => ({ filters: ft.toggleProject(s.filters, id) })),
+  toggleMilestone: (key) => set((s) => ({ filters: ft.toggleMilestone(s.filters, key) })),
   setFocusedId: (id) =>
     set((s) => {
       const detailPanelOpen = id !== null && (s.detailPanelAutoOpen || s.detailPanelOpen)
@@ -516,6 +488,7 @@ export const useViewStore = create<ViewState>((set) => ({
   // Preserve focusedNoteId across open/close cycles so the n shortcut acts as
   // a true toggle that restores the user's last view. Use the in-modal Back
   // button (or Esc-peel) to drop back to the grid explicitly.
+  setNotificationsOpen: (b) => set({ notificationsOpen: b }),
   setNotesOpen: (b) => set({ notesOpen: b }),
   setFocusedNoteId: (id) => set({ focusedNoteId: id, noteFindOpen: false }),
   setNoteFindOpen: (b) => set({ noteFindOpen: b }),

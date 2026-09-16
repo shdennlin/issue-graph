@@ -153,6 +153,16 @@ export const useIssueWriteStore = create<IssueWriteState>((set) => ({
       // No optimistic append: comments live inside the lazily-fetched issue
       // detail, not in the graph, and the route busts that cache on write. The
       // panel refetches and gets the real comment, author and timestamp.
+      //
+      // `lastCommentAt` is the exception, and it is not about painting — it is
+      // what keeps the change detector from reporting your own comment back to
+      // you. Every other write here pre-paints the field it touches, so the
+      // next sync diffs to nothing; a comment moved a field nothing painted,
+      // so this browser has to claim it explicitly. The timestamp is a
+      // placeholder the sync overwrites moments later.
+      useGraphStore.getState().applyIssuePatch(identifier, {
+        lastCommentAt: new Date().toISOString(),
+      })
       await settle()
       return true
     } catch (e) {
@@ -215,7 +225,7 @@ async function fail(
   // Reload first, so the optimistic paint is replaced by the server's truth,
   // then set the error — the reload must not be what clears it.
   try {
-    await useGraphStore.getState().refetchSilent()
+    await useGraphStore.getState().refetchSilent({ notify: false })
   } catch {
     /* the error below is the thing the user needs either way */
   }

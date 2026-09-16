@@ -3436,3 +3436,299 @@ label + .settings-help {
   border-color: var(--accent, #3b6ff0);
 }
 
+
+/* ── Notifications ─────────────────────────────────────────────────────────
+   The popover copies .toolbar-overflow-menu's geometry rather than reusing the
+   class, following the note above the facet popover: NoteEditor already shares
+   that class, so widening it for a third caller drags the other two along. */
+
+.notif-anchor {
+  position: relative;
+  display: inline-flex;
+}
+.notif-badge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+}
+.notif-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  width: 320px;
+  max-height: 60vh;
+  background: var(--bg-elev);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 4px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+}
+.notif-popover-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 6px 8px 4px;
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  color: var(--fg-muted);
+}
+.notif-popover-link {
+  background: transparent;
+  border: 0;
+  color: var(--accent);
+  font-size: var(--fs-meta);
+  cursor: pointer;
+  padding: 0 2px;
+}
+.notif-popover-link:hover {
+  text-decoration: underline;
+}
+.notif-popover-empty {
+  padding: 14px 8px;
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+}
+.notif-popover-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.notif-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: 'id title' 'id what';
+  gap: 0 8px;
+  align-items: baseline;
+  width: 100%;
+  padding: 6px 8px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: var(--fg);
+}
+.notif-row:hover {
+  background: var(--chip-bg);
+}
+.notif-row-id {
+  grid-area: id;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  color: var(--fg-muted);
+}
+.notif-row-title {
+  grid-area: title;
+  font-size: var(--fs-meta);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notif-row-what {
+  grid-area: what;
+  font-size: var(--fs-chip);
+  color: var(--accent);
+}
+.notif-popover-foot {
+  padding: 6px 8px;
+  border-top: 1px solid var(--node-border);
+  font-size: var(--fs-chip);
+  color: var(--fg-muted);
+}
+
+/* Fixed to the viewport, unlike .undo-toast which is absolute inside the notes
+   modal. They never stack: the toast hides itself whenever a modal is open. */
+.notif-toast {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  background: var(--fg);
+  color: var(--bg);
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-base);
+  z-index: 60;
+}
+.notif-toast-action {
+  background: transparent;
+  border: 0;
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.notif-toast-action:hover {
+  text-decoration: underline;
+}
+.notif-toast-close {
+  background: transparent;
+  border: 0;
+  color: var(--bg);
+  opacity: 0.6;
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 15px;
+  line-height: 1;
+}
+.notif-toast-close:hover {
+  opacity: 1;
+}
+.notif-popover-actions {
+  display: inline-flex;
+  gap: 10px;
+}
+.notif-popover-scope {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px 6px;
+  font-size: var(--fs-chip);
+  color: var(--fg-muted);
+}
+.notif-row {
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas: 'id title when' 'id what when';
+}
+.notif-row-when {
+  grid-area: when;
+  align-self: center;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-chip);
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+.notif-scope-lines {
+  margin: 2px 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.notif-scope-line {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-size: var(--fs-meta);
+}
+.notif-scope-dim {
+  color: var(--fg-muted);
+  min-width: 96px;
+}
+.notif-scope-op {
+  color: var(--fg-muted);
+  opacity: 0.75;
+}
+.notif-scope-vals {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+/* --- Notification scope editor -------------------------------------------
+   Reuses .facet-option / .facet-checkbox / .facet-option-count verbatim, which
+   are written unscoped precisely so a second filter surface costs no new row
+   styling. Only the frame around them is new. */
+.notif-scope-editor {
+  margin-bottom: var(--sp-3);
+}
+.notif-scope-disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-1) var(--sp-2);
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+  background: transparent;
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.notif-scope-disclosure:hover {
+  background: var(--chip-bg);
+  color: var(--fg);
+}
+.notif-scope-build {
+  margin-top: var(--sp-2);
+  padding: var(--sp-3);
+  background: var(--bg-elev);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-md);
+}
+.notif-scope-search {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0 var(--sp-3);
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+}
+.notif-scope-search input {
+  flex: 1;
+  min-width: 0;
+}
+/* Columns rather than one long list: a workspace can produce a dozen facets,
+   and a settings page has the width to show them side by side where the graph's
+   corner panel did not. Capped in height so the Save row stays reachable
+   without scrolling past every label in the workspace. */
+.notif-facet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: var(--sp-3);
+  max-height: 46vh;
+  overflow-y: auto;
+  padding-right: var(--sp-1);
+}
+.notif-facet {
+  min-width: 0;
+}
+.notif-facet-title {
+  font-size: var(--fs-chip);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+  padding: 0 var(--sp-1) var(--sp-1);
+  border-bottom: 1px solid var(--node-border);
+  margin-bottom: var(--sp-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notif-scope-actions {
+  display: flex;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--node-border);
+}
+.notif-scope-actions .is-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+.notif-facet-not {
+  margin-left: var(--sp-1);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--danger);
+}

@@ -604,4 +604,66 @@ export const en = {
     confirmDelete: 'Delete "{name}"?',
     confirmYes: 'Delete',
   },
+  notifications: {
+    // Toolbar + panel
+    bellTitle: 'Recent changes',
+    bellAria: 'Recent changes',
+    panelTitle: 'Changes',
+    empty: 'Nothing has changed since you opened this tab.',
+    markAllRead: 'Mark all read',
+    scopeOnlyThese: 'Only these',
+    scopeNarrowed: 'Narrowed to a saved scope.',
+    clear: 'Clear',
+    moreHidden: '{count} older change(s) not shown — filter by Recency.',
+    olderHint: 'For anything older, filter by Recency.',
+    // Toast
+    toastOne: '1 issue changed',
+    toastMany: '{count} issues changed',
+    toastView: 'View',
+    toastDismiss: 'Dismiss',
+    // What moved — used both in the panel rows and the toast summary
+    created: 'created',
+    fieldTitle: 'renamed',
+    fieldState: 'status',
+    fieldAssignee: 'assignee',
+    fieldPriority: 'priority',
+    fieldLabels: 'labels',
+    fieldProject: 'project',
+    fieldMilestone: 'milestone',
+    fieldDueDate: 'due date',
+    fieldComment: 'new comment',
+    // Settings
+    settingsHeading: 'Notifications',
+    enable: 'Show a toast when issues change',
+    enableHelp:
+      'Edits made in this browser stay silent — you just made them. Changes from the Linear app, an agent over MCP, or another browser are reported.',
+    desktop: 'Desktop notifications',
+    desktopNeedsWebhook:
+      'Needs a Linear webhook, so the server hears about changes while this tab is in the background.',
+    desktopUnsupported:
+      'This browser cannot show desktop notifications here. They need a secure origin — localhost works, a plain-HTTP address does not.',
+    desktopDenied: 'Blocked by the browser. Re-allow notifications for this site to switch it on.',
+    desktopBackgroundCaveat:
+      'Delivered only while a tab or the installed app is open. The installed app is the reliable one; a background browser tab may be frozen by the browser.',
+    scope: 'Notify me about',
+    scopeAll: 'Everything',
+    scopeCustom: 'A saved snapshot',
+    scopeCurrent: 'Use my current filters',
+    scopeCurrentHint:
+      'Takes a copy of the filters you have on right now. It does not follow the view afterwards.',
+    scopeIs: 'is',
+    scopeIsNot: 'is not',
+    scopeSummaryEmpty: 'This snapshot constrains nothing — it behaves like Everything.',
+    scopeSummaryAll: 'Every issue in this workspace.',
+    scopeSummaryCustom: 'A snapshot with {count} condition(s).',
+    scopeReset: 'Notify about everything again',
+    scopeEditOpen: 'Build a filter for notifications',
+    scopeEditClose: 'Hide the filter builder',
+    scopeEditHint:
+      'The same filters the graph uses, but this set only decides what you are told about. Nothing takes effect until you save.',
+    scopeEditSave: 'Save this scope',
+    scopeEditCancel: 'Cancel',
+    scopeEditSearch: 'Text',
+    scopeEditSearchPlaceholder: 'Match title or identifier',
+  },
 } as const
