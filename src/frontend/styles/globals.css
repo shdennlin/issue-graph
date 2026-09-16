@@ -809,23 +809,32 @@ a:hover { text-decoration: underline; }
    to. Reading --fs-base-root (defined at :root or by useFontSize for the
    custom case) avoids the self-referential cycle that would arise from
    `--fs-base: calc(var(--fs-base) + Npx)`. The 'md' state has no rule so
-   the panel inherits the global scale exactly. */
+   the panel inherits the global scale exactly.
+
+   All four roots must be listed. --fs-chip was once left out, and because an
+   unlisted token resolves back through :root to the *global* scale rather
+   than this one, the pills on the State/Priority/Assignee rows stayed 10px
+   while the labels beside them grew — invisible at 'md', where the two sizes
+   are one pixel apart, and obvious at 'lg' and 'xl'. */
 .detail-panel.detail-text-sm,
 .project-panel.detail-text-sm {
   --fs-base: calc(var(--fs-base-root) - 2px);
   --fs-meta: calc(var(--fs-meta-root) - 2px);
+  --fs-chip: calc(var(--fs-chip-root) - 2px);
   --fs-title: calc(var(--fs-title-root) - 2px);
 }
 .detail-panel.detail-text-lg,
 .project-panel.detail-text-lg {
   --fs-base: calc(var(--fs-base-root) + 2px);
   --fs-meta: calc(var(--fs-meta-root) + 2px);
+  --fs-chip: calc(var(--fs-chip-root) + 2px);
   --fs-title: calc(var(--fs-title-root) + 3px);
 }
 .detail-panel.detail-text-xl,
 .project-panel.detail-text-xl {
   --fs-base: calc(var(--fs-base-root) + 4px);
   --fs-meta: calc(var(--fs-meta-root) + 4px);
+  --fs-chip: calc(var(--fs-chip-root) + 4px);
   --fs-title: calc(var(--fs-title-root) + 6px);
 }
 
