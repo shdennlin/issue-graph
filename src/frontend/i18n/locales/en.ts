@@ -657,5 +657,13 @@ export const en = {
     scopeSummaryAll: 'Every issue in this workspace.',
     scopeSummaryCustom: 'A snapshot with {count} condition(s).',
     scopeReset: 'Notify about everything again',
+    scopeEditOpen: 'Build a filter for notifications',
+    scopeEditClose: 'Hide the filter builder',
+    scopeEditHint:
+      'The same filters the graph uses, but this set only decides what you are told about. Nothing takes effect until you save.',
+    scopeEditSave: 'Save this scope',
+    scopeEditCancel: 'Cancel',
+    scopeEditSearch: 'Text',
+    scopeEditSearchPlaceholder: 'Match title or identifier',
   },
 } as const

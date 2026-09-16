@@ -640,5 +640,13 @@ export const zhTW: Dict = {
     scopeSummaryAll: '這個工作區的所有議題。',
     scopeSummaryCustom: '一份含 {count} 項條件的快照。',
     scopeReset: '改回通知全部',
+    scopeEditOpen: '自訂通知的篩選條件',
+    scopeEditClose: '收合篩選條件編輯器',
+    scopeEditHint:
+      '和圖表使用同一組篩選條件，但這一組只決定你會收到哪些通知。按下儲存前不會生效。',
+    scopeEditSave: '儲存這個範圍',
+    scopeEditCancel: '取消',
+    scopeEditSearch: '文字',
+    scopeEditSearchPlaceholder: '比對標題或編號',
   },
 }

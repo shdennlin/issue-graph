@@ -3,6 +3,7 @@ import { useNotificationStore } from '../store/notificationStore'
 import { useGraphStore } from '../store/graphStore'
 import { buildNameLookup, describeScope } from '../lib/describeScope'
 import { parseScope } from '../lib/notificationScope'
+import { NotificationScopeEditor } from './NotificationScopeEditor'
 import { useLocale } from '../i18n'
 import { useSavedViewsStore } from '../store/savedViewsStore'
 import { currentQuery } from '../store/urlSync'
@@ -159,6 +160,12 @@ export function NotificationSettings({ webhookConfigured }: { webhookConfigured:
       <div className="settings-help" style={{ marginBottom: 12 }}>
         {t('notifications.scopeCurrentHint')}
       </div>
+
+      {/* The third way in, below the two quick ones: build the scope from
+          scratch. Collapsed by default because it is the long path — and
+          because its counts cost a pass over every issue, which a settings
+          page that merely mounted should not pay. */}
+      <NotificationScopeEditor />
     </>
   )
 }

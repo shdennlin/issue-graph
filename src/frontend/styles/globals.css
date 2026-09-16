@@ -3642,3 +3642,93 @@ label + .settings-help {
   color: var(--fg);
   font-weight: 600;
 }
+
+/* --- Notification scope editor -------------------------------------------
+   Reuses .facet-option / .facet-checkbox / .facet-option-count verbatim, which
+   are written unscoped precisely so a second filter surface costs no new row
+   styling. Only the frame around them is new. */
+.notif-scope-editor {
+  margin-bottom: var(--sp-3);
+}
+.notif-scope-disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-1) var(--sp-2);
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+  background: transparent;
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.notif-scope-disclosure:hover {
+  background: var(--chip-bg);
+  color: var(--fg);
+}
+.notif-scope-build {
+  margin-top: var(--sp-2);
+  padding: var(--sp-3);
+  background: var(--bg-elev);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-md);
+}
+.notif-scope-search {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0 var(--sp-3);
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+}
+.notif-scope-search input {
+  flex: 1;
+  min-width: 0;
+}
+/* Columns rather than one long list: a workspace can produce a dozen facets,
+   and a settings page has the width to show them side by side where the graph's
+   corner panel did not. Capped in height so the Save row stays reachable
+   without scrolling past every label in the workspace. */
+.notif-facet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: var(--sp-3);
+  max-height: 46vh;
+  overflow-y: auto;
+  padding-right: var(--sp-1);
+}
+.notif-facet {
+  min-width: 0;
+}
+.notif-facet-title {
+  font-size: var(--fs-chip);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+  padding: 0 var(--sp-1) var(--sp-1);
+  border-bottom: 1px solid var(--node-border);
+  margin-bottom: var(--sp-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notif-scope-actions {
+  display: flex;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--node-border);
+}
+.notif-scope-actions .is-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+.notif-facet-not {
+  margin-left: var(--sp-1);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--danger);
+}
