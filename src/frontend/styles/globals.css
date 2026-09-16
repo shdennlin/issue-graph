@@ -3593,3 +3593,16 @@ label + .settings-help {
 .notif-toast-close:hover {
   opacity: 1;
 }
+.notif-popover-actions {
+  display: inline-flex;
+  gap: 10px;
+}
+.notif-popover-scope {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px 6px;
+  font-size: var(--fs-chip);
+  color: var(--fg-muted);
+}

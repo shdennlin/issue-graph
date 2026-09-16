@@ -5,12 +5,16 @@
 // that reaches across to viewStore / workspaceStore for the context the scope
 // gate needs.
 //
-// Call it ONLY from the two silent refetch paths. The other paths that replace
-// `graph` all change the *set* of issues without anything having happened in
-// Linear, and every one of them would read as a flood:
+// Called from the two silent refetch paths, and from `forceSync` — pressing
+// Refresh is the most deliberate "tell me what changed" gesture there is, and
+// leaving it out (on the grounds that it reloads through `load()`) meant the
+// one moment someone was actively asking was the one moment nothing answered.
 //
-//   - `load()`            — first paint, and the post-switch reload.
-//   - `forceSync()`       — reloads through `load()`, same reason.
+// The remaining `graph` writers stay silent, because each changes the *set* of
+// issues without anything having happened in Linear:
+//
+//   - `load()`            — first paint, and the post-switch reload. There is
+//                           no baseline to diff against in either case.
 //   - `extendScope(days)` — pulls in hundreds of Completed/Canceled issues the
 //                           moment someone ticks a state box. Every one of them
 //                           is "new" to the diff, and none of them is news.

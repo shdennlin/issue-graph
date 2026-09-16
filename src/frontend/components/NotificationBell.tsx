@@ -4,6 +4,7 @@ import { useClickOutside } from '../hooks/useClickOutside'
 import type { ChangedField } from '../lib/issueDiff'
 import { unreadCount, useNotificationStore } from '../store/notificationStore'
 import { useViewStore } from '../store/viewStore'
+import { currentQuery } from '../store/urlSync'
 import { useT, type DictKey } from '../i18n'
 
 /**
@@ -20,7 +21,11 @@ export function NotificationBell({ iconSize }: { iconSize: number }) {
   const entries = useNotificationStore((s) => s.entries)
   const markAllRead = useNotificationStore((s) => s.markAllRead)
   const clear = useNotificationStore((s) => s.clear)
+  const scopeQuery = useNotificationStore((s) => s.scopeQuery)
+  const setScopeQuery = useNotificationStore((s) => s.setScopeQuery)
   const t = useT()
+
+  const scoped = scopeQuery !== ''
 
   const ref = useRef<HTMLDivElement | null>(null)
   useClickOutside(ref, open, () => setOpen(false))
@@ -51,12 +56,38 @@ export function NotificationBell({ iconSize }: { iconSize: number }) {
         <div className="notif-popover" role="menu">
           <div className="notif-popover-head">
             <span>{t('notifications.panelTitle')}</span>
-            {entries.length > 0 && (
-              <button type="button" className="notif-popover-link" onClick={() => clear()}>
-                {t('notifications.clear')}
+            <span className="notif-popover-actions">
+              {/* The moment you decide this is too noisy is while you are
+                  reading the list, not while you are in Settings — so the
+                  narrowing lives here too. Same stored value either way. */}
+              <button
+                type="button"
+                className="notif-popover-link"
+                onClick={() => setScopeQuery(currentQuery())}
+                title={t('notifications.scopeCurrentHint')}
+              >
+                {t('notifications.scopeOnlyThese')}
               </button>
-            )}
+              {entries.length > 0 && (
+                <button type="button" className="notif-popover-link" onClick={() => clear()}>
+                  {t('notifications.clear')}
+                </button>
+              )}
+            </span>
           </div>
+
+          {scoped && (
+            <div className="notif-popover-scope">
+              {t('notifications.scopeNarrowed')}
+              <button
+                type="button"
+                className="notif-popover-link"
+                onClick={() => setScopeQuery('')}
+              >
+                {t('notifications.scopeReset')}
+              </button>
+            </div>
+          )}
 
           {entries.length === 0 ? (
             <div className="notif-popover-empty">{t('notifications.empty')}</div>

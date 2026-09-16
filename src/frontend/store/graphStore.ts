@@ -119,7 +119,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       set({ error: e instanceof Error ? e.message : String(e) })
     }
     set({ syncing: false })
+    // Captured before `load()` overwrites it. Pressing Refresh is the most
+    // deliberate "tell me what changed" gesture in the app, so unlike the
+    // other `load()` callers this one reports. (Writes made through this
+    // browser reach here too — via issueWriteStore — and stay silent anyway,
+    // because `applyIssuePatch` already painted them and they diff to nothing.)
+    const beforeSync = get().graph
     await get().load()
+    const afterSync = get().graph
+    if (afterSync) notifyOnGraphSwap(beforeSync, afterSync)
     // Project + milestone detail rides a separate lazy-fetch path with its own
     // backend + frontend caches that the issue sync doesn't touch. Re-fetch any
     // project whose detail is currently displayed so an explicit sync reflects

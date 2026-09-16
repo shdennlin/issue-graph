@@ -611,6 +611,8 @@ export const en = {
     panelTitle: 'Changes',
     empty: 'Nothing has changed since you opened this tab.',
     markAllRead: 'Mark all read',
+    scopeOnlyThese: 'Only these',
+    scopeNarrowed: 'Narrowed to a saved scope.',
     clear: 'Clear',
     olderHint: 'For anything older, filter by Recency.',
     // Toast

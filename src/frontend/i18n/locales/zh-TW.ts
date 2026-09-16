@@ -599,6 +599,8 @@ export const zhTW: Dict = {
     panelTitle: '變更',
     empty: '自你開啟這個分頁以來沒有任何變更。',
     markAllRead: '全部標為已讀',
+    scopeOnlyThese: '只通知這些',
+    scopeNarrowed: '已限縮到一個儲存的範圍。',
     clear: '清空',
     olderHint: '更早的變更請用「最近活動」篩選。',
     toastOne: '1 個議題有變更',
