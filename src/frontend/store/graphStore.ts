@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { GraphResponse, ProjectDetail } from '@shared/types.js'
 import { api } from '../lib/api'
 import { applyIssueDisplayPatch, type IssueDisplayPatch } from '../lib/optimisticIssue'
+import { notifyOnGraphSwap } from '../lib/notifyChanges'
 
 /**
  * Stored value for a single project's lazy-loaded detail. String sentinels
@@ -90,6 +91,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const fresh = await api.fetchGraph()
       const current = get().graph
       if (!current || fresh.fetchedAt > (current.fetchedAt ?? 0)) {
+        // Before the swap, while the previous issues are still reachable —
+        // this is the only moment both sides of the diff exist.
+        notifyOnGraphSwap(current, fresh)
         set({ graph: fresh })
       }
     } catch {
@@ -100,6 +104,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   async refetchSilent() {
     try {
       const fresh = await api.fetchGraph()
+      notifyOnGraphSwap(get().graph, fresh)
       set({ graph: fresh })
     } catch {
       // Silent — caller is a real-time event handler; failing once is fine,

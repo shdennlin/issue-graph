@@ -35,6 +35,16 @@ export interface IssueDisplayPatch {
    *  delta (added/removed) to avoid clobbering a concurrent change; the paint
    *  needs the resulting set, because that is what the card renders. */
   labels?: NormalizedLabel[]
+  /**
+   * The one field here that paints nothing.
+   *
+   * No card renders `lastCommentAt`, so writing it changes no pixel. It exists
+   * because this patch is also what tells the change detector "this browser
+   * did that" — a field the UI writes without pre-painting shows up in the
+   * next sync's diff, and you get notified about your own comment. Every other
+   * field is silenced for free by being painted; this one has to opt in.
+   */
+  lastCommentAt?: string
 }
 
 /**
@@ -65,6 +75,7 @@ export function applyIssueDisplayPatch(
   if ('assignee' in patch) next.assignee = patch.assignee ?? null
   if (patch.priority !== undefined) next.priority = patch.priority
   if (patch.labels) next.labels = patch.labels
+  if (patch.lastCommentAt) next.lastCommentAt = patch.lastCommentAt
 
   const out = issues.slice()
   out[idx] = next
