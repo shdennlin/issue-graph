@@ -509,6 +509,32 @@ export const en = {
     badgeCacheWideNote:
       '(Counts above are cache-wide; some connections are hidden by chain isolation or filters.)',
   },
+  lifecycle: {
+    title: 'Lifecycle',
+    // The config describes and suggests; it never moves an issue by itself.
+    // Saying so here stops anyone expecting the states below to be automation.
+    hint: 'Your pipeline, in order. Each stage names the Linear states it expects and the command that moves work on. Nothing here changes an issue on its own.',
+    empty: 'No stages yet. Add the first step of your pipeline below.',
+    stageName: 'Stage name',
+    nextCommand: 'Next command',
+    nextCommandPlaceholder: 'e.g. /spectra-apply',
+    newStage: 'New stage name',
+    newStagePlaceholder: 'e.g. Review spec',
+    addStage: 'Add stage',
+    moveUp: 'Move earlier',
+    moveDown: 'Move later',
+    delete: 'Delete stage',
+    constrainsNothing: 'Expects any Linear state — never reports a conflict.',
+    usage: '{n} issues on this stage',
+    loadFailed: 'Could not load the lifecycle.',
+  },
+  stage: {
+    // {stage} and {state} are substituted at the call site. The wording names
+    // both sides and proposes nothing: the app shows the disagreement and
+    // resolves neither, because Linear's automation and the person who set the
+    // stage are both legitimate writers. See ADR-0002.
+    conflictHint: 'Stage "{stage}" does not expect the Linear state "{state}"',
+  },
   states: {
     started: 'In Progress',
     unstarted: 'Todo',

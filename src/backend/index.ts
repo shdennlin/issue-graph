@@ -22,6 +22,8 @@ import { healthRoutes } from './routes/health.js'
 import { annotationRoutes } from './routes/annotations.js'
 import { notesRoutes } from './routes/notes.js'
 import { savedViewRoutes } from './routes/savedViews.js'
+import { lifecycleRoutes } from './routes/lifecycle.js'
+import { stageRoutes } from './routes/stage.js'
 import { settingsRoutes } from './routes/settings.js'
 import { snapshotRoutes } from './routes/snapshots.js'
 import { exportRoutes } from './routes/exportRoutes.js'
@@ -110,6 +112,8 @@ export function createApp(): Hono {
   app.route('/', annotationRoutes)
   app.route('/', notesRoutes)
   app.route('/', savedViewRoutes)
+  app.route('/', lifecycleRoutes)
+  app.route('/', stageRoutes)
   app.route('/', settingsRoutes)
   app.route('/', snapshotRoutes)
   app.route('/', exportRoutes)

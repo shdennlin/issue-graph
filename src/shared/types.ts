@@ -280,11 +280,65 @@ export interface SavedViewDTO {
   updatedAt: number
 }
 
+/**
+ * One step in a workspace's own lifecycle.
+ *
+ * This is a PLAYBOOK, not a copy of Linear's workflow states. Linear owns which
+ * states exist, their order, and which one an issue is in; what it has no field
+ * for is "when an issue is here, this is the command that moves it on" — which
+ * is the thing that makes a stage worth storing.
+ *
+ * `states` lists the Linear state NAMES this stage is compatible with. It is
+ * used only to detect disagreement, never to derive the stage (see ADR-0002:
+ * stages are finer than states, so derivation is impossible) and never to
+ * correct either side.
+ */
+export interface LifecycleStageDTO {
+  id: number
+  /** Stable slug referenced by IssueStageDTO.stageKey. Unique per workspace. */
+  key: string
+  name: string
+  /** Lower values sort first. Appended at max+1, same as SavedViewDTO. */
+  sortOrder: number
+  /** Compatible Linear state names, e.g. ["In Progress"]. Empty = compatible
+   *  with everything, which is how a stage opts out of conflict detection. */
+  states: string[]
+  /** What to run next while an issue sits here. Injected into an agent session
+   *  by the SessionStart hook; null when the stage has no obvious next step. */
+  nextCommand: string | null
+  createdAt: number
+  updatedAt: number
+}
+
+/** Which stage an issue is on. Set by hand or by the MCP — NEVER derived from
+ *  the Linear state, and never written by a sync. */
+export interface IssueStageDTO {
+  identifier: string
+  stageKey: string
+  updatedAt: number
+  /** Free-text attribution ("shawn", a session id, …). Null when unknown. */
+  updatedBy: string | null
+}
+
+/**
+ * Whether a stored stage and the current Linear state agree.
+ *
+ * `unknown` is deliberately distinct from `conflict`: an issue whose stage was
+ * never set, or whose stage key no longer exists, is not in disagreement — it
+ * is unclassified, and drawing a warning on it would cry wolf on every issue
+ * the moment a lifecycle is first configured.
+ */
+export type StageVerdict = 'ok' | 'conflict' | 'unknown'
+
 export interface GraphData {
   issues: NormalizedIssue[]
   labels: NormalizedLabel[]
   designdocs?: DesignDocChange[]
   annotations?: AnnotationDTO[]
+  /** The workspace's lifecycle, ordered by sortOrder. Empty until configured. */
+  lifecycle?: LifecycleStageDTO[]
+  /** Per-issue stage assignments. Sparse — most issues have no row. */
+  stages?: IssueStageDTO[]
   viewer?: Viewer | null
   fetchedAt: number
 }

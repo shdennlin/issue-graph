@@ -5,6 +5,7 @@ import { api, type SettingsResponse } from '../lib/api'
 import { ModalHeader } from './ModalHeader'
 import { NotificationSettings } from './NotificationSettings'
 import { WorkspaceSettings } from './WorkspaceSettings'
+import { LifecycleSettings } from './LifecycleSettings'
 import { readDefaultView, writeDefaultView } from '../lib/preferences'
 import { InsecureContextError, beginAuth, clearAuth, readAuth } from '../lib/linearAuth'
 import { useCapabilityStore } from '../store/capabilityStore'
@@ -470,6 +471,11 @@ export function SettingsPage() {
 
         <h4>{t('settings.workspaces')}</h4>
         <WorkspaceSettings />
+
+        {/* Also per-workspace configuration, so it sits with Workspaces
+            rather than with the personal display preferences above. */}
+        <h4>{t('lifecycle.title')}</h4>
+        <LifecycleSettings />
 
         <h4>{t('settings.annotations')}</h4>
         <div className="settings-control-row">

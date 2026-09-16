@@ -1,5 +1,19 @@
-import type { GraphData, NormalizedIssue, NormalizedLabel, AnnotationDTO, WorkflowState } from '@shared/types.js'
+import type {
+  GraphData,
+  NormalizedIssue,
+  NormalizedLabel,
+  AnnotationDTO,
+  IssueStageDTO,
+  LifecycleStageDTO,
+  WorkflowState,
+} from '@shared/types.js'
 import { getDb } from './db.js'
+import {
+  issueStageRowToDTO,
+  lifecycleRowToDTO,
+  type IssueStageRow,
+  type LifecycleStageRow,
+} from './lifecycleStore.js'
 import { loadConfig } from './lib/env.js'
 import { settingInt } from './lib/settings.js'
 
@@ -257,6 +271,30 @@ export function resetCache(): { issues: number; labels: number } {
     writeMeta(META_LAST_RECONCILE_MS, '0')
   })()
   return { issues, labels }
+}
+
+/**
+ * The workspace's lifecycle, ordered as the pipeline runs.
+ *
+ * Read through lifecycleRowToDTO so a malformed `states` column degrades to
+ * "constrains nothing" instead of throwing inside the graph response — one bad
+ * row must not be able to blank the whole graph.
+ */
+export function readLifecycleStages(): LifecycleStageDTO[] {
+  const rows = getDb()
+    .prepare(
+      'SELECT id, key, name, sort_order, states, next_command, created_at, updated_at FROM lifecycle_stage ORDER BY sort_order ASC, id ASC',
+    )
+    .all() as LifecycleStageRow[]
+  return rows.map(lifecycleRowToDTO)
+}
+
+/** Per-issue stage assignments. Sparse: most issues have no row. */
+export function readIssueStages(): IssueStageDTO[] {
+  const rows = getDb()
+    .prepare('SELECT identifier, stage_key, updated_at, updated_by FROM issue_stage')
+    .all() as IssueStageRow[]
+  return rows.map(issueStageRowToDTO)
 }
 
 export function readAnnotations(): AnnotationDTO[] {

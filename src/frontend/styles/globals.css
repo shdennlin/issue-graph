@@ -1061,6 +1061,35 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   font-variant-numeric: tabular-nums;
 }
 
+/* Stage chip. Sits in .top's trailing flex group beside the state pill, so it
+   must not grow the card: no padding that would push the row taller than the
+   pill already makes it. Truncates rather than wrapping — a long stage name
+   must never turn one line into two, because the card height is measured and
+   fed back into the dagre layout. */
+.issue-node .stage-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+  border: 1px solid var(--node-border);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+/* Disagreement between the stored stage and the Linear state. Deliberately a
+   warning tint rather than an error: nothing is broken and nothing will be
+   changed automatically — the card is reporting that two legitimate writers
+   disagree. */
+.issue-node .stage-chip.is-conflict {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
 .priority-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .priority-0 { background: var(--priority-none); }
 .priority-1 { background: var(--priority-urgent); }
@@ -3376,7 +3405,7 @@ label + .settings-help {
   font-size: 13px;
   color: var(--fg);
   background: var(--bg-elev);
-  border: 1px solid var(--border);
+  border: 1px solid var(--node-border);
   border-radius: 4px;
   padding: 6px 8px;
   margin-bottom: 6px;
@@ -3419,11 +3448,11 @@ label + .settings-help {
   font-size: 12px;
   color: var(--fg-muted);
   background: var(--bg-elev);
-  border: 1px solid var(--border);
+  border: 1px solid var(--node-border);
   border-radius: 6px;
 }
 .detail-write-locked-cta {
-  border: 1px solid var(--border);
+  border: 1px solid var(--node-border);
   background: none;
   color: var(--accent, #3b6ff0);
   cursor: pointer;
@@ -3732,3 +3761,31 @@ label + .settings-help {
   letter-spacing: 0;
   color: var(--danger);
 }
+
+/* Lifecycle editor (Settings). A plain ordered list: the pipeline has one legal
+   shape, so reordering is two buttons rather than a drag canvas. */
+.lifecycle-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.lifecycle-row { border: 1px solid var(--node-border); border-radius: 6px; padding: 8px 10px; }
+.lifecycle-row-head { display: flex; align-items: center; gap: 6px; }
+.lifecycle-row-head input { flex: 1 1 0; min-width: 0; }
+.lifecycle-pos {
+  flex: 0 0 auto;
+  width: 20px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-muted);
+}
+.lifecycle-states { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+/* Off is the default and must read as "not selected", not as "disabled" —
+   every state starts off, and a greyed-out row would look broken. */
+.lifecycle-state-toggle {
+  font-size: var(--fs-meta);
+  padding: 1px 6px;
+  border: 1px solid var(--node-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+.lifecycle-state-toggle.is-on { color: var(--fg); border-color: var(--accent); background: var(--chip-bg); }
+.settings-error { color: var(--danger); font-size: var(--fs-meta); }

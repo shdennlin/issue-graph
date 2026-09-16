@@ -96,6 +96,43 @@ const MIGRATIONS: string[] = [
      updated_at INTEGER NOT NULL
    );`,
   `CREATE INDEX IF NOT EXISTS idx_saved_view_sort ON saved_view(sort_order ASC);`,
+
+  // 6. Lifecycle stages — the workspace's own pipeline, and which stage each
+  // issue is on. See docs/adr/0002-lifecycle-stage-is-stored-not-derived.md.
+  //
+  // A row per stage rather than one JSON document, so `key` uniqueness and the
+  // ordering are enforced by the schema instead of by whoever writes the blob.
+  // `states` is the one JSON column: a list of compatible Linear state NAMES,
+  // used to spot disagreement and nothing else.
+  //
+  // No workspace_id column, same reason as saved_view: getDb() hands out one
+  // Database per workspace, so the file is the scope.
+  //
+  // NEITHER TABLE MAY EVER BE ADDED TO resetCache(). That function is a
+  // deny-list — it deletes issue_cache, label_cache and some meta keys, and
+  // everything else survives by omission. These rows are not rebuildable:
+  // nobody can recompute what a person typed. cache.test.ts pins this.
+  `CREATE TABLE IF NOT EXISTS lifecycle_stage (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     key TEXT NOT NULL UNIQUE,
+     name TEXT NOT NULL,
+     sort_order INTEGER NOT NULL,
+     states TEXT NOT NULL,
+     next_command TEXT,
+     created_at INTEGER NOT NULL,
+     updated_at INTEGER NOT NULL
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_lifecycle_stage_sort ON lifecycle_stage(sort_order ASC);`,
+  // stage_key is deliberately NOT a foreign key. Deleting a stage must not
+  // silently erase every assignment to it — an unresolvable key reads as
+  // 'unknown' (see StageVerdict), which is recoverable by re-creating the
+  // stage, whereas a cascading delete is not.
+  `CREATE TABLE IF NOT EXISTS issue_stage (
+     identifier TEXT PRIMARY KEY,
+     stage_key TEXT NOT NULL,
+     updated_at INTEGER NOT NULL,
+     updated_by TEXT
+   );`,
 ]
 
 // One Database instance per workspace id. Each profile has its own SQLITE_PATH

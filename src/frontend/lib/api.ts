@@ -5,6 +5,8 @@ import type {
   GraphResponse,
   ProjectDetail,
   SavedViewDTO,
+  LifecycleStageDTO,
+  IssueStageDTO,
   SyncLogEntry,
   Viewer,
   WorkflowState,
@@ -219,6 +221,26 @@ export const api = {
   // module: this `http` helper throws a typed ApiError that flows into
   // apiErrorMessage -> i18n, whereas notesApi.ts rolls its own and throws a
   // bare Error, which is why note failures surface untranslated.
+  fetchLifecycle: () => http<{ entries: LifecycleStageDTO[] }>('/api/lifecycle'),
+  createStage: (s: { name: string; key?: string; states?: string[]; nextCommand?: string | null }) =>
+    http<LifecycleStageDTO>('/api/lifecycle', { method: 'POST', body: JSON.stringify(s) }),
+  patchStage: (
+    id: number,
+    patch: { key?: string; name?: string; states?: string[]; nextCommand?: string | null },
+  ) => http<{ ok: boolean }>(`/api/lifecycle/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deleteStage: (id: number) => http<unknown>(`/api/lifecycle/${id}`, { method: 'DELETE' }),
+  /** The full key list, always — the server refuses a partial reorder rather
+   *  than interleaving a stale order with the current one. */
+  reorderStages: (keys: string[]) =>
+    http<{ ok: boolean }>('/api/lifecycle/reorder', { method: 'POST', body: JSON.stringify({ keys }) }),
+  fetchIssueStages: () => http<{ entries: IssueStageDTO[] }>('/api/stage'),
+  /** `stageKey: null` clears the assignment. Omitting it is rejected, so
+   *  clearing is always deliberate. */
+  setIssueStage: (identifier: string, stageKey: string | null, updatedBy?: string) =>
+    http<unknown>(`/api/stage/${identifier}`, {
+      method: 'PUT',
+      body: JSON.stringify({ stageKey, updatedBy }),
+    }),
   fetchSavedViews: () => http<{ entries: SavedViewDTO[] }>('/api/saved-views'),
   createSavedView: (name: string, query: string) =>
     http<SavedViewDTO>('/api/saved-views', { method: 'POST', body: JSON.stringify({ name, query }) }),
