@@ -162,6 +162,33 @@ const MIGRATIONS: string[] = [
      payload_version INTEGER NOT NULL
    );`,
   `CREATE INDEX IF NOT EXISTS idx_agent_session_issue ON agent_session(identifier);`,
+
+  // 8. Batches — a set of issues handed to agent sessions one at a time, via
+  // the MCP server in integrations/claude-code/mcp/.
+  //
+  // Membership is stored; ORDER IS NOT. The order to work a batch in is a
+  // topological sort over the `blocks` edges, which live on the issues and
+  // change whenever someone edits a relation in Linear. A stored order would be
+  // a second copy of that fact and would silently go stale — the same reason
+  // a stage is not derived but an order is.
+  //
+  // `claimed_by` is what stops two sessions calling next_issue from colliding;
+  // the claim is taken with a conditional UPDATE, not a read-then-write.
+  // Ephemeral, like agent_session.
+  `CREATE TABLE IF NOT EXISTS batch (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     name TEXT NOT NULL,
+     created_at INTEGER NOT NULL
+   );`,
+  `CREATE TABLE IF NOT EXISTS batch_member (
+     batch_id INTEGER NOT NULL,
+     identifier TEXT NOT NULL,
+     claimed_by TEXT,
+     claimed_at INTEGER,
+     done_at INTEGER,
+     PRIMARY KEY (batch_id, identifier)
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_batch_member_batch ON batch_member(batch_id);`,
 ]
 
 // One Database instance per workspace id. Each profile has its own SQLITE_PATH

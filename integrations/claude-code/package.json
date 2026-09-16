@@ -1,0 +1,10 @@
+{
+  "name": "issue-graph-claude-code",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Claude Code plugin for issue-graph — session hooks and an MCP server",
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}

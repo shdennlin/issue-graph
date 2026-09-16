@@ -221,6 +221,18 @@ export const api = {
   // module: this `http` helper throws a typed ApiError that flows into
   // apiErrorMessage -> i18n, whereas notesApi.ts rolls its own and throws a
   // bare Error, which is why note failures surface untranslated.
+  /** Create a batch of issues for agent sessions to work through one at a
+   *  time. Members are stored; the ORDER is derived from `blocks` at read time,
+   *  so it is never sent. */
+  createBatch: (name: string, members: string[]) =>
+    http<{ id: number; name: string; members: string[] }>('/api/batches', {
+      method: 'POST',
+      body: JSON.stringify({ name, members }),
+    }),
+  fetchBatches: () =>
+    http<{ entries: { id: number; name: string; progress: { total: number; done: number } }[] }>(
+      '/api/batches',
+    ),
   fetchLifecycle: () => http<{ entries: LifecycleStageDTO[] }>('/api/lifecycle'),
   createStage: (s: { name: string; key?: string; states?: string[]; nextCommand?: string | null }) =>
     http<LifecycleStageDTO>('/api/lifecycle', { method: 'POST', body: JSON.stringify(s) }),

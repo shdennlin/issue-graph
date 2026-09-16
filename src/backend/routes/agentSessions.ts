@@ -16,7 +16,7 @@
 
 import { Hono } from 'hono'
 import { getDb } from '../db.js'
-import { loadConfig } from '../lib/env.js'
+import { agentTokenValid } from '../lib/http.js'
 import { readCachedIssues, readWorkflowStatesCached } from '../cache.js'
 import { issueFromBranch, teamKeysFrom } from '../branchIssue.js'
 import {
@@ -29,34 +29,10 @@ import {
 const unauthorized = () => ({ error: { code: 'unauthorized', message: 'bad or missing token' } }) as const
 const invalid = (message: string) => ({ error: { code: 'invalid', message } }) as const
 
-/**
- * Constant-time-ish comparison. Not a defence against a remote timing attack —
- * network jitter swamps the signal at this scale — but it costs nothing and
- * avoids the reflex of writing `a === b` for a secret, which is the habit worth
- * not having.
- */
-function tokenMatches(presented: string, expected: string): boolean {
-  if (presented.length !== expected.length) return false
-  let diff = 0
-  for (let i = 0; i < presented.length; i++) {
-    diff |= presented.charCodeAt(i) ^ expected.charCodeAt(i)
-  }
-  return diff === 0
-}
-
-function authorized(header: string | undefined): boolean {
-  const expected = loadConfig().AGENT_SESSION_TOKEN
-  // Unset = closed. See the header comment.
-  if (!expected) return false
-  const presented = header?.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : ''
-  if (presented.length === 0) return false
-  return tokenMatches(presented, expected)
-}
-
 export const agentSessionRoutes = new Hono()
 
 agentSessionRoutes.post('/api/agent-sessions', async (c) => {
-  if (!authorized(c.req.header('Authorization'))) return c.json(unauthorized(), 401)
+  if (!agentTokenValid(c.req.header('Authorization'))) return c.json(unauthorized(), 401)
 
   const body = await c.req.json().catch(() => null)
   const report = parseSessionReport(body)
@@ -108,7 +84,7 @@ agentSessionRoutes.post('/api/agent-sessions', async (c) => {
 })
 
 agentSessionRoutes.delete('/api/agent-sessions/:sessionId', (c) => {
-  if (!authorized(c.req.header('Authorization'))) return c.json(unauthorized(), 401)
+  if (!agentTokenValid(c.req.header('Authorization'))) return c.json(unauthorized(), 401)
   const sessionId = c.req.param('sessionId')
   if (sessionId.length === 0 || sessionId.length > SESSION_ID_MAX) {
     return c.json(invalid('bad sessionId'), 400)

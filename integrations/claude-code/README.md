@@ -95,3 +95,52 @@ Every path in `hooks/session.sh` exits 0, output goes nowhere, and the request i
 backgrounded with a 3-second timeout. If the server is down, or `curl`/`jq` are
 missing, the hook does nothing and your turn proceeds. A monitoring hook that can
 block a prompt has its priorities backwards.
+
+---
+
+# MCP server
+
+The same plugin ships an MCP server, so a session can ask issue-graph things
+rather than only being reported on.
+
+It needs the same two variables as the hooks, plus an optional workspace:
+
+```bash
+export ISSUE_GRAPH_WORKSPACE=onelegion   # omit to use the default workspace
+```
+
+| Tool | Does |
+|---|---|
+| `list_stages` | The workspace's lifecycle, in pipeline order |
+| `get_stage` | An issue's stage, its Linear state, whether they agree, and the next command |
+| `set_stage` | Record which stage an issue is on |
+| `list_batches` | Queued batches and their progress |
+| `next_issue` | Claim the next issue from a batch |
+| `report_done` | Mark a claimed issue finished |
+
+## What it will not do
+
+**It never changes a Linear state.** It writes issue-graph's own data only —
+stage assignments and batch claims. State transitions belong to Linear's own MCP
+or its GitHub automation; a second writer on that field is the failure this whole
+design is shaped around.
+
+So `set_stage` records what you assert, and if that disagrees with Linear,
+`get_stage` reports the disagreement and changes neither side.
+
+## Batches
+
+A batch is a set of issues handed out one at a time. Create one by selecting
+issues on the graph and choosing **Queue N as a batch**.
+
+Only membership is stored. The **order is derived on every read** from the
+`blocks` relations, so a blocker is always handed out before what it blocks, and
+editing a relation in Linear changes the order without anyone re-queuing.
+
+`next_issue` will not hand you an issue another session holds, and will not hand
+you one whose in-batch blockers are unfinished. When it returns nothing it says
+which: `done` means the batch is finished, `blocked` means come back shortly.
+Only the session holding a claim may `report_done` it.
+
+A session that reconnects and calls `next_issue` again gets **its own claim
+back** rather than a second issue.
