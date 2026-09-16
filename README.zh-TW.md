@@ -73,6 +73,25 @@ Linear 拉取進行中與最近的議題、掃描 `REPO_PATH` 下的設計文件
 > 只暴露那一條路徑 — 例如 `tailscale funnel --bg --set-path=/linear-hook
 > http://localhost:31415/api/webhooks/linear` — 絕對不要整個 port。
 
+> [!IMPORTANT]
+> **寫入功能預設關閉，而且每個人都是用自己的 Linear 帳號授權。** 修改議題的狀態、
+> 指派對象、優先度或標籤，以及張貼留言，都需要伺服器環境變數 `LINEAR_OAUTH_CLIENT_ID`；
+> 不設定它，寫入路由一律回 401，所以升級不會平白長出一塊可變更的介面。
+>
+> 設定比在 `.env` 塞一串隨機字元麻煩一些：到 **linear.app → Settings → API → Applications**
+> 註冊一個 OAuth application，並且為**你會用來瀏覽這個 app 的每一個來源**都加上 redirect
+> URI — 建置後或 Docker 執行是 `http://localhost:31415/`，`bun run dev` 是
+> `http://localhost:31414/`，再加上你的 tailnet 或 proxy 主機。Linear 會做完全比對，
+> redirect URI 不符是第一次使用時最可能踩到的失敗。接著把 client id 放進環境變數並重啟。
+> 不需要設定 client secret：交換流程由瀏覽器以 PKCE 完成，這正是讓伺服器置身事外的原因。
+>
+> 然後每個人各自點一次 **設定 → 寫入權限 → 連結 Linear**。access token 只存在那個瀏覽器裡，
+> 別無他處 — 這個伺服器從不儲存它，只在寫入的那一次呼叫時借用。**變更在 Linear 上會記錄成
+> 那個人做的**，這就是跟共用密鑰的差別：追蹤系統的歷史紀錄說得出誰做了什麼。授權大約維持
+> 一天（refresh token 刻意不保留，所以被偷走的瀏覽器 profile 值一天，而不是永遠），
+> 按「解除連結」即可清除。讀取完全不受這些影響 — 它仍然使用工作區的 API 金鑰，
+> 因為同步是拉進共用快取的背景作業，不是某個人的行為。
+
 ### 設定
 
 `.env` 沒有任何必填項目。工作區直接在應用程式內管理；`.env` 只承載伺服器在
