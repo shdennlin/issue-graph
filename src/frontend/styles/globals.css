@@ -1061,6 +1061,19 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   font-variant-numeric: tabular-nums;
 }
 
+/* Agent-session presence. Same flex group as the stage chip and the state
+   pill, so it costs no card height. Muted by default: a session running is the
+   normal state and should not shout; only the waiting state is a call to act. */
+.issue-node .session-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+.issue-node .session-badge.is-idle { color: var(--accent); }
+
 /* Stage chip. Sits in .top's trailing flex group beside the state pill, so it
    must not grow the card: no padding that would push the row taller than the
    pill already makes it. Truncates rather than wrapping — a long stage name

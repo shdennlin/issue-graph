@@ -498,6 +498,11 @@ export const zhTW: Dict = {
     badgeVisible: '目前視圖中可見：',
     badgeCacheWideNote: '（上方數字為快取全域計數；部分連結被鏈隔離或篩選器隱藏。）',
   },
+  session: {
+    active: '有 Claude session 正在處理這張',
+    idle: 'Claude session 正在等你回應',
+    count: '{n} 個 session',
+  },
   lifecycle: {
     title: '生命週期',
     hint: '你的流程，依序排列。每一格指定它預期的 Linear 狀態，以及推進工作的指令。這裡的設定不會自己改動任何 issue。',

@@ -1,0 +1,10 @@
+{
+  "name": "issue-graph",
+  "version": "0.1.0",
+  "description": "Report Claude Code session presence to an issue-graph server, so the graph shows which issue is being worked on right now",
+  "author": { "name": "shdennlin" },
+  "homepage": "https://github.com/shdennlin/issue-graph",
+  "repository": "https://github.com/shdennlin/issue-graph",
+  "license": "MIT",
+  "keywords": ["issue-graph", "linear", "session", "hooks"]
+}

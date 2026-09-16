@@ -51,6 +51,8 @@ const DELETABLE = ['issue_cache', 'label_cache']
 const MUST_SURVIVE = [
   'lifecycle_stage',
   'issue_stage',
+  // A reset is not a reason to forget a session that is running right now.
+  'agent_session',
   'annotation',
   'note',
   'saved_view',

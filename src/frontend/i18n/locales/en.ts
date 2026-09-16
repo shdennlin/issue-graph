@@ -509,6 +509,11 @@ export const en = {
     badgeCacheWideNote:
       '(Counts above are cache-wide; some connections are hidden by chain isolation or filters.)',
   },
+  session: {
+    active: 'A Claude session is working on this',
+    idle: 'A Claude session is waiting for you',
+    count: '{n} sessions',
+  },
   lifecycle: {
     title: 'Lifecycle',
     // The config describes and suggests; it never moves an issue by itself.

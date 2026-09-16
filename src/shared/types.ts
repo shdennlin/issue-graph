@@ -330,6 +330,33 @@ export interface IssueStageDTO {
  */
 export type StageVerdict = 'ok' | 'conflict' | 'unknown'
 
+/**
+ * A Claude Code session reported by the hook plugin.
+ *
+ * This is the one fact an issue tracker structurally cannot hold: it is runtime
+ * state, not a work item. Linear has no field for it and should not grow one.
+ *
+ * Reported by hooks rather than claimed by the agent on purpose. A hook fires
+ * whether or not the model cooperates, so a session that crashes or forgets to
+ * announce itself is still visible — and the ABSENCE of heartbeats is what
+ * reveals that it died. An agent-claimed marker could only ever show sessions
+ * that were well-behaved enough not to need watching.
+ */
+export interface AgentSessionDTO {
+  sessionId: string
+  /** The issue resolved from the branch, or null. Null is a normal outcome —
+   *  plenty of real work has no ticket. */
+  identifier: string | null
+  branch: string | null
+  cwd: string | null
+  host: string | null
+  /** Last slash command seen, for display only. */
+  phase: string | null
+  /** `active` = moving. `idle` = the turn ended; it is waiting on a human. */
+  status: 'active' | 'idle'
+  lastSeen: number
+}
+
 export interface GraphData {
   issues: NormalizedIssue[]
   labels: NormalizedLabel[]
@@ -339,6 +366,8 @@ export interface GraphData {
   lifecycle?: LifecycleStageDTO[]
   /** Per-issue stage assignments. Sparse — most issues have no row. */
   stages?: IssueStageDTO[]
+  /** Live agent sessions. Already filtered by TTL — a row here is alive. */
+  agentSessions?: AgentSessionDTO[]
   viewer?: Viewer | null
   fetchedAt: number
 }

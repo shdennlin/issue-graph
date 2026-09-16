@@ -3,11 +3,13 @@ import type {
   NormalizedIssue,
   NormalizedLabel,
   AnnotationDTO,
+  AgentSessionDTO,
   IssueStageDTO,
   LifecycleStageDTO,
   WorkflowState,
 } from '@shared/types.js'
 import { getDb } from './db.js'
+import { liveSessions, type AgentSessionRow } from './agentSessionStore.js'
 import {
   issueStageRowToDTO,
   lifecycleRowToDTO,
@@ -287,6 +289,23 @@ export function readLifecycleStages(): LifecycleStageDTO[] {
     )
     .all() as LifecycleStageRow[]
   return rows.map(lifecycleRowToDTO)
+}
+
+/**
+ * Live agent sessions, TTL already applied.
+ *
+ * The filter lives here rather than in each consumer so that no caller can
+ * forget it: a row that has gone quiet is not "a session with an old
+ * timestamp", it is a session that has probably died, and showing it would
+ * have the card claim work is in progress when nothing is running.
+ */
+export function readLiveAgentSessions(now = Date.now()): AgentSessionDTO[] {
+  const rows = getDb()
+    .prepare(
+      'SELECT session_id, identifier, branch, cwd, host, phase, status, last_seen, payload_version FROM agent_session',
+    )
+    .all() as AgentSessionRow[]
+  return liveSessions(rows, now)
 }
 
 /** Per-issue stage assignments. Sparse: most issues have no row. */

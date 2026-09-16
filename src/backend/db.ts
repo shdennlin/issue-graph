@@ -111,7 +111,7 @@ const MIGRATIONS: string[] = [
   // NEITHER TABLE MAY EVER BE ADDED TO resetCache(). That function is a
   // deny-list — it deletes issue_cache, label_cache and some meta keys, and
   // everything else survives by omission. These rows are not rebuildable:
-  // nobody can recompute what a person typed. cache.test.ts pins this.
+  // nobody can recompute what a person typed. cacheReset.test.ts pins this.
   `CREATE TABLE IF NOT EXISTS lifecycle_stage (
      id INTEGER PRIMARY KEY AUTOINCREMENT,
      key TEXT NOT NULL UNIQUE,
@@ -133,6 +133,35 @@ const MIGRATIONS: string[] = [
      updated_at INTEGER NOT NULL,
      updated_by TEXT
    );`,
+
+  // 7. Agent sessions — which Claude Code session is alive, where, and whether
+  // it is moving or waiting on a human. Written by the hook plugin in
+  // integrations/claude-code/.
+  //
+  // Ephemeral by design, and the ONE table here that a cache reset losing would
+  // be fine — clearing it just drops stale rows. It is still not listed in
+  // resetCache(), because a reset is not a reason to forget a session that is
+  // currently running.
+  //
+  // `payload_version` is recorded from the first release: once installs exist
+  // in the wild the wire format cannot be renegotiated, so the server has to be
+  // able to tell an old reporter from a new one.
+  //
+  // Liveness is a TTL on last_seen, not the SessionEnd hook. A crashed session
+  // never sends SessionEnd; without the TTL the graph fills with sessions that
+  // died days ago.
+  `CREATE TABLE IF NOT EXISTS agent_session (
+     session_id TEXT PRIMARY KEY,
+     identifier TEXT,
+     branch TEXT,
+     cwd TEXT,
+     host TEXT,
+     phase TEXT,
+     status TEXT NOT NULL,
+     last_seen INTEGER NOT NULL,
+     payload_version INTEGER NOT NULL
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_agent_session_issue ON agent_session(identifier);`,
 ]
 
 // One Database instance per workspace id. Each profile has its own SQLITE_PATH
