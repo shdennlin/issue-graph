@@ -106,6 +106,15 @@ describe('POST /api/lifecycle', () => {
     expect(rows.map((r) => r.sort_order)).toEqual([0, 1])
   })
 
+  it('refuses a duplicate NAME, so seeding twice does not double the pipeline', async () => {
+    // Key uniqueness alone misses this when the name yields no slug: the second
+    // attempt just takes the next free fallback key.
+    await post({ name: 'Implementing' })
+    const res = await post({ name: 'implementing' })
+    expect(res.status).toBe(409)
+    expect(rows).toHaveLength(1)
+  })
+
   it('refuses a duplicate key with 409 rather than silently renaming', async () => {
     await post({ name: 'Implementing', key: 'impl' })
     const res = await post({ name: 'Also implementing', key: 'impl' })

@@ -16,7 +16,9 @@ import { z } from 'zod'
 import { getDb } from '../db.js'
 import { originAllowed } from '../lib/http.js'
 import {
+  fallbackStageKey,
   isKeyTaken,
+  isNameTaken,
   lifecycleRowToDTO,
   nextSortOrder,
   normalizeNextCommand,
@@ -75,21 +77,31 @@ lifecycleRoutes.post('/api/lifecycle', async (c) => {
 
   const name = normalizeStageName(parsed.data.name)
   if (name === null) return c.json(invalid('bad name'), 400)
-  // An explicit key wins; otherwise derive one from the name so the editor's
-  // "add stage" path needs one field, not two.
-  const key =
-    parsed.data.key === undefined ? slugifyStageName(name) : normalizeStageKey(parsed.data.key)
-  if (key === null) return c.json(invalid('bad key'), 400)
   const states = normalizeStates(parsed.data.states)
   if (states === null) return c.json(invalid('bad states'), 400)
   const nextCommand = normalizeNextCommand(parsed.data.nextCommand)
   if (nextCommand === undefined) return c.json(invalid('bad nextCommand'), 400)
 
   const db = getDb()
-  const rows = db.prepare(`SELECT id, key, sort_order FROM lifecycle_stage`).all() as Pick<
+  const rows = db.prepare(`SELECT id, key, name, sort_order FROM lifecycle_stage`).all() as Pick<
     LifecycleStageRow,
-    'id' | 'key' | 'sort_order'
+    'id' | 'key' | 'name' | 'sort_order'
   >[]
+  // Checked before the key, because the name is what the user typed and a
+  // fallback key would happily let the same stage in a second time.
+  if (isNameTaken(rows, name)) return c.json(invalid('a stage with that name already exists'), 409)
+
+  // An explicit key wins; otherwise derive one from the name so the editor's
+  // "add stage" path needs one field, not two. A name in a non-Latin script
+  // slugifies to nothing — routine here, since this app ships a zh-TW locale —
+  // so it falls back to an opaque key rather than refusing the stage.
+  let key: string | null
+  if (parsed.data.key !== undefined) {
+    key = normalizeStageKey(parsed.data.key)
+    if (key === null) return c.json(invalid('bad key'), 400)
+  } else {
+    key = slugifyStageName(name) ?? fallbackStageKey(rows.map((r) => r.key))
+  }
   if (isKeyTaken(rows, key)) return c.json(invalid('key already exists'), 409)
 
   const now = Date.now()
@@ -144,6 +156,13 @@ lifecycleRoutes.patch('/api/lifecycle/:id', async (c) => {
   if (parsed.data.name !== undefined) {
     const name = normalizeStageName(parsed.data.name)
     if (name === null) return c.json(invalid('bad name'), 400)
+    const named = db.prepare(`SELECT id, name FROM lifecycle_stage`).all() as Pick<
+      LifecycleStageRow,
+      'id' | 'name'
+    >[]
+    if (isNameTaken(named, name, id)) {
+      return c.json(invalid('a stage with that name already exists'), 409)
+    }
     sets.push('name = ?')
     args.push(name)
   }

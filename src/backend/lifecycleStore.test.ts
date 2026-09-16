@@ -6,6 +6,7 @@ import {
   STATES_MAX,
   indexStages,
   isKeyTaken,
+  isNameTaken,
   issueStageRowToDTO,
   lifecycleRowToDTO,
   nextSortOrder,
@@ -17,6 +18,7 @@ import {
   reorderStages,
   slugifyStageName,
   stageVerdict,
+  fallbackStageKey,
 } from './lifecycleStore.js'
 
 describe('normalizeStageKey', () => {
@@ -59,8 +61,31 @@ describe('slugifyStageName', () => {
   })
 
   it('returns null when nothing survives', () => {
+    // Includes any non-Latin script — this app ships a zh-TW locale, so a stage
+    // named only in Chinese is ordinary. The route falls back rather than
+    // refusing the stage; see fallbackStageKey.
     expect(slugifyStageName('!!!')).toBeNull()
     expect(slugifyStageName('   ')).toBeNull()
+    expect(slugifyStageName('審查規格')).toBeNull()
+  })
+})
+
+describe('fallbackStageKey', () => {
+  it('starts at stage-1', () => {
+    expect(fallbackStageKey([])).toBe('stage-1')
+  })
+
+  it('skips keys already in use', () => {
+    expect(fallbackStageKey(['stage-1', 'stage-2'])).toBe('stage-3')
+  })
+
+  it('reuses a gap left by a deleted stage', () => {
+    // A plain count+1 would collide the first time a stage is removed.
+    expect(fallbackStageKey(['stage-1', 'stage-3'])).toBe('stage-2')
+  })
+
+  it('produces a key normalizeStageKey accepts', () => {
+    expect(normalizeStageKey(fallbackStageKey([]))).toBe('stage-1')
   })
 })
 
@@ -190,6 +215,31 @@ describe('isKeyTaken', () => {
   it('lets a row keep its own key on PATCH', () => {
     expect(isKeyTaken(rows, 'impl', 1)).toBe(false)
     expect(isKeyTaken(rows, 'impl', 2)).toBe(true)
+  })
+})
+
+describe('isNameTaken', () => {
+  const rows = [
+    { id: 1, name: 'Implementing' },
+    { id: 2, name: 'In Review' },
+  ]
+
+  it('matches case-insensitively and ignoring surrounding space', () => {
+    // Two stages a reader cannot tell apart are the same stage.
+    expect(isNameTaken(rows, 'implementing')).toBe(true)
+    expect(isNameTaken(rows, '  Implementing ')).toBe(true)
+    expect(isNameTaken(rows, 'Done')).toBe(false)
+  })
+
+  it('lets a row keep its own name on PATCH', () => {
+    expect(isNameTaken(rows, 'Implementing', 1)).toBe(false)
+    expect(isNameTaken(rows, 'Implementing', 2)).toBe(true)
+  })
+
+  it('catches a re-add whose name yields no slug', () => {
+    // The case key uniqueness cannot see: a non-Latin name gets a fresh
+    // fallback key every time, so only the name makes creation idempotent.
+    expect(isNameTaken([{ id: 1, name: '審查規格' }], '審查規格')).toBe(true)
   })
 })
 

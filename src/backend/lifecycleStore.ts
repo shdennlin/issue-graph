@@ -59,6 +59,29 @@ export function normalizeStageKey(raw: unknown): string | null {
   return key
 }
 
+/**
+ * A key for a stage whose name yields no slug.
+ *
+ * Needed because slugifyStageName strips everything outside [a-z0-9], so a name
+ * written entirely in Chinese — or emoji, or any non-Latin script — produces an
+ * empty slug and could not be saved at all. This app ships a zh-TW locale, so
+ * that is an ordinary case, not an edge one.
+ *
+ * The key is an internal join target, never shown, so an opaque one costs the
+ * user nothing. `taken` is consulted rather than trusting a counter, because
+ * stages get deleted and a plain length+1 would collide after the first one.
+ */
+export function fallbackStageKey(taken: Iterable<string>): string {
+  const used = new Set<string>()
+  for (const k of taken) used.add(k)
+  for (let n = 1; n < 10_000; n++) {
+    const key = `stage-${n}`
+    if (!used.has(key)) return key
+  }
+  // Unreachable in practice; a workspace with 10k stages has other problems.
+  return `stage-${Date.now()}`
+}
+
 /** Derive a key from a display name, for the editor's "add stage" path. */
 export function slugifyStageName(raw: string): string | null {
   const slug = raw
@@ -167,6 +190,27 @@ export function isKeyTaken(
   exceptId?: number,
 ): boolean {
   return rows.some((r) => r.key === key && r.id !== exceptId)
+}
+
+/**
+ * Is this display name already used?
+ *
+ * Names are unique as well as keys, and not only for tidiness. A name that
+ * slugifies to nothing — any non-Latin script — gets an opaque fallback key, so
+ * key uniqueness alone cannot recognise the same stage being added twice: the
+ * second attempt simply gets the next free fallback. Creating a stage is
+ * idempotent on the NAME, which is the thing the user actually typed.
+ *
+ * Compared case-insensitively: "Implementing" and "implementing" are the same
+ * stage to a reader, and two of them on a card would be indistinguishable.
+ */
+export function isNameTaken(
+  rows: Pick<LifecycleStageRow, 'id' | 'name'>[],
+  name: string,
+  exceptId?: number,
+): boolean {
+  const fold = name.trim().toLowerCase()
+  return rows.some((r) => r.name.trim().toLowerCase() === fold && r.id !== exceptId)
 }
 
 /**
