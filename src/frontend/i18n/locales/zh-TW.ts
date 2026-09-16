@@ -602,6 +602,7 @@ export const zhTW: Dict = {
     scopeOnlyThese: '只通知這些',
     scopeNarrowed: '已限縮到一個儲存的範圍。',
     clear: '清空',
+    moreHidden: '還有 {count} 筆較早的變更未顯示 —— 請用「最近活動」篩選。',
     olderHint: '更早的變更請用「最近活動」篩選。',
     toastOne: '1 個議題有變更',
     toastMany: '{count} 個議題有變更',

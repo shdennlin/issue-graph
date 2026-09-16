@@ -614,6 +614,7 @@ export const en = {
     scopeOnlyThese: 'Only these',
     scopeNarrowed: 'Narrowed to a saved scope.',
     clear: 'Clear',
+    moreHidden: '{count} older change(s) not shown — filter by Recency.',
     olderHint: 'For anything older, filter by Recency.',
     // Toast
     toastOne: '1 issue changed',

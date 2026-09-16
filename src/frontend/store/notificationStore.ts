@@ -5,19 +5,16 @@
 //   - **Preferences** (enabled / desktop / scope) persist, per browser, via
 //     `preferences.ts`. Per browser is the feature's point, not a side effect:
 //     several people reach one instance and each wants different interruptions.
-//   - **Entries** do NOT persist. They are a window onto the last few minutes,
-//     not a record. A reload would repopulate the list with "SHA-12 -> In
-//     Review" lines describing a state that has since moved twice more, which
-//     is worse than showing nothing. The durable answer to "what changed while
-//     I was away" is the recency facet, which reads the same cache the graph
-//     does and cannot drift from it.
+//   - **Entries** persist too, but keyed per workspace and in their own module
+//     (`lib/notificationHistory.ts`) — they are a log, and reviewing what an
+//     agent did overnight is exactly the case that outlives a tab. The store
+//     holds only the workspace currently on screen; `hydrate` swaps the set.
 //
 // Desktop delivery lives here rather than in a component because it must fire
 // exactly once per sync regardless of how many components are mounted.
 
 import { create } from 'zustand'
 import type { IssueChange } from '../lib/issueDiff'
-import type { ChangedField } from '../lib/issueDiff'
 import {
   readNotifyDesktop,
   readNotifyEnabled,
@@ -26,24 +23,17 @@ import {
   writeNotifyEnabled,
   writeNotifyScope,
 } from '../lib/preferences'
+import {
+  MAX_ENTRIES,
+  clearHistory,
+  readHistory,
+  writeHistory,
+  type StoredEntry,
+} from '../lib/notificationHistory'
 
-/** Ring capacity. Beyond this the oldest entries fall off; anything older is
- *  the recency facet's job, not this list's. */
-const MAX_ENTRIES = 50
-
-export interface NotificationEntry {
-  /** Stable React key. An identifier alone is not unique — the same issue can
-   *  change twice in one session and both rows must survive. */
-  id: string
-  identifier: string
-  title: string
-  kind: 'created' | 'changed'
-  fields: ChangedField[]
-  /** Short new value per field — see `IssueChanged.to`. */
-  to: Partial<Record<ChangedField, string | null>>
-  at: number
-  read: boolean
-}
+/** One row. Identical to the stored shape — the log is the state, so a second
+ *  type would only be somewhere for the two to drift apart. */
+export type NotificationEntry = StoredEntry
 
 /**
  * Whether this browser can show a desktop notification at all.
@@ -94,6 +84,11 @@ interface NotificationState {
    */
   toast: { count: number; at: number } | null
   dismissToast: () => void
+  /** Workspace the `entries` belong to. Null until the first hydrate. */
+  workspaceId: string | null
+  /** Point the store at a workspace, loading its log. A no-op when already
+   *  there, so it is safe to call from an effect that runs on every render. */
+  hydrate: (workspaceId: string | null) => void
 
   setEnabled: (v: boolean) => void
   setDesktopEnabled: (v: boolean) => void
@@ -171,6 +166,15 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   scopeQuery: readNotifyScope(),
   support: probeSupport(),
   toast: null,
+  workspaceId: null,
+
+  hydrate(workspaceId) {
+    if (get().workspaceId === workspaceId) return
+    // Dropping the toast matters: it announces a batch from the workspace we
+    // are leaving, and "3 issues changed" over a graph where none of them
+    // appear is worse than no toast at all.
+    set({ workspaceId, entries: readHistory(workspaceId), toast: null })
+  },
 
   dismissToast() {
     set({ toast: null })
@@ -209,27 +213,30 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   },
 
   record(changes, workspaceId) {
+    get().hydrate(workspaceId)
     if (!get().enabled || changes.length === 0) return
     const at = Date.now()
     const fresh = changes.map((c) => toEntry(c, at))
     // Newest first, oldest dropped past the cap.
-    set((s) => ({
-      entries: [...fresh, ...s.entries].slice(0, MAX_ENTRIES),
-      toast: { count: fresh.length, at },
-    }))
+    const entries = [...fresh, ...get().entries].slice(0, MAX_ENTRIES)
+    writeHistory(workspaceId, entries)
+    set({ entries, toast: { count: fresh.length, at } })
     if (get().desktopEnabled) raiseDesktop(fresh, workspaceId)
   },
 
   markAllRead() {
-    set({ toast: null })
-    set((s) => ({
-      entries: s.entries.some((e) => !e.read)
-        ? s.entries.map((e) => (e.read ? e : { ...e, read: true }))
-        : s.entries,
-    }))
+    const { entries, workspaceId } = get()
+    if (!entries.some((e) => !e.read)) {
+      set({ toast: null })
+      return
+    }
+    const next = entries.map((e) => (e.read ? e : { ...e, read: true }))
+    writeHistory(workspaceId, next)
+    set({ entries: next, toast: null })
   },
 
   clear() {
+    clearHistory(get().workspaceId)
     set({ entries: [], toast: null })
   },
 }))

@@ -3606,3 +3606,15 @@ label + .settings-help {
   font-size: var(--fs-chip);
   color: var(--fg-muted);
 }
+.notif-row {
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas: 'id title when' 'id what when';
+}
+.notif-row-when {
+  grid-area: when;
+  align-self: center;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-chip);
+  color: var(--fg-muted);
+  white-space: nowrap;
+}

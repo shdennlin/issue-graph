@@ -26,6 +26,7 @@ import { SyncBanner } from './components/SyncBanner'
 import { SavedViewSync } from './components/SavedViewSync'
 import { Onboarding } from './components/Onboarding'
 import { ContextMenu } from './components/ContextMenu'
+import { useNotificationStore } from './store/notificationStore'
 import { NotificationToast } from './components/NotificationToast'
 import { QuickSwitcher } from './components/QuickSwitcher'
 import { useQuickSwitcherStore } from './store/quickSwitcherStore'
@@ -269,6 +270,10 @@ export function App() {
     if (prev !== null && prev !== currentWorkspaceId) {
       useViewStore.getState().setFocusedNoteId(null)
     }
+    // The change log is workspace-scoped too, and unlike notes it has to be
+    // right before the first sync lands — the bell's badge is on screen from
+    // the moment the tab paints.
+    useNotificationStore.getState().hydrate(currentWorkspaceId)
     prevWorkspaceIdRef.current = currentWorkspaceId
   }, [currentWorkspaceId])
 

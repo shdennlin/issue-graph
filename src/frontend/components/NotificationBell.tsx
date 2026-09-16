@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Bell } from 'lucide-react'
 import { useClickOutside } from '../hooks/useClickOutside'
 import type { ChangedField } from '../lib/issueDiff'
@@ -33,6 +33,16 @@ export function NotificationBell({ iconSize }: { iconSize: number }) {
 
   const ref = useRef<HTMLDivElement | null>(null)
   useClickOutside(ref, open, () => setOpen(false))
+
+  // Advanced only by the interval, and only while the popover is open — the
+  // rows need to know what "today" is, and reading Date.now() in the render
+  // body is the impure read eslint-plugin-react-hooks v7 flags.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!open) return
+    const id = window.setInterval(() => setNow(Date.now()), 30_000)
+    return () => window.clearInterval(id)
+  }, [open])
 
   const unread = unreadCount(entries)
 
@@ -97,7 +107,7 @@ export function NotificationBell({ iconSize }: { iconSize: number }) {
             <div className="notif-popover-empty">{t('notifications.empty')}</div>
           ) : (
             <div className="notif-popover-list">
-              {entries.map((e) => (
+              {entries.slice(0, RENDER_LIMIT).map((e) => (
                 <button
                   key={e.id}
                   type="button"
@@ -114,16 +124,41 @@ export function NotificationBell({ iconSize }: { iconSize: number }) {
                   <span className="notif-row-id">{e.identifier}</span>
                   <span className="notif-row-title">{e.title}</span>
                   <span className="notif-row-what">{summarize(e, t, locale)}</span>
+                  <span className="notif-row-when">{when(e.at, now)}</span>
                 </button>
               ))}
             </div>
           )}
 
-          <div className="notif-popover-foot">{t('notifications.olderHint')}</div>
+          <div className="notif-popover-foot">
+            {entries.length > RENDER_LIMIT
+              ? t('notifications.moreHidden', { count: entries.length - RENDER_LIMIT })
+              : t('notifications.olderHint')}
+          </div>
         </div>
       )}
     </div>
   )
+}
+
+/** The log keeps up to MAX_ENTRIES, but a popover that mounts a thousand
+ *  buttons re-renders all of them on every store write. Older than this is
+ *  what the recency facet is for. */
+const RENDER_LIMIT = 200
+
+/** `13:48` for something from today, `09-16` for anything older. What makes
+ *  the row read as a record of an event rather than a claim about now. */
+function when(at: number, now: number): string {
+  const d = new Date(at)
+  const today = new Date(now)
+  const sameDay =
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate()
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return sameDay
+    ? `${pad(d.getHours())}:${pad(d.getMinutes())}`
+    : `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
 const FIELD_KEY: Record<ChangedField, DictKey> = {
