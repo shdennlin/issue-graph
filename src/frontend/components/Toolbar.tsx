@@ -28,6 +28,7 @@ import { formatShortcut } from '../lib/platform'
 import { computeChains } from '../views/chain'
 import { useT, type DictKey } from '../i18n'
 import { QuickSwitcherTrigger } from './quickSwitcher/QuickSwitcherTrigger'
+import { NotificationBell } from './NotificationBell'
 // Density + theme + search live here; Size moved to Settings → Display.
 
 const ICON_SIZE = 16
@@ -391,6 +392,7 @@ export function Toolbar() {
             </div>
           )}
         </div>
+        <NotificationBell iconSize={ICON_SIZE} />
         <button
           className="icon-only"
           onClick={() => setNotesOpen(true)}

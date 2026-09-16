@@ -26,6 +26,7 @@ import { SyncBanner } from './components/SyncBanner'
 import { SavedViewSync } from './components/SavedViewSync'
 import { Onboarding } from './components/Onboarding'
 import { ContextMenu } from './components/ContextMenu'
+import { NotificationToast } from './components/NotificationToast'
 import { QuickSwitcher } from './components/QuickSwitcher'
 import { useQuickSwitcherStore } from './store/quickSwitcherStore'
 import type { Candidate } from './components/quickSwitcher/types'
@@ -403,6 +404,12 @@ export function App() {
         const s = useViewStore.getState()
         const modalOpen = s.settingsOpen || s.syncHistoryOpen || s.coverageOpen || s.shortcutsOpen || s.notesOpen
         if (modalOpen) return
+        // Peels before the inline finder: an anchored popover is the top-most
+        // non-modal surface, so it is what Esc should reach first.
+        if (s.notificationsOpen) {
+          s.setNotificationsOpen(false)
+          return
+        }
         if (s.inlineSearch.open) {
           s.closeInlineSearch()
           return
@@ -743,6 +750,7 @@ export function App() {
         {notesOpen && <NotesModal />}
       </Suspense>
       <ContextMenu />
+      <NotificationToast />
       <QuickSwitcher onActivate={onQuickSwitcherActivate} />
     </div>
   )

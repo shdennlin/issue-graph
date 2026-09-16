@@ -83,6 +83,15 @@ interface NotificationState {
   /** Raw query string. Empty means "everything" — see `parseScope`. */
   scopeQuery: string
   support: DesktopSupport
+  /**
+   * The batch the in-app toast is currently announcing, or null.
+   *
+   * Held here rather than derived from `entries` because a toast is about one
+   * sync, while the list accumulates: after two syncs the newest entries alone
+   * cannot say whether they arrived together.
+   */
+  toast: { count: number; at: number } | null
+  dismissToast: () => void
 
   setEnabled: (v: boolean) => void
   setDesktopEnabled: (v: boolean) => void
@@ -158,6 +167,11 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   desktopEnabled: readNotifyDesktop(),
   scopeQuery: readNotifyScope(),
   support: probeSupport(),
+  toast: null,
+
+  dismissToast() {
+    set({ toast: null })
+  },
 
   setEnabled(v) {
     writeNotifyEnabled(v)
@@ -196,11 +210,15 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     const at = Date.now()
     const fresh = changes.map((c) => toEntry(c, at))
     // Newest first, oldest dropped past the cap.
-    set((s) => ({ entries: [...fresh, ...s.entries].slice(0, MAX_ENTRIES) }))
+    set((s) => ({
+      entries: [...fresh, ...s.entries].slice(0, MAX_ENTRIES),
+      toast: { count: fresh.length, at },
+    }))
     if (get().desktopEnabled) raiseDesktop(fresh, workspaceId)
   },
 
   markAllRead() {
+    set({ toast: null })
     set((s) => ({
       entries: s.entries.some((e) => !e.read)
         ? s.entries.map((e) => (e.read ? e : { ...e, read: true }))
@@ -209,7 +227,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   },
 
   clear() {
-    set({ entries: [] })
+    set({ entries: [], toast: null })
   },
 }))
 

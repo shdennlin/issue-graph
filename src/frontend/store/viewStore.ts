@@ -128,6 +128,10 @@ export interface ViewState {
   syncHistoryOpen: boolean
   coverageOpen: boolean
   shortcutsOpen: boolean
+  /** Recent-changes popover, anchored to the toolbar bell. In the store
+   *  rather than local component state only because Esc has to reach it —
+   *  the other toolbar popovers dismiss on outside-click alone. */
+  notificationsOpen: boolean
   // Workspace notes modal. `notesOpen` controls the modal; `focusedNoteId`
   // null → grid view, number → editor view for that note.
   notesOpen: boolean
@@ -263,6 +267,7 @@ export interface ViewState {
   setSyncHistoryOpen: (b: boolean) => void
   setCoverageOpen: (b: boolean) => void
   setShortcutsOpen: (b: boolean) => void
+  setNotificationsOpen: (b: boolean) => void
   setNotesOpen: (b: boolean) => void
   setFocusedNoteId: (id: number | null) => void
   setNoteFindOpen: (b: boolean) => void
@@ -361,6 +366,7 @@ export const useViewStore = create<ViewState>((set) => ({
   syncHistoryOpen: false,
   coverageOpen: false,
   shortcutsOpen: false,
+  notificationsOpen: false,
   notesOpen: false,
   focusedNoteId: null,
   noteFindOpen: false,
@@ -516,6 +522,7 @@ export const useViewStore = create<ViewState>((set) => ({
   // Preserve focusedNoteId across open/close cycles so the n shortcut acts as
   // a true toggle that restores the user's last view. Use the in-modal Back
   // button (or Esc-peel) to drop back to the grid explicitly.
+  setNotificationsOpen: (b) => set({ notificationsOpen: b }),
   setNotesOpen: (b) => set({ notesOpen: b }),
   setFocusedNoteId: (id) => set({ focusedNoteId: id, noteFindOpen: false }),
   setNoteFindOpen: (b) => set({ noteFindOpen: b }),
