@@ -2,18 +2,28 @@ import { lazy, Suspense, useEffect, useRef } from 'react'
 import { useGraphStore } from './store/graphStore'
 import { useNotesStore } from './store/notesStore'
 import { useSchemaStore } from './store/schemaStore'
+import { useCapabilityStore } from './store/capabilityStore'
 import { useViewStore } from './store/viewStore'
 import { makeTabId, useWorkspaceStore } from './store/workspaceStore'
-import { loadTab, restoreViewportOnly, snapshotTab } from './store/tabStateStore'
-import { useUrlSync } from './store/urlSync'
+import {
+  hasTabSnapshot,
+  loadTab,
+  peekTabFilters,
+  peekTabView,
+  restoreViewportOnly,
+  snapshotTab,
+} from './store/tabStateStore'
+import { arrivedViaBareDeepLink, arrivedWithEmptyUrl, useUrlSync } from './store/urlSync'
 import { useTheme } from './hooks/useTheme'
 import { useFontSize } from './hooks/useFontSize'
 import { api } from './lib/api'
+import { isTypingTarget } from './lib/isTypingTarget'
 import { GraphCanvas } from './components/GraphCanvas'
 import { TabBar } from './components/TabBar'
 import { Toolbar } from './components/Toolbar'
-import { FilterPanel } from './components/FilterPanel'
+import { FacetBar } from './components/facets/FacetBar'
 import { SyncBanner } from './components/SyncBanner'
+import { SavedViewSync } from './components/SavedViewSync'
 import { Onboarding } from './components/Onboarding'
 import { ContextMenu } from './components/ContextMenu'
 import { QuickSwitcher } from './components/QuickSwitcher'
@@ -24,6 +34,7 @@ import type { Candidate } from './components/quickSwitcher/types'
 // modals are heavy and only open on user action — splitting them keeps the
 // initial bundle lean.
 const DetailPanel = lazy(() => import('./components/DetailPanel').then((m) => ({ default: m.DetailPanel })))
+const ProjectPanel = lazy(() => import('./components/ProjectPanel').then((m) => ({ default: m.ProjectPanel })))
 const SyncHistoryModal = lazy(() =>
   import('./components/SyncHistoryModal').then((m) => ({ default: m.SyncHistoryModal })),
 )
@@ -36,15 +47,15 @@ export function App() {
   useTheme()
   useFontSize()
   useUrlSync()
-  const graph = useGraphStore((s) => s.graph)
   const status = useGraphStore((s) => s.status)
   const error = useGraphStore((s) => s.error)
   const loadGraph = useGraphStore((s) => s.load)
   const loadSchema = useSchemaStore((s) => s.load)
   const loadNotes = useNotesStore((s) => s.load)
   const focusedId = useViewStore((s) => s.focusedId)
-  const filterPanelOpen = useViewStore((s) => s.filterPanelOpen)
   const detailPanelOpen = useViewStore((s) => s.detailPanelOpen)
+  const focusedProjectId = useViewStore((s) => s.focusedProjectId)
+  const projectPanelOpen = useViewStore((s) => s.projectPanelOpen)
   const syncHistoryOpen = useViewStore((s) => s.syncHistoryOpen)
   const coverageOpen = useViewStore((s) => s.coverageOpen)
   const settingsOpen = useViewStore((s) => s.settingsOpen)
@@ -72,10 +83,10 @@ export function App() {
         if (cancelled) return
         const store = useWorkspaceStore.getState()
         store.setProfiles(ws.profiles)
-        store.setLegacyMode(ws.legacyMode)
+        store.setUnconfigured(ws.unconfigured)
         store.setDefaultWorkspaceId(ws.active?.id ?? null)
 
-        if (ws.legacyMode || ws.profiles.length === 0) {
+        if (ws.unconfigured || ws.profiles.length === 0) {
           store.setTabs([], null)
         } else {
           const fromUrl = store.currentWorkspaceId
@@ -128,6 +139,10 @@ export function App() {
       } finally {
         if (!cancelled) useWorkspaceStore.getState().setInitialized(true)
       }
+      // Whether this server allows writes at all. Asked once — it is a property
+      // of the process, not of the workspace, so it does not belong in the
+      // per-tab reload below.
+      if (!cancelled) void useCapabilityStore.getState().load()
     })()
     return () => {
       cancelled = true
@@ -153,6 +168,7 @@ export function App() {
   // we intentionally skip restore so URL-encoded view state (filters,
   // focus from the URL bar) survives the first render.
   const initialized = useWorkspaceStore((s) => s.initialized)
+  const unconfigured = useWorkspaceStore((s) => s.unconfigured)
   const activeTabId = useWorkspaceStore((s) => s.activeTabId)
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
   const refetchSilent = useGraphStore((s) => s.refetchSilent)
@@ -164,6 +180,66 @@ export function App() {
     if (prev !== null && prev !== activeTabId && activeTabId) {
       // Tab switched: snapshot/restore the new tab's view state.
       restored = loadTab(activeTabId)
+    } else if (prev === null && activeTabId && arrivedWithEmptyUrl() && hasTabSnapshot(activeTabId)) {
+      // First mount from a URL that named nothing — the PWA's start_url after a
+      // quit and relaunch, or the bare host typed by hand.
+      //
+      // The first mount skips the restore so a URL that says something wins.
+      // Silence says nothing, so there is nothing to protect and the tab should
+      // come back where it was: same filters, same view, same saved view. The
+      // snapshot was on disk all along (beforeunload writes it below); what was
+      // missing was anyone reading it on this path.
+      //
+      // Deliberately the same loadTab the tab bar uses, rather than a second
+      // partial restore beside the one below: it is the only code that knows
+      // the whole of PerTabView. On this path it always takes the view-only
+      // branch — graph data is never persisted — so it returns false and the
+      // full loadGraph() below runs, which is what shows a spinner instead of a
+      // misleading empty canvas.
+      //
+      // Guarded on the snapshot EXISTING rather than letting loadTab fall back:
+      // its no-snapshot branch applies a defaultView whose activeView is
+      // hardcoded to 'dependency', while parseUrl has already resolved the bare
+      // URL through the user's own default-view preference. Without the guard,
+      // a tab with nothing stored would have that preference overwritten.
+      restored = loadTab(activeTabId)
+    } else if (prev === null && activeTabId) {
+      // First mount from a URL that DID name something. A deep link that
+      // triggered a FULL page load (Raycast protocol launch, shared URL) lands
+      // here with a cold store: parseUrl set focusedId from the URL but nothing
+      // restored the pieces the URL doesn't carry. This is the reload
+      // counterpart of the soft-nav path, which keeps them in the store via
+      // onExternalNav.
+      const vs = useViewStore.getState()
+
+      // Filters, for a *bare* deep link only (it pinned an issue and said
+      // nothing about filters — see arrivedViaBareDeepLink). Without this the
+      // launcher shortcut silently resets whatever the user had filtered to,
+      // which is the whole complaint this pair of mechanisms exists to fix. The
+      // focused issue stays visible under the restored filters because
+      // applyFilters exempts it (`alwaysInclude`). The snapshot is written by
+      // the beforeunload handler further down, so the filters restored here are
+      // the ones that were on screen when the link navigated this window away.
+      // Like the view restore below, it is keyed by tab rather than workspace —
+      // a link into a *different* workspace therefore adopts filters naming
+      // things that workspace may not have, which over-filters the background
+      // but never hides the pinned issue.
+      if (arrivedViaBareDeepLink()) {
+        const snap = peekTabFilters(activeTabId)
+        if (snap) useViewStore.setState({ filters: snap.filters, search: snap.search })
+      }
+
+      // View: with no ?view=, parseUrl defaulted activeView to dependency. That
+      // exact fingerprint — focused issue + dependency — means "restore the view
+      // this tab was last in", then re-arm the fallback so an issue absent from
+      // that view still drops to dependency.
+      if (vs.focusedId && vs.activeView === 'dependency') {
+        const lastView = peekTabView(activeTabId)
+        if (lastView && lastView !== 'dependency') {
+          vs.setActiveView(lastView)
+          vs.notifyDeepLinkFocus(true)
+        }
+      }
     }
     prevTabIdRef.current = activeTabId
     // Re-fetch on tab switch OR same-tab workspace change (the SyncBanner
@@ -259,6 +335,19 @@ export function App() {
       }
       refetchSilent()
     })
+    // A Linear webhook triggered a sync on the server. Same workspace-tag
+    // filtering as designdoc-changed: a tab viewing another workspace must
+    // not refetch because someone edited an issue elsewhere.
+    es.addEventListener('issues-changed', (e) => {
+      try {
+        const data = JSON.parse((e as MessageEvent).data) as { workspaceId?: string }
+        const cur = useWorkspaceStore.getState().currentWorkspaceId
+        if (data.workspaceId && cur && data.workspaceId !== cur) return
+      } catch {
+        // Malformed payload — refetch anyway; a spurious fetch beats a miss.
+      }
+      refetchSilent()
+    })
     es.addEventListener('default-workspace-changed', (e) => {
       try {
         const data = JSON.parse((e as MessageEvent).data) as { activeId?: string }
@@ -275,6 +364,7 @@ export function App() {
 
   const openInlineSearch = useViewStore((s) => s.openInlineSearch)
   const setChainRootId = useViewStore((s) => s.setChainRootId)
+  const setChainRootIds = useViewStore((s) => s.setChainRootIds)
   const bumpLayout = useViewStore((s) => s.bumpLayout)
 
   // Hybrid Cmd+F:
@@ -297,12 +387,19 @@ export function App() {
         //                               chain mode / find / connectivity
         //                               highlights still work on the
         //                               focused issue)
-        //   4. focusedId             — clears the focus
-        //   5. Chain isolation       — clears chain
+        //   4. Chain isolation       — exits chain, KEEPING the focused
+        //                               issue so the full graph recenters
+        //                               on it (GraphCanvas chain-clear
+        //                               bump → preserveFocus path) instead
+        //                               of snapping back to the pre-chain
+        //                               viewport
+        //   5. focusedId             — clears the focus
         //
-        // Two-step Esc for DetailPanel: first Esc closes the panel
-        // without losing the focused issue (graph-first workflow), second
-        // Esc unfocuses. Most apps with a side detail panel work this way.
+        // Two-step Esc, DetailPanel-style: each layer peels without losing
+        // the focused issue until the final step. In chain mode the first
+        // Esc exits the chain (focus retained → camera recenters on the
+        // issue you were on, no jump), the next Esc unfocuses. Chain is
+        // peeled BEFORE focus precisely so the recenter has a focus target.
         const s = useViewStore.getState()
         const modalOpen = s.settingsOpen || s.syncHistoryOpen || s.coverageOpen || s.shortcutsOpen || s.notesOpen
         if (modalOpen) return
@@ -318,12 +415,16 @@ export function App() {
           s.setDetailPanelOpen(false)
           return
         }
-        if (s.focusedId) {
-          s.setFocusedId(null)
+        if (s.projectPanelOpen) {
+          s.closeProjectPanel()
           return
         }
-        if (s.chainRootId) {
+        if (s.chainRootIds.length) {
           setChainRootId(null)
+          return
+        }
+        if (s.focusedId) {
+          s.setFocusedId(null)
           return
         }
       }
@@ -333,11 +434,9 @@ export function App() {
       // Snapshots the previous tab's state before the switch so coming back
       // via Cmd+N feels instant.
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && /^[1-9]$/.test(e.key)) {
-        const target = e.target as HTMLElement | null
-        const tag = target?.tagName?.toLowerCase()
-        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        if (isTypingTarget(e.target as HTMLElement | null)) return
         const ws = useWorkspaceStore.getState()
-        if (ws.legacyMode || ws.tabs.length === 0) return
+        if (ws.unconfigured || ws.tabs.length === 0) return
         const idx = parseInt(e.key, 10) - 1
         const targetTab = ws.tabs[idx]
         if (!targetTab) return
@@ -353,9 +452,7 @@ export function App() {
       // occasionally wants to peek at an issue's details. No-op if panel
       // is already open, or if no issue is focused.
       if ((e.key === ' ' || e.key === 'Enter') && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
-        const target = e.target as HTMLElement | null
-        const tag = target?.tagName?.toLowerCase()
-        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        if (isTypingTarget(e.target as HTMLElement | null)) return
         const s = useViewStore.getState()
         if (!s.focusedId) return
         if (s.detailPanelOpen) return
@@ -363,21 +460,21 @@ export function App() {
         s.setDetailPanelOpen(true)
         return
       }
-      // 'c' / 'C' — isolate chain on the currently focused issue. 'C' (shift)
-      // additionally bumps layout, matching the "auto-layout" context-menu
-      // entry. Only fires when no modifier is held, no input is focused,
-      // and an issue is actually focused. Works in all views: chain
-      // isolation re-filters the visible set to the connected blocks
-      // component regardless of view.
+      // 'c' / 'C' — isolate chain. When a multi-selection exists (Cmd/Ctrl+
+      // click), isolate the union of all selected issues' chains; otherwise
+      // fall back to the single focused issue. 'C' (shift) additionally bumps
+      // layout, matching the "auto-layout" context-menu entry. Only fires when
+      // no modifier is held, no input is focused, and there's something to
+      // isolate. Works in all views: chain isolation re-filters the visible
+      // set to the connected blocks component regardless of view.
       if (e.key === 'c' || e.key === 'C') {
         if (e.metaKey || e.ctrlKey || e.altKey) return
-        const target = e.target as HTMLElement | null
-        const tag = target?.tagName?.toLowerCase()
-        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        if (isTypingTarget(e.target as HTMLElement | null)) return
         const s = useViewStore.getState()
-        if (!s.focusedId) return
+        const roots = s.selection.length > 0 ? s.selection : s.focusedId ? [s.focusedId] : []
+        if (roots.length === 0) return
         e.preventDefault()
-        setChainRootId(s.focusedId)
+        setChainRootIds(roots)
         if (e.key === 'C') bumpLayout()
         return
       }
@@ -385,9 +482,7 @@ export function App() {
       // inside an input. On most layouts '?' is Shift+/ — we accept the
       // resolved character regardless of which physical keys produced it.
       if (e.key === '?') {
-        const target = e.target as HTMLElement | null
-        const tag = target?.tagName?.toLowerCase()
-        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        if (isTypingTarget(e.target as HTMLElement | null)) return
         e.preventDefault()
         useViewStore.getState().setShortcutsOpen(true)
         return
@@ -398,25 +493,48 @@ export function App() {
       // editor). Use the in-modal Back / Esc to peel editor → grid.
       if (e.key === 'n') {
         if (e.metaKey || e.ctrlKey || e.altKey) return
-        const target = e.target as HTMLElement | null
-        const tag = target?.tagName?.toLowerCase()
-        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        if (isTypingTarget(e.target as HTMLElement | null)) return
         e.preventDefault()
         const s = useViewStore.getState()
         s.setNotesOpen(!s.notesOpen)
         return
       }
-      // 'd' — toggle the "auto-open detail panel on click" preference. Same
-      // affordance as clicking the Detail toggle in the toolbar. Same
-      // input-focus guards as the other letter shortcuts.
-      if (e.key === 'd' || e.key === 'D') {
+      // 'd' — open/close the detail panel for the currently focused issue.
+      // No-op when nothing is focused (panel can't render anyway).
+      // 'Shift+D' — toggle the persistent "auto-open detail panel on click"
+      // preference (same affordance as clicking the toolbar Detail toggle).
+      // Same input-focus guards as the other letter shortcuts.
+      if (e.key === 'd') {
         if (e.metaKey || e.ctrlKey || e.altKey) return
-        const target = e.target as HTMLElement | null
-        const tag = target?.tagName?.toLowerCase()
-        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        if (isTypingTarget(e.target as HTMLElement | null)) return
+        const s = useViewStore.getState()
+        if (s.focusedId === null) return
+        e.preventDefault()
+        s.setDetailPanelOpen(!s.detailPanelOpen)
+        return
+      }
+      if (e.key === 'D') {
+        if (e.metaKey || e.ctrlKey || e.altKey) return
+        if (isTypingTarget(e.target as HTMLElement | null)) return
         e.preventDefault()
         const s = useViewStore.getState()
         s.setDetailPanelAutoOpen(!s.detailPanelAutoOpen)
+        return
+      }
+      // Cmd/Ctrl+Alt+S — trigger Refresh (same as clicking the top-right
+      // Refresh button): re-pulls from the backend, then reloads the
+      // cached graph. We match on `e.code === 'KeyS'` rather than
+      // `e.key === 's'` because Alt+S on macOS US layout produces 'ß',
+      // and other layouts vary too — the physical key code is stable.
+      // No-op while a sync / load is already in flight so rapid presses
+      // don't queue duplicate requests. Always preventDefault on the
+      // chord (regardless of in-flight state) so the browser doesn't
+      // surface an unexpected fallback action.
+      if ((e.metaKey || e.ctrlKey) && e.altKey && !e.shiftKey && e.code === 'KeyS') {
+        e.preventDefault()
+        const g = useGraphStore.getState()
+        if (g.syncing || g.status === 'loading') return
+        void g.forceSync()
         return
       }
       // 'r' — toggle the Related-edges overlay (dependency view only). The
@@ -424,13 +542,23 @@ export function App() {
       // Same input-focus guards as the other letter shortcuts.
       if (e.key === 'r') {
         if (e.metaKey || e.ctrlKey || e.altKey) return
-        const target = e.target as HTMLElement | null
-        const tag = target?.tagName?.toLowerCase()
-        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        if (isTypingTarget(e.target as HTMLElement | null)) return
         const s = useViewStore.getState()
-        if (s.activeView !== 'dependency') return
+        if (s.activeView !== 'dependency' && s.chainRootIds.length === 0) return
         e.preventDefault()
         s.setShowRelated(!s.showRelated)
+        return
+      }
+      // 'h' — toggle the sub-issue hierarchy overlay. Same applicability
+      // guard as 'r': hierarchy edges only exist in the dependency view and
+      // in chain mode, so elsewhere the key falls through untouched.
+      if (e.key === 'h') {
+        if (e.metaKey || e.ctrlKey || e.altKey) return
+        if (isTypingTarget(e.target as HTMLElement | null)) return
+        const s = useViewStore.getState()
+        if (s.activeView !== 'dependency' && s.chainRootIds.length === 0) return
+        e.preventDefault()
+        s.setShowHierarchy(!s.showHierarchy)
         return
       }
       // 'R' (Shift+R) — re-layout. Bumps layoutBump → dagre re-runs from
@@ -438,9 +566,7 @@ export function App() {
       // in any view, doesn't require a focused issue.
       if (e.key === 'R') {
         if (e.metaKey || e.ctrlKey || e.altKey) return
-        const target = e.target as HTMLElement | null
-        const tag = target?.tagName?.toLowerCase()
-        if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+        if (isTypingTarget(e.target as HTMLElement | null)) return
         e.preventDefault()
         bumpLayout()
         return
@@ -517,7 +643,7 @@ export function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [openInlineSearch, setChainRootId, bumpLayout])
+  }, [openInlineSearch, setChainRootId, setChainRootIds, bumpLayout])
 
   const onQuickSwitcherActivate = (c: Candidate, openInNewTab: boolean) => {
     if (c.kind === 'tab') {
@@ -564,12 +690,15 @@ export function App() {
     }
   }
 
-  // Onboarding when backend unconfigured AND no cached data.
-  if (graph?.authError && (graph?.data.issues.length ?? 0) === 0) {
+  // Onboarding when the roster is empty. This keys off /api/workspaces rather
+  // than the graph's authError: the roster is known one request earlier (the
+  // bootstrap awaits it before /api/graph), and "no workspaces exist" is the
+  // state the form actually resolves. A workspace that exists but has a bad key
+  // is a different problem, and the normal UI plus the sync banner reports it
+  // better than a setup screen would.
+  if (unconfigured) {
     return (
       <div className="app-shell">
-        <SyncBanner />
-        <TabBar />
         <Onboarding />
       </div>
     )
@@ -577,15 +706,27 @@ export function App() {
 
   return (
     <div className="app-shell">
+      {/* Renders nothing. Owns the saved-view list, the applied-view identity
+          and the window title — all of which must survive the filter panel
+          collapsing, which is what unmounts SavedViewsChip. */}
+      <SavedViewSync />
       <SyncBanner />
       <TabBar />
       <Toolbar />
       <div className="app-main">
-        {filterPanelOpen && <FilterPanel />}
+        {/* Floats over the canvas rather than occupying a full-width strip
+            above it — a horizontal bar cost vertical space across the whole
+            window even when only two filters were active. */}
+        <FacetBar />
         <GraphCanvas />
         {focusedId && detailPanelOpen && (
           <Suspense fallback={null}>
             <DetailPanel />
+          </Suspense>
+        )}
+        {focusedProjectId && projectPanelOpen && (
+          <Suspense fallback={null}>
+            <ProjectPanel />
           </Suspense>
         )}
       </div>

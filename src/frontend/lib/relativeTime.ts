@@ -28,3 +28,30 @@ export function formatRelative(ts: number, now: number = Date.now()): string {
 export function formatAbsolute(ts: number): string {
   return ABS_FORMATTER.format(new Date(ts))
 }
+
+/** A coarse age, as a number plus the unit it is counted in. */
+export interface CompactAge {
+  value: number
+  unit: 'm' | 'h' | 'd'
+}
+
+/**
+ * Age reduced to one number and one unit — `45m`, `2h`, `9d`.
+ *
+ * Separate from `formatRelative`, which is prose ("3 hr ago", "yesterday") and
+ * far too wide for a badge sitting on a graph node. Returns structure rather
+ * than a string so the caller renders it through i18n; both existing
+ * relative-time helpers in this repo hardcode English, which is why a
+ * Traditional Chinese session still read "updated 3d ago".
+ *
+ * Rounds down: something 119 minutes old reads "1h", never "2h". Overstating
+ * an age is worse here than understating it, because the number is being read
+ * against a filter window the user chose.
+ */
+export function compactAge(ts: number, now: number = Date.now()): CompactAge {
+  const minutes = Math.max(0, Math.floor((now - ts) / 60_000))
+  if (minutes < 60) return { value: minutes, unit: 'm' }
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return { value: hours, unit: 'h' }
+  return { value: Math.floor(hours / 24), unit: 'd' }
+}

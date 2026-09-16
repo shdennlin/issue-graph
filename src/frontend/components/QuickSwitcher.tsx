@@ -6,9 +6,9 @@ import { useNotesStore } from '../store/notesStore'
 import { getTabGraph } from '../store/tabStateStore'
 import { buildCandidates } from './quickSwitcher/buildCandidates'
 import { fuzzyMatch } from './quickSwitcher/fuzzyMatch'
+import { rankCandidates } from './quickSwitcher/rankCandidates'
 import type { Candidate, RecentItem } from './quickSwitcher/types'
-import { stateColorVar, stateIcon, stateLabelFor } from '../lib/colors'
-import { useLocale } from '../i18n'
+import { stateColorVar, stateIcon } from '../lib/colors'
 
 const GROUP_ORDER: Candidate['kind'][] = ['issue', 'note', 'tab']
 const PER_GROUP_CAP = 20
@@ -20,7 +20,6 @@ interface Props {
 }
 
 export function QuickSwitcher({ onActivate }: Props) {
-  const locale = useLocale()
   const open = useQuickSwitcherStore((s) => s.open)
   const close = useQuickSwitcherStore((s) => s.closePalette)
   const recents = useQuickSwitcherStore((s) => s.recents)
@@ -60,22 +59,18 @@ export function QuickSwitcher({ onActivate }: Props) {
     if (query.trim() === '') {
       return out
     }
-    const scored: { c: Candidate; score: number }[] = []
-    for (const c of candidates) {
-      const identifier = c.kind === 'issue' ? c.identifier : null
-      const score = fuzzyMatch(query, { label: c.label, identifier })
-      if (score !== null) scored.push({ c, score })
-    }
-    scored.sort((a, b) => b.score - a.score)
+    const ranked = rankCandidates(candidates, query, activeTabId, (c) =>
+      fuzzyMatch(query, { label: c.label, identifier: c.kind === 'issue' ? c.identifier : null }),
+    )
     let total = 0
-    for (const { c } of scored) {
+    for (const c of ranked) {
       if (total >= TOTAL_CAP) break
       if (out[c.kind].length >= PER_GROUP_CAP) continue
       out[c.kind].push(c)
       total++
     }
     return out
-  }, [candidates, query])
+  }, [candidates, query, activeTabId])
 
   const flat = useMemo<Candidate[]>(() => {
     if (query.trim() === '') {
@@ -186,8 +181,7 @@ export function QuickSwitcher({ onActivate }: Props) {
           {showingRecents
             ? flat.map((c, i) => (
                 <Row key={c.id} idx={i} c={c} selected={i === selectedIdx}
-                     onClick={() => activate(i, false)} groupHeader={i === 0 ? 'Recent' : null}
-                     locale={locale} />
+                     onClick={() => activate(i, false)} groupHeader={i === 0 ? 'Recent' : null} />
               ))
             : GROUP_ORDER.flatMap((kind) => {
                 const list = grouped[kind]
@@ -203,7 +197,6 @@ export function QuickSwitcher({ onActivate }: Props) {
                     selected={offset + i === selectedIdx}
                     onClick={() => activate(offset + i, false)}
                     groupHeader={i === 0 ? GROUP_LABEL[kind] : null}
-                    locale={locale}
                   />
                 ))
               })}
@@ -220,14 +213,13 @@ const GROUP_LABEL: Record<Candidate['kind'], string> = {
 }
 
 function Row({
-  idx, c, selected, onClick, groupHeader, locale,
+  idx, c, selected, onClick, groupHeader,
 }: {
   idx: number
   c: Candidate
   selected: boolean
   onClick: () => void
   groupHeader: string | null
-  locale: ReturnType<typeof useLocale>
 }) {
   const issueState = c.kind === 'issue' ? c.state : null
   return (
@@ -261,7 +253,7 @@ function Row({
             }}
           >
             <span aria-hidden>{stateIcon(issueState.type)}</span>
-            <span>{stateLabelFor(issueState.type, locale)}</span>
+            <span>{issueState.name}</span>
           </span>
         )}
         {c.hint && (

@@ -16,6 +16,9 @@ interface NotesState {
   error: string | null
   /** Most recently deleted note, kept ~3s for undo. Cleared on subsequent deletes. */
   lastDeleted: DeletedSnapshot | null
+  /** Modal-session-scoped filter applied to the grid/list. Persists across
+   *  open/close cycles of the modal so reopening returns to the filtered view. */
+  notesSearch: string
 
   load: () => Promise<void>
   loadArchived: () => Promise<void>
@@ -27,6 +30,7 @@ interface NotesState {
   setArchived: (id: number, archived: boolean) => Promise<void>
   /** Best-effort flush — useful before closing the editor. */
   flushPending: () => Promise<void>
+  setNotesSearch: (q: string) => void
 }
 
 const DEBOUNCE_MS = 500
@@ -45,6 +49,9 @@ export const useNotesStore = create<NotesState>((set, get) => ({
   status: 'idle',
   error: null,
   lastDeleted: null,
+  notesSearch: '',
+
+  setNotesSearch: (q) => set({ notesSearch: q }),
 
   load: async () => {
     set({ status: 'loading', error: null })

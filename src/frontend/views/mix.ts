@@ -2,10 +2,12 @@ import type { Edge, Node } from 'reactflow'
 import type { ViewDefinition } from './types'
 import { issueNodeHeight } from './types'
 import { applyFilters } from './filters'
-import { computeChain } from './chain'
-import { getPrimaryLabel } from '../lib/labelSchema'
+import { labelForDimension } from '../lib/mixGrouping'
 import { computeConnectivity } from './connectivity'
+import { computeHierarchyCounts } from './hierarchy'
 import { chooseColumnCount, packIntoColumns } from './containerLayout'
+import { buildChainLayout } from './chainLayout'
+import { fanOutCurvatures } from './edgeStyle'
 
 const PADDING = 30
 const HEADER = 32
@@ -26,25 +28,28 @@ function computeContainerWidth(cols: number): number {
 // got used to the previous behavior.
 const MAX_ROW_WIDTH = computeContainerWidth(1) * 4 + GAP_X * 3
 
+export const UNCLASSIFIED_BUCKET = '__unclassified'
+
 export const mixView: ViewDefinition = {
   id: 'mix',
   label: 'Mix',
   description: 'Buckets as containers + issues inside. Cross-bucket edges highlighted.',
-  build({ data, schema, filters, staleDays, myUserName, focusedId, chainRootId, showRelated, density, search, measuredHeights }) {
-    const NODE_H = issueNodeHeight(density)
-    // Chain isolation: when a root is set, replace user filters with the
-    // chain's connected component — mirrors the dependency-view behavior
-    // so an off-state blocker doesn't fragment the chain across views.
-    let issues
-    if (chainRootId) {
-      const { members } = computeChain(data.issues, chainRootId, {
-        includeRelatedNeighbors: showRelated,
+  build(ctx) {
+    const { data, schema, filters, staleDays, myUserName, selection, focusedId, chainRootIds, density, maxColsPerRow, search, mixGroupBy, measuredHeights } = ctx
+    // Chain mode: container layout fights dependency flow — drop the buckets
+    // and use dagre, decorating each card with its primary-label color stripe
+    // so bucket identity isn't lost. See chainLayout.ts for the rationale.
+    if (chainRootIds.length > 0) {
+      return buildChainLayout(ctx, (issue) => {
+        const lab = labelForDimension(issue, schema, mixGroupBy)
+        if (!lab?.color) return null
+        return { color: lab.color, label: lab.name }
       })
-      issues = data.issues.filter((i) => members.has(i.identifier))
-    } else {
-      issues = applyFilters(data.issues, filters, staleDays, myUserName, search)
     }
+    const NODE_H = issueNodeHeight(density)
+    const issues = applyFilters(data.issues, filters, staleDays, myUserName, search, focusedId)
     const conn = computeConnectivity(data.issues)
+    const hier = computeHierarchyCounts(data.issues)
     // Per-issue height resolver — measured value when available (post-paint
     // re-layout pass), density estimate otherwise. Same mechanism as the
     // dependency view; without this, tall cards (long titles + many chips)
@@ -53,9 +58,11 @@ export const mixView: ViewDefinition = {
 
     const buckets = new Map<string, { name: string; color: string; issues: typeof issues }>()
     for (const i of issues) {
-      const lab = getPrimaryLabel(i, schema)
-      const key = lab?.id ?? '__unclassified'
-      const name = lab?.name ?? 'Unclassified'
+      const lab = labelForDimension(i, schema, mixGroupBy)
+      const key = lab?.id ?? UNCLASSIFIED_BUCKET
+      // Sentinel rather than an English literal: MixedContainerNode swaps it
+      // for the translated string at render time (views have no `t`).
+      const name = lab?.name ?? UNCLASSIFIED_BUCKET
       const color = lab?.color ?? '#888'
       if (!buckets.has(key)) buckets.set(key, { name, color, issues: [] })
       buckets.get(key)!.issues.push(i)
@@ -77,7 +84,7 @@ export const mixView: ViewDefinition = {
     ordered.forEach(([key, b]) => {
       // Pack issues into N columns inside this bucket so a long list
       // doesn't become an unscannable vertical strip.
-      const cols = chooseColumnCount(b.issues.length)
+      const cols = chooseColumnCount(b.issues.length, maxColsPerRow)
       const containerW = computeContainerWidth(cols)
       const heights = b.issues.map((iss) => ({ id: iss.identifier, h: heightFor(iss.identifier) }))
       const { placed, maxColumnHeight } = packIntoColumns(heights, cols, GAP_Y)
@@ -112,8 +119,10 @@ export const mixView: ViewDefinition = {
           data: {
             issue: iss,
             focused: focusedId === id,
-            isChainRoot: chainRootId === id,
+            selected: selection.includes(id),
+            isChainRoot: chainRootIds.includes(id),
             connectivity: conn.get(id),
+              hierarchy: hier.get(id),
           },
           parentNode: containerId,
           extent: 'parent',
@@ -129,14 +138,23 @@ export const mixView: ViewDefinition = {
     })
 
     const issueIds = new Set(issues.map((i) => i.identifier))
+    const curvatures = fanOutCurvatures(issues, issueIds)
     const edges: Edge[] = []
     for (const i of issues) {
       for (const r of i.relations) {
         if (r.type !== 'blocks') continue
         if (!issueIds.has(r.targetIdentifier)) continue
         const cross = issueToBucket.get(i.identifier) !== issueToBucket.get(r.targetIdentifier)
+        const edgeId = `${i.identifier}->${r.targetIdentifier}`
         edges.push({
-          id: `${i.identifier}->${r.targetIdentifier}`,
+          // bezier in container views (RF v11's 'default' type — not
+          // 'bezier' which is just an undocumented alias). Per-edge
+          // curvature varies across same-source fan-outs so parallel
+          // paths spread apart; see edgeStyle.ts for the spread logic
+          // and its (partial) effectiveness against RF's bezier math.
+          type: 'default',
+          pathOptions: { curvature: curvatures.get(edgeId) ?? 0.4 },
+          id: edgeId,
           source: i.identifier,
           target: r.targetIdentifier,
           className: cross ? 'cross-bucket-edge' : undefined,

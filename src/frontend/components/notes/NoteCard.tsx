@@ -3,6 +3,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { Archive, ArchiveRestore, Check, Trash2 } from 'lucide-react'
 import { deriveTitle } from '../../lib/noteTitle'
 import { ConfirmIconButton } from './ConfirmIconButton'
+import { HighlightedText } from './HighlightedText'
 import { NoteThumbnail } from './NoteThumbnail'
 import type { NoteDTO } from '@shared/types.js'
 
@@ -15,6 +16,8 @@ interface Props {
   draggable?: boolean
   /** True when this card is currently in the archived bucket. */
   archived?: boolean
+  /** When non-empty, matches in the title + thumbnail are wrapped in <mark>. */
+  highlight?: string
 }
 
 export function NoteCard({
@@ -24,6 +27,7 @@ export function NoteCard({
   onToggleArchive,
   draggable = true,
   archived = false,
+  highlight = '',
 }: Props) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: note.id,
@@ -91,8 +95,10 @@ export function NoteCard({
           onConfirm={onDelete}
         />
       </div>
-      <h3 className={`note-card-title${isEmpty ? ' empty' : ''}`}>{title}</h3>
-      {!isEmpty && <NoteThumbnail body={note.body} />}
+      <h3 className={`note-card-title${isEmpty ? ' empty' : ''}`}>
+        <HighlightedText text={title} query={highlight} />
+      </h3>
+      {!isEmpty && <NoteThumbnail body={note.body} highlight={highlight} />}
     </div>
   )
 }

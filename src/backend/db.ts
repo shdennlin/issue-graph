@@ -8,7 +8,7 @@ import { Database } from 'bun:sqlite'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { loadConfig } from './lib/env.js'
-import { getCurrentWorkspaceId, LEGACY_WORKSPACE_ID } from './lib/workspaceContext.js'
+import { getCurrentWorkspaceId, UNCONFIGURED_WORKSPACE_ID } from './lib/workspaceContext.js'
 import { getDefaultWorkspaceId } from './lib/env.js'
 import { getLogger } from './lib/log.js'
 
@@ -76,6 +76,26 @@ const MIGRATIONS: string[] = [
   // without deleting them. Existing rows default to 0 (active).
   `ALTER TABLE note ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;`,
   `CREATE INDEX IF NOT EXISTS idx_note_archived ON note(archived ASC, sort_order ASC);`,
+
+  // 5. Saved views — named snapshots of the URL's view + filter state, shared
+  // by everyone hitting this server (there is no auth by design).
+  //
+  // Stores the URL QUERY STRING rather than structured JSON, so urlSync stays
+  // the single codec and a saved view can never drift from what the URL can
+  // express. `w` and record-pointer params are stripped before insert — see
+  // savedViewStore.normalizeSavedViewQuery.
+  //
+  // No workspace_id column: getDb() already hands out one Database per
+  // workspace, so the file itself is the scope.
+  `CREATE TABLE IF NOT EXISTS saved_view (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     name TEXT NOT NULL,
+     query TEXT NOT NULL,
+     sort_order INTEGER NOT NULL,
+     created_at INTEGER NOT NULL,
+     updated_at INTEGER NOT NULL
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_saved_view_sort ON saved_view(sort_order ASC);`,
 ]
 
 // One Database instance per workspace id. Each profile has its own SQLITE_PATH
@@ -84,7 +104,7 @@ const MIGRATIONS: string[] = [
 const dbByWorkspaceId: Map<string, Database> = new Map()
 
 function currentWid(): string {
-  return getCurrentWorkspaceId() ?? getDefaultWorkspaceId() ?? LEGACY_WORKSPACE_ID
+  return getCurrentWorkspaceId() ?? getDefaultWorkspaceId() ?? UNCONFIGURED_WORKSPACE_ID
 }
 
 export function getDb(): Database {

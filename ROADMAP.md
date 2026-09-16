@@ -213,29 +213,148 @@ Direction, not commitment. Issues and PRs welcome on anything below.
 - React-hooks v7 recommended preset adopted
 - Opt-in bundle-composition report via `rollup-plugin-visualizer`
 
-## v1.5 — next
+## v1.5 — shipped
 
+**Write-back — edit issues as yourself**
+- Status, assignee, priority, labels and comments are editable from the detail
+  panel. `PATCH /api/issues/:id` and `POST /api/issues/:id/comments` carry the
+  caller's own Linear OAuth token, so Linear answers both "may this person
+  write" and "who wrote this"
+- No caller's token is persisted server-side — no session table, no roster
+  column, no `setting` row. The server checks only that *a* credential was
+  presented, and forwards it; validity is Linear's answer
+- Gated on `LINEAR_OAUTH_CLIENT_ID`. Unset means the write routes answer 401,
+  so upgrading does not grow a mutation surface. Reads still use the
+  workspace's stored key — syncing is a shared background pull, not an act by
+  a person
+- Labels travel as a delta, not a replacement set: the graph is a cache, and a
+  replacement would clobber any label added upstream since the last sync
+
+**Filter panel — from sidebar to floating facet bar**
+- The fixed-width sidebar is gone. A compact panel floats over the canvas's
+  top-left corner, one row per applied filter, so an unused dimension costs
+  no vertical space at all
+- `+ Filter` opens a cascading menu: dimensions on the left, that dimension's
+  values flying out beside the hovered row with checkboxes and counts
+- The menu's search box fuzzy-matches **values across every dimension**, not
+  just dimension names — `bug` finds `Type › Bug`. Capped at 12 ranked results
+- Chips render as aligned rows rather than pills: dimension, operator, value,
+  clear. Structure comes from column alignment, so the panel carries one border
+
+**Negatable conditions**
+- Any multi-select filter can be inverted (`is` ↔ `is not`), stored as
+  `Filters.negated` and serialized as one `neg=` URL param, so a new dimension
+  is negatable for free
+- Value counts hide while inverted — they are leave-one-out ("pick this and N
+  remain"), which answers the wrong question once picking excludes
+
+**Saved views**
+- Named view + filter snapshots in a new `saved_view` table, per workspace and
+  shared by everyone reaching the instance. Survive a cache reset
+- Stores the URL query string, not structured JSON, so `urlSync` stays the
+  single codec and a view cannot drift from what the URL can express
+- The panel names the active view, marks divergence with `*`, and offers Save
+  changes / Discard changes. Name also carried in the window title and tab label
+
+**Saved views — reorder, and a name that is always visible**
+- Drag to reorder the list. The active view's name reaches the filter handle,
+  the tab strip and the window title on load, rather than on first opening the
+  panel
+- A view can record "no state filter" and mean it
+
+**Recent activity filter**
+- `any / today / 7d / 30d` against either `createdAt` or `updatedAt`.
+  `today` means since local midnight; the rolling windows match `staleDays`
+
+**Recency beyond `updatedAt`**
+- Arbitrary spans (`6h`, `1.5d`) replace the fixed any/today/7d/30d list, and
+  each card shows how long ago it crossed the threshold
+- A relation being pointed at an issue no longer counts as activity on it.
+  `recencyIgnoreLinked` defaults on, and writes `recentlinks` to the URL only
+  when switched off — one timestamp no longer decides whether anything happened
+
+**Filter panel auto-hide**
+- The panel can collapse to a handle and expand on hover; a pin keeps it open,
+  and pinned stays the default. The handle carries the active-filter count
+  while collapsed, so a hidden panel never hides *that* it is filtering
+
+**Filter picker sections and counts**
+- Dimensions group under Quick / Attributes / Labels / Time instead of one flat
+  list in implementation order; rows are larger and carry the matching card count
+
+**Pinned filter values**
+- Pinned values sort to the top of their dimension's list. localStorage, keyed
+  per workspace — pins hold raw label/project ids that mean nothing elsewhere
+
+**Linear push-style updates**
+- `POST /api/webhooks/linear` accepts Linear's HMAC-signed deliveries, debounces
+  a burst into one sync, and broadcasts `issues-changed` over the existing SSE
+  channel, so issue edits land without waiting for the cache TTL
+- Publish that path alone (e.g. a path-scoped Tailscale funnel); it is the only
+  route meant to be reachable from outside
+
+**Workspaces move out of `.env`**
+- The roster (names, API keys, webhook secrets) lives in `data/workspaces.db`
+  and is managed from a setup form and Settings, so a remote deployment no
+  longer needs shell access to add a Linear workspace. Replaces the
+  `WORKSPACE_<ID>_*` env schema and its single-key legacy mode listed under v1.3
+- **Breaking:** per-workspace `REPO_PATH` is gone; `REPO_PATH` is now one
+  server-wide value. Existing deployments start with an empty roster and
+  re-enter their workspaces — re-using the same id reconnects the cached data
+
+**Fixes**
+- Four filter dimensions (project, milestone, state name, search) were never
+  written to the URL: shared links dropped them and Back cleared them silently.
+  A pure `filterCodec` now owns all three registration points with a round-trip
+  test over every dimension
+- Specific Linear states used to shadow every canonical type at once, making
+  the state tree behave as though it were mutually exclusive. Names now refine
+  within their own type
+- Clicking the canvas failed to dismiss any dropdown in the app — d3-drag stops
+  propagation on the pane, so a bubble-phase listener never fired
+- Constraints live at their defaults (active-only, four of six state types) now
+  appear as clearable rows instead of an empty panel implying no filters
+- A Raycast deep link wiped whatever filters were already on screen; the link's
+  params now merge instead of replacing
+- Tabs did not come back where you left off after quitting the app
+- The quick switcher showed one row per matching *state group* rather than per
+  issue, and could not find an issue by its number
+- Searching in the quick switcher could hand back results from a different tab
+- The last two Settings sections had escaped the page they belong to
+- Teaching recency that an incoming link is not activity went too strong:
+  `passesRecency` returned false outright, which asserts "nothing happened"
+  when all that was established is that `updatedAt` can no longer testify.
+  Measured live, it hid 8 of 17 issues created in the last 7 days. A link-only
+  bump now falls back to `createdAt` and a new `lastCommentAt`
+
+**Removed**
+- `Filters.activeOnly`, a second filter over the state dimension `stateTypes`
+  already owned. At its default it did nothing; the only way to make it act was
+  to contradict the state list, and then it won — Completed ticked, graph empty.
+  One dimension, one filter. `savedViewMatch` still ignores its `active=` param
+  so views saved before the removal keep matching
+- `Filters.tagIds`, stored and serialized since the first release but never
+  read by `applyFilters`. Its intended role shipped as `orphanValues`
+
+## v1.6 — next
 - [ ] Optional auth (basic-auth or token gate) for non-localhost deployments
 - [ ] Migrate the remaining v7 hook-rule violations (`set-state-in-effect`, `purity`) — currently suppressed per-call-site
 - [ ] Document the JSON shape of `/api/export` so users can build their own tools on top
 
-## v1.6+ — likely
+## v1.7+ — likely
 
 - [ ] **GitHub Issues backend** — same `Source` interface as Linear; high-value for OSS teams
-- [ ] Saved views (named filter sets, not just URL params)
 - [ ] **Mix view layout improvements** — the bucket-as-container layout gets cramped past ~15 nodes:
   - Collapsible buckets (click header to collapse to a `▶ docs (3)` chip)
   - Per-bucket auto-density (large buckets switch to compact cards automatically; small buckets keep full detail)
   - Zoom-aware bucket summary (when zoomed out, replace cards with a state-count chip like `backend ◯3 ⏳2 ✓1`)
   - Drag to reorder buckets
 - [ ] Timeline view — surface the daily snapshot data (already persisted; needs a UI)
-- [ ] Linear push-style updates — extend the SSE channel to broadcast Linear webhooks so issue changes (not just design-doc edits) appear without polling
 
 ## Maybe — no commitment
 
 - [ ] **Jira backend** — env shape already sketched in `docs/PRD.md` §10
 - [ ] Plane / GitLab issue backends
-- [ ] Read-write mode (state transitions from the graph itself)
 - [ ] Themed graph exports (SVG with embedded fonts)
 
 ## Not planned
@@ -246,5 +365,5 @@ Direction, not commitment. Issues and PRs welcome on anything below.
 
 ---
 
-If you want to work on something in **v1.5** or **v1.6+**, open an issue first so we can align on scope.
+If you want to work on something in **v1.6** or **v1.7+**, open an issue first so we can align on scope.
 For **Maybe** items, open an issue to gauge interest before writing code.

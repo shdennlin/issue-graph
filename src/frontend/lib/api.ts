@@ -3,11 +3,15 @@ import type {
   DesignDocCoverage,
   DetectedSchema,
   GraphResponse,
+  ProjectDetail,
+  SavedViewDTO,
   SyncLogEntry,
   Viewer,
   WorkflowState,
 } from '@shared/types.js'
 import { useWorkspaceStore } from '../store/workspaceStore'
+import { ApiError, extractApiError } from './apiError'
+import { authHeader } from './linearAuth'
 
 /**
  * Inject the current tab's workspace id as `?w=<id>` into a path. The
@@ -32,7 +36,10 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${path}: ${text.slice(0, 200)}`)
+    // Surface the server's sentence, not the JSON envelope around it — these
+    // reach the user directly in the setup form.
+    const { code, message } = extractApiError(text)
+    throw new ApiError(message, res.status, code)
   }
   return (await res.json()) as T
 }
@@ -53,21 +60,42 @@ export interface SettingsResponse {
     active: WorkspaceProfile | null
     profiles: WorkspaceProfile[]
   }
+  /** Inbound-webhook health. The secret itself is never sent — this endpoint
+   *  has no auth, so only the fact that one is set crosses the wire. */
+  webhook?: {
+    secret_set: boolean
+    last_ok_ms: number | null
+    ok_count: number
+    last_reject_ms: number | null
+    reject_count: number
+    last_reject_reason: string | null
+  }
 }
 
 export interface WorkspaceProfile {
   id: string
   name: string
   linearApiKeySet: boolean
+  webhookSecretSet: boolean
   linearTeamId: string | null
-  repoPath: string | null
-  dbPath: string | null
+  dbPath: string
 }
 
 export interface WorkspaceListResponse {
   active: WorkspaceProfile | null
   profiles: WorkspaceProfile[]
-  legacyMode: boolean
+  /** Empty roster — nothing has been set up yet, so the app shows onboarding. */
+  unconfigured: boolean
+}
+
+/** Credential fields are patch-style: omit one to keep the stored value, pass
+ *  '' to clear it. That is what lets the form show an empty password box
+ *  without wiping the secret on every unrelated save. */
+export interface WorkspaceInput {
+  name?: string
+  apiKey?: string
+  teamId?: string | null
+  webhookSecret?: string
 }
 
 export interface SnapshotDiff {
@@ -97,6 +125,45 @@ export const api = {
     http<{ data: import('@shared/types.js').NormalizedIssue & { description: string | null; comments: import('@shared/types.js').IssueComment[] } }>(
       `/api/issues/${encodeURIComponent(identifier)}`,
     ),
+  // ─── Write-back ───────────────────────────────────────────────────────────
+  // The only two calls that change something outside this app. They live on
+  // `api` for the same reason saved views do (see the note further down): this
+  // `http` helper throws a typed ApiError, which apiErrorMessage turns into a
+  // translated sentence — a hand-rolled client would surface the server's raw
+  // English instead.
+  //
+  // The Authorization header is attached per call rather than injected into
+  // `http`, so the shared secret rides along with the two requests that need
+  // it instead of every request the app makes.
+  //
+  // `assigneeId: null` means unassign; omitting the key leaves the assignee
+  // alone. JSON.stringify preserves that difference, which is the whole reason
+  // the patch is built by the caller rather than spread from a form.
+  updateIssue: (
+    identifier: string,
+    patch: {
+      stateId?: string
+      assigneeId?: string | null
+      priority?: number
+      addedLabelIds?: string[]
+      removedLabelIds?: string[]
+    },
+  ) =>
+    http<{ ok: true }>(`/api/issues/${encodeURIComponent(identifier)}`, {
+      method: 'PATCH',
+      headers: authHeader(),
+      body: JSON.stringify(patch),
+    }),
+  addIssueComment: (identifier: string, body: string) =>
+    http<{ ok: true }>(`/api/issues/${encodeURIComponent(identifier)}/comments`, {
+      method: 'POST',
+      headers: authHeader(),
+      body: JSON.stringify({ body }),
+    }),
+  fetchProjectDetail: (projectId: string, opts?: { fresh?: boolean }) =>
+    http<{ data: ProjectDetail }>(
+      `/api/projects/${encodeURIComponent(projectId)}${opts?.fresh ? '?fresh=1' : ''}`,
+    ),
   fetchLabels: () => http<LabelsResponse>('/api/labels'),
   fetchHealth: () => http<{ ok: boolean }>('/api/health'),
   fetchMe: () => http<{ viewer: Viewer | null; issuesCached: number }>('/api/me'),
@@ -108,6 +175,20 @@ export const api = {
   // Sets the server-default workspace (the one new tabs land on, and the one
   // the file watcher follows). Distinct from changing this tab's view —
   // that's a URL change handled in the workspace store.
+  createWorkspace: (input: WorkspaceInput & { id: string }) =>
+    http<{ ok: boolean; id: string; dbPath: string; adoptedExistingData: boolean }>('/api/workspaces', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateWorkspace: (id: string, input: WorkspaceInput) =>
+    http<{ ok: boolean; id: string }>(`/api/workspaces/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  deleteWorkspace: (id: string) =>
+    http<{ ok: boolean; id: string; dataRetained: boolean }>(`/api/workspaces/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
   setDefaultWorkspace: (id: string) =>
     http<{ ok: boolean; active: WorkspaceProfile | null; changed: boolean }>('/api/workspaces/active', {
       method: 'POST',
@@ -134,4 +215,17 @@ export const api = {
     http<SnapshotDiff>(`/api/snapshot-diff?from=${from}&to=${to}`),
   exportUrl: (format: 'csv' | 'md') => withWorkspaceParam(`/api/export?format=${format}`),
   fetchCoverage: () => http<DesignDocCoverage>('/api/designdoc/coverage'),
+  // Saved views deliberately live on `api` rather than in their own client
+  // module: this `http` helper throws a typed ApiError that flows into
+  // apiErrorMessage -> i18n, whereas notesApi.ts rolls its own and throws a
+  // bare Error, which is why note failures surface untranslated.
+  fetchSavedViews: () => http<{ entries: SavedViewDTO[] }>('/api/saved-views'),
+  createSavedView: (name: string, query: string) =>
+    http<SavedViewDTO>('/api/saved-views', { method: 'POST', body: JSON.stringify({ name, query }) }),
+  patchSavedView: (id: number, patch: { name?: string; query?: string; sortOrder?: number }) =>
+    http<SavedViewDTO>(`/api/saved-views/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deleteSavedView: (id: number) =>
+    fetch(withWorkspaceParam(`/api/saved-views/${id}`), { method: 'DELETE' }).then((r) => {
+      if (!r.ok) throw new Error(`${r.status}`)
+    }),
 }

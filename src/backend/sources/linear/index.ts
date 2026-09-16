@@ -1,4 +1,4 @@
-import type { IssueStateType, NormalizedIssue, NormalizedLabel, Viewer, WorkflowState } from '@shared/types.js'
+import type { NormalizedIssue, NormalizedLabel, ProjectDetail, Viewer, WorkflowState } from '@shared/types.js'
 import { getLogger } from '../../lib/log.js'
 import {
   AuthError,
@@ -6,15 +6,52 @@ import {
   type BackendAdapter,
   type FetchOpts,
   type IssueDetail,
+  type IssuePatch,
   type RateLimitInfo,
 } from '../types.js'
-import { ISSUES_QUERY, ISSUE_DETAIL_QUERY, LABELS_QUERY, VIEWER_QUERY, WORKFLOW_STATES_QUERY } from './queries.js'
-import { normalizeIssue, normalizeLabel } from './normalize.js'
+import {
+  ADD_COMMENT_MUTATION,
+  ISSUES_QUERY,
+  ISSUE_DETAIL_QUERY,
+  LABELS_QUERY,
+  PROJECT_DETAIL_QUERY,
+  RECONCILE_IDENTIFIERS_QUERY,
+  UPDATE_ISSUE_MUTATION,
+  VIEWER_QUERY,
+  WORKFLOW_STATES_QUERY,
+} from './queries.js'
+import { coerceStateType, normalizeIssue, normalizeLabel, normalizeProjectDetail } from './normalize.js'
 
 interface LinearOptions {
   apiKey: string
   endpoint: string
   teamId?: string | undefined
+}
+
+/**
+ * Translate an IssuePatch into Linear's IssueUpdateInput.
+ *
+ * The whole point of this function is the difference between an absent key and
+ * an explicit null. `IssueUpdateInput` only touches the fields it is given, and
+ * a field set to null is *cleared* — so omitting `assigneeId` leaves the
+ * assignee alone while passing null unassigns. A truthiness check would
+ * collapse those two into one and make unassigning impossible, which is why
+ * this reads the key's presence rather than its value.
+ *
+ * Exported (like buildIssueFilter) so the mapping is testable without an API.
+ */
+export function buildIssuePatchInput(patch: IssuePatch): Record<string, unknown> {
+  const input: Record<string, unknown> = {}
+  if (patch.stateId !== undefined) input.stateId = patch.stateId
+  if ('assigneeId' in patch) input.assigneeId = patch.assigneeId ?? null
+  // 0 is "No priority" — a value the user can choose — so this cannot be a
+  // truthiness check without making that choice unreachable.
+  if (patch.priority !== undefined) input.priority = patch.priority
+  // Empty arrays are dropped: Linear accepts them but they mean "change
+  // nothing", and sending one would turn a no-op into a real mutation.
+  if (patch.addedLabelIds?.length) input.addedLabelIds = patch.addedLabelIds
+  if (patch.removedLabelIds?.length) input.removedLabelIds = patch.removedLabelIds
+  return input
 }
 
 /**
@@ -25,13 +62,15 @@ interface LinearOptions {
  * the window. Used when the user explicitly checks Canceled / Completed in
  * the state filter so we fetch the data they're asking to see.
  */
-function buildIssueFilter(
+export function buildIssueFilter(
   scope: string,
   teamId?: string,
   extendedDays = 0,
+  updatedAfter?: string,
 ): Record<string, unknown> | undefined {
   const filter: Record<string, unknown> = {}
   if (teamId) filter.team = { id: { eq: teamId } }
+  if (updatedAfter) filter.updatedAt = { gt: updatedAfter }
 
   if (scope === 'all') {
     if (Object.keys(filter).length === 0) return undefined
@@ -138,7 +177,12 @@ export class LinearBackend implements BackendAdapter {
   }
 
   async fetchAllIssues(opts: FetchOpts): Promise<NormalizedIssue[]> {
-    const filter = buildIssueFilter(opts.scope, opts.teamId ?? this.opts.teamId, opts.extendedDays ?? 0)
+    const filter = buildIssueFilter(
+      opts.scope,
+      opts.teamId ?? this.opts.teamId,
+      opts.extendedDays ?? 0,
+      opts.updatedAfter,
+    )
     const out: NormalizedIssue[] = []
     let after: string | null = null
     type IssuesResp = {
@@ -147,6 +191,31 @@ export class LinearBackend implements BackendAdapter {
     for (let page = 0; page < 50; page++) {
       const data: IssuesResp = await this.gql<IssuesResp>(ISSUES_QUERY, { after, filter })
       for (const raw of data.issues.nodes) out.push(normalizeIssue(raw))
+      if (!data.issues.pageInfo.hasNextPage) break
+      after = data.issues.pageInfo.endCursor
+    }
+    return out
+  }
+
+  async fetchIssueIdentifiers(opts: FetchOpts): Promise<string[]> {
+    const filter = buildIssueFilter(
+      opts.scope,
+      opts.teamId ?? this.opts.teamId,
+      opts.extendedDays ?? 0,
+      // Reconcile intentionally does not pass updatedAfter — it needs the
+      // full identifier set to detect deletions.
+    )
+    const out: string[] = []
+    let after: string | null = null
+    type Resp = {
+      issues: {
+        pageInfo: { hasNextPage: boolean; endCursor: string | null }
+        nodes: Array<{ identifier: string }>
+      }
+    }
+    for (let page = 0; page < 50; page++) {
+      const data: Resp = await this.gql<Resp>(RECONCILE_IDENTIFIERS_QUERY, { after, filter })
+      for (const n of data.issues.nodes) out.push(n.identifier)
       if (!data.issues.pageInfo.hasNextPage) break
       after = data.issues.pageInfo.endCursor
     }
@@ -177,6 +246,12 @@ export class LinearBackend implements BackendAdapter {
     }
   }
 
+  async fetchProjectDetail(projectId: string): Promise<ProjectDetail> {
+    const data = await this.gql<{ project: any }>(PROJECT_DETAIL_QUERY, { id: projectId })
+    if (!data.project) throw new Error(`Linear returned no project for id ${projectId}`)
+    return normalizeProjectDetail(data.project)
+  }
+
   async fetchViewer(): Promise<Viewer> {
     const data = await this.gql<{ viewer: any }>(VIEWER_QUERY)
     const org = data.viewer.organization
@@ -195,7 +270,7 @@ export class LinearBackend implements BackendAdapter {
     return data.workflowStates.nodes.map((n) => ({
       id: String(n.id),
       name: String(n.name),
-      type: String(n.type) as IssueStateType,
+      type: coerceStateType(n.type),
       color: n.color ?? null,
       position: typeof n.position === 'number' ? n.position : null,
       teamKey: n.team?.key ?? null,
@@ -218,5 +293,23 @@ export class LinearBackend implements BackendAdapter {
       after = data.issueLabels.pageInfo.endCursor
     }
     return out
+  }
+
+  async updateIssue(id: string, patch: IssuePatch): Promise<void> {
+    const input = buildIssuePatchInput(patch)
+    // An empty patch would be a no-op round trip to Linear that still reports
+    // success, which would make the caller believe a change landed.
+    if (Object.keys(input).length === 0) throw new Error('Issue update requested with no fields.')
+    type Resp = { issueUpdate: { success: boolean } }
+    const data = await this.gql<Resp>(UPDATE_ISSUE_MUTATION, { id, input })
+    // Linear answers 200 with success:false for a rejected-but-well-formed
+    // mutation, so this is the only place the failure surfaces.
+    if (!data.issueUpdate?.success) throw new Error(`Linear declined the update to ${id}.`)
+  }
+
+  async addComment(issueId: string, body: string): Promise<void> {
+    type Resp = { commentCreate: { success: boolean } }
+    const data = await this.gql<Resp>(ADD_COMMENT_MUTATION, { input: { issueId, body } })
+    if (!data.commentCreate?.success) throw new Error(`Linear declined the comment on ${issueId}.`)
   }
 }

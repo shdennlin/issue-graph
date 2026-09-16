@@ -32,8 +32,10 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ['Click'], descriptionKey: 'shortcuts.items.click', group: 'Selection' },
   { keys: ['Space'], descriptionKey: 'shortcuts.items.space', group: 'Selection' },
   { keys: ['Enter'], descriptionKey: 'shortcuts.items.enter', group: 'Selection' },
-  { keys: ['d'], descriptionKey: 'shortcuts.items.detailAutoToggle', group: 'Selection' },
+  { keys: ['d'], descriptionKey: 'shortcuts.items.detailPanelToggle', group: 'Selection' },
+  { keys: ['Shift', 'D'], descriptionKey: 'shortcuts.items.detailAutoToggle', group: 'Selection' },
   { keys: ['m'], descriptionKey: 'shortcuts.items.detailWideToggle', group: 'Selection' },
+  { keys: ['Cmd', 'Shift', 'C'], descriptionKey: 'shortcuts.items.detailCopyId', group: 'Selection' },
   { keys: ['Cmd', 'Click'], descriptionKey: 'shortcuts.items.cmdClick', group: 'Selection' },
   { keys: ['Right-click'], descriptionKey: 'shortcuts.items.rightClick', group: 'Selection' },
   { keys: ['Double-click'], descriptionKey: 'shortcuts.items.doubleClick', group: 'Selection' },
@@ -42,8 +44,10 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ['Shift', 'C'], descriptionKey: 'shortcuts.items.chainAuto', group: 'Chain isolation' },
 
   { keys: ['r'], descriptionKey: 'shortcuts.items.relatedToggle', group: 'Layout' },
+  { keys: ['h'], descriptionKey: 'shortcuts.items.hierarchyToggle', group: 'Layout' },
   { keys: ['Shift', 'R'], descriptionKey: 'shortcuts.items.relayout', group: 'Layout' },
 
+  { keys: ['Cmd', 'Alt', 'S'], descriptionKey: 'shortcuts.items.refresh', group: 'Other' },
   { keys: ['Cmd', 'Shift', 'S'], descriptionKey: 'shortcuts.items.screenshot', group: 'Other' },
 
   { keys: ['Ctrl', 'J'], descriptionKey: 'shortcuts.items.quickSwitcherDown', group: 'Quick switcher' },

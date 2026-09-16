@@ -4,9 +4,19 @@ services:
     image: issue-graph:latest
     container_name: issue-graph
     restart: unless-stopped
-    env_file: .env
+    # required: false — a fresh clone has no .env, and it no longer needs one:
+    # workspaces are configured in the app, and everything that must be set
+    # before a database can be opened is either pinned below or has a default.
+    # Without this, `docker compose up` fails outright on a clean deploy.
+    env_file:
+      - path: .env
+        required: false
     environment:
       PORT: 31415  # pinned; overrides any PORT in .env
+      # Snapshot scheduling uses local time (`now.getHours()` in sync.ts), and
+      # containers default to UTC — without this, DAILY_SNAPSHOT_HOUR=2 fires
+      # at 10:00 Taipei. Change to match your own timezone.
+      TZ: Asia/Taipei
       # Pin SQLite path inside the container so docker keeps using the
       # bind-mounted ./data/ tree even if .env points host dev at a
       # separate ./data-dev/. Sharing one DB between host bun and the
@@ -14,7 +24,15 @@ services:
       # across the FUSE/virtiofs bind-mount boundary on macOS Docker).
       SQLITE_PATH: /app/data/graph.db
     ports:
-      - "31415:31415"
+      # Loopback only. This app ships with NO authentication, so publishing on
+      # 0.0.0.0 exposes every workspace's issue data to anything on the LAN.
+      # For remote access put a layer with auth in front — on a Tailscale host,
+      # `tailscale serve --bg 31415` reaches the loopback bind and adds an
+      # HTTPS cert, which the PWA needs anyway (service workers require a
+      # secure context, so plain http://<tailnet-ip>:31415 silently loses it).
+      # To reach it from your LAN instead, change this back to "31415:31415"
+      # and understand what you are opening.
+      - "127.0.0.1:31415:31415"
     volumes:
       - ./data:/app/data
       # REPO_PATH bind-mounted at the same path inside; default is an

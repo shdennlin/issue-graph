@@ -7,7 +7,7 @@ function lab(id: string, name: string, group?: string): NormalizedLabel {
     id,
     name,
     color: '#fff',
-    group: group ? { id: `g:${group}`, name: group, exclusive: true } : null,
+    group: group ? { id: `g:${group}`, name: group } : null,
   }
 }
 
@@ -81,5 +81,37 @@ describe('detectSchema', () => {
     const labels = [lab('1', 'foo'), lab('2', 'bar')]
     const out = detectSchema({ labels, issues: [] })
     expect(out.orphans.map((l: { id: string }) => l.id).sort()).toEqual(['1', '2'])
+  })
+})
+
+// PREFIX_RE was lowercase-only while its two sibling regexes carry /i, so a
+// label typed `Risk: high` in Linear was never recognized as a prefix family
+// and fell out of the filter panel entirely.
+describe('detectSchema · prefix case handling', () => {
+  it('detects a prefix regardless of the label’s capitalization', () => {
+    const labels = [lab('1', 'Risk: security'), lab('2', 'Risk: migration')]
+    const out = detectSchema({ labels, issues: [iss('A', labels)] })
+    expect(out.prefixes.map((p) => p.token)).toEqual(['risk'])
+  })
+
+  it('merges labels that differ only in the token’s case into one family', () => {
+    const labels = [lab('1', 'Risk: security'), lab('2', 'risk: migration'), lab('3', 'RISK: legal')]
+    const out = detectSchema({ labels, issues: [iss('A', labels)] })
+    expect(out.prefixes).toHaveLength(1)
+    expect(out.prefixes[0]?.token).toBe('risk')
+    expect(out.prefixes[0]?.labels.map((l) => l.id).sort()).toEqual(['1', '2', '3'])
+  })
+
+  it('still needs two labels before a token becomes a family', () => {
+    const labels = [lab('1', 'Risk: security'), lab('2', 'standalone')]
+    const out = detectSchema({ labels, issues: [iss('A', labels)] })
+    expect(out.prefixes).toEqual([])
+  })
+
+  it('keeps a single-member capitalized prefix label out of orphans’ way', () => {
+    // Not a family, so it stays an orphan — same as the lowercase case.
+    const labels = [lab('1', 'Risk: security'), lab('2', 'standalone')]
+    const out = detectSchema({ labels, issues: [iss('A', labels)] })
+    expect(out.orphans.map((l) => l.id).sort()).toEqual(['1', '2'])
   })
 })

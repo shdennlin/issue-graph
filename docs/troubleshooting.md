@@ -22,6 +22,6 @@ curl -X POST http://localhost:31415/api/sync
 
 Or, if you'd rather start over from a blank slate (loses snapshots + annotations too), stop the server and `rm data/graph.db data/graph.db-shm data/graph.db-wal`.
 
-For frequent switching, use the `WORKSPACE_<ID>_*` profile variables instead.
-Profiles use separate databases, so switching from the toolbar does not require
-resetting cached data. See [Advanced workspace profiles](advanced-workspaces.md).
+For frequent switching, add each Linear workspace separately under
+**Settings → Workspaces**. Each one has its own database, so switching from the
+tab bar never requires resetting cached data. See [Workspaces](advanced-workspaces.md).

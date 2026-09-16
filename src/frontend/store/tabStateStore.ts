@@ -18,7 +18,7 @@
 //
 // What gets snapshotted: the IDE-feel state — filters, focus, chain,
 // selection, expanded buckets. NOT global preferences (theme, density, font
-// size, modal-open flags, `filterPanelOpen`, `inlineSearch`) — those are
+// size, modal-open flags, `inlineSearch`) — those are
 // user-level preferences that should not vary by tab.
 
 import type { Viewport } from 'reactflow'
@@ -28,16 +28,23 @@ import { defaultFilters, useViewStore, type Filters, type ViewId } from './viewS
 
 interface PerTabView {
   activeView: ViewId
+  mixGroupBy: string | null
   filters: Filters
   focusedId: string | null
-  chainRootId: string | null
+  chainRootIds: string[]
+  chainDepthUp: number | null
+  chainDepthDown: number | null
   layoutBump: number
   expandedBuckets: string[]
   search: string
   showRelated: boolean
+  showHierarchy: boolean
   selection: string[]
   highlightedEdgeId: string | null
   highlightedNodeId: string | null
+  /** Which saved view this tab is on. Snapshotted with the rest of the
+   *  per-tab state so a tab keeps its identity across switches. */
+  appliedSavedViewId: number | null
 }
 
 interface TabSnapshot {
@@ -51,16 +58,21 @@ interface TabSnapshot {
 
 const defaultView: PerTabView = {
   activeView: 'dependency',
+  mixGroupBy: null,
   filters: defaultFilters,
   focusedId: null,
-  chainRootId: null,
+  chainRootIds: [],
+  chainDepthUp: null,
+  chainDepthDown: null,
   layoutBump: 0,
   expandedBuckets: [],
   search: '',
   showRelated: false,
+  showHierarchy: false,
   selection: [],
   highlightedEdgeId: null,
   highlightedNodeId: null,
+  appliedSavedViewId: null,
 }
 
 const snapshots: Map<string, TabSnapshot> = new Map()
@@ -72,7 +84,9 @@ const snapshots: Map<string, TabSnapshot> = new Map()
 // hydrate path discards mismatched data instead of trying to migrate.
 
 const STORAGE_KEY = 'issue-graph-tab-snapshots'
-const STORAGE_VERSION = 1
+// v2: PerTabView.chainRootId (string|null) → chainRootIds (string[]).
+// v3: added chainDepthUp / chainDepthDown.
+const STORAGE_VERSION = 3
 
 interface PersistedSnapshot {
   view: PerTabView
@@ -120,7 +134,19 @@ function hydrate(): void {
       // Defensive: ensure required shape — drop entries that look corrupt.
       if (typeof snap.view !== 'object' || snap.view === null) continue
       snapshots.set(id, {
-        view: snap.view,
+        // Merge over defaults rather than trusting the stored shape: filter
+        // fields added after a payload was written would otherwise restore as
+        // undefined and blow up the filter UI's `filters.x[key]` reads. A
+        // STORAGE_VERSION bump would also fix it, but at the cost of wiping
+        // every tab's state for a purely additive change.
+        // restoreTab does useViewStore.setState(view), a shallow merge — a key
+        // missing from an older payload would leave the *current* tab's value
+        // in place, leaking one tab's grouping into another. Default it here.
+        view: {
+          ...snap.view,
+          mixGroupBy: snap.view.mixGroupBy ?? null,
+          filters: { ...defaultFilters, ...snap.view.filters },
+        },
         viewport: snap.viewport ?? null,
         graph: null, // graph is always re-fetched, never restored from disk
       })
@@ -175,16 +201,21 @@ function captureCurrentView(): PerTabView {
   const v = useViewStore.getState()
   return {
     activeView: v.activeView,
+    mixGroupBy: v.mixGroupBy,
     filters: v.filters,
     focusedId: v.focusedId,
-    chainRootId: v.chainRootId,
+    chainRootIds: v.chainRootIds,
+    chainDepthUp: v.chainDepthUp,
+    chainDepthDown: v.chainDepthDown,
     layoutBump: v.layoutBump,
     expandedBuckets: v.expandedBuckets,
     search: v.search,
     showRelated: v.showRelated,
+    showHierarchy: v.showHierarchy,
     selection: v.selection,
     highlightedEdgeId: v.highlightedEdgeId,
     highlightedNodeId: v.highlightedNodeId,
+    appliedSavedViewId: v.appliedSavedViewId,
   }
 }
 
@@ -274,6 +305,56 @@ export function restoreViewportOnly(tabId: string): void {
   if (snap?.viewport && viewportRestoreCallback) {
     viewportRestoreCallback(snap.viewport)
   }
+}
+
+/** Which saved view another tab is on, without switching to it. Lets the tab
+ *  bar label every tab rather than only the active one. */
+/**
+ * Whether this tab has anything stored to come back to.
+ *
+ * Needed because `loadTab`'s no-snapshot branch applies `defaultView`, whose
+ * `activeView` is hardcoded to 'dependency' — while a cold start at a bare URL
+ * has already resolved the view through `readDefaultView()`, the preference the
+ * user set in Settings. Restoring unconditionally would therefore overwrite
+ * that preference with 'dependency' for anyone whose tab has no snapshot yet.
+ */
+export function hasTabSnapshot(tabId: string): boolean {
+  return snapshots.has(tabId)
+}
+
+export function peekTabSavedViewId(tabId: string): number | null {
+  return snapshots.get(tabId)?.view.appliedSavedViewId ?? null
+}
+
+/**
+ * Read a tab's last active view WITHOUT applying the rest of its snapshot.
+ * Used on a fresh focus-deep-link load (Raycast / shared URL): the URL pins the
+ * issue but carries no `?view=`, so we restore the view the user was last in
+ * while the URL stays authoritative for everything it does carry. Returns null
+ * when the tab has no snapshot yet. Mirrors restoreViewportOnly's "URL wins, but
+ * this one piece isn't in the URL" rationale — just for the view instead of the
+ * viewport.
+ */
+export function peekTabView(tabId: string): ViewId | null {
+  return snapshots.get(tabId)?.view.activeView ?? null
+}
+
+/**
+ * Same idea, for the filters. A *bare* deep link (Raycast launch, the
+ * `web+issuegraph://` handler) pins an issue and says nothing about filters; on
+ * a full page load the store is cold, so there is nothing for urlSync's
+ * preserveFiltersOnFocus to preserve and the user's filters would come back as
+ * defaults. This is where they actually live across a reload — snapshots are
+ * hydrated from localStorage at module load, before any effect runs.
+ *
+ * Only meaningful when the arrival really was a bare deep link; see
+ * arrivedViaBareDeepLink() in urlSync.ts for the guard, and App.tsx for the
+ * caller. Returns null when the tab has no snapshot yet.
+ */
+export function peekTabFilters(tabId: string): { filters: Filters; search: string } | null {
+  const snap = snapshots.get(tabId)
+  if (!snap) return null
+  return { filters: snap.view.filters, search: snap.view.search }
 }
 
 /** Forget a tab's snapshot (called on tab close). */

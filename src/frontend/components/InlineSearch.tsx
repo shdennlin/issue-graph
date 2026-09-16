@@ -4,6 +4,7 @@ import { useReactFlow } from 'reactflow'
 import type { NormalizedIssue } from '@shared/types.js'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
+import { resolveAbsolutePosition } from '../lib/nodeCoords'
 
 // Stable empty-array reference. Used as fallback when graph isn't loaded yet
 // — must NOT be `[]` inline because each call creates a new ref → infinite loop.
@@ -98,9 +99,13 @@ export function InlineSearch() {
     if (!target) return
     const node = rf.getNode(target)
     if (!node) return
+    // Walk the parent chain so we land at the rendered absolute coords —
+    // milestone view nests issue → milestone → projectBackdrop, Mix/Project
+    // views nest issue → container.
+    const { x: absX, y: absY } = resolveAbsolutePosition(node, (id) => rf.getNode(id))
     rf.setCenter(
-      node.position.x + (node.width ?? 280) / 2,
-      node.position.y + (node.height ?? 100) / 2,
+      absX + (node.width ?? 280) / 2,
+      absY + (node.height ?? 100) / 2,
       { zoom: 1.0, duration: 350 },
     )
   }, [activeIdx, matchIds, open, rf])

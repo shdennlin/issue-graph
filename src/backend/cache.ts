@@ -1,12 +1,16 @@
 import type { GraphData, NormalizedIssue, NormalizedLabel, AnnotationDTO, WorkflowState } from '@shared/types.js'
 import { getDb } from './db.js'
 import { loadConfig } from './lib/env.js'
+import { settingInt } from './lib/settings.js'
 
 const META_LAST_SYNC = 'last_sync_ms'
 const META_HAS_DESIGNDOC = 'has_designdoc'
 const META_DESIGNDOC_PAYLOAD = 'designdoc_payload'
 const META_WORKFLOW_STATES = 'workflow_states'
 const META_EXTENDED_SCOPE = 'extended_scope_days'
+const META_LAST_ISSUE_UPDATED_AT = 'last_issue_updated_at'
+const META_LAST_SYNC_SCOPE_KEY = 'last_sync_scope_key'
+const META_LAST_RECONCILE_MS = 'last_reconcile_ms'
 
 interface IssueRow { identifier: string; payload: string; fetched_at: number }
 interface LabelRow { id: string; payload: string }
@@ -43,6 +47,47 @@ export function readLastSyncMs(): number | null {
 
 export function writeLastSyncMs(ms: number): void {
   writeMeta(META_LAST_SYNC, String(ms))
+}
+
+/**
+ * Incremental-sync high-water-mark — the max `updatedAt` (ISO 8601) observed
+ * across all issues in the most recent successful sync. The next sync uses
+ * this as the `updatedAfter` cursor so Linear only returns issues changed
+ * since. Null means a full sync is required (first run, or after reset).
+ */
+export function readLastIssueUpdatedAt(): string | null {
+  return readMeta(META_LAST_ISSUE_UPDATED_AT)
+}
+
+export function writeLastIssueUpdatedAt(iso: string): void {
+  writeMeta(META_LAST_ISSUE_UPDATED_AT, iso)
+}
+
+/**
+ * Fingerprint of the scope/team/extended-days settings under which the
+ * cursor was captured. If the user changes scope, the cursor is invalidated
+ * (next sync goes full) so newly-in-scope issues come in.
+ */
+export function readLastSyncScopeKey(): string | null {
+  return readMeta(META_LAST_SYNC_SCOPE_KEY)
+}
+
+export function writeLastSyncScopeKey(key: string): void {
+  writeMeta(META_LAST_SYNC_SCOPE_KEY, key)
+}
+
+/**
+ * Epoch ms of the last successful reconcile pass (identifier-only scan that
+ * deletes cached issues no longer present in Linear). Used by sync.ts to
+ * gate the once-per-day reconcile cadence.
+ */
+export function readLastReconcileMs(): number {
+  const v = readMeta(META_LAST_RECONCILE_MS)
+  return v ? Number(v) : 0
+}
+
+export function writeLastReconcileMs(ms: number): void {
+  writeMeta(META_LAST_RECONCILE_MS, String(ms))
 }
 
 export function readDesigndocsCached(): GraphData['designdocs'] | undefined {
@@ -106,20 +151,18 @@ export function isCacheFresh(): boolean {
   const cfg = loadConfig()
   const last = readLastSyncMs()
   if (!last) return false
-  // User-overridable via Settings → Backend; falls back to env, then default.
-  // Setting precedence: setting table > env > schema default. Bounds [10, 86400]
-  // mirror the API's PatchSchema validation in routes/settings.ts.
-  const ttlSeconds = readCacheTtlSeconds(cfg.CACHE_TTL_SECONDS)
+  // User-overridable via Settings → Backend. Precedence and bounds live in
+  // lib/settingSpecs.ts, which every setting now shares.
+  const ttlSeconds = settingInt('cache_ttl_seconds', cfg.CACHE_TTL_SECONDS)
   return Date.now() - last < ttlSeconds * 1000
 }
 
-function readCacheTtlSeconds(envFallback: number): number {
+/** The most recent sync's status + message, for explaining an empty graph. */
+export function readLastSyncOutcome(): { status: string; message: string | null } | null {
   const row = getDb()
-    .prepare('SELECT value FROM setting WHERE key = ?')
-    .get('cache_ttl_seconds') as { value: string } | undefined
-  if (!row) return envFallback
-  const n = Number(row.value)
-  return Number.isFinite(n) && n >= 10 && n <= 86400 ? n : envFallback
+    .prepare('SELECT status, error_message FROM sync_log ORDER BY started_at DESC LIMIT 1')
+    .get() as { status: string; error_message: string | null } | undefined
+  return row ? { status: row.status, message: row.error_message } : null
 }
 
 export function writeIssueCache(issues: NormalizedIssue[]): void {
@@ -129,11 +172,34 @@ export function writeIssueCache(issues: NormalizedIssue[]): void {
     `INSERT INTO issue_cache(identifier, payload, fetched_at) VALUES(?, ?, ?)
      ON CONFLICT(identifier) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`,
   )
+  // UPSERT-only — incremental sync only fetches changed issues, so unchanged
+  // rows must persist across calls. Deletes are handled by the periodic
+  // reconcile pass (see deleteIssuesNotIn / sync.ts) and by resetCache.
   const txn = db.transaction((items: NormalizedIssue[]) => {
-    db.prepare('DELETE FROM issue_cache').run()
     for (const it of items) insert.run(it.identifier, JSON.stringify(it), now)
   })
   txn(issues)
+}
+
+/**
+ * Reconcile-pass delete: remove cached issues whose identifier is NOT in the
+ * provided keep-set. Uses `json_each` so a single statement handles any
+ * collection size without bumping into SQLite's parameter limit.
+ *
+ * Returns the number of deleted rows.
+ */
+export function deleteIssuesNotIn(keep: string[]): number {
+  const db = getDb()
+  // Defensive: never wipe the cache when the backend returned zero — that
+  // usually means a transient API hiccup, not "the workspace is empty now".
+  if (keep.length === 0) return 0
+  const before = countCachedIssues()
+  db.prepare(
+    `DELETE FROM issue_cache
+     WHERE identifier NOT IN (SELECT value FROM json_each(?))`,
+  ).run(JSON.stringify(keep))
+  const after = countCachedIssues()
+  return before - after
 }
 
 export function writeLabelCache(labels: NormalizedLabel[]): void {
@@ -163,8 +229,8 @@ export function countCachedIssues(): number {
 /**
  * Wipe everything tied to the configured backend/workspace so the next
  * sync rebuilds from scratch. Intentionally preserves user-created data:
- * annotations, notes (+ notes-assets on disk), snapshots, sync_log,
- * settings. Use after switching LINEAR_API_KEY to a different workspace,
+ * annotations, notes (+ notes-assets on disk), saved views, snapshots,
+ * sync_log, settings. Use after switching LINEAR_API_KEY to a different workspace,
  * or to recover from a corrupted cache.
  */
 export function resetCache(): { issues: number; labels: number } {
@@ -183,6 +249,12 @@ export function resetCache(): { issues: number; labels: number } {
     writeMeta(META_LAST_SYNC, '0')
     // Clear the workspace-change banner so it doesn't reappear after reset.
     writeMeta('workspace_change_warning', '')
+    // Drop incremental-sync cursor so the next sync goes full. Empty-string
+    // sentinel matches the convention used for other reset-tied keys; both
+    // readers fall back to the full-sync path on falsy values.
+    writeMeta(META_LAST_ISSUE_UPDATED_AT, '')
+    writeMeta(META_LAST_SYNC_SCOPE_KEY, '')
+    writeMeta(META_LAST_RECONCILE_MS, '0')
   })()
   return { issues, labels }
 }

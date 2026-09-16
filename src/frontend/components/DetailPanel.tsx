@@ -1,39 +1,31 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { AlertTriangle, ExternalLink, Maximize2, Minimize2, Type, X } from 'lucide-react'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { AlertTriangle, Check, ExternalLink, Maximize2, Minimize2, Type, X } from 'lucide-react'
 import type { AnnotationDTO, IssueComment, NormalizedIssue } from '@shared/types.js'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { useSchemaStore } from '../store/schemaStore'
 import { useResizable } from '../hooks/useResizable'
 import { api } from '../lib/api'
-import { priorityLabelFor, stateLabelFor } from '../lib/colors'
-import { getDesignDocsForIssue } from '../lib/labelSchema'
+import { sortCommentsOldestFirst } from '../lib/comments'
+import { priorityLabelFor, stateColorVar, stateIcon, stateLabelFor } from '../lib/colors'
+import { getDesignDocsForIssue, groupIssueLabels, shortPrefixDisplay, type LabelSection } from '../lib/labelSchema'
+import { isOverdueIssue } from '../lib/dueDate'
+import { milestoneFilterKey } from '../views/filters'
+import { resolveHierarchy } from '../views/hierarchy'
+import { renderMarkdownHtml } from '../lib/markdown'
+import { MarkdownBody } from './MarkdownBody'
 import { translate, useLocale, useT } from '../i18n'
-
-function MarkdownBody({ body }: { body: string }) {
-  const ref = useRef<HTMLDivElement | null>(null)
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const html = marked.parse(body || '', { async: false }) as string
-    const safe = DOMPurify.sanitize(html, { ADD_ATTR: ['target', 'rel'] })
-    const parsed = new DOMParser().parseFromString(safe, 'text/html')
-    const nodes = Array.from(parsed.body.childNodes)
-    if (nodes.length === 0 && body) {
-      // Sanitizer stripped everything (e.g., Linear bot comment with raw HTML).
-      // Fall back to plaintext so the card isn't blank.
-      const pre = document.createElement('div')
-      pre.style.whiteSpace = 'pre-wrap'
-      pre.textContent = body
-      el.replaceChildren(pre)
-      return
-    }
-    el.replaceChildren(...nodes)
-  }, [body])
-  return <div ref={ref} />
-}
+import { isTypingTarget } from '../lib/isTypingTarget'
+import {
+  AssigneeControl,
+  CommentComposer,
+  LabelAddControl,
+  LabelRemoveButton,
+  PriorityControl,
+  StatusControl,
+  useWriteGate,
+  WriteLockedHint,
+} from './detail/IssueWriteControls'
 
 function timeAgo(iso: string, locale: ReturnType<typeof useLocale>): string {
   const ms = Date.now() - new Date(iso).getTime()
@@ -51,6 +43,26 @@ const WIDE_MODE_KEY = 'ig-detail-wide-v1'
 const TEXT_SIZE_KEY = 'ig-detail-text-size-v1'
 type TextSize = 'sm' | 'md' | 'lg' | 'xl'
 
+/**
+ * The quiet half of an editable row: "show only issues like this one".
+ *
+ * Deliberately not another pill. The row already carries one control with a
+ * border; a second would read as two peers competing for the same job, which
+ * is the confusion this replaced. Muted text that picks up the accent on hover
+ * says "also available" without arguing with the dropdown beside it.
+ *
+ * The value it filters on lives in `title`, not in the label — the label is a
+ * verb precisely so the row stops printing the same words twice.
+ */
+function FilterOnlyButton({ onClick, title }: { onClick: () => void; title: string }) {
+  const t = useT()
+  return (
+    <button type="button" className="detail-filter-only" onClick={onClick} title={title}>
+      {t('detailPanel.filterOnly')}
+    </button>
+  )
+}
+
 export function DetailPanel() {
   const focusedId = useViewStore((s) => s.focusedId)
   const setDetailPanelOpen = useViewStore((s) => s.setDetailPanelOpen)
@@ -60,6 +72,11 @@ export function DetailPanel() {
   const { schema } = useSchemaStore()
   const t = useT()
   const locale = useLocale()
+  // Decides the shape of the three editable rows, not whether they appear.
+  // When the server has no OAuth application the write controls render
+  // nothing, so the value has to stay on the filter chip — otherwise a
+  // read-only deployment gets a row with a label and no value in it.
+  const { show: writable } = useWriteGate()
   const [description, setDescription] = useState<string | null>(null)
   const [descLoading, setDescLoading] = useState(false)
   const [comments, setComments] = useState<IssueComment[] | null>(null)
@@ -95,15 +112,64 @@ export function DetailPanel() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'm' && e.key !== 'M') return
       if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
-      const target = e.target as HTMLElement | null
-      const tag = target?.tagName?.toLowerCase()
-      if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+      if (isTypingTarget(e.target as HTMLElement | null)) return
       e.preventDefault()
       toggleWide()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [focusedId, toggleWide])
+
+  // "Copied!" feedback after the user copies the issue identifier. The
+  // transient swap lasts ~1.2s — long enough to register, short enough to
+  // not block re-copy. Reset whenever the focused issue changes so the
+  // pill text matches the displayed identifier (see the issueId effect).
+  // No useCallback: the project uses React Compiler, which auto-memoizes
+  // and complains when manual memoization is added on top.
+  const [copied, setCopied] = useState(false)
+  const copyTimerRef = useRef<number | null>(null)
+  const copyIdentifier = async (id: string) => {
+    try {
+      await navigator.clipboard.writeText(id)
+      setCopied(true)
+      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current)
+      copyTimerRef.current = window.setTimeout(() => setCopied(false), 1200)
+    } catch {
+      // Clipboard API can fail on non-secure origins (http://) or when
+      // permission is denied. Silently swallow — the ID stays visible
+      // (selectable text inside the button) so the user has a fallback.
+    }
+  }
+  useEffect(() => () => {
+    if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current)
+  }, [])
+
+  // Cmd/Ctrl+Shift+C → copy the focused issue's identifier. Mirrors the
+  // existing right-click "Copy ID" action but as a keyboard shortcut.
+  // Active only when the panel is open (gated on focusedId). Unlike the
+  // letter-only `m` shortcut above we don't need to guard against typing
+  // in inputs — Cmd/Ctrl+Shift+C is a chorded combo and doesn't collide
+  // with text entry. Body inlined (instead of calling copyIdentifier) so
+  // the effect doesn't re-bind on every render — copyIdentifier has an
+  // unstable identity since we can't wrap it in useCallback (React
+  // Compiler rejects manual memoization in this codebase).
+  useEffect(() => {
+    if (!focusedId) return
+    const onKey = async (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return
+      if (!e.shiftKey || e.altKey) return
+      if (e.key.toLowerCase() !== 'c') return
+      e.preventDefault()
+      try {
+        await navigator.clipboard.writeText(focusedId)
+        setCopied(true)
+        if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current)
+        copyTimerRef.current = window.setTimeout(() => setCopied(false), 1200)
+      } catch { /* see copyIdentifier comment */ }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [focusedId])
 
   // Mirror wide mode onto <body> so canvas-floating controls (inline search
   // button/bar) can hide themselves — they live inside GraphCanvas and would
@@ -135,6 +201,12 @@ export function DetailPanel() {
   // references it directly. Avoids react-hooks/exhaustive-deps complaining
   // about deriving the dep from `issue?.identifier` inside the deps array.
   const issueId = issue?.identifier
+  // Bumped after a comment posts, to re-run the fetch below for the same issue.
+  // The effect keys on the identifier alone, so without this a new comment
+  // would not appear until the panel was closed and reopened — the server's
+  // detail cache is already busted by the write, so the refetch is cheap and
+  // returns the real comment (author, timestamp) instead of a local guess.
+  const [detailNonce, setDetailNonce] = useState(0)
   useEffect(() => {
     // react-hooks/set-state-in-effect: standard async-fetch pattern — clear
     // stale description, mark loading, then write the resolved value (or
@@ -143,6 +215,8 @@ export function DetailPanel() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDescription(null)
     setComments(null)
+    setCopied(false)
+    if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current)
     if (!issueId) return
     let cancelled = false
     setDescLoading(true)
@@ -160,7 +234,7 @@ export function DetailPanel() {
       })
       .finally(() => { if (!cancelled) setDescLoading(false) })
     return () => { cancelled = true }
-  }, [issueId])
+  }, [issueId, detailNonce])
 
   // Viewport-adaptive max: never wider than 75% of the window, never wider
   // than 1200px (long-form reading column ceiling). Re-derived on window
@@ -200,6 +274,10 @@ export function DetailPanel() {
   const renderedWidth = Math.min(active.width, activeMax)
   const startResize = active.startResize
   const resizing = active.resizing
+  const sortedComments = useMemo(
+    () => comments === null ? null : sortCommentsOldestFirst(comments),
+    [comments],
+  )
 
   if (!issue) return null
 
@@ -207,6 +285,21 @@ export function DetailPanel() {
     (a) => a.targetType === 'issue' && a.targetId === issue.identifier,
   )
   const docs = getDesignDocsForIssue(issue, graph?.data.designdocs)
+  const labelSections = groupIssueLabels(issue, schema)
+
+  // Each section maps to the filter dimension that section's labels live in.
+  // Selecting *just* the clicked value mirrors the state / priority /
+  // assignee chips above — a chip is "show me only this", not a toggle.
+  const applyLabelFilter = (sec: LabelSection, id: string): void => {
+    const f = useViewStore.getState().filters
+    switch (sec.kind) {
+      case 'primary': setFilter('primaryValues', [id]); break
+      case 'type': setFilter('typeValues', [id]); break
+      case 'prefix': setFilter('prefixSelections', { ...f.prefixSelections, [sec.key]: [id] }); break
+      case 'group': setFilter('groupSelections', { ...f.groupSelections, [sec.key]: [id] }); break
+      case 'orphan': setFilter('orphanValues', [id]); break
+    }
+  }
 
   const submitAnnotation = async () => {
     const body = annotationDraft.trim()
@@ -256,6 +349,11 @@ export function DetailPanel() {
     .map((id) => allIssues.find((i) => i.identifier === id))
     .filter((i): i is NormalizedIssue => i !== undefined)
 
+  // Sub-issue hierarchy. Indexed rather than `.find`-per-child: a parent can
+  // carry up to 20 children and each lookup would otherwise scan every issue.
+  const byId = new Map(allIssues.map((i) => [i.identifier, i]))
+  const hierarchy = resolveHierarchy(issue, byId)
+
   return (
     <aside
       className={[
@@ -269,8 +367,21 @@ export function DetailPanel() {
       <div className="resize-handle resize-handle-left" onMouseDown={startResize} title="Drag to resize" />
       <div className="detail-header">
         <h2>
-          <span className="detail-identifier">{issue.identifier}</span>{' '}
-          {issue.title}
+          <button
+            type="button"
+            className={`detail-identifier${copied ? ' is-copied' : ''}`}
+            onClick={() => void copyIdentifier(issue.identifier)}
+            title={copied ? t('detailPanel.copied') : t('detailPanel.copyId')}
+            aria-label={t('detailPanel.copyIdAria', { id: issue.identifier })}
+          >
+            <span className="detail-identifier-text">{issue.identifier}</span>
+            {copied && (
+              <span className="detail-identifier-icon" aria-hidden>
+                <Check size={11} />
+              </span>
+            )}
+          </button>
+          <span className="detail-title-text">{issue.title}</span>
         </h2>
         <button
           className="icon-only detail-text-size-btn"
@@ -303,38 +414,80 @@ export function DetailPanel() {
       </a>
 
       <div className="section">
+        {/* Above the fields it explains, and only while the fix is in the
+            user's hands — see WriteLockedHint. */}
+        <WriteLockedHint />
+        {/* Two verbs share each of these rows: change this issue, and show
+            only issues like it. The editable control leads, because the row is
+            labelled "State" and the first thing after that label should be the
+            state itself — not an action that happens to be spelled the same.
+            Filtering keeps its place but says what it does instead of
+            repeating the value a second time, which is what made the old row
+            read as two identical controls. */}
         <div className="row">
           <span className="k">{t('detailPanel.state')}</span>
-          <button
-            type="button"
-            className="detail-filter-link"
-            onClick={() => { setFilter('stateTypes', [issue.state.type]); setDetailPanelOpen(false) }}
-            title={t('detailPanel.filterByState', { value: stateLabelFor(issue.state.type, locale) })}
-          >
-            {stateLabelFor(issue.state.type, locale)}
-          </button>
+          {writable ? (
+            <>
+              <StatusControl issue={issue} />
+              <FilterOnlyButton
+                onClick={() => { setFilter('stateTypes', [issue.state.type]); setDetailPanelOpen(false) }}
+                title={t('detailPanel.filterByState', { value: stateLabelFor(issue.state.type, locale) })}
+              />
+            </>
+          ) : (
+            <button
+              type="button"
+              className={`state-pill detail-state-pill is-${issue.state.type}`}
+              style={{ color: stateColorVar(issue.state.type) }}
+              onClick={() => { setFilter('stateTypes', [issue.state.type]); setDetailPanelOpen(false) }}
+              title={t('detailPanel.filterByState', { value: stateLabelFor(issue.state.type, locale) })}
+            >
+              <span className="glyph" aria-hidden>{stateIcon(issue.state.type)}</span>
+              <span>{issue.state.name}</span>
+            </button>
+          )}
         </div>
         <div className="row">
           <span className="k">{t('detailPanel.priority')}</span>
-          <button
-            type="button"
-            className="detail-filter-link"
-            onClick={() => { setFilter('priorities', [issue.priority]); setDetailPanelOpen(false) }}
-            title={t('detailPanel.filterByPriority', { value: priorityLabelFor(issue.priority, locale) })}
-          >
-            {priorityLabelFor(issue.priority, locale)}
-          </button>
+          {writable ? (
+            <>
+              <PriorityControl issue={issue} />
+              <FilterOnlyButton
+                onClick={() => { setFilter('priorities', [issue.priority]); setDetailPanelOpen(false) }}
+                title={t('detailPanel.filterByPriority', { value: priorityLabelFor(issue.priority, locale) })}
+              />
+            </>
+          ) : (
+            <button
+              type="button"
+              className="detail-filter-link"
+              onClick={() => { setFilter('priorities', [issue.priority]); setDetailPanelOpen(false) }}
+              title={t('detailPanel.filterByPriority', { value: priorityLabelFor(issue.priority, locale) })}
+            >
+              {priorityLabelFor(issue.priority, locale)}
+            </button>
+          )}
         </div>
         <div className="row">
           <span className="k">{t('detailPanel.assignee')}</span>
-          <button
-            type="button"
-            className="detail-filter-link"
-            onClick={() => { setFilter('assignees', [issue.assignee?.displayName ?? '(unassigned)']); setDetailPanelOpen(false) }}
-            title={t('detailPanel.filterByAssignee', { value: issue.assignee?.displayName ?? t('detailPanel.unassignedShort') })}
-          >
-            {issue.assignee?.displayName ?? t('detailPanel.unassignedShort')}
-          </button>
+          {writable ? (
+            <>
+              <AssigneeControl issue={issue} />
+              <FilterOnlyButton
+                onClick={() => { setFilter('assignees', [issue.assignee?.displayName ?? '(unassigned)']); setDetailPanelOpen(false) }}
+                title={t('detailPanel.filterByAssignee', { value: issue.assignee?.displayName ?? t('detailPanel.unassignedShort') })}
+              />
+            </>
+          ) : (
+            <button
+              type="button"
+              className="detail-filter-link"
+              onClick={() => { setFilter('assignees', [issue.assignee?.displayName ?? '(unassigned)']); setDetailPanelOpen(false) }}
+              title={t('detailPanel.filterByAssignee', { value: issue.assignee?.displayName ?? t('detailPanel.unassignedShort') })}
+            >
+              {issue.assignee?.displayName ?? t('detailPanel.unassignedShort')}
+            </button>
+          )}
         </div>
         <div className="row">
           <span className="k">{t('detailPanel.project')}</span>
@@ -351,28 +504,129 @@ export function DetailPanel() {
             <span style={{ color: 'var(--fg-muted)' }}>—</span>
           )}
         </div>
+        {/* Milestone row only renders when the issue has a project — a
+            milestone without a project isn't representable in Linear's data
+            model and would have no filter key. Mirrors the milestone view's
+            "skip projectless issues" rule. */}
+        {issue.project && (
+          <div className="row">
+            <span className="k">{t('detailPanel.milestone')}</span>
+            {issue.projectMilestone ? (
+              <button
+                type="button"
+                className="detail-filter-link"
+                onClick={() => {
+                  setFilter('milestoneIds', [
+                    milestoneFilterKey(issue.project!.id, issue.projectMilestone!.id),
+                  ])
+                  setDetailPanelOpen(false)
+                }}
+                title={t('detailPanel.filterByMilestone', { value: issue.projectMilestone.name })}
+              >
+                {issue.projectMilestone.name}
+              </button>
+            ) : (
+              <span style={{ color: 'var(--fg-muted)' }}>{t('detailPanel.noMilestone')}</span>
+            )}
+          </div>
+        )}
+        {issue.team && (
+          <div className="row">
+            <span className="k">{t('detailPanel.team')}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              {issue.team.color && (
+                <span
+                  aria-hidden
+                  style={{
+                    display: 'inline-block',
+                    width: 8,
+                    height: 8,
+                    borderRadius: 999,
+                    background: issue.team.color,
+                  }}
+                />
+              )}
+              <span>
+                {issue.team.name}
+                {issue.team.key && (
+                  <span style={{ color: 'var(--fg-muted)', marginLeft: 6 }}>
+                    {issue.team.key}
+                  </span>
+                )}
+              </span>
+            </span>
+          </div>
+        )}
+        {typeof issue.estimate === 'number' && (
+          <div className="row">
+            <span className="k">{t('detailPanel.estimate')}</span>
+            <span>{t('detailPanel.estimatePointsShort', { value: issue.estimate })}</span>
+          </div>
+        )}
+        {issue.dueDate && (
+          <div className="row">
+            <span className="k">{t('detailPanel.dueDate')}</span>
+            <span
+              title={issue.dueDate}
+              style={
+                isOverdueIssue(issue)
+                  ? { color: 'var(--danger, #ef4444)', fontWeight: 600 }
+                  : undefined
+              }
+            >
+              {issue.dueDate}
+              {isOverdueIssue(issue) && (
+                <span style={{ marginLeft: 6, fontSize: 11 }}>
+                  · {t('detailPanel.overdue')}
+                </span>
+              )}
+            </span>
+          </div>
+        )}
+        {issue.startedAt && (
+          <div className="row">
+            <span className="k">{t('detailPanel.startedAt')}</span>
+            <span title={issue.startedAt}>{timeAgo(issue.startedAt, locale)}</span>
+          </div>
+        )}
         <div className="row"><span className="k">{t('detailPanel.created')}</span><span>{timeAgo(issue.createdAt, locale)}</span></div>
         <div className="row"><span className="k">{t('detailPanel.updated')}</span><span>{timeAgo(issue.updatedAt, locale)}</span></div>
-        {schema.primaryGroup && (() => {
-          const primary = issue.labels.find((l) => l.group?.name === schema.primaryGroup)
-          return (
-            <div className="row">
-              <span className="k">{schema.primaryGroup}</span>
-              {primary ? (
+        {/* Every label on the issue, one row per schema section. Driven by
+            groupIssueLabels rather than by looking up the groups the schema
+            named, so a label from a group autodetection has not classified
+            (or has not seen yet) still surfaces under "Labels" instead of
+            vanishing. Chips filter the dimension they belong to, matching the
+            state/priority/assignee rows above. */}
+        {labelSections.map((sec) => (
+          <div className="row" key={`${sec.kind}:${sec.key}`}>
+            <span className="k">
+              {sec.kind === 'prefix' ? `${sec.key}:` : sec.kind === 'orphan' ? t('detailPanel.labels') : sec.key}
+            </span>
+            <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {sec.labels.map((l) => (
+                <span key={l.id} className="detail-label-chip">
                 <button
                   type="button"
                   className="detail-filter-link"
-                  onClick={() => { setFilter('primaryValues', [primary.id]); setDetailPanelOpen(false) }}
-                  title={t('detailPanel.filterByGroup', { group: schema.primaryGroup, value: primary.name })}
+                  onClick={() => { applyLabelFilter(sec, l.id); setDetailPanelOpen(false) }}
+                  title={
+                    sec.kind === 'orphan'
+                      ? t('detailPanel.filterByLabel', { value: l.name })
+                      : t('detailPanel.filterByGroup', {
+                          group: sec.kind === 'prefix' ? `${sec.key}:` : sec.key,
+                          value: l.name,
+                        })
+                  }
                 >
-                  {primary.name}
+                  {sec.kind === 'prefix' ? shortPrefixDisplay(l.name, sec.key) : l.name}
                 </button>
-              ) : (
-                <span style={{ color: 'var(--fg-muted)' }}>—</span>
-              )}
-            </div>
-          )
-        })()}
+                <LabelRemoveButton issue={issue} label={l} />
+              </span>
+              ))}
+            </span>
+          </div>
+        ))}
+        <LabelAddControl issue={issue} />
       </div>
 
       {docs.length > 0 && (
@@ -397,6 +651,62 @@ export function DetailPanel() {
               <div style={{ color: 'var(--fg-muted)', fontSize: 11 }}>{d.filePath}</div>
             </details>
           ))}
+        </div>
+      )}
+
+      {(hierarchy.parent || hierarchy.children.length > 0) && (
+        // Hierarchy — Linear's parent/children, which live outside `relations`
+        // and so never appear as edges. Section is omitted entirely when the
+        // issue has neither: most issues don't use sub-issues, and an empty
+        // heading would be noise on every card.
+        <div className="section">
+          <h3>{t('detailPanel.hierarchy')}</h3>
+          {hierarchy.parent && (
+            <div>
+              <div style={{ color: 'var(--fg-muted)', fontSize: 11 }}>{t('detailPanel.parentIssue')}</div>
+              <div>
+                <a href="#" onClick={(e) => { e.preventDefault(); useViewStore.getState().setFocusedId(hierarchy.parent!.identifier) }}>
+                  ↑ {hierarchy.parent.identifier} {hierarchy.parent.issue?.title ?? ''}
+                </a>
+              </div>
+            </div>
+          )}
+          {hierarchy.children.length > 0 && (
+            <div style={{ marginTop: hierarchy.parent ? 6 : 0 }}>
+              <div
+                style={{ color: 'var(--fg-muted)', fontSize: 11 }}
+                title={[
+                  hierarchy.unresolved > 0
+                    ? t('detailPanel.subIssuesUnresolved', { count: hierarchy.unresolved })
+                    : '',
+                  hierarchy.truncated ? t('detailPanel.subIssuesTruncated') : '',
+                ].filter(Boolean).join('\n')}
+              >
+                {t('detailPanel.subIssues')} —{' '}
+                {t('detailPanel.subIssuesProgress', {
+                  done: hierarchy.done,
+                  total: hierarchy.truncated ? `${hierarchy.total}+` : hierarchy.total,
+                })}
+              </div>
+              {hierarchy.children.map((c) => (
+                <div key={c.identifier}>
+                  {c.issue ? (
+                    <a href="#" onClick={(e) => { e.preventDefault(); useViewStore.getState().setFocusedId(c.identifier) }}>
+                      ↳ {c.identifier} {c.issue.title}
+                    </a>
+                  ) : (
+                    // Unlike `related` (which hides uncached targets), an
+                    // uncached child still represents outstanding work — it
+                    // counts toward the progress denominator, so hiding the
+                    // row would make the number unexplainable.
+                    <span style={{ color: 'var(--fg-muted)' }} title={t('detailPanel.subIssueNotCached')}>
+                      ↳ {c.identifier}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -464,7 +774,7 @@ export function DetailPanel() {
               </>
             ) : (
               <>
-                <div dangerouslySetInnerHTML={{ __html: marked.parse(a.body) as string }} />
+                <div dangerouslySetInnerHTML={{ __html: renderMarkdownHtml(a.body) }} />
                 <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
                   <button onClick={() => { setEditingId(a.id); setEditingBody(a.body) }}>{t('common.edit')}</button>
                   <button onClick={() => remove(a.id)}>{t('common.delete')}</button>
@@ -497,20 +807,20 @@ export function DetailPanel() {
           </div>
         )}
         {!descLoading && description !== null && (
-          <div dangerouslySetInnerHTML={{ __html: marked.parse(description || t('detailPanel.noDescription')) as string }} />
+          <div dangerouslySetInnerHTML={{ __html: renderMarkdownHtml(description || '', t('detailPanel.noDescription')) }} />
         )}
         {!descLoading && description === null && <div style={{ color: 'var(--fg-muted)' }}>{t('detailPanel.descriptionLoadFail')}</div>}
       </div>
 
       <div className="section">
-        <h3>{t('detailPanel.comments', { count: comments?.length ?? 0 })}</h3>
-        {descLoading && comments === null && (
+        <h3>{t('detailPanel.comments', { count: sortedComments?.length ?? 0 })}</h3>
+        {descLoading && sortedComments === null && (
           <div style={{ color: 'var(--fg-muted)' }}>{t('detailPanel.commentsLoading')}</div>
         )}
-        {comments !== null && comments.length === 0 && !descLoading && (
+        {sortedComments !== null && sortedComments.length === 0 && !descLoading && (
           <div style={{ color: 'var(--fg-muted)' }}>{t('detailPanel.noComments')}</div>
         )}
-        {comments !== null && comments.map((cm) => (
+        {sortedComments !== null && sortedComments.map((cm) => (
           <div key={cm.id} className="detail-comment">
             <div className="detail-comment-head">
               <strong>{cm.user?.displayName ?? t('detailPanel.unknownAuthor')}</strong>
@@ -519,6 +829,7 @@ export function DetailPanel() {
             <MarkdownBody body={cm.body} />
           </div>
         ))}
+        <CommentComposer identifier={issue.identifier} onPosted={() => setDetailNonce((n) => n + 1)} />
       </div>
     </aside>
   )

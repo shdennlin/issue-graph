@@ -10,7 +10,11 @@ export const ISSUES_QUERY = /* GraphQL */ `
         title
         url
         priority
+        estimate
+        dueDate
+        startedAt
         state { name type }
+        team { id key name color }
         assignee { id displayName email }
         labels(first: 30) {
           nodes {
@@ -21,19 +25,37 @@ export const ISSUES_QUERY = /* GraphQL */ `
           }
         }
         cycle { number startsAt endsAt }
-        project { id name }
+        project { id name color }
+        projectMilestone { id name targetDate sortOrder }
         parent { identifier }
         children(first: 20) { nodes { identifier } }
         relations(first: 30) {
           nodes {
             type
+            createdAt
             relatedIssue { identifier }
           }
         }
         createdAt
         updatedAt
         completedAt
+        # Newest comment only. Linear orders this connection newest-first, so
+        # first:1 is the one we want — measured at +64ms and +2 complexity over
+        # a 100-issue page, which is what makes it affordable in the BULK query
+        # rather than only in ISSUE_DETAIL_QUERY.
+        comments(first: 1) {
+          nodes { createdAt }
+        }
       }
+    }
+  }
+`
+
+export const RECONCILE_IDENTIFIERS_QUERY = /* GraphQL */ `
+  query ReconcileIdentifiers($after: String, $filter: IssueFilter) {
+    issues(first: 250, after: $after, filter: $filter) {
+      pageInfo { hasNextPage endCursor }
+      nodes { identifier }
     }
   }
 `
@@ -47,17 +69,22 @@ export const ISSUE_DETAIL_QUERY = /* GraphQL */ `
       description
       url
       priority
+      estimate
+      dueDate
+      startedAt
       state { name type }
+      team { id key name color }
       assignee { id displayName email }
       labels(first: 30) {
         nodes { id name color parent { id name } }
       }
       cycle { number startsAt endsAt }
       project { id name }
+      projectMilestone { id name targetDate sortOrder }
       parent { identifier }
       children(first: 20) { nodes { identifier } }
       relations(first: 30) {
-        nodes { type relatedIssue { identifier } }
+        nodes { type createdAt relatedIssue { identifier } }
       }
       createdAt
       updatedAt
@@ -68,6 +95,33 @@ export const ISSUE_DETAIL_QUERY = /* GraphQL */ `
           body
           createdAt
           updatedAt
+          user { displayName }
+        }
+      }
+    }
+  }
+`
+
+export const PROJECT_DETAIL_QUERY = /* GraphQL */ `
+  query ProjectDetail($id: String!) {
+    project(id: $id) {
+      id
+      state
+      progress
+      startDate
+      targetDate
+      description
+      content
+      lead { displayName }
+      projectMilestones(first: 50) {
+        nodes { id name targetDate sortOrder description progress status }
+      }
+      projectUpdates(first: 5, orderBy: updatedAt) {
+        nodes {
+          id
+          body
+          createdAt
+          health
           user { displayName }
         }
       }
@@ -111,6 +165,22 @@ export const WORKFLOW_STATES_QUERY = /* GraphQL */ `
         position
         team { key }
       }
+    }
+  }
+`
+
+export const UPDATE_ISSUE_MUTATION = /* GraphQL */ `
+  mutation UpdateIssue($id: String!, $input: IssueUpdateInput!) {
+    issueUpdate(id: $id, input: $input) {
+      success
+    }
+  }
+`
+
+export const ADD_COMMENT_MUTATION = /* GraphQL */ `
+  mutation AddComment($input: CommentCreateInput!) {
+    commentCreate(input: $input) {
+      success
     }
   }
 `

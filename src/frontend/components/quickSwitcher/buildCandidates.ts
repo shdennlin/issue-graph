@@ -30,8 +30,25 @@ function deriveNoteSnippet(body: string): string {
 export function buildCandidates(args: Args): Candidate[] {
   const out: Candidate[] = []
 
-  // Issues — one pass per tab.
-  for (const tab of args.tabs) {
+  // Issues — one pass per tab, then one row per issue.
+  //
+  // Two tabs may sit on the same workspace (they keep independent filters), and
+  // an issue reached through either is the same issue. Emitting it once per tab
+  // put indistinguishable rows next to each other: the only thing separating
+  // them is which tab would open, and the row shows `scopeLabel`, the workspace
+  // name, which is identical by construction.
+  //
+  // Keyed by workspace rather than globally, because the same identifier in two
+  // different workspaces really is two different issues — and there the scope
+  // label does tell them apart.
+  const seen = new Set<string>()
+  // Active tab first so its copy is the one kept: opening an issue should land
+  // in the tab you are already looking at. The rest keep their given order, so
+  // the fallback is the first tab holding the issue, not an arbitrary one.
+  const tabsByPreference = [...args.tabs].sort(
+    (a, b) => Number(b.id === args.activeTabId) - Number(a.id === args.activeTabId),
+  )
+  for (const tab of tabsByPreference) {
     const isActive = tab.id === args.activeTabId
     const graph = isActive ? args.activeGraph : args.snapshotGraph(tab.id)
     const issues = (graph as any)?.data?.issues as
@@ -46,6 +63,9 @@ export function buildCandidates(args: Args): Candidate[] {
     if (!issues) continue
     const scopeLabel = args.workspaceName(tab.workspaceId)
     for (const i of issues) {
+      const key = `${tab.workspaceId}:${i.identifier}`
+      if (seen.has(key)) continue
+      seen.add(key)
       const cand: IssueCandidate = {
         kind: 'issue',
         id: `${tab.id}:${i.identifier}`,

@@ -7,7 +7,7 @@
 //   [tabs … ] [+]   …spacer…   [picker?] [last sync] [N issues · M docs] [↻]
 //
 // Modes:
-//   - Multi-workspace (profiles.length >= 1, !legacyMode):
+//   - Multi-workspace (profiles.length >= 1, roster non-empty):
 //       Tabs render on the left. The workspace-picker (repoint-this-tab)
 //       only appears when profiles.length >= 2 — with a single profile it
 //       would be a no-op duplicate of the tab label.
@@ -29,7 +29,8 @@ import { useWorkspaceStore, type Tab } from '../store/workspaceStore'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { useHistoryAvailability } from '../store/urlSync'
-import { forgetTab, snapshotTab } from '../store/tabStateStore'
+import { forgetTab, peekTabSavedViewId, snapshotTab } from '../store/tabStateStore'
+import { useSavedViewsStore } from '../store/savedViewsStore'
 import { MOD_GLYPH, formatShortcut } from '../lib/platform'
 
 function colorClass(ageMinutes: number): string {
@@ -49,7 +50,19 @@ function formatAge(age: number): string {
 export function TabBar() {
   // workspace store
   const profiles = useWorkspaceStore((s) => s.profiles)
-  const legacyMode = useWorkspaceStore((s) => s.legacyMode)
+  // Every tab can be labelled now that the applied view is per-tab state:
+  // the active one reads the live store, the rest read their own snapshot.
+  // Same reason as FacetBar: the tab's label depends on the whole serialized
+  // query, not only the filters.
+  useViewStore()
+  const savedViews = useSavedViewsStore((s) => s.views)
+  const liveAppliedId = useViewStore((s) => s.appliedSavedViewId)
+  const savedViewName = (tab: Tab, isActive: boolean): string | null => {
+    const id = isActive ? liveAppliedId : peekTabSavedViewId(tab.id)
+    if (id === null) return null
+    return savedViews.find((v) => v.id === id)?.name ?? null
+  }
+  const unconfigured = useWorkspaceStore((s) => s.unconfigured)
   const tabs = useWorkspaceStore((s) => s.tabs)
   const activeTabId = useWorkspaceStore((s) => s.activeTabId)
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
@@ -169,12 +182,12 @@ export function TabBar() {
 
   // Keep server-default workspace in sync with the leftmost tab. Fires
   // whenever tabs[0]'s workspace changes (drag-reorder, tab close, add).
-  // The backend persists this to active-workspace.json and restarts the
-  // design-doc watcher on the new REPO_PATH; other open browser tabs see
-  // it via the SSE 'default-workspace-changed' broadcast (App.tsx).
+  // The backend persists this to the control plane and restarts the
+  // design-doc watcher; other open browser tabs see it via the SSE
+  // 'default-workspace-changed' broadcast (App.tsx).
   const firstTabWorkspaceId = tabs[0]?.workspaceId ?? null
   useEffect(() => {
-    if (!initialized || legacyMode) return
+    if (!initialized || unconfigured) return
     if (!firstTabWorkspaceId) return
     if (firstTabWorkspaceId === defaultWorkspaceId) return
     let cancelled = false
@@ -191,7 +204,7 @@ export function TabBar() {
     return () => {
       cancelled = true
     }
-  }, [firstTabWorkspaceId, defaultWorkspaceId, initialized, legacyMode, setDefaultWorkspaceIdInStore])
+  }, [firstTabWorkspaceId, defaultWorkspaceId, initialized, unconfigured, setDefaultWorkspaceIdInStore])
 
   if (!initialized) return null
 
@@ -284,9 +297,10 @@ export function TabBar() {
   }
 
   const profileById = new Map(profiles.map((p) => [p.id, p]))
+
   const canClose = tabs.length > 1
-  const showTabs = !legacyMode && profiles.length > 0
-  const showPicker = !legacyMode && profiles.length >= 2
+  const showTabs = !unconfigured && profiles.length > 0
+  const showPicker = !unconfigured && profiles.length >= 2
 
   const last = graph?.fetchedAt ?? 0
   const ageMinutes = last ? Math.floor((now - last) / 60_000) : Infinity
@@ -327,6 +341,7 @@ export function TabBar() {
             const profile = profileById.get(tab.workspaceId)
             const name = profile?.name ?? tab.workspaceId
             const isActive = tab.id === activeTabId
+            const viewName = savedViewName(tab, isActive)
             const shortcut = idx < 9 ? `${MOD_GLYPH}${idx + 1}` : null
             const isDragging = draggingId === tab.id
             return (
@@ -355,6 +370,17 @@ export function TabBar() {
               >
                 {shortcut && <span className="tabbar-shortcut">{shortcut}</span>}
                 <span className="tabbar-label">{name}</span>
+                {viewName && (
+                  // No dirty marker here. Whether you have edited away from
+                  // the view is only knowable for the active tab, and a
+                  // marker that appears on one tab and not the others would
+                  // read as a difference between the tabs rather than a limit
+                  // of what this label can say. The panel and the window
+                  // title carry it, where it is accurate.
+                  <span className="tabbar-view" title={viewName}>
+                    {viewName}
+                  </span>
+                )}
                 {canClose && (
                   <span
                     role="button"
@@ -456,7 +482,7 @@ export function TabBar() {
           className="tabbar-refresh icon-text"
           onClick={forceSync}
           disabled={status === 'loading'}
-          title="Shift-click to force a fresh fetch"
+          title="Refresh (⌘⌥S) — re-pull from the backend"
         >
           {syncing ? (
             <><Loader2 size={14} className="lucide-spin" /> Syncing…</>

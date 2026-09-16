@@ -1,27 +1,87 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import type { NormalizedIssue } from '@shared/types.js'
 import { toggleChecklistAt } from '../../lib/checklist'
+import { highlightTextNodes } from '../../lib/highlightDom'
 import { decorateIssueLinksWithStatus, linkifyIssueIds } from '../../lib/issueLinks'
-import { stateLabelFor } from '../../lib/colors'
 import { useGraphStore } from '../../store/graphStore'
 import { useViewStore } from '../../store/viewStore'
-import { useLocale } from '../../i18n'
+import { getNoteScroll, setNoteScroll } from '../../lib/noteScrollMemory'
+import { IssueHoverCard } from './IssueHoverCard'
 
 interface Props {
+  /** Identifier used to key per-note scroll restoration. */
+  noteId: number
   body: string
   /** Called when the modal should close (after an issue link click). */
   onCloseModal: () => void
   /** Optional. When set, rendered task-list checkboxes become interactive
    *  and call this with the updated markdown body on each toggle. */
   onBodyChange?: (next: string) => void
+  /** In-note find: text to highlight. Empty string disables highlighting. */
+  highlightQuery?: string
+  /** In-note find: the active match (0-based). Scrolled into view + given
+   *  the `.note-find-match-active` class. */
+  activeMatchIndex?: number
+  /** Called whenever the highlight pipeline finishes with the new total match
+   *  count. Useful for the find bar's `N / total` counter. */
+  onMatchCountChange?: (count: number) => void
 }
 
-export function NotePreview({ body, onCloseModal, onBodyChange }: Props) {
+export function NotePreview({
+  noteId,
+  body,
+  onCloseModal,
+  onBodyChange,
+  highlightQuery = '',
+  activeMatchIndex = 0,
+  onMatchCountChange,
+}: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const locale = useLocale()
+  const [hover, setHover] = useState<{ issue: NormalizedIssue; rect: DOMRect } | null>(null)
 
+  // Delegated hover on issue anchors. The badge that `decorateIssueLinksWithStatus`
+  // appends sits adjacent to the anchor; we treat moving between them as the
+  // same hover so the card doesn't flicker when the mouse crosses the seam.
   useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const onOver = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      const anchor =
+        (target.closest('a[data-issue-id]') as HTMLAnchorElement | null) ??
+        (target.closest('.issue-status-badge')?.previousElementSibling as HTMLAnchorElement | null)
+      if (!anchor) return
+      const id = anchor.getAttribute('data-issue-id')
+      if (!id) return
+      const issues = useGraphStore.getState().graph?.data.issues ?? []
+      const iss = issues.find((i) => i.identifier === id)
+      if (!iss) return
+      setHover({ issue: iss, rect: anchor.getBoundingClientRect() })
+    }
+    const onOut = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      const left = target.closest('a[data-issue-id], .issue-status-badge')
+      if (!left) return
+      const rt = e.relatedTarget as HTMLElement | null
+      if (rt?.closest('a[data-issue-id], .issue-status-badge')) return
+      setHover(null)
+    }
+    el.addEventListener('mouseover', onOver)
+    el.addEventListener('mouseout', onOut)
+    return () => {
+      el.removeEventListener('mouseover', onOver)
+      el.removeEventListener('mouseout', onOut)
+      setHover(null)
+    }
+  }, [body])
+
+  // Content rendering runs as useLayoutEffect so the DOM is populated before
+  // paint — required so the scroll restore at the end of this effect lands
+  // on real content height instead of an empty container (which would reset
+  // to 0 after the first post-paint repopulation).
+  useLayoutEffect(() => {
     const el = containerRef.current
     if (!el) return
     const html = marked.parse(body || '*Empty note*', { async: false }) as string
@@ -43,15 +103,47 @@ export function NotePreview({ body, onCloseModal, onBodyChange }: Props) {
     // O(1) lookup map built once per render — cheaper than `find` per anchor
     // when a note mentions many IDs in a large workspace.
     const issues = useGraphStore.getState().graph?.data.issues ?? []
-    const stateTypeByIdentifier = new Map(
-      issues.map((i) => [i.identifier, i.state.type] as const),
+    // Show Linear's actual state name (e.g. "Review") rather than the canonical
+    // type label ("In Progress"). Linear users name custom states per their
+    // workflow; collapsing to the type label is misleading when the workflow
+    // distinguishes states the canonical labels don't (Review vs Code Review,
+    // QA vs Live Verification, etc.). The hover-card already uses .state.name.
+    const stateByIdentifier = new Map(
+      issues.map((i) => [i.identifier, { type: i.state.type, name: i.state.name }] as const),
     )
     decorateIssueLinksWithStatus(el, (id) => {
-      const type = stateTypeByIdentifier.get(id)
-      if (!type) return null
-      return { type, label: stateLabelFor(type, locale) }
+      const s = stateByIdentifier.get(id)
+      if (!s) return null
+      return { type: s.type, label: s.name }
     })
-  }, [body, onBodyChange, locale])
+    // In-note find highlighting runs AFTER linkify + decorate so it walks
+    // the final text nodes. Skip the appended status badges so their state
+    // labels aren't searchable.
+    const count = highlightQuery.trim().length > 0
+      ? highlightTextNodes(el, highlightQuery, {
+          className: 'note-find-match',
+          numbered: true,
+          skipSelectors: ['.issue-status-badge'],
+        })
+      : 0
+    if (count > 0) {
+      const clamped = Math.max(0, Math.min(activeMatchIndex, count - 1))
+      const active = el.querySelector<HTMLElement>(`mark[data-match-index="${clamped}"]`)
+      if (active) {
+        active.classList.add('note-find-match-active')
+        active.scrollIntoView({ block: 'center', inline: 'nearest' })
+      }
+    }
+    if (onMatchCountChange) onMatchCountChange(count)
+    // Restore the user's last scroll position for this note when there's no
+    // active find — otherwise scrollIntoView above is the authoritative
+    // scroll. The onScroll handler keeps the stored value current, so
+    // re-applying on body changes (e.g. checklist toggles) is a no-op rather
+    // than a jump.
+    if (count === 0) {
+      el.scrollTop = getNoteScroll(noteId, 'preview')
+    }
+  }, [body, onBodyChange, noteId, highlightQuery, activeMatchIndex, onMatchCountChange])
 
   function onClick(e: React.MouseEvent<HTMLDivElement>) {
     const target = e.target as HTMLElement
@@ -92,10 +184,14 @@ export function NotePreview({ body, onCloseModal, onBodyChange }: Props) {
   }
 
   return (
-    <div
-      ref={containerRef}
-      className="note-preview markdown-body"
-      onClick={onClick}
-    />
+    <>
+      <div
+        ref={containerRef}
+        className="note-preview markdown-body"
+        onClick={onClick}
+        onScroll={(e) => setNoteScroll(noteId, 'preview', e.currentTarget.scrollTop)}
+      />
+      {hover && <IssueHoverCard issue={hover.issue} anchorRect={hover.rect} />}
+    </>
   )
 }

@@ -1,17 +1,22 @@
 import { stateColorVar, stateIcon } from './colors'
 
 /**
- * Linear issue identifier pattern, e.g. `ABC-123`, `PROJ-9`, `MOBILE-1234`.
+ * Linear issue identifier pattern, e.g. `ABC-123`, `PROJ-9`, `A1-7`.
  * Requires:
- *   - 2+ uppercase letters (team prefix)
+ *   - an uppercase letter, then 1+ uppercase letters or digits (team key)
  *   - hyphen
  *   - 1+ digits
  * Boundary-anchored so plain words like "ZZ-top-3" inside other text don't match.
+ *
+ * Kept identical to ISSUE_ID_RE in src/backend/designdoc/scanner.ts. The two
+ * diverged once — the scanner allowed digits in the key and this did not — so
+ * an id like A1-7 was linked from a design doc but stayed plain text in notes
+ * and descriptions. Change both or neither.
  */
-const ISSUE_ID_PATTERN = /\b([A-Z]{2,})-(\d+)\b/g
+const ISSUE_ID_PATTERN = /\b([A-Z][A-Z0-9]+)-(\d+)\b/g
 
 export function isIssueId(text: string): boolean {
-  return /^[A-Z]{2,}-\d+$/.test(text)
+  return /^[A-Z][A-Z0-9]+-\d+$/.test(text)
 }
 
 export function findIssueIds(text: string): string[] {

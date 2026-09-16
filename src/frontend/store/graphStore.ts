@@ -1,6 +1,14 @@
 import { create } from 'zustand'
-import type { GraphResponse } from '@shared/types.js'
+import type { GraphResponse, ProjectDetail } from '@shared/types.js'
 import { api } from '../lib/api'
+import { applyIssueDisplayPatch, type IssueDisplayPatch } from '../lib/optimisticIssue'
+
+/**
+ * Stored value for a single project's lazy-loaded detail. String sentinels
+ * keep the loading / error states in the same map so callers can drive UI
+ * (skeleton vs retry button vs real data) off one lookup.
+ */
+export type ProjectDetailCacheEntry = ProjectDetail | 'loading' | 'error'
 
 interface GraphState {
   graph: GraphResponse | null
@@ -11,6 +19,17 @@ interface GraphState {
   // server is actually re-fetching from Linear, not just returning cached data.
   syncing: boolean
   error: string | null
+  /**
+   * Repaint one issue's state / assignee in place, without a round trip.
+   *
+   * The single writer of `graph.data.issues` outside of a fetch. issueWriteStore
+   * drives it so a status change shows up immediately instead of after the
+   * ~3-4s the sync round trip takes; the next reload overwrites whatever this
+   * wrote with the server's version, which is the authority. Nothing here tries
+   * to remember what it changed — see issueWriteStore for why a failure reloads
+   * rather than rolling back.
+   */
+  applyIssuePatch: (identifier: string, patch: IssueDisplayPatch) => void
   load: () => Promise<void>
   /**
    * Silent re-fetch used by the background poller. Same network call as
@@ -33,6 +52,13 @@ interface GraphState {
    * (max 365), then we reload the graph.
    */
   extendScope: (days: number) => Promise<void>
+  /** Cache of fetched project details, keyed by Linear project id. */
+  projectDetails: Record<string, ProjectDetailCacheEntry>
+  /**
+   * Lazy-fetch a project's detail. No-op if already loaded or in-flight.
+   * `force: true` re-fetches even when cached (used by panel's retry button).
+   */
+  loadProjectDetail: (projectId: string, opts?: { force?: boolean }) => Promise<void>
 }
 
 export const useGraphStore = create<GraphState>((set, get) => ({
@@ -40,6 +66,16 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   status: 'idle',
   syncing: false,
   error: null,
+  applyIssuePatch(identifier, patch) {
+    const current = get().graph
+    if (!current) return
+    const issues = applyIssueDisplayPatch(current.data.issues, identifier, patch)
+    // Same reference means the identifier was not in the list — a reload can
+    // land between the write and its response. Skip the store write and the
+    // re-render behind it rather than publishing an identical object.
+    if (issues === current.data.issues) return
+    set({ graph: { ...current, data: { ...current.data, issues } } })
+  },
   async load() {
     set({ status: 'loading', error: null })
     try {
@@ -79,6 +115,45 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
     set({ syncing: false })
     await get().load()
+    // Project + milestone detail rides a separate lazy-fetch path with its own
+    // backend + frontend caches that the issue sync doesn't touch. Re-fetch any
+    // project whose detail is currently displayed so an explicit sync reflects
+    // the newest milestones/progress instead of a stale cached copy. Skip
+    // 'loading' (a fetch is already in flight — forcing would duplicate it) and
+    // 'error' (nothing is displayed; the panel's retry handles recovery).
+    const details = get().projectDetails
+    const openedIds = Object.keys(details).filter((id) => {
+      const d = details[id]
+      return d && d !== 'loading' && d !== 'error'
+    })
+    await Promise.all(openedIds.map((id) => get().loadProjectDetail(id, { force: true })))
+  },
+  projectDetails: {},
+  async loadProjectDetail(projectId, opts) {
+    if (!projectId) return
+    const current = get().projectDetails[projectId]
+    if (!opts?.force && current && current !== 'error') return
+    // Stale-while-revalidate: when we already have real data on screen (a forced
+    // post-sync refresh of an open panel), keep showing it instead of blinking
+    // the 'loading' skeleton. The 'loading' sentinel is only for a first open or
+    // a retry after error, where there is nothing valid to display yet.
+    const hasData = current && current !== 'loading' && current !== 'error'
+    if (!hasData) {
+      set((s) => ({ projectDetails: { ...s.projectDetails, [projectId]: 'loading' } }))
+    }
+    try {
+      // A forced reload (panel retry, or post-sync refresh) must also bypass the
+      // backend's 10-min TTL cache — otherwise the "fresh" fetch could be served
+      // a stale copy. Normal lazy opens keep using the cache.
+      const res = await api.fetchProjectDetail(projectId, { fresh: opts?.force === true })
+      set((s) => ({ projectDetails: { ...s.projectDetails, [projectId]: res.data } }))
+    } catch {
+      // Don't replace good data with an error state on a silent revalidation —
+      // a failed background refresh should leave the existing detail untouched.
+      if (!hasData) {
+        set((s) => ({ projectDetails: { ...s.projectDetails, [projectId]: 'error' } }))
+      }
+    }
   },
   async extendScope(days) {
     set({ status: 'loading', syncing: true })

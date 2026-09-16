@@ -34,13 +34,42 @@ export interface FuzzyTarget {
   identifier: string | null
 }
 
-/** Score against label, with an extra bonus when identifier starts with the query. */
+/** The digits of "ONE-393" — what people actually type to reach an issue. */
+function numberPart(identifier: string): string {
+  const dash = identifier.lastIndexOf('-')
+  return dash === -1 ? identifier : identifier.slice(dash + 1)
+}
+
+/**
+ * Naming an issue outranks resembling one.
+ *
+ * These bands sit well above any fuzzy score on purpose. A subsequence match is
+ * a guess about what you meant; an identifier hit is you saying it, and no
+ * amount of coincidental scatter in someone else's title should outrank that.
+ * Typing "393" used to lose to ONE-329, whose title happened to carry a "3"
+ * after a word boundary — because the bonus only fired on `startsWith`, and
+ * identifiers start with the team prefix, never the number.
+ *
+ * Guarded by `looksLikeIdRef` so it stays out of the way of ordinary word
+ * searches. Every issue's identifier starts with the team prefix, so an
+ * unguarded prefix rule would hand every issue the same large bonus the moment
+ * someone typed the team name, burying every note and tab in the palette.
+ */
+function identifierBonus(query: string, identifier: string | null): number {
+  if (!identifier) return 0
+  const q = query.toLowerCase()
+  const id = identifier.toLowerCase()
+  if (id === q) return 400
+  const looksLikeIdRef = /^\d+$/.test(q) || q.includes('-')
+  if (looksLikeIdRef && (id.startsWith(q) || numberPart(id).startsWith(q))) return 300
+  // The original rule, kept for the alphabetic case it was written for.
+  return id.startsWith(q) ? 50 : 0
+}
+
+/** Score against the label, plus a bonus for addressing the issue by id. */
 export function fuzzyMatch(query: string, target: FuzzyTarget): number | null {
   const labelScore = fuzzyScore(query, target.label)
-  const idScore =
-    target.identifier && target.identifier.toLowerCase().startsWith(query.toLowerCase())
-      ? 50
-      : 0
+  const idScore = identifierBonus(query, target.identifier)
   if (labelScore === null && idScore === 0) return null
   return (labelScore ?? 0) + idScore
 }

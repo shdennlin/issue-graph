@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeChain } from './chain'
+import { computeChain, computeChains } from './chain'
 import type { NormalizedIssue } from '@shared/types.js'
 
 function mk(id: string, blocks: string[] = []): NormalizedIssue {
@@ -120,6 +120,58 @@ describe('computeChain', () => {
     expect(r.dangling).toEqual(new Set(['GHOST']))
   })
 
+  it('opt-in: 1-hop parent expands members, siblings stay out', () => {
+    // A blocks B (chain). B's parent is P; P also has child S. With
+    // includeHierarchyNeighbors, P joins. S does NOT — reaching a sibling
+    // needs a second hop (member → parent → parent's other children).
+    const issues: NormalizedIssue[] = [
+      mk('A', ['B']),
+      { ...mk('B'), parent: 'P' },
+      { ...mk('P'), children: ['B', 'S'] },
+      mk('S'),
+    ]
+    expect(computeChain(issues, 'A').members).toEqual(new Set(['A', 'B']))
+    const expanded = computeChain(issues, 'A', { includeHierarchyNeighbors: true })
+    expect(expanded.members).toEqual(new Set(['A', 'B', 'P']))
+  })
+
+  it('pulls in children of chain members, not just parents', () => {
+    const issues: NormalizedIssue[] = [
+      mk('A', ['B']),
+      { ...mk('B'), children: ['C1', 'C2'] },
+      mk('C1'),
+      mk('C2'),
+    ]
+    expect(
+      computeChain(issues, 'A', { includeHierarchyNeighbors: true }).members,
+    ).toEqual(new Set(['A', 'B', 'C1', 'C2']))
+  })
+
+  it('hierarchy expansion is only 1 hop (grandchildren stay out)', () => {
+    const issues: NormalizedIssue[] = [
+      mk('A', ['B']),
+      { ...mk('B'), children: ['C'] },
+      { ...mk('C'), children: ['G'] },
+      mk('G'),
+    ]
+    expect(
+      computeChain(issues, 'A', { includeHierarchyNeighbors: true }).members,
+    ).toEqual(new Set(['A', 'B', 'C']))
+  })
+
+  it('hierarchy expansion does not affect dangling count (blocks-only)', () => {
+    // A blocks B (cached) + GHOST (not cached). B has an uncached child.
+    // Dangling must stay { GHOST } — it drives the "load full history"
+    // prompt, which is about missing blockers, not missing sub-issues.
+    const issues: NormalizedIssue[] = [
+      mk('A', ['B', 'GHOST']),
+      { ...mk('B'), children: ['MISSING'] },
+    ]
+    const r = computeChain(issues, 'A', { includeHierarchyNeighbors: true })
+    expect(r.members).toEqual(new Set(['A', 'B']))
+    expect(r.dangling).toEqual(new Set(['GHOST']))
+  })
+
   it('ignores non-blocks relation types', () => {
     const issues: NormalizedIssue[] = [
       { ...mk('A'), relations: [{ type: 'related', targetIdentifier: 'B' }] },
@@ -128,5 +180,120 @@ describe('computeChain', () => {
     const r = computeChain(issues, 'A')
     expect(r.members).toEqual(new Set(['A']))
     expect(r.dangling).toEqual(new Set())
+  })
+})
+
+describe('computeChains (multi-root)', () => {
+  it('returns empty result for no roots', () => {
+    const issues = [mk('A', ['B']), mk('B')]
+    const r = computeChains(issues, [])
+    expect(r.members).toEqual(new Set())
+    expect(r.dangling).toEqual(new Set())
+  })
+
+  it('matches computeChain for a single root', () => {
+    const issues = [mk('A', ['B']), mk('B', ['C']), mk('C'), mk('Z')]
+    expect(computeChains(issues, ['B'])).toEqual(computeChain(issues, 'B'))
+  })
+
+  it('unions the chains of two disjoint components', () => {
+    const issues = [
+      mk('A', ['B']),
+      mk('B'),
+      mk('X', ['Y']),
+      mk('Y'),
+      mk('Z'),
+    ]
+    const r = computeChains(issues, ['A', 'X'])
+    expect(r.members).toEqual(new Set(['A', 'B', 'X', 'Y']))
+    expect(r.dangling).toEqual(new Set())
+  })
+
+  it('de-duplicates overlapping chains (roots in the same component)', () => {
+    // A → B → C → D ; rooting on B and D yields the same single component once.
+    const issues = [mk('A', ['B']), mk('B', ['C']), mk('C', ['D']), mk('D')]
+    const r = computeChains(issues, ['B', 'D'])
+    expect(r.members).toEqual(new Set(['A', 'B', 'C', 'D']))
+  })
+
+  it('skips roots not present in the issue set but keeps the rest', () => {
+    const issues = [mk('A', ['B']), mk('B')]
+    const r = computeChains(issues, ['A', 'NOPE'])
+    expect(r.members).toEqual(new Set(['A', 'B']))
+    expect(r.dangling).toEqual(new Set())
+  })
+
+  it('accumulates dangling refs across all roots', () => {
+    const issues = [mk('A', ['GHOST1']), mk('X', ['GHOST2'])]
+    const r = computeChains(issues, ['A', 'X'])
+    expect(r.members).toEqual(new Set(['A', 'X']))
+    expect(r.dangling).toEqual(new Set(['GHOST1', 'GHOST2']))
+  })
+
+  it('applies includeRelatedNeighbors across roots', () => {
+    const issues: NormalizedIssue[] = [
+      mk('A', ['B']),
+      { ...mk('B'), relations: [{ type: 'related', targetIdentifier: 'R' }] },
+      mk('R'),
+      mk('X', ['Y']),
+      mk('Y'),
+    ]
+    const r = computeChains(issues, ['A', 'X'], { includeRelatedNeighbors: true })
+    expect(r.members).toEqual(new Set(['A', 'B', 'R', 'X', 'Y']))
+  })
+})
+
+describe('computeChains depth limits', () => {
+  // A → B → C → D (A blocks B, B blocks C, C blocks D)
+  const linear = [mk('A', ['B']), mk('B', ['C']), mk('C', ['D']), mk('D')]
+
+  it('limits downstream (dependents) depth from the root', () => {
+    expect(computeChains(linear, ['A'], { maxDownstream: 1 }).members).toEqual(new Set(['A', 'B']))
+    expect(computeChains(linear, ['A'], { maxDownstream: 2 }).members).toEqual(new Set(['A', 'B', 'C']))
+  })
+
+  it('limits upstream (blockers) depth from the root', () => {
+    expect(computeChains(linear, ['D'], { maxUpstream: 1 }).members).toEqual(new Set(['D', 'C']))
+    expect(computeChains(linear, ['D'], { maxUpstream: 2 }).members).toEqual(new Set(['D', 'C', 'B']))
+  })
+
+  it('depth 0 in both directions yields only the roots', () => {
+    expect(computeChains(linear, ['B'], { maxUpstream: 0, maxDownstream: 0 }).members).toEqual(
+      new Set(['B']),
+    )
+  })
+
+  it('applies upstream and downstream limits independently', () => {
+    // root C: 1 blocker up (B), 1 dependent down (D)
+    expect(computeChains(linear, ['C'], { maxUpstream: 1, maxDownstream: 1 }).members).toEqual(
+      new Set(['B', 'C', 'D']),
+    )
+  })
+
+  it('excludes sibling-via-ancestor paths once a depth limit is set', () => {
+    // A blocks B and C. Rooted at B with a finite upstream limit, A is a
+    // blocker (1 up) but C is A's *other dependent* — a mixed up-then-down
+    // path — so it stays out. Unbounded, the full component includes C.
+    const fork = [mk('A', ['B', 'C']), mk('B'), mk('C')]
+    expect(computeChains(fork, ['B']).members).toEqual(new Set(['A', 'B', 'C']))
+    expect(computeChains(fork, ['B'], { maxUpstream: 1 }).members).toEqual(new Set(['A', 'B']))
+  })
+
+  it('measures depth from the nearest root with multiple roots', () => {
+    // roots A and D on the linear chain, 1 hop each way:
+    //   A → B (down 1 from A), C → D means C is up 1 from D
+    expect(
+      computeChains(linear, ['A', 'D'], { maxUpstream: 1, maxDownstream: 1 }).members,
+    ).toEqual(new Set(['A', 'B', 'C', 'D']))
+  })
+
+  it('only records dangling refs reachable within the downstream limit', () => {
+    // A → B → GHOST. At depth 1, GHOST (B's blockee) is beyond reach.
+    const issues = [mk('A', ['B']), mk('B', ['GHOST'])]
+    const d1 = computeChains(issues, ['A'], { maxDownstream: 1 })
+    expect(d1.members).toEqual(new Set(['A', 'B']))
+    expect(d1.dangling).toEqual(new Set())
+    const d2 = computeChains(issues, ['A'], { maxDownstream: 2 })
+    expect(d2.dangling).toEqual(new Set(['GHOST']))
   })
 })

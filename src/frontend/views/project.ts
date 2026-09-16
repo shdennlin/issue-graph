@@ -2,9 +2,13 @@ import type { Edge, Node } from 'reactflow'
 import type { ViewDefinition } from './types'
 import { issueNodeHeight } from './types'
 import { applyFilters } from './filters'
-import { computeChain } from './chain'
 import { computeConnectivity } from './connectivity'
+import { computeHierarchyCounts } from './hierarchy'
 import { chooseColumnCount, packIntoColumns } from './containerLayout'
+import { projectColor } from '../lib/projectColor'
+import { buildChainLayout } from './chainLayout'
+import { fanOutCurvatures } from './edgeStyle'
+import { rollupProgress } from '../lib/issueProgress'
 
 const PADDING = 30
 const HEADER = 32
@@ -17,36 +21,42 @@ function computeContainerWidth(cols: number): number {
 }
 const MAX_ROW_WIDTH = computeContainerWidth(1) * 4 + GAP_X * 3
 
-// Neutral color for the project container header. Projects don't have
-// a label-schema color the way buckets do (the label schema is
-// label-based, not project-based), so we render them in a uniform
-// muted gray to signal "this is a structural grouping, not a category".
-const PROJECT_COLOR = 'var(--fg-muted)'
+// Falls back to muted gray when a project has no Linear color set, or for
+// the synthetic '(No project)' bucket. Real project colors come from
+// NormalizedIssue.project.color (Linear hex) and pass through as-is so the
+// tint matches the color the user sees in the Linear app.
+const FALLBACK_COLOR = 'var(--fg-muted)'
 const NO_PROJECT_KEY = '__noproject'
 
 export const projectView: ViewDefinition = {
   id: 'project',
   label: 'Project',
   description: 'Linear projects as containers + issues inside. Cross-project edges highlighted.',
-  build({ data, filters, staleDays, myUserName, focusedId, chainRootId, showRelated, density, search, measuredHeights }) {
-    const NODE_H = issueNodeHeight(density)
-    let issues
-    if (chainRootId) {
-      const { members } = computeChain(data.issues, chainRootId, {
-        includeRelatedNeighbors: showRelated,
+  build(ctx) {
+    const { data, filters, staleDays, myUserName, selection, focusedId, chainRootIds, density, maxColsPerRow, search, measuredHeights } = ctx
+    // Chain mode: dissolve project containers and switch to dagre — project
+    // membership is preserved as a 4px left stripe on each card so the user
+    // still sees which project each chain member belongs to.
+    if (chainRootIds.length > 0) {
+      return buildChainLayout(ctx, (issue) => {
+        if (!issue.project?.id) return null
+        const color = projectColor(issue.project.id, issue.project.color, FALLBACK_COLOR)
+        if (color === FALLBACK_COLOR) return null
+        return { color, label: issue.project.name }
       })
-      issues = data.issues.filter((i) => members.has(i.identifier))
-    } else {
-      issues = applyFilters(data.issues, filters, staleDays, myUserName, search)
     }
+    const NODE_H = issueNodeHeight(density)
+    const issues = applyFilters(data.issues, filters, staleDays, myUserName, search, focusedId)
     const conn = computeConnectivity(data.issues)
+    const hier = computeHierarchyCounts(data.issues)
     const heightFor = (id: string): number => measuredHeights?.get(id) ?? NODE_H
 
     const buckets = new Map<string, { name: string; color: string; issues: typeof issues }>()
     for (const i of issues) {
       const key = i.project?.id ?? NO_PROJECT_KEY
       const name = i.project?.name ?? '(No project)'
-      if (!buckets.has(key)) buckets.set(key, { name, color: PROJECT_COLOR, issues: [] })
+      const color = projectColor(i.project?.id, i.project?.color, FALLBACK_COLOR)
+      if (!buckets.has(key)) buckets.set(key, { name, color, issues: [] })
       buckets.get(key)!.issues.push(i)
     }
 
@@ -65,7 +75,7 @@ export const projectView: ViewDefinition = {
     let rowMaxH = 0
     let rowWidth = 0
     ordered.forEach(([key, b]) => {
-      const cols = chooseColumnCount(b.issues.length)
+      const cols = chooseColumnCount(b.issues.length, maxColsPerRow)
       const containerW = computeContainerWidth(cols)
       const heights = b.issues.map((iss) => ({ id: iss.identifier, h: heightFor(iss.identifier) }))
       const { placed, maxColumnHeight } = packIntoColumns(heights, cols, GAP_Y)
@@ -81,10 +91,22 @@ export const projectView: ViewDefinition = {
       rowWidth = xOffset + containerW
 
       const containerId = `project:${key}`
+      const { done, total } = rollupProgress(b.issues)
       nodes.push({
         id: containerId,
         type: 'mixedContainer',
-        data: { bucket: { id: key, name: b.name, color: b.color, count: b.issues.length } },
+        data: {
+          bucket: {
+            id: key,
+            name: b.name,
+            color: b.color,
+            count: b.issues.length,
+            progress: { done, total },
+            // null for the synthetic '(No project)' bucket — it has no real
+            // Linear project id, so leave the header non-clickable there.
+            projectId: key === NO_PROJECT_KEY ? null : key,
+          },
+        },
         position: { x: xOffset, y: rowY },
         width: containerW,
         height: containerHeight,
@@ -99,11 +121,17 @@ export const projectView: ViewDefinition = {
           data: {
             issue: iss,
             focused: focusedId === id,
-            isChainRoot: chainRootId === id,
+            selected: selection.includes(id),
+            isChainRoot: chainRootIds.includes(id),
             connectivity: conn.get(id),
+              hierarchy: hier.get(id),
           },
           parentNode: containerId,
-          extent: 'parent',
+          // Intentionally NOT setting `extent: 'parent'` — issues should be
+          // free to be dragged outside their container if the user wants to
+          // rearrange. The container still tints the area they started in,
+          // so the visual association is preserved on first paint. Drag
+          // positions are reset on re-layout (density change, view switch).
           position: {
             x: PADDING + p.col * (NODE_W + INNER_GAP_X),
             y: HEADER + PADDING / 2 + p.y,
@@ -116,14 +144,19 @@ export const projectView: ViewDefinition = {
     })
 
     const issueIds = new Set(issues.map((i) => i.identifier))
+    const curvatures = fanOutCurvatures(issues, issueIds)
     const edges: Edge[] = []
     for (const i of issues) {
       for (const r of i.relations) {
         if (r.type !== 'blocks') continue
         if (!issueIds.has(r.targetIdentifier)) continue
         const cross = issueToProject.get(i.identifier) !== issueToProject.get(r.targetIdentifier)
+        const edgeId = `${i.identifier}->${r.targetIdentifier}`
         edges.push({
-          id: `${i.identifier}->${r.targetIdentifier}`,
+          // See mix.ts / edgeStyle.ts for bezier + fan-out rationale.
+          type: 'default',
+          pathOptions: { curvature: curvatures.get(edgeId) ?? 0.4 },
+          id: edgeId,
           source: i.identifier,
           target: r.targetIdentifier,
           className: cross ? 'cross-bucket-edge' : undefined,

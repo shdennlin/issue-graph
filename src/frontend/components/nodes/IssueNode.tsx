@@ -1,5 +1,5 @@
-import { memo } from 'react'
-import { AlertTriangle, ArrowLeft, ArrowRight, MessageSquare, Minus, Star } from 'lucide-react'
+import { memo, useMemo } from 'react'
+import { AlertTriangle, ArrowLeft, ArrowRight, ListTree, MessageSquare, Minus, Star } from 'lucide-react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import type { AnnotationDTO, NormalizedIssue } from '@shared/types.js'
 import { useSchemaStore } from '../../store/schemaStore'
@@ -8,16 +8,33 @@ import { useGraphStore } from '../../store/graphStore'
 import {
   getPrimaryLabel,
   getTypeLabel,
-  getPrefixLabels,
+  groupIssueLabels,
   getDesignDocsForIssue,
   unionProgress,
   shortPrefixDisplay,
 } from '../../lib/labelSchema'
 import { priorityClass, priorityLabel, stateColorVar, stateIcon, stateLabel } from '../../lib/colors'
+import { isOverdueIssue } from '../../lib/dueDate'
+import type { HierarchyCounts } from '../../views/hierarchy'
+import { compactAge } from '../../lib/relativeTime'
+import { getLinkTouchIndex, linkOnlyTouchAt } from '../../lib/linkTouch'
+import { useT, type DictKey } from '../../i18n'
+
+function formatDueDate(iso: string): string {
+  // Render as locale-short ("MMM D") for the chip; full ISO stays on hover.
+  const d = new Date(`${iso}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
 
 interface IssueNodeData {
   issue: NormalizedIssue
   focused?: boolean
+  /** Set when this issue is part of the multi-selection (Cmd/Ctrl+click).
+   * Renders a dashed accent outline so batch operations (open all, isolate
+   * chain of selection) have visible scope. Distinct from `focused` (the
+   * single sticky cursor) and `isChainRoot` (the chain's origin). */
+  selected?: boolean
   /** Set by the dependency view when chain isolation is active and this is
    * the root the chain was rooted at. Renders a star + accent ring so the
    * user can see at a glance where the chain started from. */
@@ -31,6 +48,21 @@ interface IssueNodeData {
    * by the badge tooltip to clarify "X visible / Y total" so the user
    * understands why the badge shows 5 but only 2 edges are drawn. */
   visibleConnectivity?: { out: number; in: number; related: number }
+  /** Cache-wide sub-issue progress for the badge's "⊞ 3/7" segment. Linear
+   * models hierarchy outside `relations`, so this rides alongside
+   * `connectivity` rather than inside it. Absent when the issue has no
+   * children — the segment should not render at all. */
+  hierarchy?: HierarchyCounts
+  /** How many children are actually drawn in the current view. Same purpose
+   * as `visibleConnectivity`: chain isolation can hide most of them, and the
+   * tooltip discloses the gap. */
+  visibleChildren?: number
+  /** Container-view chain-mode stripe. When a container view (mix/project/
+   * milestone) falls through to dagre layout because chain mode is active,
+   * each card carries this color band on its left edge so the user still
+   * sees the issue's bucket/project identity without containers. Absent in
+   * the dependency view and in container views' default container mode. */
+  projectStripe?: { color: string; label?: string }
 }
 
 function truncate(s: string, n: number): string {
@@ -44,19 +76,32 @@ function truncate(s: string, n: number): string {
 // `s.graph` is non-null, but as soon as anything sets it to null (e.g. the
 // tab snapshot/restore layer), the selector spirals into "Maximum update
 // depth exceeded" because every forced re-render re-allocates the fallback.
+/** Age units, translated rather than concatenated — both existing
+ *  relative-time helpers hardcoded English, so a zh-TW session read
+ *  "updated 3d ago". */
+const AGE_UNIT_KEYS: Record<'m' | 'h' | 'd', DictKey> = {
+  m: 'issueNode.ageMinutes',
+  h: 'issueNode.ageHours',
+  d: 'issueNode.ageDays',
+}
+
 const EMPTY_ANNOTATIONS: AnnotationDTO[] = []
 
 function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
-  const { issue, focused, isChainRoot, connectivity, visibleConnectivity } = data
+  const { issue, focused, selected, isChainRoot, connectivity, visibleConnectivity, hierarchy, visibleChildren, projectStripe } = data
   const { schema, typeIcons } = useSchemaStore()
   const density = useViewStore((s) => s.density)
   const annotations = useGraphStore((s) => s.graph?.data.annotations ?? EMPTY_ANNOTATIONS)
   const designdocs = useGraphStore((s) => s.graph?.data.designdocs)
+  const t = useT()
 
   const primary = getPrimaryLabel(issue, schema)
   const type = getTypeLabel(issue, schema)
   const typeIcon = type ? typeIcons[type.name] ?? type.name.charAt(0).toUpperCase() : null
-  const prefixes = getPrefixLabels(issue, schema)
+  // Prefix + group + orphan sections; primary/type are rendered separately.
+  const chipSections = groupIssueLabels(issue, schema).filter(
+    (sec) => sec.kind === 'prefix' || sec.kind === 'group' || sec.kind === 'orphan',
+  )
   const docs = getDesignDocsForIssue(issue, designdocs)
   const progress = unionProgress(docs)
   const annCount = annotations.filter((a) => a.targetType === 'issue' && a.targetId === issue.identifier).length
@@ -64,9 +109,57 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
   const isCompact = density === 'compact'
   const isVerbose = density === 'verbose'
 
+  const recencyWindow = useViewStore((s) => s.filters.recencyWindow)
+  const recencyMode = useViewStore((s) => s.filters.recencyMode)
+  // Verbose density has always shown an updated-at line; it now goes through
+  // the same translatable formatter instead of a local English-only helper.
+  const verboseAge = useMemo(() => {
+    const { value, unit } = compactAge(new Date(issue.updatedAt).getTime())
+    return t(AGE_UNIT_KEYS[unit], { count: value })
+  }, [issue.updatedAt, t])
+
+  // Only read while a window is active, which is also the only time the age
+  // badge renders — see the `age` memo's own early return.
+  const allIssues = useGraphStore((s) => s.graph?.data.issues)
+
+  const age = useMemo(() => {
+    if (recencyWindow === 'any') return null
+    const iso = recencyMode === 'created' ? issue.createdAt : issue.updatedAt
+    const ts = new Date(iso).getTime()
+    if (!Number.isFinite(ts)) return null
+    // A bump that was only somebody pointing a link at this issue says
+    // nothing about the issue itself. The badge names it for what it is
+    // rather than calling it an update — otherwise a card sitting in a
+    // "last 24h" view looks like work happened on it when none did.
+    const linkOnly =
+      recencyMode === 'updated' && allIssues
+        ? linkOnlyTouchAt({ identifier: issue.identifier, updatedAt: issue.updatedAt }, getLinkTouchIndex(allIssues))
+        : null
+    const { value, unit } = compactAge(ts)
+    return {
+      text: t(AGE_UNIT_KEYS[unit], { count: value }),
+      mode: t(
+        linkOnly
+          ? 'filterPanel.recencyModeLinked'
+          : recencyMode === 'created'
+            ? 'filterPanel.recencyModeCreated'
+            : 'filterPanel.recencyModeUpdated',
+      ),
+      title: iso,
+    }
+  }, [recencyWindow, recencyMode, issue.identifier, issue.createdAt, issue.updatedAt, allIssues, t])
+
+  // The badge renders when there is anything at all to report — edge counts
+  // OR sub-issues. An issue can have children without touching a single
+  // blocks/related edge, and that card still deserves the "⊞ 3/7" summary.
+  const hasEdgeCounts =
+    !!connectivity && (connectivity.out > 0 || connectivity.in > 0 || connectivity.related > 0)
+  const hasSubIssues = !!hierarchy && hierarchy.total > 0
+  const subIssueTotal = hierarchy?.truncated ? `${hierarchy.total}+` : hierarchy?.total ?? 0
+
   return (
     <div
-      className={`issue-node${focused ? ' focused' : ''}${isChainRoot ? ' chain-root' : ''}`}
+      className={`issue-node${focused ? ' focused' : ''}${selected ? ' selected' : ''}${isChainRoot ? ' chain-root' : ''}`}
       style={{
         // position: relative so absolutely-positioned children (chain-root
         // star, connectivity badge) anchor to this card.
@@ -80,6 +173,14 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
         }),
       }}
     >
+      {projectStripe && (
+        <span
+          className="project-stripe"
+          style={{ background: projectStripe.color }}
+          title={projectStripe.label}
+          aria-label={projectStripe.label}
+        />
+      )}
       {isChainRoot && (
         <span
           title="Chain root — this is the issue you isolated the chain from"
@@ -102,28 +203,69 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
           <Star size={11} fill="currentColor" />
         </span>
       )}
-      {connectivity && !isCompact && (connectivity.out > 0 || connectivity.in > 0 || connectivity.related > 0) && (
-        // Connectivity badge — global blocks/blocked-by/related counts so the
-        // user can spot hubs without tracing edges. Hidden in compact density
-        // (cards are too short) and when all counts are zero. Position is
-        // anchored relative to the card so it survives node drag/zoom.
+      {age && (
+        // Outside the card, like the chain-root star above. Absolutely
+        // positioned children do not count toward offsetHeight, which is what
+        // GraphCanvas measures and feeds back to dagre — so this cannot make
+        // the graph re-lay-out when the filter is switched on.
+        //
+        // Only rendered while a recency filter is active. The timestamp is
+        // worth the space precisely when you are asking a time question, and
+        // is noise on forty cards when you are not. It also reports the
+        // timestamp the filter is using, so it can never be ambiguous about
+        // whether it means created or updated.
+        <span className="issue-age" title={age.title}>
+          <span className="issue-age-mode">{age.mode}</span>
+          {age.text}
+        </span>
+      )}
+      {!isCompact && (hasEdgeCounts || hasSubIssues) && (
+        // Relationship badge — global blocks/blocked-by/related counts plus
+        // sub-issue progress, so the user can spot hubs and unfinished
+        // breakdowns without tracing edges or opening the panel. Hidden in
+        // compact density (cards are too short) and when there is nothing to
+        // report. Position is anchored relative to the card so it survives
+        // node drag/zoom.
         <span
           title={(() => {
+            const parts: string[] = []
+            if (hasEdgeCounts && connectivity) {
+              parts.push(t('issueNode.badgeBlocks', { count: connectivity.out }))
+              parts.push(t('issueNode.badgeBlockedBy', { count: connectivity.in }))
+              if (connectivity.related > 0) {
+                parts.push(t('issueNode.badgeRelated', { count: connectivity.related }))
+              }
+            }
+            if (hasSubIssues && hierarchy) {
+              parts.push(
+                t('issueNode.badgeSubIssues', { done: hierarchy.done, total: subIssueTotal }),
+              )
+            }
+            const base = parts.join(' • ')
+
+            // Disclose the cache-wide vs. view-bound gap. Chain isolation and
+            // filters can hide most connections/children, and without this the
+            // badge reads as a lie ("says 5, I count 2 lines").
             const v = visibleConnectivity
-            const c = connectivity
-            const hidden =
-              v &&
-              (v.out !== c.out || v.in !== c.in || v.related !== c.related)
-            const base =
-              `Blocks ${c.out} • Blocked by ${c.in}` +
-              (c.related > 0 ? ` • Related ${c.related}` : '')
-            if (!hidden) return base
+            const connHidden =
+              !!v &&
+              !!connectivity &&
+              (v.out !== connectivity.out ||
+                v.in !== connectivity.in ||
+                v.related !== connectivity.related)
+            const childrenHidden =
+              hasSubIssues && visibleChildren !== undefined && visibleChildren !== hierarchy!.total
+            if (!connHidden && !childrenHidden) return base
+
+            const visible: string[] = []
+            if (connHidden) {
+              visible.push(`→ ${v!.out}`, `← ${v!.in}`)
+              if (v!.related > 0 || connectivity!.related > 0) visible.push(`↔ ${v!.related}`)
+            }
+            if (childrenHidden) visible.push(`⊞ ${visibleChildren}`)
             return (
-              base +
-              `\n\nVisible in current view: → ${v!.out} • ← ${v!.in}` +
-              (v!.related > 0 || c.related > 0 ? ` • ↔ ${v!.related}` : '') +
-              `\n(Counts above are cache-wide; some connections are hidden ` +
-              `by chain isolation or filters.)`
+              `${base}\n\n${t('issueNode.badgeVisible')} ${visible.join(' • ')}` +
+              `\n${t('issueNode.badgeCacheWideNote')}`
             )
           })()}
           style={{
@@ -151,22 +293,31 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
               dashed-bar that some platforms rendered as just a dash).
               Minus stays as the "non-directional connection" cue,
               echoing the dashed related-edge style on the canvas. */}
-          {connectivity.out > 0 && (
+          {connectivity && connectivity.out > 0 && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
               <ArrowRight size={13} strokeWidth={2.5} aria-hidden />
               {connectivity.out}
             </span>
           )}
-          {connectivity.in > 0 && (
+          {connectivity && connectivity.in > 0 && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
               <ArrowLeft size={13} strokeWidth={2.5} aria-hidden />
               {connectivity.in}
             </span>
           )}
-          {connectivity.related > 0 && (
+          {connectivity && connectivity.related > 0 && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
               <Minus size={13} strokeWidth={3} aria-hidden />
               {connectivity.related}
+            </span>
+          )}
+          {hasSubIssues && hierarchy && (
+            // ListTree reads as "structure", deliberately unlike the arrows
+            // (which mean dependency direction) and the Minus (non-directional
+            // link) — hierarchy is neither.
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+              <ListTree size={13} strokeWidth={2.5} aria-hidden />
+              {hierarchy.done}/{subIssueTotal}
             </span>
           )}
         </span>
@@ -190,6 +341,20 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
             <span className="meta" style={{ fontSize: 11 }}>{priorityLabel(issue.priority)}</span>
           )}
         </span>
+        {issue.team?.color && (
+          <span
+            aria-hidden
+            title={issue.team.name}
+            style={{
+              display: 'inline-block',
+              width: 7,
+              height: 7,
+              borderRadius: 999,
+              background: issue.team.color,
+              flexShrink: 0,
+            }}
+          />
+        )}
         <span className="pid">{issue.identifier}</span>
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
           <span
@@ -212,6 +377,31 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
       {!isCompact && (
         <div className="meta">
           <span>{issue.assignee?.displayName ?? 'unassigned'}</span>
+          {typeof issue.estimate === 'number' && (
+            <span className="chip" title={`${t('detailPanel.estimate')}: ${issue.estimate}`}>
+              {t('detailPanel.estimatePointsShort', { value: issue.estimate })}
+            </span>
+          )}
+          {issue.dueDate && (
+            <span
+              className="chip"
+              title={`${t('detailPanel.dueDate')}: ${issue.dueDate}${isOverdueIssue(issue) ? ` (${t('detailPanel.overdue')})` : ''}`}
+              style={
+                isOverdueIssue(issue)
+                  ? {
+                      // Inline override to surface overdue without theming a new
+                      // chip variant. Mirrors the multi-spec warn color so the
+                      // "needs attention" semantics are consistent.
+                      background: 'var(--danger-bg, rgba(239, 68, 68, 0.15))',
+                      color: 'var(--danger, #ef4444)',
+                      fontWeight: 600,
+                    }
+                  : undefined
+              }
+            >
+              {formatDueDate(issue.dueDate)}
+            </span>
+          )}
           {primary && (
             <span
               className="chip"
@@ -259,39 +449,39 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
           </div>
         </>
       )}
-      {!isCompact && prefixes.length > 0 && (
+      {/* Chips for every label the header doesn't already show. Primary and
+          type render above (as the accent chip and the type glyph), so this
+          row covers prefix, other groups, and unclassified labels — the card
+          used to drop the last two entirely. Driven by the same helper as the
+          detail panel so a label reads the same in both places. */}
+      {!isCompact && chipSections.length > 0 && (
         <div className="chips">
-          {prefixes.flatMap(({ token, labels }) =>
-            labels.map((l) => (
+          {chipSections.flatMap((sec) =>
+            sec.labels.map((l) => (
               <span
                 key={l.id}
                 className="chip"
                 style={l.color ? ({ ['--chip-tint' as string]: l.color } as React.CSSProperties) : undefined}
-                title={l.name}
+                title={sec.kind === 'orphan' ? l.name : `${sec.key}: ${l.name}`}
               >
-                {token}: {shortPrefixDisplay(l.name, token)}
+                {sec.kind === 'prefix' ? `${sec.key}: ${shortPrefixDisplay(l.name, sec.key)}` : l.name}
               </span>
             )),
           )}
         </div>
       )}
-      {isVerbose && (
+      {isVerbose && !age && (
+        // Verbose already carried an updated-at line. It is redundant while the
+        // badge is up, which is why it steps aside rather than duplicating it.
         <div className="meta" style={{ marginTop: 6 }}>
-          <span title={issue.updatedAt}>updated {timeAgo(issue.updatedAt)}</span>
+          <span title={issue.updatedAt}>
+            {t('filterPanel.recencyModeUpdated')} {verboseAge}
+          </span>
         </div>
       )}
       <Handle type="source" position={Position.Right} />
     </div>
   )
-}
-
-function timeAgo(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime()
-  const m = Math.floor(ms / 60000)
-  if (m < 60) return `${m}m ago`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h ago`
-  return `${Math.floor(h / 24)}d ago`
 }
 
 export const IssueNode = memo(IssueNodeImpl)

@@ -11,10 +11,24 @@ export interface ViewContext {
   myUserName: string | null
   selection: string[]
   focusedId: string | null
-  chainRootId: string | null
+  /** Chain-isolation roots — empty means chain mode is off. The view shows the
+   *  union of each root's transitive `blocks` component. */
+  chainRootIds: string[]
+  /** Chain depth caps (hops from nearest root); `null` = unbounded. Upstream
+   *  limits blockers, downstream limits dependents. */
+  chainDepthUp: number | null
+  chainDepthDown: number | null
   showRelated: boolean
+  /** When true, draw parent/child links and expand chains by 1-hop hierarchy. */
+  showHierarchy: boolean
   density: Density
+  /** Max issues per row inside a container. Pulled from viewStore; views
+   *  pass this to chooseColumnCount so it stays user-tunable. */
+  maxColsPerRow: number
   search: string
+  /** Mix view's bucketing dimension; null = auto (detected primary group).
+   *  See lib/mixGrouping.ts for the key format. */
+  mixGroupBy: string | null
   // Measured heights from React Flow after first paint, keyed by node id.
   // When present, views should prefer these over their density-based estimate
   // so dagre lays out around the *real* card height (no overlap from long

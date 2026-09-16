@@ -6,6 +6,110 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [v1.5.0] - 2026-09-16
+
+### What's New
+
+**Write-back — change issues from inside the app, as yourself**
+You can now edit an issue's status, assignee, priority and labels, and post comments, directly from the detail panel instead of switching to Linear. Each person signs in with their own Linear account, so a change you make is attributed to you in Linear rather than to a shared workspace key — and no one's token is ever stored on the server. This is **off by default**: it turns on only once an administrator registers a Linear OAuth application and sets `LINEAR_OAUTH_CLIENT_ID`, so upgrading does not open a write surface on an existing install. See the write-back section in `README.md` for the setup, including the redirect-URI rule that is the most likely first-run failure.
+
+**Workspaces are added and managed in the app, not in `.env`**
+A first start with no workspaces now shows a setup form instead of instructions to go and edit a file, and the whole roster — names, API keys, webhook secrets — is managed from Settings afterwards. A remote deployment no longer needs shell access to add a Linear workspace. The form checks the API key against Linear when you submit it and tells you what it is doing, so a wrong key fails at the point you can fix it rather than as an empty graph later.
+
+**Linear push updates — edits land without waiting for the poll**
+`POST /api/webhooks/linear` accepts Linear's HMAC-signed deliveries, collapses a burst of them into a single sync, and announces the change over the existing live-update channel, so an edit in Linear reaches the graph without waiting out the cache timer. It is optional, and it is the one route designed to be reachable from outside — publish that path alone (a path-scoped Tailscale funnel, for example), never the whole port.
+
+**The filter panel can hide itself out of the way**
+The panel can collapse to a small handle in the corner of the canvas and expand again on hover, giving the graph its space back. Click the pin to keep it open instead — that is still the default, so nothing changes unless you turn it off. Even collapsed, the handle keeps showing how many filters are active, so it is never a mystery why some issues are missing.
+
+**See how old an issue is, and catch more of what actually changed**
+When a recency filter is on, every card shows how long ago it crossed that mark. The filter itself takes any span you type — `6h`, `1.5d` — instead of a fixed any/today/7d/30d list. It is also smarter about what counts as activity: someone pointing a relation at an issue no longer registers as something happening *to* it, which had been drowning out genuinely new and updated issues in every window.
+
+**Filters moved out of the sidebar into a panel that floats over the graph**
+The filter sidebar is gone. In its place is a compact panel in the top-left corner of the canvas, listing one row per filter you actually have applied — a dimension that is not in use takes no space at all. Click `+ Filter` to open a cascading menu: pick a dimension on the left, its values fly out beside it with checkboxes and live counts. Typing in the menu's search box looks through the *values* of every dimension at once, so searching `bug` finds `Type › Bug` without you needing to remember which dimension it lives under.
+
+**Saved views**
+Save the current view and filter combination under a name, and get back to it in one click. Views are stored on the server, so everyone reaching the same instance sees the same list — this is how you hand someone "the board I look at every morning". The panel names the view you are currently on, marks it with `*` once you edit away from it, and offers both Save changes and Discard changes at that point. The window title and the tab label carry the view name too, which matters when you keep several windows open.
+
+**Recent activity filter**
+Filter by what changed rather than by what something is: any time / today / last 7 days / last 30 days, measured against either the created or the updated timestamp. "What moved this week, and what is downstream of it" is a question the graph could not previously answer — the only time dimension was its opposite, "not touched in N days".
+
+**Negatable conditions**
+Any multi-select filter can be inverted. Click the `is` in a filter row to turn it into `is not`, and the row inverts — everything except the priorities you picked, everyone except the assignees you named. Value counts are hidden while a filter is inverted: they answer "pick this and N remain", which is the wrong question once picking a value excludes it.
+
+**Pinned filter values**
+Pin the values you reach for constantly and they sort to the top of their dimension's list. Pins are per browser and per workspace, since they describe your habits rather than the workspace's data.
+
+### Improved
+
+**The filter picker is organised into sections**
+Filter dimensions are grouped under Quick, Attributes, Labels and Time instead of one flat list in implementation order. The rows are larger, and each one reads like `42/231`, so you can tell at a glance whether a filter is narrowing things a little or a lot.
+
+**Saved views reorder, and always show their name**
+Drag a saved view up or down to reorder the list. The name of the view you are on now reaches the filter handle, the tab strip and the window title as soon as a tab loads, instead of staying blank until you happened to open the panel.
+
+**The detail panel's editable fields behave like the controls they are**
+The state, priority and assignee rows each printed their value twice — once as a chip that filtered the graph, once inside the control that actually changed it — and the two came in the wrong order, so the row labelled "State" opened with something that was not the state but an action spelled the same way. The chip was also quietly wrong: it showed your team's workflow label but filtered by the broad state *type*, so clicking "In Progress" filtered to every started issue. The editable control now leads the row and filtering follows as a clearly separate action.
+
+**State filters no longer behave as though they were mutually exclusive**
+Picking a specific Linear state used to override every canonical state type at once, blanking the other checkboxes. Specific states now refine within their own type: choosing `Todo` narrows Unstarted to Todo and leaves Started and Backlog untouched, which is what a checkbox tree means everywhere else.
+
+**The panel shows the filters that are on by default**
+Two defaults are not neutral — completed and cancelled issues are hidden, and four of the six state types are shown. The panel previously displayed nothing at all in that state, implying no filters were applied. Those constraints now appear as rows you can see and clear like any other.
+
+### Changed
+
+**Upgrading from 1.4: your workspaces need to be entered once**
+The workspace roster moved out of environment variables and into a `data/workspaces.db` file the app owns, so the first launch after upgrading starts with an empty roster and shows the setup form. Re-entering a workspace under **the same id it had before** reconnects its existing cached graph, so this costs you the form and not a re-sync. The old `WORKSPACE_<ID>_*` variables and the single-key legacy mode are no longer read.
+
+**Breaking: `REPO_PATH` is one server-wide setting**
+A per-workspace `REPO_PATH` is gone; design-doc scanning now resolves one `REPO_PATH` for the whole server.
+
+### Fixed
+
+**Recent activity no longer hides issues that genuinely changed**
+Teaching the recency filter that an incoming link is not activity was right, but the conclusion drawn from it was too strong: an issue whose `updatedAt` had been overwritten by a link was treated as though nothing had happened to it at all. Measured on a live workspace, that hid 8 of the 17 issues created in the last 7 days, including cards with comments posted seconds before the link landed. A link-only bump now falls back to the other evidence an issue can offer — when it was created, and when it was last commented on — instead of ending the question.
+
+**A Raycast deep link no longer wipes the filters already on screen**
+Opening an issue from the Raycast integration replaced whatever you had filtered down to. The link's parameters now merge with the current state instead of replacing it.
+
+**Tabs come back where you left off after quitting the app**
+Closing and reopening the app dropped each tab's position. Tab state now survives a restart.
+
+**The quick switcher lists one row per issue, and a number finds its issue**
+Results were grouped so that one issue could occupy several rows, and typing an issue's number found nothing. Both are fixed, and searching no longer hands back results belonging to a different tab.
+
+**A saved view can say "no state filter" and mean it**
+Saving a view with the state filter cleared did not survive the round trip — reloading it reinstated the default state types.
+
+**Settings sections stay inside the page they belong to**
+The Write Access and Linear Webhook sections had been pushed outside the page's normal layout by a stray formatting bug.
+
+**Detail panel pills grow with the panel's text size**
+The metadata pills kept a fixed size while the surrounding text scaled.
+
+**The setup screen is reachable in Chinese**
+The first-run setup screen could not be completed with the interface language set to Traditional Chinese.
+
+**Docker and first-install fixes**
+`docker compose` now starts without a `.env` file present, the backup path the documentation tells you to use actually exists inside the image, and a fresh install no longer leaves behind a stray empty `graph.db`.
+
+**Dropdowns close when you click the graph**
+Clicking the canvas to dismiss an open menu did nothing. This affected every menu in the app — the toolbar overflow menu, the tab menu, and the note copy menu — not only the new filter panel.
+
+**Shared links keep project, milestone, state-name and search filters**
+Four filter dimensions were never written to the URL, so a link you copied silently dropped them and `Cmd+[` cleared them without warning. All four now round-trip, and a test pins every dimension so the class of bug cannot come back.
+
+### Removed
+
+**The "Active only" filter, which duplicated the State filter**
+It hid completed and cancelled issues — exactly what the State filter already does at its default — so at the default it did nothing, and the only way to make it act was to put it at odds with the State panel. Then it won: tick Completed, click "Active only", and the graph came back empty while the panel showed Completed ticked. Views saved before this change keep matching as they did.
+
+**The `tag` filter, which never filtered anything**
+`?tag=` was accepted, stored and carried through history, but no code ever applied it. The dimension it was meant to be shipped long ago as the "other labels" filter under `?label=`.
+
+---
+
 ## [v1.4.0] - 2026-05-14
 
 ### What's New

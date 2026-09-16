@@ -18,9 +18,16 @@ import { useEffect, useSyncExternalStore } from 'react'
 import type { Viewport } from 'reactflow'
 import { useViewStore, type ViewId, type ThemeMode, type Density } from './viewStore'
 import { useWorkspaceStore } from './workspaceStore'
-import type { IssueStateType } from '@shared/types.js'
-
-const STATE_TYPES: IssueStateType[] = ['backlog', 'unstarted', 'started', 'completed', 'canceled', 'triage']
+import { DEFAULT_VIEW, readDefaultView } from '../lib/preferences'
+import {
+  fillLegacyState,
+  filterSignatureParts,
+  hasFilterParams,
+  parseFilters,
+  serializeFilters,
+} from './filterCodec'
+import { consumeCallback } from '../lib/linearAuth'
+import { useCapabilityStore } from './capabilityStore'
 
 interface HistoryEntryState {
   seq: number
@@ -74,11 +81,6 @@ export function storeViewportInHistory(vp: Viewport): void {
   window.history.replaceState(next, '', window.location.href)
 }
 
-function csv(arr: string[] | number[]): string | null {
-  if (!arr || arr.length === 0) return null
-  return arr.join(',')
-}
-
 function buildUrl(): string {
   const s = useViewStore.getState()
   const ws = useWorkspaceStore.getState()
@@ -86,31 +88,27 @@ function buildUrl(): string {
   // `?w=<id>` is *first* so the most operationally-relevant context (which
   // workspace this tab is viewing) is visible at the front of the URL bar.
   if (ws.currentWorkspaceId) params.set('w', ws.currentWorkspaceId)
-  if (s.activeView !== 'dependency') params.set('view', s.activeView)
+  // Omitted only for the user's default view — see resolveActiveView.
+  if (s.activeView !== readDefaultView()) params.set('view', s.activeView)
   if (s.focusedId) params.set('focus', s.focusedId)
-  if (s.chainRootId) params.set('chain', s.chainRootId)
+  // `detail=1` reflects (and, when arriving via a deep link, drives) the
+  // open detail panel. Only meaningful alongside a focused issue.
+  if (s.focusedId && s.detailPanelOpen) params.set('detail', '1')
+  if (s.chainRootIds.length) params.set('chain', s.chainRootIds.join(','))
+  if (s.chainDepthUp !== null) params.set('cdu', String(s.chainDepthUp))
+  if (s.chainDepthDown !== null) params.set('cdd', String(s.chainDepthDown))
   if (s.showRelated) params.set('related', '1')
+  if (s.showHierarchy) params.set('hier', '1')
   if (s.theme !== 'auto') params.set('theme', s.theme)
   if (s.density !== 'default') params.set('density', s.density)
+  if (s.mixGroupBy) params.set('mixby', s.mixGroupBy)
 
-  if (!s.filters.activeOnly) params.set('active', '0')
-  if (s.filters.myIssuesOnly) params.set('mine', '1')
-  if (s.filters.staleOnly) params.set('stale', '1')
-  const states = csv(s.filters.stateTypes)
-  if (states) params.set('state', states)
-  const primaries = csv(s.filters.primaryValues)
-  if (primaries) params.set('bucket', primaries)
-  const types = csv(s.filters.typeValues)
-  if (types) params.set('type', types)
-  const prios = csv(s.filters.priorities)
-  if (prios) params.set('priority', prios)
-  const asg = csv(s.filters.assignees)
-  if (asg) params.set('assignee', asg)
-  for (const [token, ids] of Object.entries(s.filters.prefixSelections)) {
-    if (ids.length) params.set(`pfx_${token}`, ids.join(','))
+  // Filters + search are owned by filterCodec so that all three registration
+  // points (write / read / signature) live in one testable module.
+  for (const [k, v] of serializeFilters({ filters: s.filters, search: s.search })) {
+    params.set(k, v)
   }
-  if (s.filters.tagIds.length) params.set('tag', s.filters.tagIds.join(','))
-  if (s.filters.designdocFilter !== 'all') params.set('designdoc', s.filters.designdocFilter)
+
   if (s.expandedBuckets.length) params.set('expand', s.expandedBuckets.join(','))
   if (s.notesOpen) params.set('notes', '1')
   if (s.focusedNoteId !== null) params.set('note', String(s.focusedNoteId))
@@ -122,6 +120,11 @@ function buildUrl(): string {
 let pending: number | undefined
 let lastPushedUrl: string | null = null
 let lastSnapshot: { url: string; signature: string } | null = null
+// The `location.search` last applied to the stores — by parseUrl (inbound) or
+// schedulePush (our own writes). Used to detect an external navigation that
+// changed the URL without firing popstate (e.g. a PWA `navigate-existing`
+// launch from the Raycast extension), so we can re-apply it on window focus.
+let lastAppliedSearch = ''
 
 // "Significant" parts of the URL — when these change, push a new history
 // entry so Cmd+[ navigates back to the prior step. Preferences (theme,
@@ -130,58 +133,287 @@ let lastSnapshot: { url: string; signature: string } | null = null
 function significantSignature(): string {
   const s = useViewStore.getState()
   const ws = useWorkspaceStore.getState()
-  const f = s.filters
   return [
     ws.currentWorkspaceId ?? '',
     s.activeView,
     s.focusedId ?? '',
-    s.chainRootId ?? '',
+    s.chainRootIds.join(','),
+    s.chainDepthUp === null ? '' : String(s.chainDepthUp),
+    s.chainDepthDown === null ? '' : String(s.chainDepthDown),
     s.showRelated ? '1' : '0',
-    s.search,
-    f.activeOnly ? '1' : '0',
-    f.myIssuesOnly ? '1' : '0',
-    f.staleOnly ? '1' : '0',
-    f.stateTypes.slice().sort().join(','),
-    f.stateNames.slice().sort().join(','),
-    f.primaryValues.slice().sort().join(','),
-    f.typeValues.slice().sort().join(','),
-    f.priorities.slice().sort().join(','),
-    f.assignees.slice().sort().join(','),
-    f.projectIds.slice().sort().join(','),
-    f.designdocFilter,
-    Object.entries(f.prefixSelections).map(([k, v]) => `${k}:${v.slice().sort().join(',')}`).sort().join('|'),
+    s.showHierarchy ? '1' : '0',
+    s.mixGroupBy ?? '',
+    // search + every filter dimension — see filterCodec.filterSignatureParts.
+    ...filterSignatureParts({ filters: s.filters, search: s.search }),
     s.notesOpen ? '1' : '0',
     s.focusedNoteId === null ? '' : String(s.focusedNoteId),
   ].join('|')
 }
 
+// The body of a scheduled push.
+function pushNow(): void {
+  const url = buildUrl()
+  if (url === lastPushedUrl) return
+  const sig = significantSignature()
+  const significantChanged = lastSnapshot?.signature !== sig
+  lastPushedUrl = url
+  if (significantChanged) {
+    // New "step" — push a fresh entry. Wipes any forward stack.
+    nextSeq++
+    currentSeq = nextSeq
+    maxSeq = nextSeq
+    window.history.pushState({ seq: nextSeq }, '', url)
+    lastSnapshot = { url, signature: sig }
+    lastAppliedSearch = window.location.search
+    notifyListeners()
+  } else {
+    // Same step, preferences-only change — patch the URL in place.
+    const prev = (window.history.state as HistoryEntryState | null) ?? { seq: currentSeq }
+    window.history.replaceState({ ...prev, seq: prev.seq }, '', url)
+    lastSnapshot = { url, signature: sig }
+    lastAppliedSearch = window.location.search
+  }
+}
+
 function schedulePush(): void {
   if (pending) window.clearTimeout(pending)
   pending = window.setTimeout(() => {
-    const url = buildUrl()
-    if (url === lastPushedUrl) return
-    const sig = significantSignature()
-    const significantChanged = lastSnapshot?.signature !== sig
-    lastPushedUrl = url
-    if (significantChanged) {
-      // New "step" — push a fresh entry. Wipes any forward stack.
-      nextSeq++
-      currentSeq = nextSeq
-      maxSeq = nextSeq
-      window.history.pushState({ seq: nextSeq }, '', url)
-      lastSnapshot = { url, signature: sig }
-      notifyListeners()
-    } else {
-      // Same step, preferences-only change — patch the URL in place.
-      const prev = (window.history.state as HistoryEntryState | null) ?? { seq: currentSeq }
-      window.history.replaceState({ ...prev, seq: prev.seq }, '', url)
-      lastSnapshot = { url, signature: sig }
-    }
+    pending = undefined
+    pushNow()
   }, 200)
 }
 
-function parseUrl(): void {
-  const params = new URLSearchParams(window.location.search)
+/**
+ * The query string the current store state serializes to, computed rather than
+ * read back from `window.location`.
+ *
+ * Reading location.search for this is wrong twice over: schedulePush debounces
+ * the write by 200ms, so it lags the store by up to one change, and a
+ * pushState does not re-render React, so nothing recomputes once it catches
+ * up. Anything comparing "where am I" against a stored query — naming the
+ * active saved view, deciding whether it has been edited — was therefore
+ * describing a different state from the one the panel was showing beside it.
+ *
+ * buildUrl is the canonical serializer, so this is exact by construction.
+ */
+export function currentQuery(): string {
+  const url = buildUrl()
+  return url.startsWith('?') ? url.slice(1) : ''
+}
+
+/**
+ * Apply a saved view's query string: push one history entry and replay it into
+ * the stores.
+ *
+ * The current workspace is re-applied here rather than read from the query —
+ * saved views are stored per workspace with `w` stripped, so the view carries
+ * no opinion about which workspace it belongs to.
+ *
+ * The bookkeeping at the end is not optional. parseUrl mutates the stores,
+ * whose subscribers call schedulePush; without marking this URL as already
+ * pushed, that fires a second, spurious history entry and Back stops working
+ * in one step. Same reason onPopState does it.
+ */
+export function applySavedQuery(query: string): void {
+  const params = new URLSearchParams(query)
+  // A view saved before `state=any` existed and holding no state constraint
+  // stored no `state` param at all — and parseUrl reads an absent one as the
+  // default four types, so applying such a view quietly installed a filter it
+  // never had. The inference is safe: any NON-empty list serialized to a param,
+  // so an omitted `state` in a stored query can only mean the list was empty.
+  //
+  // Only ever fires for legacy views; everything saved from now on writes the
+  // param explicitly.
+  fillLegacyState(params)
+  const wid = useWorkspaceStore.getState().currentWorkspaceId
+  if (wid) params.set('w', wid)
+  const qs = params.toString()
+  const url = qs ? `?${qs}` : window.location.pathname
+
+  nextSeq++
+  currentSeq = nextSeq
+  maxSeq = nextSeq
+  window.history.pushState({ seq: nextSeq }, '', url)
+
+  parseUrl()
+
+  lastPushedUrl = buildUrl()
+  lastSnapshot = { url: lastPushedUrl, signature: significantSignature() }
+  lastAppliedSearch = window.location.search
+  notifyListeners()
+}
+
+// Translate a `web+issuegraph://<workspace>/<identifier>[?mode=chain]`
+// protocol-handler payload into the equivalent query params. Returns null when
+// the payload isn't a recognizable protocol URL. `mode=chain` opens the issue's
+// dependency chain; otherwise it focuses the issue + opens its detail panel.
+// Carries no filter params, mirroring focusUrl — see preserveFiltersOnFocus
+// below and applyFilters' `alwaysInclude` for how the target stays reachable
+// without touching the user's filters.
+export function translateProtocol(raw: string): URLSearchParams | null {
+  const m = raw.match(/^web\+issuegraph:(?:\/\/)?(.*)$/i)
+  if (!m) return null
+  let body = m[1] ?? ''
+  let query = ''
+  const qi = body.indexOf('?')
+  if (qi >= 0) {
+    query = body.slice(qi + 1)
+    body = body.slice(0, qi)
+  }
+  const segs = body
+    .split('/')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const identifier = segs[segs.length - 1]
+  if (!identifier) return null
+  const workspace = segs.length > 1 ? segs[segs.length - 2] : null
+  const mode = new URLSearchParams(query).get('mode')
+
+  const p = new URLSearchParams()
+  if (workspace) p.set('w', workspace.toLowerCase())
+  if (mode === 'chain') {
+    p.set('chain', identifier)
+  } else {
+    p.set('focus', identifier)
+    p.set('detail', '1')
+  }
+  return p
+}
+
+/**
+ * Decide the active view from the URL. An explicit `?view=` always wins. When
+ * it's absent we normally fall back to dependency — EXCEPT for a focus deep
+ * link (Raycast / direct URL) arriving outside of Back/Forward: there we keep
+ * the user's current view so opening an issue doesn't yank them out of, say,
+ * the milestone view they were in. popstate passes preserveOnFocus=false so
+ * Cmd+[ / Cmd+] still reset view-when-absent (the history model depends on it).
+ */
+export function resolveActiveView(
+  viewParam: string | null,
+  hasFocus: boolean,
+  currentView: ViewId,
+  preserveOnFocus: boolean,
+  defaultView: ViewId = DEFAULT_VIEW,
+): ViewId {
+  if (viewParam) return viewParam as ViewId
+  if (preserveOnFocus && hasFocus) return currentView
+  // Must be the same value buildUrl omits `?view=` for. If the two disagree, a
+  // bare URL means one view to the writer and another to the reader, and
+  // Back/Forward flips the view under the user.
+  return defaultView
+}
+
+// Whether the URL parsed most recently was a *bare* deep link — it pinned an
+// issue (`focus`/`chain`) and said nothing about filters. parseUrl acts on this
+// itself when told to preserve; App.tsx reads it on first mount, where the store
+// is cold and the filters have to come from the tab snapshot instead. Recorded
+// on every parse so it can never describe a stale navigation.
+let bareDeepLinkArrival = false
+export function arrivedViaBareDeepLink(): boolean {
+  return bareDeepLinkArrival
+}
+
+/**
+ * Whether a query names nothing this app would have to honour.
+ *
+ * `w` does not count: it picks which workspace the tab is on, which is a fact
+ * about the tab, not a claim about how to look at it — and the snapshot being
+ * restored belongs to that same tab.
+ *
+ * Deliberately a whole-query check rather than a list of known params. A list
+ * would have to be maintained alongside every future param, and the failure of
+ * forgetting one is silent and bad: a URL that *did* say something would be
+ * treated as silent and overwritten by the snapshot.
+ */
+export function urlCarriesNoAppState(params: URLSearchParams): boolean {
+  for (const key of params.keys()) {
+    if (key !== 'w') return false
+  }
+  return true
+}
+
+/**
+ * Whether the URL that was parsed most recently said nothing at all.
+ *
+ * The PWA's manifest sets `start_url: '/'`, so relaunching after Cmd+Q lands
+ * here with an empty query — and parseUrl applies a URL wholesale, resetting
+ * every filter, the view and the saved-view identity to their defaults. The
+ * tab's snapshot is in localStorage the whole time; before this existed nothing
+ * read it on a cold start, because the only first-mount restore additionally
+ * required the URL to have pinned an issue (see arrivedViaBareDeepLink).
+ *
+ * Read by App.tsx on first mount only. Later parses — popstate, soft navs —
+ * must stay a faithful replay of the URL, or Back would restore a snapshot
+ * instead of going back.
+ */
+let emptyUrlArrival = false
+export function arrivedWithEmptyUrl(): boolean {
+  return emptyUrlArrival
+}
+
+function parseUrl({
+  preserveViewOnFocus = false,
+  preserveFiltersOnFocus = false,
+}: { preserveViewOnFocus?: boolean; preserveFiltersOnFocus?: boolean } = {}): void {
+  lastAppliedSearch = window.location.search
+  let params = new URLSearchParams(window.location.search)
+
+  // Protocol-handler entry point: `/?proto=web+issuegraph://...`. Translate it
+  // into canonical focus params and rewrite the address bar so buildUrl and the
+  // rest of parseUrl operate on the normal query (the `proto` param never sticks).
+  const proto = params.get('proto')
+  if (proto) {
+    const translated = translateProtocol(proto)
+    if (translated) {
+      window.history.replaceState(window.history.state, '', `?${translated.toString()}`)
+      lastAppliedSearch = window.location.search
+      params = translated
+    }
+  }
+
+  // OAuth callback entry point: `/?code=…&state=…`, where Linear drops the user
+  // after they authorise. Same shape as the `proto` branch above and for the
+  // same reason — consume the foreign params before any store write — but the
+  // two solve different problems, which is worth keeping straight:
+  //
+  //   - `proto` swaps in a *translated* query.
+  //   - this swaps in the *stashed pre-redirect* query, i.e. the user's own URL.
+  //
+  // That distinction is what makes two separate landmines harmless. parseUrl
+  // applies a URL wholesale (absent params reset to defaults), so returning to a
+  // bare `/?code=…` would clear filters, focus and view — restoring the stash
+  // prevents that. And OAuth's `state` is a CSRF nonce while `state` in this
+  // app's URLs is the state-type filter; the nonce never reaches parseFilters
+  // because the whole arrival query is discarded, not merged. There is no
+  // `state`-disambiguation step here, and none is needed.
+  //
+  // It must live here rather than in a component effect: onExternalNav re-parses
+  // and then unconditionally replaceStates buildUrl(), so a PWA
+  // `navigate-existing` launch would strip `?code=` before any effect ran.
+  const code = params.get('code')
+  if (code) {
+    const { returnTo, exchange, rejected } = consumeCallback(code, params.get('state'))
+    window.history.replaceState(window.history.state, '', returnTo || window.location.pathname)
+    lastAppliedSearch = window.location.search
+    params = new URLSearchParams(returnTo)
+    // Synchronous URL restoration, asynchronous token exchange.
+    //
+    // Whatever the outcome, the user is put back in the Settings section they
+    // started from. The restored query is their pre-redirect URL, which does not
+    // record that Settings was open, so without this a *successful* connection
+    // looks exactly like a failed one: consent, a redirect, and a graph that
+    // says nothing. Deferred into the continuation rather than run inline so
+    // the rest of parseUrl's store writes cannot clobber it.
+    const settle = (failure: 'rejected' | 'exchange' | null) => {
+      const cap = useCapabilityStore.getState()
+      cap.refreshUnlocked()
+      cap.setAuthError(failure)
+      useViewStore.getState().openSettingsAt('write-access')
+    }
+    if (rejected) settle('rejected')
+    else void exchange?.then(() => settle(null)).catch(() => settle('exchange'))
+  }
+
   const set = useViewStore.setState
 
   // Apply the URL fully — including resetting fields back to defaults
@@ -192,12 +424,55 @@ function parseUrl(): void {
   const w = params.get('w')
   if (w) useWorkspaceStore.getState().setCurrentWorkspaceId(w.toLowerCase())
 
-  const view = params.get('view') as ViewId | null
-  set({ activeView: view ?? 'dependency' })
+  const viewParam = params.get('view')
+  const focus = params.get('focus')
+  const currentView = useViewStore.getState().activeView
+  const nextView = resolveActiveView(
+    viewParam,
+    focus !== null,
+    currentView,
+    preserveViewOnFocus,
+    readDefaultView(),
+  )
+  set({ activeView: nextView })
 
-  set({ focusedId: params.get('focus') })
-  set({ chainRootId: params.get('chain') })
-  set({ showRelated: params.get('related') === '1' })
+  // `detail=1` (only honored with a focus) opens the detail panel on arrival —
+  // e.g. a deep link from the Raycast extension. parseUrl sets focusedId
+  // directly (bypassing setFocusedId's auto-open heuristic), so the panel is
+  // driven explicitly here.
+  set({ focusedId: focus, detailPanelOpen: focus !== null && params.get('detail') === '1' })
+
+  // View-preserving focus deep link: the view didn't switch, so nothing else
+  // would move the camera onto the issue — tell GraphCanvas to fit onto it.
+  // Arm the dependency fallback only when we kept a non-dependency view AND the
+  // URL didn't pin one explicitly (an explicit ?view= is the user's choice).
+  if (preserveViewOnFocus && focus !== null) {
+    const armed = !viewParam && nextView !== 'dependency'
+    useViewStore.getState().notifyDeepLinkFocus(armed)
+  }
+  const chain = params.get('chain')
+  const nextChainRootIds = chain ? chain.split(',').filter(Boolean) : []
+  // Entering/switching/leaving a chain must re-run dagre so the chain
+  // auto-arranges. The UI path (ContextMenu/keyboard) calls bumpLayout()
+  // alongside setChainRootId; a deep link / popstate sets chainRootIds here, so
+  // bump too — otherwise layoutSig is unchanged and the canvas keeps the old
+  // (un-rearranged) node positions.
+  const chainChanged =
+    nextChainRootIds.join(',') !== useViewStore.getState().chainRootIds.join(',')
+  set({ chainRootIds: nextChainRootIds })
+  if (chainChanged) set((s) => ({ layoutBump: s.layoutBump + 1 }))
+  const parseDepth = (raw: string | null): number | null => {
+    if (raw === null) return null
+    const n = parseInt(raw, 10)
+    return Number.isFinite(n) && n >= 0 ? n : null
+  }
+  set({ chainDepthUp: parseDepth(params.get('cdu')), chainDepthDown: parseDepth(params.get('cdd')) })
+  // `showRelated` is a sticky per-browser preference (localStorage), not
+  // filter state — only let the URL override it when `related` is explicitly
+  // present, so a deep link that omits it inherits the user's last toggle.
+  if (params.has('related')) set({ showRelated: params.get('related') === '1' })
+  // Same sticky carve-out as `related`.
+  if (params.has('hier')) set({ showHierarchy: params.get('hier') === '1' })
 
   const theme = params.get('theme') as ThemeMode | null
   if (theme === 'light' || theme === 'dark' || theme === 'auto') set({ theme })
@@ -207,37 +482,48 @@ function parseUrl(): void {
     set({ density })
   }
 
-  // Filters: build a fresh object from URL — fall back to defaults
-  // for any field whose param is absent.
-  const filters = {
-    activeOnly: params.get('active') !== '0',
-    myIssuesOnly: params.get('mine') === '1',
-    staleOnly: params.get('stale') === '1',
-    stateTypes: (() => {
-      const s = params.get('state')
-      if (!s) return ['backlog', 'unstarted', 'started', 'triage'] as IssueStateType[]
-      return s.split(',').filter((x): x is IssueStateType => STATE_TYPES.includes(x as IssueStateType))
-    })(),
-    stateNames: [] as string[],
-    primaryValues: (params.get('bucket')?.split(',') ?? []),
-    typeValues: (params.get('type')?.split(',') ?? []),
-    priorities: (params.get('priority')?.split(',').map(Number).filter((n) => !isNaN(n)) ?? []),
-    assignees: (params.get('assignee')?.split(',') ?? []),
-    projectIds: [] as string[],
-    prefixSelections: {} as Record<string, string[]>,
-    tagIds: (params.get('tag')?.split(',') ?? []),
-    designdocFilter: ((): 'all' | 'has' | 'missing' => {
-      const dd = params.get('designdoc')
-      return dd === 'has' || dd === 'missing' ? dd : 'all'
-    })(),
+  // Always assigned (not gated on presence) so navigating to a URL without
+  // ?mixby= resets to auto instead of inheriting the previous view's grouping.
+  // An unresolvable key is tolerated downstream by mixGrouping.resolveMixKey.
+  set({ mixGroupBy: params.get('mixby') || null })
+
+  // Filters + search: rebuilt wholesale from the URL, so a field whose param is
+  // absent resets to its default instead of sticking. `search` is assigned
+  // unconditionally for the same reason — otherwise Back cannot clear it.
+  //
+  // The one exception is a *bare* deep link — a Raycast launch or the
+  // `web+issuegraph://` handler, which pins an issue (`focus`, or `chain` for
+  // the chain-mode variant) and says nothing about filters. Rebuilding
+  // wholesale there resets every filter the user had on screen, which reads as
+  // "the link wiped my filters". So we keep the store's filters instead, on the
+  // same "URL wins, but this piece isn't in the URL" rationale as
+  // preserveViewOnFocus and restoreViewportOnly.
+  //
+  // Three guards keep this from eating the URL's authority:
+  //   - popstate never passes the flag, so Back/Forward stays a full replay;
+  //   - it needs a `focus` or a `chain`, so an ordinary navigation is
+  //     unaffected (and a chain link matters here even though chain mode does
+  //     not filter: the filters must still be intact when the user exits it);
+  //   - hasFilterParams means any URL that mentions filters at all still wins,
+  //     which covers the links the app itself produces (buildUrl writes `state=`
+  //     at the default and at every non-empty value) and so keeps shared links
+  //     rendering identically for everyone. Its one blind spot — an emptied
+  //     state list — is documented there.
+  // Whatever is preserved is written straight back into the address bar by the
+  // caller's replaceState(buildUrl()), so the URL is authoritative again the
+  // moment we are done here.
+  //
+  // `search` rides along with the filters on both branches — it is the same
+  // kind of URL state, and a deep link that cleared the search box would be as
+  // surprising as one that cleared the filters.
+  bareDeepLinkArrival = (focus !== null || chain !== null) && !hasFilterParams(params)
+  // Recorded on every parse, like the flag above, so it can never describe a
+  // stale navigation.
+  emptyUrlArrival = urlCarriesNoAppState(params)
+  if (!(preserveFiltersOnFocus && bareDeepLinkArrival)) {
+    const decoded = parseFilters(params)
+    set({ filters: decoded.filters, search: decoded.search })
   }
-  for (const [k, v] of params.entries()) {
-    if (k.startsWith('pfx_')) {
-      const token = k.slice(4)
-      filters.prefixSelections[token] = v.split(',')
-    }
-  }
-  set({ filters })
 
   set({ expandedBuckets: (params.get('expand')?.split(',') ?? []) })
 
@@ -261,7 +547,9 @@ export function registerHistoryViewportSink(sink: (vp: Viewport) => void): () =>
 
 export function useUrlSync(): void {
   useEffect(() => {
-    parseUrl()
+    // Initial load may be a focus deep link (PWA launch / shared URL); preserve
+    // the view it lands in rather than forcing dependency.
+    parseUrl({ preserveViewOnFocus: true })
     // Seed the first history entry with seq=0 so we have a sentinel for
     // "no app step yet" — Cmd+[ from here goes to whatever was loaded
     // before our SPA (or no-op at the start of session history).
@@ -299,10 +587,45 @@ export function useUrlSync(): void {
     }
     window.addEventListener('popstate', onPopState)
 
+    // External-navigation catch-up. A PWA `navigate-existing` launch (and some
+    // other OS-driven navigations) can change location.search WITHOUT a full
+    // reload or a popstate — so parseUrl never runs and the focus/detail in the
+    // launch URL is ignored. When the window regains focus/visibility, re-apply
+    // the URL if it changed out from under us.
+    const onExternalNav = () => {
+      // Re-apply whenever the URL changed out from under us, regardless of
+      // visibility — re-parsing is idempotent and the search-equality guard
+      // already makes this a no-op for ordinary focus/visibility flips.
+      if (window.location.search === lastAppliedSearch) return
+      // A Raycast focus link carries no ?view= and no filter params, but
+      // parseUrl now KEEPS the current view and filters instead of resetting
+      // them. This is the one call site where preserving filters can actually
+      // do anything: the window is already up, so the store holds the user's
+      // real filters. (Mount is always a cold store — defaults either way — and
+      // popstate must stay a full replay, so neither passes the flag. A bare
+      // deep link that cold-starts the app therefore still lands on default
+      // filters; restoring those would mean reading the tabStateStore snapshot,
+      // the way App.tsx does for the view.)
+      parseUrl({ preserveViewOnFocus: true, preserveFiltersOnFocus: true })
+      // The externally-applied search (e.g. `?w=…&focus=…`) omits the view we
+      // just preserved, so the address bar would disagree with the store and a
+      // reload/share would drop the view. Rewrite it to the canonical URL.
+      const canonical = buildUrl()
+      window.history.replaceState(window.history.state, '', canonical)
+      lastAppliedSearch = window.location.search
+      lastPushedUrl = canonical
+      lastSnapshot = { url: canonical, signature: significantSignature() }
+      notifyListeners()
+    }
+    window.addEventListener('focus', onExternalNav)
+    document.addEventListener('visibilitychange', onExternalNav)
+
     return () => {
       unsubView()
       unsubWorkspace()
       window.removeEventListener('popstate', onPopState)
+      window.removeEventListener('focus', onExternalNav)
+      document.removeEventListener('visibilitychange', onExternalNav)
     }
   }, [])
 }

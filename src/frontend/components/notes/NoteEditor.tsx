@@ -1,10 +1,21 @@
-import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Edit3, Eye } from 'lucide-react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { ArrowLeft, Check, ChevronDown, ChevronRight, Copy, Edit3, Eye } from 'lucide-react'
 import { useNotesStore } from '../../store/notesStore'
 import { notesApi } from '../../lib/notesApi'
 import { formatShortcut, NOTE_TOGGLE_KEYS } from '../../lib/platform'
 import { formatAbsolute, formatRelative } from '../../lib/relativeTime'
+import { findIssueIds } from '../../lib/issueLinks'
+import { priorityLabelFor, stateColorVar, stateIcon } from '../../lib/colors'
+import { useGraphStore } from '../../store/graphStore'
+import { useViewStore } from '../../store/viewStore'
+import { useClickOutside } from '../../hooks/useClickOutside'
+import { useLocale } from '../../i18n'
+import { NoteFindBar } from './NoteFindBar'
 import { NotePreview } from './NotePreview'
+import { getNoteScroll, setNoteScroll } from '../../lib/noteScrollMemory'
+
+const SHOW_REFS_KEY = 'ig-note-show-refs-v1'
+type CopyMode = 'full' | 'body' | 'refs'
 
 interface Props {
   noteId: number
@@ -34,6 +45,32 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
   })
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [copyMenuOpen, setCopyMenuOpen] = useState(false)
+  const copyMenuRef = useRef<HTMLDivElement | null>(null)
+  useClickOutside(copyMenuRef, copyMenuOpen, () => setCopyMenuOpen(false))
+  const [showRefs, setShowRefs] = useState<boolean>(() => {
+    if (typeof localStorage === 'undefined') return false
+    try { return localStorage.getItem(SHOW_REFS_KEY) === '1' } catch { return false }
+  })
+  // In-note find state. Open/closed is mirrored into viewStore (noteFindOpen)
+  // so NotesModal's Esc handler can defer to us. matchCount is updated by
+  // NotePreview's highlight pipeline via onMatchCountChange.
+  const [findOpen, setFindOpenLocal] = useState(false)
+  const [findQuery, setFindQuery] = useState('')
+  const [findMatchCount, setFindMatchCount] = useState(0)
+  const [findMatchIndex, setFindMatchIndex] = useState(0)
+  const findInputRef = useRef<HTMLInputElement | null>(null)
+  const setNoteFindOpen = useViewStore((s) => s.setNoteFindOpen)
+  const toggleShowRefs = () => {
+    setShowRefs((prev) => {
+      const next = !prev
+      try { localStorage.setItem(SHOW_REFS_KEY, next ? '1' : '0') } catch { /* silent */ }
+      return next
+    })
+  }
+  const locale = useLocale()
+  const issues = useGraphStore((s) => s.graph?.data.issues)
   // `now` advances once a minute so the "updated 2 min ago" label ages in
   // place. Updating less often keeps re-renders cheap; the label resolution
   // is in minutes anyway.
@@ -115,6 +152,28 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
     if (mode === 'edit') textareaRef.current?.focus()
   }, [mode])
 
+  // Restore the textarea's last scroll position when entering edit mode (incl.
+  // the first mount triggered by `n`). Runs before paint to avoid a frame at
+  // scrollTop=0 before the snap.
+  useLayoutEffect(() => {
+    if (mode !== 'edit') return
+    const ta = textareaRef.current
+    if (!ta) return
+    ta.scrollTop = getNoteScroll(noteId, 'edit')
+  }, [mode, noteId])
+
+  function onFindQueryChange(q: string) {
+    setFindQuery(q)
+    // Reset active match to the first hit whenever the query mutates.
+    setFindMatchIndex(0)
+  }
+
+  function closeFind() {
+    setFindOpenLocal(false)
+    setNoteFindOpen(false)
+    setFindMatchIndex(0)
+  }
+
   // Cmd+E and Cmd+/ both toggle edit/preview. We accept both because Cmd+E
   // is the conventional binding but gets swallowed by the macOS Edit menu's
   // "Use Selection for Find" accelerator in Chrome PWA windows — the
@@ -124,9 +183,28 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
   // Backspace (the key labeled "delete" on Mac) acts as ← Back when focus
   // is NOT inside a text input — so typing keeps working but pressing
   // Backspace anywhere else navigates one level back to the grid.
+  // Cmd/Ctrl+F opens the in-note find bar (overriding the browser's native
+  // find since the highlight DOM is rebuilt on every render anyway and
+  // wouldn't survive the next preview pass).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey
+      if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        // Inline open-find: auto-switch to preview (highlighting requires
+        // the rendered DOM), then focus the find input on the next frame.
+        setMode((m) => (m === 'edit' ? 'preview' : m))
+        setFindOpenLocal(true)
+        setNoteFindOpen(true)
+        requestAnimationFrame(() => {
+          const el = findInputRef.current
+          if (el) {
+            el.focus()
+            el.select()
+          }
+        })
+        return
+      }
       if (mod && !e.shiftKey && (e.key.toLowerCase() === 'e' || e.key === '/')) {
         e.preventDefault()
         setMode((m) => (m === 'edit' ? 'preview' : 'edit'))
@@ -145,7 +223,13 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onBack])
+  }, [onBack, setNoteFindOpen])
+
+  // Clear the modal-visible find flag if the editor unmounts mid-find so
+  // NotesModal's Esc handler doesn't stay stuck-deferred. Note: switching
+  // between notes ALWAYS unmounts NoteEditor (parent toggles focusedNoteId
+  // through null in between), so the find state is per-note for free.
+  useEffect(() => () => setNoteFindOpen(false), [setNoteFindOpen])
 
   // Flush any pending debounced save on unmount (e.g. user closed the modal
   // mid-edit), so we never lose the latest keystrokes.
@@ -154,6 +238,70 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
       void flushPending()
     }
   }, [flushPending])
+
+  const body = note?.body ?? ''
+  const referencedIssues = useMemo(() => {
+    const ids = findIssueIds(body)
+    if (ids.length === 0) return []
+    const byId = new Map((issues ?? []).map((i) => [i.identifier, i] as const))
+    const seen = new Set<string>()
+    const out: { id: string; issue: ReturnType<typeof byId.get> }[] = []
+    for (const id of ids) {
+      if (seen.has(id)) continue
+      seen.add(id)
+      out.push({ id, issue: byId.get(id) })
+    }
+    return out
+  }, [body, issues])
+  const resolvedIssues = useMemo(
+    () => referencedIssues.filter((r): r is { id: string; issue: NonNullable<typeof r.issue> } => r.issue !== undefined),
+    [referencedIssues],
+  )
+  const unresolvedIds = useMemo(
+    () => referencedIssues.filter((r) => r.issue === undefined).map((r) => r.id),
+    [referencedIssues],
+  )
+
+  const hasBody = body.trim().length > 0
+  const hasRefs = resolvedIssues.length > 0 || unresolvedIds.length > 0
+  const canCopy = hasBody || hasRefs
+
+  function buildPayload(mode: CopyMode): string {
+    const refLines: string[] = []
+    if (mode !== 'body' && hasRefs) {
+      refLines.push('**Referenced issues:**')
+      for (const { issue } of resolvedIssues) {
+        // Linear's actual state name (e.g. "Review") not the canonical type
+        // label ("In Progress") — the AI consumer needs to match what the
+        // human sees in Linear, and the human's vocabulary is the custom name.
+        const state = issue.state.name
+        const priority = priorityLabelFor(issue.priority, locale)
+        refLines.push(`- **${issue.identifier}** · ${state} · ${priority} · ${issue.title}`)
+      }
+      for (const id of unresolvedIds) {
+        refLines.push(`- **${id}** · (not in cache)`)
+      }
+    }
+    if (mode === 'refs') return refLines.join('\n')
+    if (mode === 'body') return body.trimEnd()
+    const parts = [body.trimEnd()]
+    if (refLines.length > 0) parts.push('', '---', ...refLines)
+    return parts.join('\n')
+  }
+
+  async function copyAs(mode: CopyMode) {
+    if (!note) return
+    const payload = buildPayload(mode)
+    if (!payload) return
+    try {
+      await navigator.clipboard.writeText(payload)
+      setCopied(true)
+      setCopyMenuOpen(false)
+      window.setTimeout(() => setCopied(false), 1500)
+    } catch {
+      setUploadError('Copy failed — clipboard unavailable')
+    }
+  }
 
   if (!note) {
     return (
@@ -194,6 +342,52 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
             <Eye size={14} /> Preview
           </button>
         </div>
+        <div className="note-copy-split" ref={copyMenuRef}>
+          <button
+            type="button"
+            className="icon-text note-copy-main"
+            onClick={() => copyAs('full')}
+            disabled={!canCopy}
+            title="Copy note + referenced issue statuses (for AI)"
+            aria-label="Copy as Markdown"
+          >
+            {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : 'Copy note + issues'}
+          </button>
+          <button
+            type="button"
+            className="icon-only note-copy-chevron"
+            onClick={() => setCopyMenuOpen((o) => !o)}
+            disabled={!canCopy}
+            aria-haspopup="menu"
+            aria-expanded={copyMenuOpen}
+            aria-label="Copy options"
+            title="Copy options"
+          >
+            <ChevronDown size={12} />
+          </button>
+          {copyMenuOpen && (
+            <div className="toolbar-overflow-menu note-copy-menu" role="menu">
+              <button
+                type="button"
+                role="menuitem"
+                className="toolbar-overflow-item"
+                onClick={() => copyAs('body')}
+                disabled={!hasBody}
+              >
+                Copy note only
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="toolbar-overflow-item"
+                onClick={() => copyAs('refs')}
+                disabled={!hasRefs}
+              >
+                Copy referenced issues only
+              </button>
+            </div>
+          )}
+        </div>
         <span className="note-editor-meta" aria-live="polite">
           {uploading ? (
             <span className="note-editor-meta-status">Uploading…</span>
@@ -221,12 +415,31 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
           {uploadError}
         </div>
       )}
+      {findOpen && (
+        <NoteFindBar
+          ref={findInputRef}
+          query={findQuery}
+          onQueryChange={onFindQueryChange}
+          matchIndex={findMatchIndex}
+          matchCount={findMatchCount}
+          onNext={() => {
+            if (findMatchCount === 0) return
+            setFindMatchIndex((i) => (i + 1) % findMatchCount)
+          }}
+          onPrev={() => {
+            if (findMatchCount === 0) return
+            setFindMatchIndex((i) => (i - 1 + findMatchCount) % findMatchCount)
+          }}
+          onClose={closeFind}
+        />
+      )}
       {mode === 'edit' ? (
         <textarea
           ref={textareaRef}
           className="note-editor-textarea"
           value={note.body}
           onChange={(e) => updateBody(noteId, e.target.value)}
+          onScroll={(e) => setNoteScroll(noteId, 'edit', e.currentTarget.scrollTop)}
           onPaste={onPaste}
           onDrop={onDrop}
           onDragOver={onDragOver}
@@ -235,10 +448,64 @@ export function NoteEditor({ noteId, onBack, onCloseModal }: Props) {
         />
       ) : (
         <NotePreview
+          noteId={noteId}
           body={note.body}
           onCloseModal={onCloseModal}
           onBodyChange={(next) => updateBody(noteId, next)}
+          highlightQuery={findOpen ? findQuery : ''}
+          activeMatchIndex={findMatchIndex}
+          onMatchCountChange={setFindMatchCount}
         />
+      )}
+      {hasRefs && (
+        <div className="note-editor-issue-refs" aria-label="Referenced issues">
+          <button
+            type="button"
+            className="note-editor-issue-refs-toggle"
+            onClick={toggleShowRefs}
+            aria-expanded={showRefs}
+          >
+            {showRefs ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+            Referenced issues ({resolvedIssues.length + unresolvedIds.length})
+          </button>
+          {showRefs && <>
+          {resolvedIssues.map(({ issue: iss }) => (
+            <button
+              key={iss.identifier}
+              type="button"
+              className="note-editor-issue-ref"
+              onClick={() => {
+                useViewStore.getState().setFocusedId(iss.identifier)
+                useViewStore.getState().requestPanToFocused()
+                onCloseModal()
+              }}
+              title={`Open ${iss.identifier} in graph`}
+            >
+              <span className="note-editor-issue-ref-id">{iss.identifier}</span>
+              <span
+                className="note-editor-issue-ref-state"
+                style={{ color: stateColorVar(iss.state.type) }}
+                aria-hidden
+              >
+                {stateIcon(iss.state.type)}
+              </span>
+              <span className="note-editor-issue-ref-state-label">
+                {iss.state.name}
+              </span>
+              <span className="note-editor-issue-ref-priority">
+                {priorityLabelFor(iss.priority, locale)}
+              </span>
+              <span className="note-editor-issue-ref-title">{iss.title}</span>
+            </button>
+          ))}
+          {unresolvedIds.map((id) => (
+            <div key={id} className="note-editor-issue-ref is-unresolved" title="Not in graph cache">
+              <span className="note-editor-issue-ref-id">{id}</span>
+              <span className="note-editor-issue-ref-title">(not in cache)</span>
+            </div>
+          ))}
+          </>}
+        </div>
       )}
     </div>
   )

@@ -4,14 +4,14 @@ import {
   Camera,
   Eye,
   EyeOff,
+  FileDown,
   FileText,
   Keyboard,
+  ListTree,
   Loader2,
   Monitor,
   Moon,
   MoreHorizontal,
-  PanelLeftClose,
-  PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
   Settings,
@@ -20,11 +20,12 @@ import {
 import { useClickOutside } from '../hooks/useClickOutside'
 import { useGraphStore } from '../store/graphStore'
 import { useSchemaStore } from '../store/schemaStore'
+import { mixDimensions } from '../lib/mixGrouping'
 import { useViewStore } from '../store/viewStore'
 import { views } from '../views'
 import { api } from '../lib/api'
 import { formatShortcut } from '../lib/platform'
-import { computeChain } from '../views/chain'
+import { computeChains } from '../views/chain'
 import { useT, type DictKey } from '../i18n'
 import { QuickSwitcherTrigger } from './quickSwitcher/QuickSwitcherTrigger'
 // Density + theme + search live here; Size moved to Settings → Display.
@@ -32,6 +33,10 @@ import { QuickSwitcherTrigger } from './quickSwitcher/QuickSwitcherTrigger'
 const ICON_SIZE = 16
 
 const FULL_HISTORY_DAYS = 365
+
+// Finite chain-depth choices offered in the toolbar selects (0–8 hops). The
+// empty-string option ('') represents unbounded (∞).
+const DEPTH_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8] as const
 
 export function Toolbar() {
   const activeView = useViewStore((s) => s.activeView)
@@ -46,20 +51,27 @@ export function Toolbar() {
   const setCoverageOpen = useViewStore((s) => s.setCoverageOpen)
   const setShortcutsOpen = useViewStore((s) => s.setShortcutsOpen)
   const setNotesOpen = useViewStore((s) => s.setNotesOpen)
-  const filterPanelOpen = useViewStore((s) => s.filterPanelOpen)
-  const toggleFilterPanel = useViewStore((s) => s.toggleFilterPanel)
   const detailPanelAutoOpen = useViewStore((s) => s.detailPanelAutoOpen)
   const toggleDetailPanelAutoOpen = useViewStore((s) => s.toggleDetailPanelAutoOpen)
   const selection = useViewStore((s) => s.selection)
   const clearSelection = useViewStore((s) => s.clearSelection)
-  const chainRootId = useViewStore((s) => s.chainRootId)
+  const chainRootIds = useViewStore((s) => s.chainRootIds)
   const setChainRootId = useViewStore((s) => s.setChainRootId)
+  const chainDepthUp = useViewStore((s) => s.chainDepthUp)
+  const chainDepthDown = useViewStore((s) => s.chainDepthDown)
+  const setChainDepthUp = useViewStore((s) => s.setChainDepthUp)
+  const setChainDepthDown = useViewStore((s) => s.setChainDepthDown)
   const showRelated = useViewStore((s) => s.showRelated)
   const setShowRelated = useViewStore((s) => s.setShowRelated)
+  const showHierarchy = useViewStore((s) => s.showHierarchy)
+  const setShowHierarchy = useViewStore((s) => s.setShowHierarchy)
   const graph = useGraphStore((s) => s.graph)
   const extendScope = useGraphStore((s) => s.extendScope)
   const syncing = useGraphStore((s) => s.syncing)
   const primaryGroup = useSchemaStore((s) => s.schema.primaryGroup)
+  const schema = useSchemaStore((s) => s.schema)
+  const mixGroupBy = useViewStore((s) => s.mixGroupBy)
+  const setMixGroupBy = useViewStore((s) => s.setMixGroupBy)
   const t = useT()
 
   // Chain-mode dangling-ref check: when chain isolation is active, we
@@ -67,12 +79,15 @@ export function Toolbar() {
   // outside the current cache. If any are found AND the user hasn't already
   // extended the sync window, surface a "Load older history" button.
   const chainStats = useMemo(() => {
-    if (!chainRootId || !graph) return null
-    const { members, dangling } = computeChain(graph.data.issues, chainRootId, {
+    if (chainRootIds.length === 0 || !graph) return null
+    const { members, dangling } = computeChains(graph.data.issues, chainRootIds, {
       includeRelatedNeighbors: showRelated,
+      includeHierarchyNeighbors: showHierarchy,
+      maxUpstream: chainDepthUp,
+      maxDownstream: chainDepthDown,
     })
     return { memberCount: members.size, dangling: dangling.size }
-  }, [chainRootId, graph, showRelated])
+  }, [chainRootIds, graph, showRelated, showHierarchy, chainDepthUp, chainDepthDown])
   const chainDangling = chainStats && chainStats.dangling > 0 ? chainStats.dangling : null
 
   // Backend's current extended-scope window (0 = default 30-day Done window).
@@ -86,12 +101,12 @@ export function Toolbar() {
   const closeOverflow = useCallback(() => setOverflowOpen(false), [])
   useClickOutside(overflowRef, overflowOpen, closeOverflow)
   useEffect(() => {
-    if (!chainRootId) return
+    if (chainRootIds.length === 0) return
     if (scopeDays !== null) return
     api.getSyncScope().then((r) => setScopeDays(r.days)).catch(() => setScopeDays(0))
-  }, [chainRootId, scopeDays])
+  }, [chainRootIds, scopeDays])
 
-  const showLoadFullHistory = chainRootId && chainDangling && (scopeDays ?? 0) < FULL_HISTORY_DAYS
+  const showLoadFullHistory = chainRootIds.length > 0 && chainDangling && (scopeDays ?? 0) < FULL_HISTORY_DAYS
 
   const loadFullHistory = async () => {
     await extendScope(FULL_HISTORY_DAYS)
@@ -126,11 +141,20 @@ export function Toolbar() {
   // the user can tell what the buckets are based on without opening the
   // filter panel. Source ("auto-detected" / "PRIMARY_GROUP" / yaml) lives
   // in Settings → Backend; we just name the group here to stay terse.
+  // Dimensions that actually bucket something in the current issue set. The
+  // auto entry is rendered separately and unconditionally, so a default with
+  // zero coverage (the failure this picker exists for) stays visible instead
+  // of silently dropping out of its own dropdown.
+  const mixOptions = mixDimensions(graph?.data.issues ?? [], schema)
+
   const viewTooltip = (id: string): string => {
     const base = t(viewDescKey(id))
     if (id !== 'mix') return base
-    const suffix = primaryGroup
-      ? t('views.mix.groupedBy', { group: primaryGroup })
+    const effective = mixGroupBy
+      ? (mixOptions.find((o) => o.key === mixGroupBy)?.title ?? primaryGroup)
+      : primaryGroup
+    const suffix = effective
+      ? t('views.mix.groupedBy', { group: effective })
       : t('views.mix.groupedByUnknown')
     return `${base}\n\n${suffix}`
   }
@@ -138,18 +162,6 @@ export function Toolbar() {
 
   return (
     <div className="toolbar">
-      <div className="group">
-        <button
-          onClick={toggleFilterPanel}
-          title={filterPanelOpen ? t('toolbar.filtersHide') : t('toolbar.filtersShow')}
-          aria-pressed={filterPanelOpen}
-          className="icon-text"
-        >
-          {filterPanelOpen ? <PanelLeftClose size={ICON_SIZE} /> : <PanelLeftOpen size={ICON_SIZE} />}
-          {t('toolbar.filters')}
-        </button>
-      </div>
-      <div className="sep" />
       <div className="group">
         {views.map((v) => (
           <button
@@ -162,6 +174,34 @@ export function Toolbar() {
           </button>
         ))}
       </div>
+      {activeView === 'mix' && (
+        <>
+          <div className="sep" />
+          <div className="group">
+            <label htmlFor="toolbar-mix-groupby" className="toolbar-inline-label">
+              {t('views.mix.groupBy')}
+            </label>
+            <select
+              id="toolbar-mix-groupby"
+              aria-label={t('views.mix.groupByAria')}
+              title={t('views.mix.groupByMultiHint')}
+              value={mixGroupBy ?? ''}
+              onChange={(e) => setMixGroupBy(e.target.value || null)}
+            >
+              <option value="">
+                {primaryGroup
+                  ? t('views.mix.groupByAuto', { group: primaryGroup })
+                  : t('views.mix.groupByAutoNone')}
+              </option>
+              {mixOptions.map((o) => (
+                <option key={o.key} value={o.key}>
+                  {t('views.mix.groupByOption', { title: o.title, count: o.coverage })}
+                </option>
+              ))}
+            </select>
+          </div>
+        </>
+      )}
       <div className="sep" />
       <div className="group">
         <input
@@ -176,7 +216,7 @@ export function Toolbar() {
           <button onClick={() => setSearch('')} title={t('toolbar.clearSearch')}>×</button>
         )}
       </div>
-      {activeView === 'dependency' && (
+      {(activeView === 'dependency' || chainRootIds.length > 0) && (
         <>
           <div className="sep" />
           <div className="group">
@@ -188,6 +228,15 @@ export function Toolbar() {
             >
               {showRelated ? <Eye size={ICON_SIZE} /> : <EyeOff size={ICON_SIZE} />}
               {t('toolbar.related')}
+            </button>
+            <button
+              onClick={() => setShowHierarchy(!showHierarchy)}
+              className={`icon-text ${showHierarchy ? 'active' : ''}`}
+              title={showHierarchy ? t('toolbar.hierarchyHide') : t('toolbar.hierarchyShow')}
+              aria-pressed={showHierarchy}
+            >
+              <ListTree size={ICON_SIZE} />
+              {t('toolbar.hierarchy')}
             </button>
           </div>
         </>
@@ -201,17 +250,42 @@ export function Toolbar() {
           <option value="verbose">{t('toolbar.densityVerbose')}</option>
         </select>
       </div>
-      {chainRootId && (
+      {chainRootIds.length > 0 && (
         <>
           <div className="sep" />
-          <div className="group" title={t('toolbar.chainTitle')}>
+          <div className="group" title={chainRootIds.length > 1 ? chainRootIds.join(', ') : t('toolbar.chainTitle')}>
             <span style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-meta)' }}>{t('toolbar.chainLabel')}</span>
-            <span style={{ fontSize: 'var(--fs-meta)', fontWeight: 600 }}>{chainRootId}</span>
+            <span style={{ fontSize: 'var(--fs-meta)', fontWeight: 600 }}>
+              {chainRootIds.length === 1 ? chainRootIds[0] : `${chainRootIds[0]} +${chainRootIds.length - 1}`}
+            </span>
             {chainStats && (
               <span style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-meta)' }}>
                 ({chainStats.memberCount} {chainStats.memberCount === 1 ? t('toolbar.chainIssue') : t('toolbar.chainIssues')})
               </span>
             )}
+            <span style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-meta)' }}>depth</span>
+            <span title="Levels of blockers (upstream) to include; ∞ = all" style={{ fontSize: 'var(--fs-meta)', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+              ↑
+              <select
+                value={chainDepthUp === null ? '' : String(chainDepthUp)}
+                onChange={(e) => setChainDepthUp(e.target.value === '' ? null : parseInt(e.target.value, 10))}
+                aria-label="Blockers depth"
+              >
+                <option value="">∞</option>
+                {DEPTH_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </span>
+            <span title="Levels of dependents (downstream) to include; ∞ = all" style={{ fontSize: 'var(--fs-meta)', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+              ↓
+              <select
+                value={chainDepthDown === null ? '' : String(chainDepthDown)}
+                onChange={(e) => setChainDepthDown(e.target.value === '' ? null : parseInt(e.target.value, 10))}
+                aria-label="Dependents depth"
+              >
+                <option value="">∞</option>
+                {DEPTH_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </span>
             <button onClick={() => setChainRootId(null)} title={t('toolbar.clearChain')}>×</button>
             {showLoadFullHistory && (
               <button
@@ -243,12 +317,6 @@ export function Toolbar() {
             <div className="sep" />
           </>
         )}
-        <a href={api.exportUrl('csv')} download>
-          <button>{t('toolbar.exportCsv')}</button>
-        </a>
-        <a href={api.exportUrl('md')} download>
-          <button>{t('toolbar.exportMd')}</button>
-        </a>
         <div className="toolbar-overflow" ref={overflowRef}>
           <button
             type="button"
@@ -263,6 +331,27 @@ export function Toolbar() {
           </button>
           {overflowOpen && (
             <div className="toolbar-overflow-menu" role="menu">
+              {/* Exports stay <a download> rather than becoming <button> —
+                  routing them through onClick would navigate instead of
+                  downloading. */}
+              <a
+                role="menuitem"
+                className="toolbar-overflow-item"
+                href={api.exportUrl('csv')}
+                download
+                onClick={() => setOverflowOpen(false)}
+              >
+                <FileDown size={14} /> {t('toolbar.exportCsv')}
+              </a>
+              <a
+                role="menuitem"
+                className="toolbar-overflow-item"
+                href={api.exportUrl('md')}
+                download
+                onClick={() => setOverflowOpen(false)}
+              >
+                <FileDown size={14} /> {t('toolbar.exportMd')}
+              </a>
               <button
                 type="button"
                 role="menuitem"

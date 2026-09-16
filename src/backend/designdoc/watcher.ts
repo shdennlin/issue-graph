@@ -15,8 +15,8 @@
 // only loss is real-time. Don't crash the server over this.
 //
 // Per-tab note: the watcher follows the **default** workspace (the one
-// `active-workspace.json` points at), not every open profile. Tabs viewing
-// a non-default workspace fall back to the existing 30s frontend poll.
+// control_meta['active_workspace'] names), not every open profile. Tabs
+// viewing a non-default workspace fall back to the existing 30s frontend poll.
 //
 // Worktree caveat: this starts one watcher per worktree present at
 // startup. Worktrees added with `git worktree add` while the server is

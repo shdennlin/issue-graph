@@ -18,6 +18,8 @@ import type {
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]+?)\r?\n---/
 const LINEAR_LINE_RE = /^.*linear.*$/gim
+// Kept identical to ISSUE_ID_PATTERN in src/frontend/lib/issueLinks.ts, which
+// linkifies the same ids in notes and descriptions. Change both or neither.
 const ISSUE_ID_RE = /\b([A-Z][A-Z0-9]+-\d+)\b/g
 const CHECKBOX_TOTAL_RE = /^\s*-\s\[[xX ]\]/gm
 const CHECKBOX_DONE_RE = /^\s*-\s\[[xX]\]/gm

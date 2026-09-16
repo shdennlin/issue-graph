@@ -1,0 +1,554 @@
+import { describe, expect, it } from 'vitest'
+import type { IssueStateType, NormalizedIssue } from '@shared/types.js'
+import type { Filters } from '../store/viewStore'
+import { applyFilters, applyFiltersExcluding } from './filters'
+
+/** What the removed `activeOnly` boolean used to stand for: the state types
+ *  that are not completed or canceled. It is a plain type selection now, which
+ *  is the point — one filter over the state dimension instead of two. */
+const ACTIVE: IssueStateType[] = ['started', 'unstarted', 'backlog', 'triage']
+
+function baseFilters(overrides: Partial<Filters> = {}): Filters {
+  return {
+    stateTypes: [],
+    stateNames: [],
+    recencyWindow: 'any',
+    recencyMode: 'updated',
+    recencyIgnoreLinked: true,
+    negated: [],
+    myIssuesOnly: false,
+    staleOnly: false,
+    primaryValues: [],
+    typeValues: [],
+    priorities: [],
+    assignees: [],
+    prefixSelections: {},
+    groupSelections: {},
+    orphanValues: [],
+    designdocFilter: 'all',
+    dueFilter: 'any',
+    projectIds: [],
+    milestoneIds: [],
+    ...overrides,
+  }
+}
+
+function makeIssue(overrides: Partial<NormalizedIssue> = {}): NormalizedIssue {
+  return {
+    id: overrides.identifier ?? 'x',
+    identifier: overrides.identifier ?? 'X-1',
+    title: 't',
+    url: 'u',
+    priority: 0,
+    state: { name: 'In Progress', type: 'started' },
+    assignee: null,
+    labels: [],
+    parent: null,
+    children: [],
+    relations: [],
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+    completedAt: null,
+    ...overrides,
+  }
+}
+
+// applyFilters reads "today" from system clock. The cases below use date
+// offsets relative to *real* today so they stay correct regardless of when
+// the test runs. The bug surface this protects against is "filter logic
+// silently uses UTC and gets the wrong day in non-UTC timezones" — and
+// that's a property of the helper, tested separately in dueDate.test.ts.
+function offsetFromToday(days: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const da = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${da}`
+}
+
+describe('applyFilters · dueFilter', () => {
+  const noDue = makeIssue({ identifier: 'A', dueDate: null })
+  const pastDue = makeIssue({ identifier: 'B', dueDate: offsetFromToday(-3) })
+  const dueToday = makeIssue({ identifier: 'C', dueDate: offsetFromToday(0) })
+  const dueIn5 = makeIssue({ identifier: 'D', dueDate: offsetFromToday(5) })
+  const dueIn20 = makeIssue({ identifier: 'E', dueDate: offsetFromToday(20) })
+  const dueIn90 = makeIssue({ identifier: 'F', dueDate: offsetFromToday(90) })
+  const completedPastDue = makeIssue({
+    identifier: 'G',
+    dueDate: offsetFromToday(-3),
+    state: { name: 'Done', type: 'completed' },
+  })
+  const all = [noDue, pastDue, dueToday, dueIn5, dueIn20, dueIn90, completedPastDue]
+
+  function ids(result: NormalizedIssue[]): string[] {
+    return result.map((i) => i.identifier).sort()
+  }
+
+  it("'any' is a no-op", () => {
+    const out = applyFilters(all, baseFilters({ dueFilter: 'any' }), 365, null)
+    expect(out.length).toBe(all.length)
+  })
+
+  it("'has' keeps any issue with a dueDate, regardless of state", () => {
+    const out = applyFilters(all, baseFilters({ dueFilter: 'has' }), 365, null)
+    expect(ids(out)).toEqual(['B', 'C', 'D', 'E', 'F', 'G'])
+  })
+
+  it("'overdue' = past due AND actionable (excludes completed/canceled)", () => {
+    const out = applyFilters(all, baseFilters({ dueFilter: 'overdue' }), 365, null)
+    expect(ids(out)).toEqual(['B'])
+  })
+
+  it("'soon7' covers [today, today+7], excludes past-due and >7", () => {
+    const out = applyFilters(all, baseFilters({ dueFilter: 'soon7' }), 365, null)
+    expect(ids(out)).toEqual(['C', 'D'])
+  })
+
+  it("'soon30' covers [today, today+30], excludes past-due and >30", () => {
+    const out = applyFilters(all, baseFilters({ dueFilter: 'soon30' }), 365, null)
+    expect(ids(out)).toEqual(['C', 'D', 'E'])
+  })
+
+  it("'overdue' and 'soon7' partition (no overlap, dueToday belongs to soon7)", () => {
+    const overdue = new Set(applyFilters(all, baseFilters({ dueFilter: 'overdue' }), 365, null).map((i) => i.identifier))
+    const soon7 = new Set(applyFilters(all, baseFilters({ dueFilter: 'soon7' }), 365, null).map((i) => i.identifier))
+    for (const id of overdue) expect(soon7.has(id)).toBe(false)
+    expect(soon7.has('C')).toBe(true)
+  })
+})
+
+describe('applyFilters · label group selections', () => {
+  const label = (id: string, name: string, group?: string) => ({
+    id,
+    name,
+    color: '#000',
+    group: group ? { id: `g-${group}`, name: group } : null,
+  })
+  const ios = label('1', 'iOS', 'Platform')
+  const android = label('2', 'Android', 'Platform')
+  const triage = label('3', 'needs-triage')
+  const flaky = label('4', 'flaky')
+
+  const all = [
+    makeIssue({ identifier: 'A', labels: [ios, triage] }),
+    makeIssue({ identifier: 'B', labels: [android] }),
+    makeIssue({ identifier: 'C', labels: [ios, flaky] }),
+    makeIssue({ identifier: 'D', labels: [] }),
+  ]
+  const ids = (out: NormalizedIssue[]) => out.map((i) => i.identifier)
+
+  it('keeps issues carrying any selected label within a group (OR)', () => {
+    const out = applyFilters(all, baseFilters({ groupSelections: { Platform: ['1', '2'] } }), 365, null)
+    expect(ids(out)).toEqual(['A', 'B', 'C'])
+  })
+
+  it('requires a match in every group that has a selection (AND)', () => {
+    const out = applyFilters(
+      all,
+      baseFilters({ groupSelections: { Platform: ['1'], Severity: ['99'] } }),
+      365,
+      null,
+    )
+    expect(ids(out)).toEqual([])
+  })
+
+  it('ignores a group whose selection is empty', () => {
+    const out = applyFilters(all, baseFilters({ groupSelections: { Platform: [] } }), 365, null)
+    expect(ids(out)).toEqual(['A', 'B', 'C', 'D'])
+  })
+
+  it('filters by orphan label ids', () => {
+    const out = applyFilters(all, baseFilters({ orphanValues: ['3', '4'] }), 365, null)
+    expect(ids(out)).toEqual(['A', 'C'])
+  })
+
+  it('ANDs orphan selection with group selection', () => {
+    const out = applyFilters(
+      all,
+      baseFilters({ groupSelections: { Platform: ['1'] }, orphanValues: ['4'] }),
+      365,
+      null,
+    )
+    expect(ids(out)).toEqual(['C'])
+  })
+
+  it('tolerates snapshots persisted before these filters existed', () => {
+    const legacy = baseFilters()
+    delete (legacy as Partial<Filters>).groupSelections
+    delete (legacy as Partial<Filters>).orphanValues
+    expect(ids(applyFilters(all, legacy, 365, null))).toEqual(['A', 'B', 'C', 'D'])
+  })
+})
+
+// The filter panel counts every label from ONE leave-one-out pass, so that
+// pass has to drop all five label dimensions at once. Dropping only 'primary'
+// (as it used to) makes an exclusive group unusable: picking "iOS" drives the
+// count next to "Android" to 0, hiding the option the user wants to switch to.
+describe("applyFiltersExcluding · 'label'", () => {
+  const label = (id: string, name: string, group?: string) => ({
+    id,
+    name,
+    color: '#000',
+    group: group ? { id: `g-${group}`, name: group } : null,
+  })
+  const ios = label('1', 'iOS', 'Platform')
+  const android = label('2', 'Android', 'Platform')
+  const bug = label('3', 'Bug', 'Type')
+  const triage = label('4', 'needs-triage')
+
+  const all = [
+    makeIssue({ identifier: 'A', labels: [ios, bug] }),
+    makeIssue({ identifier: 'B', labels: [android, triage] }),
+  ]
+  const ids = (out: NormalizedIssue[]) => out.map((i) => i.identifier)
+
+  it('clears group, orphan, primary, type and prefix selections together', () => {
+    const f = baseFilters({
+      groupSelections: { Platform: ['1'] },
+      orphanValues: ['4'],
+      primaryValues: ['1'],
+      typeValues: ['3'],
+      prefixSelections: { env: ['99'] },
+    })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual([])
+    expect(ids(applyFiltersExcluding(all, f, 365, null, undefined, 'label'))).toEqual(['A', 'B'])
+  })
+
+  it('leaves non-label dimensions applied', () => {
+    const f = baseFilters({ groupSelections: { Platform: ['1'] }, assignees: ['nobody'] })
+    expect(ids(applyFiltersExcluding(all, f, 365, null, undefined, 'label'))).toEqual([])
+  })
+})
+
+describe('recency filter', () => {
+  // applyFilters reads the clock internally, so these use offsets from real
+  // "now". Boundary precision is covered exhaustively in recency.test.ts
+  // against a fixed clock; here we only prove the wiring.
+  const isoDaysAgo = (days: number) => new Date(Date.now() - days * 86400_000).toISOString()
+
+  const fresh = makeIssue({
+    identifier: 'FRESH',
+    createdAt: isoDaysAgo(200),
+    updatedAt: isoDaysAgo(1),
+  })
+  const old = makeIssue({
+    identifier: 'OLD',
+    createdAt: isoDaysAgo(200),
+    updatedAt: isoDaysAgo(200),
+  })
+  const bornToday = makeIssue({
+    identifier: 'NEW',
+    createdAt: isoDaysAgo(0),
+    updatedAt: isoDaysAgo(0),
+  })
+  const all = [fresh, old, bornToday]
+  const ids = (out: NormalizedIssue[]) => out.map((i) => i.identifier)
+
+  it('is off at the default window', () => {
+    expect(ids(applyFilters(all, baseFilters(), 365, null))).toEqual(['FRESH', 'OLD', 'NEW'])
+  })
+
+  it('keeps only recently updated issues in updated mode', () => {
+    const f = baseFilters({ recencyWindow: '7d', recencyMode: 'updated' })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['FRESH', 'NEW'])
+  })
+
+  it('keeps only recently created issues in created mode', () => {
+    // FRESH was created long ago but touched yesterday — the distinction the
+    // two modes exist for.
+    const f = baseFilters({ recencyWindow: '7d', recencyMode: 'created' })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['NEW'])
+  })
+
+  it('excludes the window but keeps other dimensions when excluding "time"', () => {
+    const f = baseFilters({ recencyWindow: '7d', priorities: [9] })
+    expect(ids(applyFiltersExcluding(all, f, 365, null, undefined, 'time'))).toEqual([])
+    const g = baseFilters({ recencyWindow: '7d' })
+    expect(ids(applyFiltersExcluding(all, g, 365, null, undefined, 'time'))).toEqual([
+      'FRESH',
+      'OLD',
+      'NEW',
+    ])
+  })
+})
+
+describe('negated facets', () => {
+  const a = makeIssue({
+    identifier: 'A',
+    state: { name: 'In Progress', type: 'started' },
+    priority: 1,
+    assignee: { displayName: 'shawn' },
+    labels: [{ id: 'l1', name: 'Bug', color: '#f00', group: null }],
+    project: { id: 'p1', name: 'Core' },
+  })
+  const b = makeIssue({
+    identifier: 'B',
+    state: { name: 'Todo', type: 'unstarted' },
+    priority: 2,
+    assignee: null,
+    labels: [{ id: 'l2', name: 'Chore', color: '#0f0', group: null }],
+    project: { id: 'p2', name: 'Side' },
+  })
+  const all = [a, b]
+  const ids = (out: NormalizedIssue[]) => out.map((i) => i.identifier)
+
+  it('inverts a state selection', () => {
+    const f = baseFilters({ stateTypes: ['started'] })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['A'])
+    expect(ids(applyFilters(all, { ...f, negated: ['state'] }, 365, null))).toEqual(['B'])
+  })
+
+  it.each([
+    ['priority', { priorities: [1] }, 'priority'],
+    ['assignee', { assignees: ['shawn'] }, 'assignee'],
+    ['primary label', { primaryValues: ['l1'] }, 'primary'],
+    ['orphan label', { orphanValues: ['l1'] }, 'orphan'],
+    ['project', { projectIds: ['p1'] }, 'project'],
+  ] as [string, Partial<Filters>, string][])('inverts %s', (_name, sel, facetId) => {
+    const f = baseFilters(sel)
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['A'])
+    expect(ids(applyFilters(all, { ...f, negated: [facetId] }, 365, null))).toEqual(['B'])
+  })
+
+  it('inverts a dynamic prefix group by its composed id', () => {
+    const f = baseFilters({ prefixSelections: { horizon: ['l1'] } })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['A'])
+    expect(
+      ids(applyFilters(all, { ...f, negated: ['prefix:horizon'] }, 365, null)),
+    ).toEqual(['B'])
+  })
+
+  it('negates only the named facet, leaving the others positive', () => {
+    const f = baseFilters({ priorities: [1], assignees: ['shawn'], negated: ['priority'] })
+    // priority NOT 1 excludes A; assignee IS shawn excludes B. Nothing left.
+    expect(ids(applyFilters(all, f, 365, null))).toEqual([])
+  })
+
+  // "Not in the empty set" matches everything, which is the same as no filter —
+  // so a negation with nothing selected must not hide anything.
+  it('is inert when the dimension has no selection', () => {
+    const f = baseFilters({ negated: ['priority', 'assignee', 'state'] })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['A', 'B'])
+  })
+
+  // "Not in these milestones" is true of an issue that is in no milestone at
+  // all, so a project-less issue passes under negation rather than being
+  // dropped by the milestone guard.
+  it('keeps project-less issues when a milestone selection is negated', () => {
+    const loose = makeIssue({ identifier: 'C' })
+    const f = baseFilters({ milestoneIds: ['p1::m1'], negated: ['project'] })
+    expect(ids(applyFilters([a, loose], f, 365, null))).toEqual(['A', 'C'])
+  })
+
+  it('tolerates a tab snapshot written before the field existed', () => {
+    const legacy = { ...baseFilters({ priorities: [1] }) } as Filters
+    delete (legacy as Partial<Filters>).negated
+    expect(ids(applyFilters(all, legacy, 365, null))).toEqual(['A'])
+  })
+})
+
+describe('state tree — names refine within their own type', () => {
+  const inProgress = makeIssue({
+    identifier: 'INP',
+    state: { name: 'In Progress', type: 'started' },
+  })
+  const review = makeIssue({ identifier: 'REV', state: { name: 'Review', type: 'started' } })
+  const todo = makeIssue({ identifier: 'TODO', state: { name: 'Todo', type: 'unstarted' } })
+  const spec = makeIssue({ identifier: 'SPEC', state: { name: 'Review Spec', type: 'unstarted' } })
+  const done = makeIssue({ identifier: 'DONE', state: { name: 'Done', type: 'completed' } })
+  const all = [inProgress, review, todo, spec, done]
+  const ids = (out: NormalizedIssue[]) => out.map((i) => i.identifier)
+
+  // The behaviour this replaced made any named pick shadow every type at once,
+  // which read as the tree being mutually exclusive.
+  it('narrows only the named type, leaving sibling types whole', () => {
+    const f = baseFilters({
+      stateTypes: ['started', 'unstarted'],
+      stateNames: ['unstarted::Todo'],
+    })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['INP', 'REV', 'TODO'])
+  })
+
+  it('refines two types independently', () => {
+    const f = baseFilters({
+      stateTypes: ['started', 'unstarted'],
+      stateNames: ['unstarted::Todo', 'started::Review'],
+    })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['REV', 'TODO'])
+  })
+
+  // Naming a state implies wanting its type, so the type list must not veto it.
+  it('honours an explicitly named archival state outside the type list', () => {
+    // The realistic shape: the four active types still checked, plus one
+    // named completed state. Tree semantics give "everything active, AND
+    // Done" — the type list must not veto the part the user named.
+    const f = baseFilters({
+      stateTypes: ['started', 'unstarted', 'backlog', 'triage'],
+      stateNames: ['completed::Done'],
+    })
+    expect(ids(applyFilters(all, f, 365, null))).toContain('DONE')
+  })
+
+  it('still hides archival states that were not named', () => {
+    const cancelled = makeIssue({
+      identifier: 'CAN',
+      state: { name: 'Cancelled', type: 'canceled' },
+    })
+    const f = baseFilters({
+      stateTypes: ['started', 'unstarted', 'backlog', 'triage'],
+      stateNames: ['completed::Done'],
+    })
+    expect(ids(applyFilters([...all, cancelled], f, 365, null))).not.toContain('CAN')
+  })
+
+  it('falls back to the coarse type selection when no name is picked', () => {
+    const f = baseFilters({ stateTypes: ['unstarted'] })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['TODO', 'SPEC'])
+  })
+
+  // Keys became composite only after `sname` started being serialized, so any
+  // bare name comes from a tab snapshot written earlier the same day.
+  it('still honours a bare legacy name, matching on name alone', () => {
+    const f = baseFilters({ stateTypes: [], stateNames: ['Todo'] })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['TODO'])
+  })
+})
+
+describe('recency ignores bumps that were only a link', () => {
+  // A single moment, used both as the link's timestamp and as the bumped
+  // issue's updatedAt — which is what the real backend produces.
+  const linkedAt = new Date(Date.now() - 3600 * 1000).toISOString()
+  const long_ago = '2026-01-01T00:00:00.000Z'
+
+  // SRC drew a link at `linkedAt`; TGT was on the receiving end and has not
+  // been touched in months otherwise. MOVER was genuinely edited.
+  const src = makeIssue({
+    identifier: 'SRC',
+    updatedAt: long_ago,
+    relations: [{ type: 'related', targetIdentifier: 'TGT', createdAt: linkedAt }],
+  })
+  const tgt = makeIssue({ identifier: 'TGT', updatedAt: linkedAt })
+  const mover = makeIssue({ identifier: 'MOVER', updatedAt: linkedAt })
+  const all = [src, tgt, mover]
+  const ids = (out: NormalizedIssue[]) => out.map((i) => i.identifier)
+
+  it('keeps the real mover and drops the merely-linked issue', () => {
+    const f = baseFilters({ recencyWindow: '24h', recencyIgnoreLinked: true })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['MOVER'])
+  })
+
+  it('admits the linked issue again when switched off', () => {
+    const f = baseFilters({ recencyWindow: '24h', recencyIgnoreLinked: false })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['TGT', 'MOVER'])
+  })
+
+  it('never removes anything while no window is set', () => {
+    // The flag defaults to on, so without this guard turning the recency
+    // filter OFF would still hide issues from the whole graph.
+    const f = baseFilters({ recencyWindow: 'any', recencyIgnoreLinked: true })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['SRC', 'TGT', 'MOVER'])
+  })
+
+  it('stays out of the way in created mode', () => {
+    const fresh = makeIssue({ identifier: 'NEW', createdAt: linkedAt, updatedAt: linkedAt })
+    const f = baseFilters({
+      recencyWindow: '24h',
+      recencyMode: 'created',
+      recencyIgnoreLinked: true,
+    })
+    expect(ids(applyFilters([...all, fresh], f, 365, null))).toEqual(['NEW'])
+  })
+
+  it('leaves the issue that drew the link visible when it is the one that moved', () => {
+    const activeSrc = { ...src, updatedAt: linkedAt }
+    const f = baseFilters({ recencyWindow: '24h', recencyIgnoreLinked: true })
+    expect(ids(applyFilters([activeSrc, tgt], f, 365, null))).toEqual(['SRC'])
+  })
+})
+
+// The deep-link escape hatch. A Raycast / shared-URL launch pins one issue and
+// no longer relaxes the filters to make it visible — the pinned identifier is
+// simply exempt, so the rest of the graph stays exactly as the user had it.
+describe('alwaysInclude (focused deep-link target)', () => {
+  const ids = (out: NormalizedIssue[]) => out.map((i) => i.identifier)
+  const target = makeIssue({ identifier: 'ENG-1', state: { name: 'Done', type: 'completed' } })
+  const other = makeIssue({ identifier: 'ENG-2', state: { name: 'Done', type: 'completed' } })
+  const active = makeIssue({ identifier: 'ENG-3', state: { name: 'In Progress', type: 'started' } })
+  const all = [target, other, active]
+
+  it('is dropped like anything else when no target is named', () => {
+    const f = baseFilters({ stateTypes: ACTIVE })
+    expect(ids(applyFilters(all, f, 365, null))).toEqual(['ENG-3'])
+  })
+
+  it('survives a state-type filter without dragging its peers along', () => {
+    const f = baseFilters({ stateTypes: ACTIVE })
+    expect(ids(applyFilters(all, f, 365, null, undefined, 'ENG-1'))).toEqual(['ENG-1', 'ENG-3'])
+  })
+
+  it('survives a dimension the target could never satisfy', () => {
+    // The exact case that makes this pair with preserveFiltersOnFocus: keeping
+    // the user's assignee filter would otherwise hide the issue they clicked.
+    const f = baseFilters({ assignees: ['Someone Else'] })
+    expect(ids(applyFilters(all, f, 365, null, undefined, 'ENG-1'))).toEqual(['ENG-1'])
+  })
+
+  it('survives the search box too', () => {
+    const f = baseFilters()
+    expect(ids(applyFilters(all, f, 365, null, 'zzzz', 'ENG-1'))).toEqual(['ENG-1'])
+  })
+
+  it('is inert when the named issue is not in the data', () => {
+    const f = baseFilters({ stateTypes: ACTIVE })
+    expect(ids(applyFilters(all, f, 365, null, undefined, 'NOPE-9'))).toEqual(['ENG-3'])
+  })
+
+  // Leave-one-out counts must not see the exemption, or every facet in the
+  // panel would read one higher than the graph actually shows.
+  it('does not leak into applyFiltersExcluding', () => {
+    const f = baseFilters({ stateTypes: ACTIVE, assignees: ['Someone Else'] })
+    expect(ids(applyFiltersExcluding(all, f, 365, null, undefined, 'state'))).toEqual([])
+  })
+})
+
+// The contradiction that removing `activeOnly` was really about. There used to
+// be a second filter over the state dimension, defaulting to ON, which hid
+// completed and canceled. At the default it did nothing — the four default
+// types exclude those already — so the only way to make it act was to put it at
+// odds with the type list, and then it won.
+describe('asking for an archival state actually shows it', () => {
+  const ids = (out: NormalizedIssue[]) => out.map((i) => i.identifier)
+  const done = makeIssue({ identifier: 'DONE-1', state: { name: 'Done', type: 'completed' } })
+  const cancelled = makeIssue({ identifier: 'CAN-1', state: { name: 'Cancelled', type: 'canceled' } })
+  const doing = makeIssue({ identifier: 'ENG-1', state: { name: 'In Progress', type: 'started' } })
+  const all = [done, cancelled, doing]
+
+  // Reachable from the UI, not only by hand-editing a URL: tick Completed in
+  // the State panel, then click the old "Active only" chip. The panel showed
+  // Completed selected and the graph showed nothing.
+  it('shows completed when completed is the selected type', () => {
+    expect(ids(applyFilters(all, baseFilters({ stateTypes: ['completed'] }), 365, null))).toEqual([
+      'DONE-1',
+    ])
+  })
+
+  it('shows canceled too', () => {
+    expect(ids(applyFilters(all, baseFilters({ stateTypes: ['canceled'] }), 365, null))).toEqual([
+      'CAN-1',
+    ])
+  })
+
+  it('still excludes them when they are not selected', () => {
+    expect(ids(applyFilters(all, baseFilters({ stateTypes: ACTIVE }), 365, null))).toEqual(['ENG-1'])
+  })
+
+  // The leave-one-out pass drops the whole state dimension. It used to need a
+  // third line for the boolean, without which these counted 0 no matter what.
+  it('counts archival states in the state facet’s leave-one-out', () => {
+    const f = baseFilters({ stateTypes: ACTIVE })
+    expect(ids(applyFiltersExcluding(all, f, 365, null, undefined, 'state')).sort()).toEqual([
+      'CAN-1', 'DONE-1', 'ENG-1',
+    ])
+  })
+})

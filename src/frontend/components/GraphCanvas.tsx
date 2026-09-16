@@ -22,14 +22,17 @@ import { useViewStore } from '../store/viewStore'
 import { useSchemaStore } from '../store/schemaStore'
 import { registerViewportBridge } from '../store/tabStateStore'
 import { registerHistoryViewportSink, storeViewportInHistory } from '../store/urlSync'
+import { resolveAbsolutePosition } from '../lib/nodeCoords'
 import { findView } from '../views'
 import { IssueNode } from './nodes/IssueNode'
 import { MixedContainerNode } from './nodes/MixedContainerNode'
+import { ProjectBackdropNode } from './nodes/ProjectBackdropNode'
 import { InlineSearch } from './InlineSearch'
 
 const nodeTypes = {
   issue: IssueNode,
   mixedContainer: MixedContainerNode,
+  projectBackdrop: ProjectBackdropNode,
 }
 
 function CanvasInner() {
@@ -38,13 +41,22 @@ function CanvasInner() {
   const activeView = useViewStore((s) => s.activeView)
   const filters = useViewStore((s) => s.filters)
   const focusedId = useViewStore((s) => s.focusedId)
-  const chainRootId = useViewStore((s) => s.chainRootId)
+  const chainRootIds = useViewStore((s) => s.chainRootIds)
+  const chainDepthUp = useViewStore((s) => s.chainDepthUp)
+  const chainDepthDown = useViewStore((s) => s.chainDepthDown)
   const showRelated = useViewStore((s) => s.showRelated)
+  const showHierarchy = useViewStore((s) => s.showHierarchy)
   const setChainRootId = useViewStore((s) => s.setChainRootId)
   const layoutBump = useViewStore((s) => s.layoutBump)
   const bumpLayout = useViewStore((s) => s.bumpLayout)
+  const focusArrivalSeq = useViewStore((s) => s.focusArrivalSeq)
+  const deepLinkFocusFallbackArmed = useViewStore((s) => s.deepLinkFocusFallbackArmed)
+  const clearDeepLinkFocusFallback = useViewStore((s) => s.clearDeepLinkFocusFallback)
+  const setActiveView = useViewStore((s) => s.setActiveView)
   const staleDays = useViewStore((s) => s.staleDays)
   const density = useViewStore((s) => s.density)
+  const maxColsPerRow = useViewStore((s) => s.maxColsPerRow)
+  const mixGroupBy = useViewStore((s) => s.mixGroupBy)
   const search = useViewStore((s) => s.search)
   const theme = useViewStore((s) => s.theme)
   const colorMode = theme === 'auto'
@@ -53,6 +65,8 @@ function CanvasInner() {
   const selection = useViewStore((s) => s.selection)
   const setFocusedId = useViewStore((s) => s.setFocusedId)
   const toggleSelection = useViewStore((s) => s.toggleSelection)
+  const setSelection = useViewStore((s) => s.setSelection)
+  const clearSelection = useViewStore((s) => s.clearSelection)
   const setContextMenu = useViewStore((s) => s.setContextMenu)
   const highlightedEdgeId = useViewStore((s) => s.highlightedEdgeId)
   const setHighlightedEdgeId = useViewStore((s) => s.setHighlightedEdgeId)
@@ -80,23 +94,43 @@ function CanvasInner() {
       myUserName,
       selection,
       focusedId,
-      chainRootId,
+      chainRootIds,
+      chainDepthUp,
+      chainDepthDown,
       showRelated,
+      showHierarchy,
       density,
+      maxColsPerRow,
       search,
+      mixGroupBy,
       measuredHeights: measuredHeights ?? undefined,
     })
-  }, [graph, schema, activeView, filters, staleDays, focusedId, chainRootId, showRelated, selection, myUserId, myUserName, density, search, measuredHeights])
+  }, [graph, schema, activeView, filters, staleDays, focusedId, chainRootIds, chainDepthUp, chainDepthDown, showRelated, showHierarchy, selection, myUserId, myUserName, density, maxColsPerRow, search, mixGroupBy, measuredHeights])
 
   // Local node state so user drags persist between renders within the same
   // layout-equivalent context. Anything that changes node sizes (density) or
   // node parentage (view) invalidates positions and forces a fresh layout —
   // otherwise stale positions cause overlaps when nodes grow.
+  // Published for the filter panel to report. Counted here rather than derived
+  // from applyFilters because container views add non-issue nodes and chain
+  // isolation trims the set, so only the built graph knows what is on screen.
+  const issueNodeCount = useMemo(
+    () => built.nodes.reduce((n, node) => (node.type === 'issue' ? n + 1 : n), 0),
+    [built.nodes],
+  )
+  const setVisibleIssueCount = useViewStore((s) => s.setVisibleIssueCount)
+  useEffect(() => {
+    setVisibleIssueCount(issueNodeCount)
+  }, [issueNodeCount, setVisibleIssueCount])
+
   const [nodes, setNodes] = useState<RFNode[]>(built.nodes)
   // Include `measuredHeights ? 'm' : 'e'` so the post-measure re-layout pass is
   // treated as a sig change — that forces the freshly-laid-out positions in,
   // instead of preserving the pre-measure (overlapping) positions.
-  const layoutSig = `${activeView}|${density}|${measuredHeights ? 'm' : 'e'}|${layoutBump}`
+  // mixGroupBy belongs here for the same reason activeView does: regrouping
+  // reparents every issue node, so preserved drag positions would place cards
+  // at coordinates that belonged to a different container.
+  const layoutSig = `${activeView}|${density}|${mixGroupBy ?? ''}|${measuredHeights ? 'm' : 'e'}|${layoutBump}`
   const lastSigRef = useRef(layoutSig)
   useEffect(() => {
     const sigChanged = lastSigRef.current !== layoutSig
@@ -353,7 +387,7 @@ function CanvasInner() {
         //   - lastLayoutBumpRef: align with the restored layoutBump so
         //     Producer 3 doesn't fire a re-layout in the new tab just
         //     because the previous tab had a different bump count.
-        //   - prevChainRef: align with the restored chainRootId so the
+        //   - prevChainRef: align with the restored chainRootIds so the
         //     auto-bump-on-chain-clear effect doesn't trigger when the
         //     previous tab had a chain set and the new one doesn't.
         const s = useViewStore.getState()
@@ -362,7 +396,7 @@ function CanvasInner() {
           pendingFitViewRef.current = { padding: 0.1, preserveFocus: true }
         }
         lastLayoutBumpRef.current = s.layoutBump
-        prevChainRef.current = s.chainRootId
+        prevChainRef.current = s.chainRootIds
       },
     )
   }, [rf])
@@ -423,6 +457,23 @@ function CanvasInner() {
       // PREVIOUS view's coordinates after a view switch.
       const sourceNodes = built.nodes
       const node = sourceNodes.find((n) => n.id === focusedId)
+
+      // Deep-link safety net: we arrived via ?focus= and KEPT the user's view
+      // (Raycast / shared link), but the focused issue has no node here — e.g.
+      // focusing a project-less issue while in Milestone view. Fall back to
+      // dependency, which shows every issue, so the camera has a real target.
+      // Producer 2 (activeView change) re-queues a preserve-focus fit, and this
+      // effect re-runs with the node present. One-shot — clear so it can't loop.
+      if (deepLinkFocusFallbackArmed) {
+        clearDeepLinkFocusFallback()
+        if (!node && activeView !== 'dependency') {
+          pendingFitViewRef.current = null
+          pendingViewportRestoreRef.current = null
+          setActiveView('dependency')
+          return
+        }
+      }
+
       const issueCount = sourceNodes.filter((n) => n.type === 'issue').length
       // Small-view heuristic: when the visible issue count is low
       // (typical of Design-docs view, or a narrow chain isolation),
@@ -438,15 +489,11 @@ function CanvasInner() {
         return
       }
       if (node?.position) {
-        let absX = node.position.x
-        let absY = node.position.y
-        if (node.parentNode) {
-          const parent = sourceNodes.find((p) => p.id === node.parentNode)
-          if (parent?.position) {
-            absX += parent.position.x
-            absY += parent.position.y
-          }
-        }
+        // Walk the full parent chain — milestone view nests issue → milestone
+        // → projectBackdrop, so a single-level lookup misses the backdrop's
+        // offset and pans the camera to the wrong place.
+        const lookupById = new Map(sourceNodes.map((n) => [n.id, n]))
+        const { x: absX, y: absY } = resolveAbsolutePosition(node, (id) => lookupById.get(id))
         const w = (node.width ?? 320) as number
         const h = (node.height ?? 110) as number
         pendingFitViewRef.current = null
@@ -479,7 +526,7 @@ function CanvasInner() {
       pendingFitViewRef.current = null
       fitToBuiltBounds({ padding: fitReq.padding, duration: 600, densityFit: true })
     }
-  }, [measuredHeights, rf, focusedId, built, fitToBuiltBounds])
+  }, [measuredHeights, rf, focusedId, built, fitToBuiltBounds, activeView, deepLinkFocusFallbackArmed, clearDeepLinkFocusFallback, setActiveView])
 
   // Producer 1: first non-empty load. preserveFocus so that F5 / cold
   // start with a focusedId in the URL (or restored from tabStateStore)
@@ -528,6 +575,19 @@ function CanvasInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layoutBump])
 
+  // Producer 5: view-preserving focus deep link (Raycast / shared URL). The
+  // view didn't switch, so Producers 1–3 don't fire — but the user just asked
+  // to see a specific issue. Queue a preserve-focus fit so the main fit effect
+  // centers on it (and runs the dependency fallback if it isn't in this view).
+  const lastFocusArrivalRef = useRef(focusArrivalSeq)
+  useEffect(() => {
+    if (lastFocusArrivalRef.current === focusArrivalSeq) return
+    lastFocusArrivalRef.current = focusArrivalSeq
+    if (nodes.length === 0) return
+    pendingFitViewRef.current = { padding: 0.1, preserveFocus: true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusArrivalSeq])
+
   // Producer 4: explicit pan-to-focused request. Bumped from external surfaces
   // (e.g. an issue-id link clicked inside a workspace note) so the camera
   // follows the focus change without forcing a full layout redo. We pan with
@@ -540,20 +600,11 @@ function CanvasInner() {
     if (!focusedId) return
     const node = rf.getNode(focusedId)
     if (!node) return
-    // Resolve absolute coords: in Mix / Project views issues live inside
-    // bucket containers, so `node.position` is relative to the parent. The
-    // existing preserveFocus path (see Producer 1/2/3 consumer) does this
-    // same walk; without it, setCenter lands the camera somewhere far from
-    // the actual rendered position.
-    let absX = node.position.x
-    let absY = node.position.y
-    if (node.parentNode) {
-      const parent = rf.getNode(node.parentNode)
-      if (parent?.position) {
-        absX += parent.position.x
-        absY += parent.position.y
-      }
-    }
+    // Resolve absolute coords by walking the full parent chain. In
+    // milestone view this is issue → milestone → projectBackdrop (two
+    // hops); Mix/Project views are one hop. The existing preserveFocus
+    // path uses the same helper.
+    const { x: absX, y: absY } = resolveAbsolutePosition(node, (id) => rf.getNode(id))
     const w = node.width ?? 320
     const h = node.height ?? 110
     const cx = absX + w / 2
@@ -608,8 +659,8 @@ function CanvasInner() {
     }
   }, [panToFocusedSeq, focusedId, rf, storeApi])
 
-  // Auto-bump layout when chain isolation is *cleared* (chainRootId goes
-  // non-null → null). Without this, exiting chain mode keeps the chain
+  // Auto-bump layout when chain isolation is *cleared* (chainRootIds goes
+  // non-empty → empty). Without this, exiting chain mode keeps the chain
   // members' tightly-packed positions and the previously-hidden nodes get
   // fresh dagre positions inserted around them — they overlap. We don't bump
   // when entering chain mode: plain "Isolate chain" deliberately preserves
@@ -622,17 +673,17 @@ function CanvasInner() {
   // (null → non-null) and queue a restore on exit. The consumer at
   // `pendingViewportRestoreRef` runs *before* fitView, so the saved
   // viewport wins.
-  const prevChainRef = useRef<string | null>(chainRootId)
+  const prevChainRef = useRef<string[]>(chainRootIds)
   const chainEntryViewportRef = useRef<Viewport | null>(null)
   useEffect(() => {
-    const wasSet = prevChainRef.current !== null
-    const isSet = chainRootId !== null
-    const isCleared = chainRootId === null
-    // react-hooks/immutability: tracking the previous chainRootId via a
-    // ref so we can detect non-null ↔ null transitions. Canonical
+    const wasSet = prevChainRef.current.length > 0
+    const isSet = chainRootIds.length > 0
+    const isCleared = chainRootIds.length === 0
+    // react-hooks/immutability: tracking the previous chainRootIds via a
+    // ref so we can detect empty ↔ non-empty transitions. Canonical
     // "useEffect with previous value" pattern.
     // eslint-disable-next-line react-hooks/immutability
-    prevChainRef.current = chainRootId
+    prevChainRef.current = chainRootIds
     if (!wasSet && isSet) {
       // Entering chain mode — snapshot viewport so we can restore on exit.
       chainEntryViewportRef.current = rf.getViewport()
@@ -645,7 +696,7 @@ function CanvasInner() {
         chainEntryViewportRef.current = null
       }
     }
-  }, [chainRootId, bumpLayout, rf])
+  }, [chainRootIds, bumpLayout, rf])
 
   // Manual re-layout button handler. Bumps layoutBump → measured cache
   // clears → dagre re-runs from scratch (ignores user-dragged positions) →
@@ -670,6 +721,10 @@ function CanvasInner() {
   // pinned/focused state when they leave.
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null)
+  // Position of the cursor while hovering an edge. Drives the floating
+  // "ONE-xxx → ONE-yyy" tag so it sits near the cursor instead of at the
+  // edge midpoint (RF's default), which can be far off-screen on long edges.
+  const [edgeHoverPos, setEdgeHoverPos] = useState<{ x: number; y: number } | null>(null)
 
   // Effective highlight target — priority order:
   //   1. hovered edge / node (instant, ephemeral)
@@ -679,6 +734,14 @@ function CanvasInner() {
   // both cases.
   const effectiveEdgeId = hoveredEdgeId ?? highlightedEdgeId
   const effectiveNodeId = hoveredNodeId ?? highlightedNodeId ?? focusedId
+  // Highlight strength: 'soft' for transient hover or focus-based dim;
+  // 'strong' for explicit click-pin isolation. Strong mode is for the user
+  // who's actively tracing a chain — drops unrelated cards to near-invisible
+  // and hides unrelated edges entirely so the chain reads cleanly. Hover
+  // stays soft so quick scanning doesn't feel violent.
+  const isHovering = Boolean(hoveredEdgeId || hoveredNodeId)
+  const isPinned = !isHovering && Boolean(highlightedEdgeId || highlightedNodeId)
+  const highlightStrength: 'soft' | 'strong' = isPinned ? 'strong' : 'soft'
 
   const highlight = useMemo(() => {
     if (effectiveEdgeId) {
@@ -708,33 +771,81 @@ function CanvasInner() {
 
   const displayNodes = useMemo(() => {
     if (!highlight) return nodes
+    // C3: container/backdrop chrome dims alongside issues when a highlight is
+    // active, so the user's chain isn't visually overrun by the project frame
+    // or milestone-container outline. Keep it at 0.4 (not deeper) so the
+    // project tint still signals "this is what cluster you're in".
+    const dimUnrelated = highlightStrength === 'strong' ? 0.08 : 0.25
     return nodes.map((n) => {
-      // Container nodes (mix view) stay opaque so the layout chrome doesn't fade.
-      if (n.type !== 'issue') return n
+      if (n.type !== 'issue') {
+        return {
+          ...n,
+          style: { ...(n.style ?? {}), opacity: 0.4, transition: 'opacity 200ms' },
+        }
+      }
       const isOn = highlight.nodes.has(n.id)
-      return { ...n, style: { ...(n.style ?? {}), opacity: isOn ? 1 : 0.25, transition: 'opacity 200ms' } }
+      return {
+        ...n,
+        style: { ...(n.style ?? {}), opacity: isOn ? 1 : dimUnrelated, transition: 'opacity 200ms' },
+      }
     })
-  }, [nodes, highlight])
+  }, [nodes, highlight, highlightStrength])
 
   const displayEdges = useMemo<RFEdge[]>(() => {
     if (!highlight) return built.edges
+    const isStrong = highlightStrength === 'strong'
+    const onStroke = isStrong ? 3.5 : 2.6
+    const offOpacity = isStrong ? 0 : 0.15
     return built.edges.map((e) => {
       const isOn = highlight.edges.has(e.id)
+      // C1 + C2: highlighted edges get `.is-highlighted` (CSS halo via
+      // drop-shadow so the line reads even where it crosses cards) and
+      // zIndex 1000 so RF v11's edge-layer-per-zIndex puts them in a
+      // separate SVG that renders above the nodes container.
+      const baseClass = e.className ?? ''
+      const className = isOn ? `${baseClass} is-highlighted`.trim() : baseClass
+      // Edge label hint is rendered as a floating overlay near the cursor
+      // (see edgeHoverPos / EdgeHoverLabel below) rather than RF's built-in
+      // mid-edge label, which often lands far from where the user is probing
+      // on long edges.
       return {
         ...e,
-        style: { ...(e.style ?? {}), opacity: isOn ? 1 : 0.15, strokeWidth: isOn ? 2.6 : (e.style?.strokeWidth ?? 1.8) },
-        zIndex: isOn ? 10 : 0,
+        className,
+        style: {
+          ...(e.style ?? {}),
+          opacity: isOn ? 1 : offOpacity,
+          strokeWidth: isOn ? onStroke : (e.style?.strokeWidth ?? 1.8),
+          // C4 strong mode: unrelated edges are invisible AND non-interactive,
+          // so the user can hover the chain without accidentally grabbing a
+          // hidden edge sitting underneath.
+          pointerEvents: !isOn && isStrong ? 'none' : undefined,
+        },
+        zIndex: isOn ? 1000 : 0,
       }
     })
-  }, [built.edges, highlight])
+    // hoveredEdgeId is deliberately NOT a dependency: the hover hint is a
+    // floating overlay rendered near the cursor (see EdgeHoverLabel below),
+    // not an edge style, so recomputing every edge on each hover was pure
+    // waste on the hot path.
+  }, [built.edges, highlight, highlightStrength])
 
   const onNodeClick: NodeMouseHandler = (event, node) => {
     if (event.metaKey || event.ctrlKey) {
-      toggleSelection(node.id)
+      // Multi-select. Seed from the current focus so "click A, then Cmd+click
+      // B" selects BOTH — the plain click on A established it as the anchor.
+      // Once a selection already exists, Cmd+click just toggles membership.
+      if (selection.length === 0 && focusedId && focusedId !== node.id) {
+        setSelection([focusedId, node.id])
+      } else {
+        toggleSelection(node.id)
+      }
       return
     }
     if (node.type === 'issue') {
       setFocusedId(node.id)
+      // A plain click starts fresh — drop any multi-selection so its dashed
+      // outlines don't linger as confusing stale state next to the new focus.
+      if (selection.length > 0) clearSelection()
       // Toggle node-spotlight: same node clears, different node replaces.
       if (highlightedEdgeId) setHighlightedEdgeId(null)
       setHighlightedNodeId(highlightedNodeId === node.id ? null : node.id)
@@ -791,14 +902,17 @@ function CanvasInner() {
   // priority order (effectiveEdgeId ?? highlightedEdgeId), so a wrongly-
   // pinned edge hijacks the entire highlight even when the user has moved
   // on to hovering an unrelated node.
-  const onEdgeMouseEnter: EdgeMouseHandler = (_e, edge) => {
+  const onEdgeMouseEnter: EdgeMouseHandler = (e, edge) => {
     setHoveredEdgeId(edge.id)
+    setEdgeHoverPos({ x: e.clientX, y: e.clientY })
   }
-  const onEdgeMouseMove: EdgeMouseHandler = (_e, edge) => {
+  const onEdgeMouseMove: EdgeMouseHandler = (e, edge) => {
     setHoveredEdgeId((prev) => (prev === edge.id ? prev : edge.id))
+    setEdgeHoverPos({ x: e.clientX, y: e.clientY })
   }
   const onEdgeMouseLeave: EdgeMouseHandler = (_e, edge) => {
     setHoveredEdgeId((prev) => (prev === edge.id ? null : prev))
+    setEdgeHoverPos(null)
   }
 
   // Final safety net: when the cursor is in the empty pane between nodes
@@ -816,6 +930,7 @@ function CanvasInner() {
     if (target.closest('.react-flow__node, .react-flow__edge')) return
     setHoveredNodeId((prev) => (prev === null ? prev : null))
     setHoveredEdgeId((prev) => (prev === null ? prev : null))
+    setEdgeHoverPos(null)
   }
 
   const onPaneClick = () => {
@@ -834,7 +949,7 @@ function CanvasInner() {
   return (
     <div className="canvas" ref={rfRef} style={{ position: 'relative' }}>
       <InlineSearch />
-      {chainRootId && activeView === 'dependency' && built.nodes.length === 0 && (
+      {chainRootIds.length > 0 && activeView === 'dependency' && built.nodes.length === 0 && (
         <div
           style={{
             position: 'absolute',
@@ -854,7 +969,7 @@ function CanvasInner() {
             alignItems: 'center',
           }}
         >
-          <div>Chain root <strong>{chainRootId}</strong> not found in current data.</div>
+          <div>Chain root{chainRootIds.length === 1 ? ' ' : 's '}<strong>{chainRootIds.join(', ')}</strong> not found in current data.</div>
           <button onClick={() => setChainRootId(null)}>Clear chain</button>
         </div>
       )}
@@ -982,6 +1097,31 @@ function CanvasInner() {
           />
         )}
       </ReactFlow>
+      {hoveredEdgeId && edgeHoverPos && (() => {
+        const e = built.edges.find((x) => x.id === hoveredEdgeId)
+        if (!e) return null
+        return (
+          <div
+            style={{
+              position: 'fixed',
+              left: edgeHoverPos.x + 12,
+              top: edgeHoverPos.y + 12,
+              padding: '3px 6px',
+              borderRadius: 4,
+              background: 'var(--bg-elev)',
+              border: '1px solid var(--node-border)',
+              color: 'var(--fg)',
+              fontSize: 11,
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+              pointerEvents: 'none',
+              zIndex: 1000,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {e.source} → {e.target}
+          </div>
+        )
+      })()}
     </div>
   )
 }

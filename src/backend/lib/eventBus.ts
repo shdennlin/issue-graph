@@ -9,6 +9,8 @@ type Listener = (event: BusEvent) => void
 export const BUS_EVENT = {
   DESIGNDOC_CHANGED: 'designdoc-changed',
   DEFAULT_WORKSPACE_CHANGED: 'default-workspace-changed',
+  /** A Linear webhook triggered a sync that completed. Clients refetch. */
+  ISSUES_CHANGED: 'issues-changed',
 } as const
 export type BusEventType = (typeof BUS_EVENT)[keyof typeof BUS_EVENT]
 

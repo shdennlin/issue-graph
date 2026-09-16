@@ -1,10 +1,16 @@
 // Workspace-change warning banner. The sync metadata that used to live
 // here (last-sync, issue/doc counts, refresh button, workspace picker)
 // moved into `TabBar` as part of unifying the two header rows. This
-// component now only renders the red warning bar shown when the backend
-// detects that the active Linear API key resolves to a different
-// `viewer.organization.urlKey` than the last sync — i.e. the cache may
-// contain stale issues from a previous workspace.
+// component renders two red bars:
+//
+//   1. The active workspace's credentials were rejected by the backend. This
+//      used to be handled by showing the setup screen, but that screen now
+//      means "no workspaces exist" — a workspace that exists with a bad key is
+//      a different problem and needs a different message, or the graph just
+//      renders empty with no explanation.
+//   2. The backend detects that the active Linear API key resolves to a
+//      different `viewer.organization.urlKey` than the last sync — i.e. the
+//      cache may contain stale issues from a previous workspace.
 
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
@@ -17,6 +23,41 @@ export function SyncBanner() {
   const setSettingsOpen = useViewStore((s) => s.setSettingsOpen)
   const t = useT()
   const warning = graph?.workspaceWarning ?? null
+  const authError = graph?.authError ?? false
+  const syncFailure = graph?.syncFailure ?? null
+
+  // No key configured at all.
+  if (authError) {
+    return (
+      <div className="sync-banner-error">
+        <span style={{ fontWeight: 600 }}>{t('syncBanner.authError')}</span>
+        <span style={{ opacity: 0.9 }}>{t('syncBanner.authErrorHelp')}</span>
+        <button onClick={() => setSettingsOpen(true)} title={t('syncBanner.openSettingsTitle')}>
+          {t('syncBanner.openSettings')}
+        </button>
+      </div>
+    )
+  }
+
+  // A key IS configured but the last sync failed. The auth case is the one a
+  // first-time user hits by typing the key wrong, and it used to show as an
+  // empty graph with no explanation anywhere except the sync-history modal.
+  if (syncFailure) {
+    const isAuth = syncFailure.kind === 'auth'
+    return (
+      <div className="sync-banner-error">
+        <span style={{ fontWeight: 600 }}>
+          {isAuth ? t('syncBanner.syncAuthFailed') : t('syncBanner.syncFailed')}
+        </span>
+        <span style={{ opacity: 0.9 }}>
+          {isAuth ? t('syncBanner.syncAuthFailedHelp') : (syncFailure.message ?? '')}
+        </span>
+        <button onClick={() => setSettingsOpen(true)} title={t('syncBanner.openSettingsTitle')}>
+          {t('syncBanner.openSettings')}
+        </button>
+      </div>
+    )
+  }
 
   if (!warning) return null
 
