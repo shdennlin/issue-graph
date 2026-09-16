@@ -101,13 +101,29 @@ export function allIssuesFromBranch(
   return out
 }
 
-/** Collect the team keys present in a set of cached issues, for the options
- *  above. Kept here so the caller does not have to know that `team` is
- *  optional on NormalizedIssue. */
+/**
+ * Collect the team keys a workspace has.
+ *
+ * Workflow states are the better source and are tried first: the cached list
+ * covers every team in the workspace, while cached ISSUES only cover whatever
+ * the current scope window happens to hold. Deriving keys from issues alone
+ * means a team with nothing recent is invisible, and a session on one of its
+ * branches silently resolves to nothing.
+ *
+ * Issues are still folded in as a fallback, for a cache populated before
+ * workflow states were stored, or a backend adapter that does not expose them.
+ *
+ * An empty result resolves nothing downstream, by design — see trap 2 above.
+ */
 export function teamKeysFrom(
   issues: { team?: { key: string } | null }[],
+  workflowStates: { teamKey?: string | null }[] = [],
 ): string[] {
   const keys = new Set<string>()
+  for (const w of workflowStates) {
+    const k = w.teamKey
+    if (typeof k === 'string' && k.length > 0) keys.add(k.toUpperCase())
+  }
   for (const i of issues) {
     const k = i.team?.key
     if (typeof k === 'string' && k.length > 0) keys.add(k.toUpperCase())

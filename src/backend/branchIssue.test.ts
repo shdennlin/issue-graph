@@ -106,7 +106,26 @@ describe('teamKeysFrom', () => {
     ).toEqual(['ONE', 'VDKR'])
   })
 
-  it('returns an empty list for no issues, which resolves nothing downstream', () => {
+  it('returns an empty list for no input, which resolves nothing downstream', () => {
     expect(teamKeysFrom([])).toEqual([])
+    expect(teamKeysFrom([], [])).toEqual([])
+  })
+
+  it('takes keys from workflow states, which cover teams the issue cache does not', () => {
+    // Cached issues only hold whatever the current scope window caught. A team
+    // with nothing recent would be invisible, and a session on one of its
+    // branches would silently resolve to nothing.
+    expect(teamKeysFrom([], [{ teamKey: 'VDKR' }])).toEqual(['VDKR'])
+  })
+
+  it('merges both sources and ignores states with no team', () => {
+    expect(
+      teamKeysFrom([{ team: { key: 'ONE' } }], [{ teamKey: 'vdkr' }, { teamKey: null }, {}]).sort(),
+    ).toEqual(['ONE', 'VDKR'])
+  })
+
+  it('resolves a branch for a team that has no cached issues at all', () => {
+    const keys = teamKeysFrom([], [{ teamKey: 'ONE' }])
+    expect(issueFromBranch('fix/one-393-x', { teamKeys: keys })).toBe('ONE-393')
   })
 })

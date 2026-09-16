@@ -17,7 +17,7 @@
 import { Hono } from 'hono'
 import { getDb } from '../db.js'
 import { loadConfig } from '../lib/env.js'
-import { readCachedIssues } from '../cache.js'
+import { readCachedIssues, readWorkflowStatesCached } from '../cache.js'
 import { issueFromBranch, teamKeysFrom } from '../branchIssue.js'
 import {
   HOOK_PAYLOAD_VERSION,
@@ -66,11 +66,13 @@ agentSessionRoutes.post('/api/agent-sessions', async (c) => {
   // time (see branchIssue.ts), and a rule in the server can be fixed by
   // restarting it, while one baked into an installed plugin cannot.
   //
-  // Team keys come from the cache, so a cold cache resolves nothing. That is
-  // the safe direction — an unattributed session is better than one parked on
-  // the wrong issue.
+  // Team keys come from the cache, so a server that has never synced resolves
+  // nothing. That is the safe direction — an unattributed session is better
+  // than one parked on the wrong issue. Workflow states are preferred over
+  // issues because they cover every team, not just the ones with something in
+  // the current scope window.
   const identifier = issueFromBranch(report.branch, {
-    teamKeys: teamKeysFrom(readCachedIssues()),
+    teamKeys: teamKeysFrom(readCachedIssues(), readWorkflowStatesCached()),
   })
 
   const now = Date.now()

@@ -64,9 +64,13 @@ vi.mock('../db.js', () => ({
 
 vi.mock('../lib/env.js', () => ({ loadConfig: () => ({ AGENT_SESSION_TOKEN: token }) }))
 
-// One cached issue, so the branch parser has a team key to work with.
+// No cached issues at all — the team key comes from the workflow states, which
+// is the case that matters: a team with nothing inside the current scope window
+// must still resolve, or a session on one of its branches silently attributes
+// to nothing.
 vi.mock('../cache.js', () => ({
-  readCachedIssues: () => [{ team: { key: 'ONE' } }],
+  readCachedIssues: () => [],
+  readWorkflowStatesCached: () => [{ teamKey: 'ONE' }],
 }))
 
 const { agentSessionRoutes } = await import('./agentSessions.js')
