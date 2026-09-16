@@ -56,6 +56,18 @@ export interface IssueChanged {
   title: string
   /** Non-empty by construction — a change with no moved field is not emitted. */
   fields: ChangedField[]
+  /**
+   * What each field became, short enough to sit on one line.
+   *
+   * Raw domain values, not sentences — this module has no locale and must not
+   * grow one. `null` means the field was cleared; a field is absent when
+   * naming the new value adds nothing (a comment has no "to", and a rename
+   * already shows as the row's own title).
+   *
+   * `priority` rides as the number in string form because localising it needs
+   * `priorityLabelFor`, which belongs to the component.
+   */
+  to: Partial<Record<ChangedField, string | null>>
   before: NormalizedIssue
   after: NormalizedIssue
 }
@@ -126,6 +138,62 @@ function changedFields(before: NormalizedIssue, after: NormalizedIssue): Changed
 }
 
 /**
+ * Labels as a signed delta rather than the resulting set.
+ *
+ * "+bug" says what happened; listing all six labels the issue now carries
+ * would not, and would not fit on the line either.
+ */
+function labelDelta(before: NormalizedIssue, after: NormalizedIssue): string {
+  const had = new Set(before.labels.map((l) => l.id))
+  const has = new Set(after.labels.map((l) => l.id))
+  const added = after.labels.filter((l) => !had.has(l.id)).map((l) => `+${l.name}`)
+  const removed = before.labels.filter((l) => !has.has(l.id)).map((l) => `−${l.name}`)
+  return [...added, ...removed].join(' ')
+}
+
+/** Short new value per moved field. Only fields in `fields` are looked at, so
+ *  nothing here can invent a change the comparison did not find. */
+function newValues(
+  fields: readonly ChangedField[],
+  before: NormalizedIssue,
+  after: NormalizedIssue,
+): Partial<Record<ChangedField, string | null>> {
+  const to: Partial<Record<ChangedField, string | null>> = {}
+  for (const f of fields) {
+    switch (f) {
+      case 'state':
+        to.state = after.state.name
+        break
+      case 'assignee':
+        to.assignee = after.assignee?.displayName ?? null
+        break
+      case 'priority':
+        to.priority = String(after.priority)
+        break
+      case 'project':
+        to.project = after.project?.name ?? null
+        break
+      case 'milestone':
+        to.milestone = after.projectMilestone?.name ?? null
+        break
+      case 'dueDate':
+        // 'YYYY-MM-DD' -> 'MM-DD'. The year is noise on a line this short, and
+        // trimming beats reaching for a locale formatter this module cannot have.
+        to.dueDate = after.dueDate ? after.dueDate.slice(5) : null
+        break
+      case 'labels':
+        to.labels = labelDelta(before, after)
+        break
+      // `title` and `comment` carry no useful "to": the row already shows the
+      // new title, and a comment's value is that it exists.
+      default:
+        break
+    }
+  }
+  return to
+}
+
+/**
  * Semantic changes between two issue lists, keyed by `identifier`.
  *
  * Issues present in `prev` but absent from `next` produce nothing. That is not
@@ -160,6 +228,7 @@ export function diffIssues(
       identifier: after.identifier,
       title: after.title,
       fields,
+      to: newValues(fields, before, after),
       before,
       after,
     })

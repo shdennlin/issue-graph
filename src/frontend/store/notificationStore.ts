@@ -39,6 +39,8 @@ export interface NotificationEntry {
   title: string
   kind: 'created' | 'changed'
   fields: ChangedField[]
+  /** Short new value per field — see `IssueChanged.to`. */
+  to: Partial<Record<ChangedField, string | null>>
   at: number
   read: boolean
 }
@@ -116,6 +118,7 @@ function toEntry(change: IssueChange, at: number): NotificationEntry {
     title: change.title,
     kind: change.kind,
     fields: change.kind === 'changed' ? change.fields : [],
+    to: change.kind === 'changed' ? change.to : {},
     at,
     read: false,
   }

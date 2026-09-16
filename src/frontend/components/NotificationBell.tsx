@@ -5,7 +5,10 @@ import type { ChangedField } from '../lib/issueDiff'
 import { unreadCount, useNotificationStore } from '../store/notificationStore'
 import { useViewStore } from '../store/viewStore'
 import { currentQuery } from '../store/urlSync'
-import { useT, type DictKey } from '../i18n'
+import { useT, useLocale, type DictKey } from '../i18n'
+import { priorityLabelFor } from '../lib/colors'
+import type { NotificationEntry } from '../store/notificationStore'
+import type { Locale } from '../i18n/store'
 
 /**
  * Anchored popover, not a modal.
@@ -24,6 +27,7 @@ export function NotificationBell({ iconSize }: { iconSize: number }) {
   const scopeQuery = useNotificationStore((s) => s.scopeQuery)
   const setScopeQuery = useNotificationStore((s) => s.setScopeQuery)
   const t = useT()
+  const locale = useLocale()
 
   const scoped = scopeQuery !== ''
 
@@ -109,7 +113,7 @@ export function NotificationBell({ iconSize }: { iconSize: number }) {
                 >
                   <span className="notif-row-id">{e.identifier}</span>
                   <span className="notif-row-title">{e.title}</span>
-                  <span className="notif-row-what">{summarize(e.kind, e.fields, t)}</span>
+                  <span className="notif-row-what">{summarize(e, t, locale)}</span>
                 </button>
               ))}
             </div>
@@ -135,10 +139,21 @@ const FIELD_KEY: Record<ChangedField, DictKey> = {
 }
 
 function summarize(
-  kind: 'created' | 'changed',
-  fields: ChangedField[],
+  e: NotificationEntry,
   t: (k: DictKey) => string,
+  locale: Locale,
 ): string {
-  if (kind === 'created') return t('notifications.created')
-  return fields.map((f) => t(FIELD_KEY[f])).join(' · ')
+  if (e.kind === 'created') return t('notifications.created')
+  // "→ In Review · +bug · new comment" — the value where there is one, the
+  // field name where naming the value would say less than naming the field.
+  return e.fields
+    .map((f) => {
+      const to = e.to[f]
+      if (to === undefined) return t(FIELD_KEY[f])
+      if (to === null) return `${t(FIELD_KEY[f])} —`
+      if (f === 'priority') return `→ ${priorityLabelFor(Number(to), locale)}`
+      if (f === 'labels') return to
+      return `→ ${to}`
+    })
+    .join(' · ')
 }

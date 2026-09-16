@@ -198,3 +198,64 @@ describe('diffIssues — gate support', () => {
     expect(out[0]?.after).toBe(after)
   })
 })
+
+describe('diffIssues — short "what it became"', () => {
+  it('names the new state, assignee, project, milestone and due date', () => {
+    const before = makeIssue({})
+    const after = makeIssue({
+      state: { name: 'In Review', type: 'started' },
+      assignee: { id: 'u1', displayName: 'Shawn' },
+      project: { id: 'p1', name: 'Core API' },
+      projectMilestone: { id: 'm1', name: 'M2', targetDate: null, sortOrder: null },
+      dueDate: '2026-10-08',
+    })
+    const out = diffIssues([before], [after])
+    expect(out[0]).toMatchObject({
+      to: {
+        state: 'In Review',
+        assignee: 'Shawn',
+        project: 'Core API',
+        milestone: 'M2',
+        // Year trimmed — noise on a one-line summary.
+        dueDate: '10-08',
+      },
+    })
+  })
+
+  it('uses null for a cleared field, which the UI renders as an em dash', () => {
+    const before = makeIssue({
+      assignee: { id: 'u1', displayName: 'Shawn' },
+      dueDate: '2026-10-08',
+      project: { id: 'p1', name: 'Core API' },
+    })
+    const after = makeIssue({})
+    expect(out(before, after)).toMatchObject({
+      to: { assignee: null, dueDate: null, project: null },
+    })
+  })
+
+  it('renders labels as a signed delta, not the resulting set', () => {
+    const before = makeIssue({ labels: [label('keep'), label('drop')] })
+    const after = makeIssue({ labels: [label('keep'), label('add')] })
+    expect(out(before, after).to?.labels).toBe('+add −drop')
+  })
+
+  it('carries priority as the raw number for the component to localise', () => {
+    expect(out(makeIssue({ priority: 2 }), makeIssue({ priority: 1 })).to?.priority).toBe('1')
+    // 0 is "No priority", a value someone picks — not a cleared field.
+    expect(out(makeIssue({ priority: 2 }), makeIssue({ priority: 0 })).to?.priority).toBe('0')
+  })
+
+  it('offers no value for a rename or a comment', () => {
+    // The row already shows the new title, and a comment's value is that it exists.
+    expect(out(makeIssue({ title: 'a' }), makeIssue({ title: 'b' })).to).toEqual({})
+    const commented = out(makeIssue({}), makeIssue({ lastCommentAt: '2026-09-02T00:00:00.000Z' }))
+    expect(commented.to).toEqual({})
+  })
+})
+
+function out(before: NormalizedIssue, after: NormalizedIssue) {
+  const [first] = diffIssues([before], [after])
+  if (!first || first.kind !== 'changed') throw new Error('expected one changed entry')
+  return first
+}
