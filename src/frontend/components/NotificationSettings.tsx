@@ -75,11 +75,17 @@ export function NotificationSettings({ webhookConfigured }: { webhookConfigured:
           checked={desktopEnabled && !desktopBlocked}
           disabled={desktopBlocked}
           onChange={async (e) => {
+            // Read before awaiting. This is a controlled input, so React puts
+            // the DOM node back in step with its prop as soon as the
+            // synchronous part of this handler returns — by the time the
+            // permission prompt resolves, `e.target.checked` reads false again
+            // and the very first grant would leave the toggle off.
+            const wanted = e.target.checked
             // requestPermission MUST run inside this gesture — asking on mount
             // is what gets a prompt silently suppressed.
-            if (e.target.checked && support !== 'granted') await requestPermission()
+            if (wanted && support !== 'granted') await requestPermission()
             const granted = useNotificationStore.getState().support === 'granted'
-            setDesktopEnabled(e.target.checked && granted)
+            setDesktopEnabled(wanted && granted)
           }}
         />{' '}
         {t('notifications.desktop')}

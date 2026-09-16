@@ -45,7 +45,7 @@ interface GraphState {
    * don't bump last_sync_ms — so we just want to pull the latest graph
    * state and replace. No loading flash.
    */
-  refetchSilent: () => Promise<void>
+  refetchSilent: (opts?: { notify?: boolean }) => Promise<void>
   forceSync: () => Promise<void>
   /**
    * Lazy-fetch extension. Used by the State filter when the user explicitly
@@ -101,10 +101,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       // refresh / sync will surface a real error.
     }
   },
-  async refetchSilent() {
+  async refetchSilent({ notify = true }: { notify?: boolean } = {}) {
     try {
       const fresh = await api.fetchGraph()
-      notifyOnGraphSwap(get().graph, fresh)
+      // `notify: false` is for the rollback after a failed write. There the
+      // baseline is this browser's own optimistic paint and the incoming rows
+      // are the server's unchanged ones, so the diff reads the revert as an
+      // external edit — the user would be told an agent undid the change they
+      // just failed to make.
+      if (notify) notifyOnGraphSwap(get().graph, fresh)
       set({ graph: fresh })
     } catch {
       // Silent — caller is a real-time event handler; failing once is fine,

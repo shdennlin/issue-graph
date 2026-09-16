@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useNotificationStore } from '../store/notificationStore'
 import { useViewStore } from '../store/viewStore'
 import { useT } from '../i18n'
@@ -30,19 +30,17 @@ export function NotificationToast() {
       s.settingsOpen || s.syncHistoryOpen || s.coverageOpen || s.shortcutsOpen || s.notesOpen,
   )
 
-  // `now` advances only from the interval. Reading Date.now() in the render
-  // body is an impure read that eslint-plugin-react-hooks v7 rightly flags,
-  // and it would also make the component non-deterministic under replay.
-  const [now, setNow] = useState(() => Date.now())
-
+  // One timeout that actually clears the toast, rather than a ticker that
+  // re-renders until something else happens to replace it. Hiding on an elapsed
+  // comparison left `toast` set, and with it as the effect's only dependency
+  // the interval went on firing for the rest of the session.
   useEffect(() => {
     if (!toast) return
-    const id = window.setInterval(() => setNow(Date.now()), 500)
-    return () => window.clearInterval(id)
-  }, [toast])
+    const id = window.setTimeout(dismiss, Math.max(0, toast.at + TOAST_MS - Date.now()))
+    return () => window.clearTimeout(id)
+  }, [toast, dismiss])
 
   if (!toast || modalOpen) return null
-  if (now - toast.at > TOAST_MS) return null
 
   return (
     <div className="notif-toast" role="status">

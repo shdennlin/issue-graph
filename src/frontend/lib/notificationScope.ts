@@ -11,7 +11,7 @@
 
 import type { NormalizedIssue } from '@shared/types.js'
 import type { CodecState } from '../store/filterCodec'
-import { parseFilters } from '../store/filterCodec'
+import { fillLegacyState, parseFilters } from '../store/filterCodec'
 import { applyFilters } from '../views/filters'
 import type { IssueChange } from './issueDiff'
 
@@ -37,7 +37,14 @@ export interface ScopeContext {
 export function parseScope(query: string): NotificationScope {
   const trimmed = query.trim()
   if (trimmed === '') return null
-  return parseFilters(new URLSearchParams(trimmed))
+  // `fillLegacyState` first, exactly as `applySavedQuery` and `savedViewMatch`
+  // do, and for the same reason: a query that names no `state` was written when
+  // omission meant the EMPTY selection, while `parseFilters` reads an absent
+  // `state` as the default four types. Skipping it turns "any state" into
+  // "anything but Completed and Canceled" — so a saved view that shows every
+  // state on the canvas would gate notifications to four of six, and a scope
+  // snapshotted from a bare deep-link URL would drop every completion.
+  return parseFilters(fillLegacyState(new URLSearchParams(trimmed)))
 }
 
 /**

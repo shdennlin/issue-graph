@@ -110,9 +110,12 @@ export function writeHistory(workspaceId: string | null, entries: StoredEntry[])
     localStorage.setItem(storageKey(workspaceId), serialize(capped))
   } catch {
     try {
+      // `Math.max(1, …)`: halving a single-entry log rounds to zero, which
+      // would write an empty one — losing the head, which is the opposite of
+      // what this retry is for.
       localStorage.setItem(
         storageKey(workspaceId),
-        serialize(capped.slice(0, Math.floor(capped.length / 2))),
+        serialize(capped.slice(0, Math.max(1, Math.floor(capped.length / 2)))),
       )
     } catch {
       // Quota or private mode. The in-memory list still works this session.

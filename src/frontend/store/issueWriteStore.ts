@@ -225,7 +225,7 @@ async function fail(
   // Reload first, so the optimistic paint is replaced by the server's truth,
   // then set the error — the reload must not be what clears it.
   try {
-    await useGraphStore.getState().refetchSilent()
+    await useGraphStore.getState().refetchSilent({ notify: false })
   } catch {
     /* the error below is the thing the user needs either way */
   }

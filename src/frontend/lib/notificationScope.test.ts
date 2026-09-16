@@ -145,3 +145,19 @@ describe('gateChanges — short circuits', () => {
     expect(gateChanges([], parseScope('proj=p1'), [], [], ctx)).toEqual([])
   })
 })
+
+describe('parseScope — legacy queries', () => {
+  it('reads a query with no state param as "any state", not as the default four', () => {
+    // Regression: `parseFilters` alone returns defaultFilters.stateTypes when
+    // `state` is absent, but an absent `state` in a STORED query means the
+    // empty selection — which is why applySavedQuery and savedViewMatch both
+    // run fillLegacyState first. Without it, a scope snapshotted from a bare
+    // URL silently excludes every Completed/Canceled transition.
+    const scope = parseScope('proj=p1')
+    expect(scope?.filters.stateTypes).toEqual([])
+  })
+
+  it('still honours an explicit state list', () => {
+    expect(parseScope('state=started')?.filters.stateTypes).toEqual(['started'])
+  })
+})

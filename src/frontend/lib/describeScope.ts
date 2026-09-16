@@ -37,6 +37,7 @@ export type Translate = (key: DictKey, params?: Record<string, string | number>)
 export interface NameLookup {
   label: (id: string) => string
   project: (id: string) => string
+  milestone: (id: string) => string
 }
 
 /** Build id -> name maps from the cached graph. Missing ids fall back to the
@@ -49,27 +50,17 @@ export function buildNameLookup(
   const labelNames = new Map<string, string>()
   for (const l of labels) labelNames.set(l.id, l.name)
   const projectNames = new Map<string, string>()
+  const milestoneNames = new Map<string, string>()
   for (const i of issues) {
     if (i.project) projectNames.set(i.project.id, i.project.name)
+    if (i.projectMilestone) milestoneNames.set(i.projectMilestone.id, i.projectMilestone.name)
     for (const l of i.labels) if (!labelNames.has(l.id)) labelNames.set(l.id, l.name)
   }
   return {
     label: (id) => labelNames.get(id) ?? id,
     project: (id) => projectNames.get(id) ?? id,
+    milestone: (id) => milestoneNames.get(id) ?? id,
   }
-}
-
-/** Every label-shaped dimension flattened into one list. The scope panel does
- *  not need to reproduce the schema's primary/type/prefix/group taxonomy — the
- *  reader wants to know which labels, not which bucket the schema put them in. */
-function allLabelIds(f: Filters): string[] {
-  return [
-    ...f.primaryValues,
-    ...f.typeValues,
-    ...f.orphanValues,
-    ...Object.values(f.prefixSelections).flat(),
-    ...Object.values(f.groupSelections).flat(),
-  ]
 }
 
 /**
@@ -133,17 +124,42 @@ export function describeScope(
       label: t('filterPanel.projectMilestone'),
       values: f.milestoneIds.map((k) => {
         const [, milestone] = k.split(STATE_NAME_SEP)
-        return milestone === NO_MILESTONE_TOKEN ? t('filterPanel.noMilestone') : (milestone ?? k)
+        if (milestone === NO_MILESTONE_TOKEN) return t('filterPanel.noMilestone')
+        // Without this the line read as a raw Linear uuid — the one dimension
+        // with no path to a name at all.
+        return milestone ? names.milestone(milestone) : k
       }),
       negated: false,
     })
   }
 
-  const labelIds = allLabelIds(f)
-  if (labelIds.length > 0) {
+  // One line per label dimension rather than one flattened line. `primary`,
+  // `type` and `orphan` are each independently negatable (NEGATABLE_FACETS in
+  // views/filters.ts), so flattening them forced a single `negated` flag —
+  // which rendered an exclusion as an allow-list, stating the exact inverse of
+  // what the scope does. Prefix and group selections are not negatable and can
+  // still share a line.
+  for (const [ids, facetId] of [
+    [f.primaryValues, 'primary'],
+    [f.typeValues, 'type'],
+    [f.orphanValues, 'orphan'],
+  ] as const) {
+    if (ids.length > 0) {
+      lines.push({
+        label: t('filterPanel.otherLabels'),
+        values: ids.map(names.label),
+        negated: neg(facetId),
+      })
+    }
+  }
+  const keyed = [
+    ...Object.values(f.prefixSelections).flat(),
+    ...Object.values(f.groupSelections).flat(),
+  ]
+  if (keyed.length > 0) {
     lines.push({
       label: t('filterPanel.otherLabels'),
-      values: labelIds.map(names.label),
+      values: keyed.map(names.label),
       negated: false,
     })
   }
@@ -161,7 +177,9 @@ export function describeScope(
     lines.push({
       label: t('filterPanel.recency'),
       values: [f.recencyWindow],
-      negated: neg('recency'),
+      // Recency is not in NEGATABLE_FACETS, and its facet id is `time` anyway —
+      // the `neg('recency')` that used to sit here could never be true.
+      negated: false,
     })
   }
   if (f.designdocFilter !== 'all') {

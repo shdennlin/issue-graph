@@ -90,3 +90,23 @@ describe('notificationHistory — bounds', () => {
     expect(back?.title.endsWith('…')).toBe(true)
   })
 })
+
+describe('notificationHistory — quota retry', () => {
+  it('keeps the single entry when halving would round to zero', () => {
+    // Math.floor(1/2) === 0 wrote an empty log — losing the head, which is the
+    // opposite of what the retry exists for.
+    const original = Storage.prototype.setItem
+    let calls = 0
+    Storage.prototype.setItem = function patched(k: string, v: string) {
+      calls += 1
+      if (calls === 1) throw new DOMException('quota', 'QuotaExceededError')
+      return original.call(this, k, v)
+    }
+    try {
+      writeHistory('ws1', [entry({ id: 'only' })])
+    } finally {
+      Storage.prototype.setItem = original
+    }
+    expect(readHistory('ws1').map((e) => e.id)).toEqual(['only'])
+  })
+})

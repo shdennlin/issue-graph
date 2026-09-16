@@ -83,7 +83,10 @@ describe('describeScope — names', () => {
 })
 
 describe('describeScope — every label dimension is reported', () => {
-  it('flattens primary, type, orphan, prefix and group selections into one line', () => {
+  it('gives each negatable label dimension its own line, and shares one for the rest', () => {
+    // primary / type / orphan are independently negatable, so they cannot share
+    // a line — one `negated` flag between them would misstate at least one.
+    // Prefix and group selections are not negatable and still share.
     const scope = f({
       primaryValues: ['a'],
       typeValues: ['b'],
@@ -91,10 +94,10 @@ describe('describeScope — every label dimension is reported', () => {
       prefixSelections: { area: ['d'] },
       groupSelections: { team: ['e'] },
     })
-    const line = describeScope(scope, noNames, t, locale).find(
+    const lines = describeScope(scope, noNames, t, locale).filter(
       (l) => l.label === 'filterPanel.otherLabels',
     )
-    expect(line?.values).toEqual(['a', 'b', 'c', 'd', 'e'])
+    expect(lines.map((l) => l.values)).toEqual([['a'], ['b'], ['c'], ['d', 'e']])
   })
 })
 
@@ -120,5 +123,37 @@ describe('describeScope — negation and booleans', () => {
     expect(d).toContain('filterPanel.dueDate')
     expect(d).toContain('filterPanel.recency')
     expect(d).toContain('filterPanel.designDoc')
+  })
+})
+
+describe('describeScope — regressions', () => {
+  it('marks a negated label dimension instead of stating its inverse', () => {
+    // `bucket=Bug&neg=primary` means "everything that is NOT Bug". Flattening
+    // the three label dimensions into one line forced a single negated flag,
+    // and rendered the exclusion as an allow-list.
+    const scope = f({ primaryValues: ['Bug'], negated: ['primary'] })
+    const line = describeScope(scope, noNames, t, locale).find(
+      (l) => l.label === 'filterPanel.otherLabels',
+    )
+    expect(line?.negated).toBe(true)
+  })
+
+  it('keeps independently negated label dimensions on separate lines', () => {
+    const scope = f({ primaryValues: ['Bug'], typeValues: ['Chore'], negated: ['primary'] })
+    const lines = describeScope(scope, noNames, t, locale).filter(
+      (l) => l.label === 'filterPanel.otherLabels',
+    )
+    expect(lines.map((l) => [l.values, l.negated])).toEqual([
+      [['Bug'], true],
+      [['Chore'], false],
+    ])
+  })
+
+  it('never reports recency as negated — it is not a negatable facet', () => {
+    const scope = f({ recencyWindow: '24h', negated: ['recency', 'time'] })
+    const line = describeScope(scope, noNames, t, locale).find(
+      (l) => l.label === 'filterPanel.recency',
+    )
+    expect(line?.negated).toBe(false)
   })
 })

@@ -26,15 +26,17 @@ import { useNotificationStore } from '../store/notificationStore'
 import { useViewStore } from '../store/viewStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 
-/**
- * Workspace the last diffed graph belonged to.
- *
- * `GraphResponse` carries no workspace id, so the only way to notice a switch
- * is to remember which one we were on. Without this, moving a tab from
- * workspace A to B would diff A's issues against B's and report the entire
- * workspace as new.
- */
-let lastWorkspaceId: string | null | undefined
+// No cross-workspace guard here, deliberately.
+//
+// There used to be a remembered `lastWorkspaceId`, on the theory that moving a
+// tab between workspaces would diff A's issues against B's. It cannot: at every
+// site that calls this, `prev` and `next` already belong to the same workspace.
+// `loadTab` restores that tab's OWN graph before App.tsx re-fetches, and an
+// in-place workspace change (the SyncBanner picker) takes the `load()` path,
+// which never notifies at all. What the guard actually did was fire on tab
+// switch — dropping a perfectly good diff AND advancing the baseline past it,
+// so everything an agent had done in the workspace you were switching TO was
+// swallowed and could never be reported.
 
 /**
  * Diff `prev` against `next`, apply the stored scope, and record what survives.
@@ -45,12 +47,10 @@ let lastWorkspaceId: string | null | undefined
 export function notifyOnGraphSwap(prev: GraphResponse | null, next: GraphResponse): void {
   try {
     const workspaceId = useWorkspaceStore.getState().currentWorkspaceId
-    const switched = lastWorkspaceId !== undefined && lastWorkspaceId !== workspaceId
-    lastWorkspaceId = workspaceId
 
-    // No baseline, or the baseline belongs to another workspace: adopt `next`
-    // as the new baseline silently. The first graph a tab ever sees is not news.
-    if (!prev || switched) return
+    // The first graph a tab ever sees is not news — there is nothing to diff
+    // it against.
+    if (!prev) return
 
     const changes = diffIssues(prev.data.issues, next.data.issues)
     if (changes.length === 0) return
@@ -73,9 +73,4 @@ export function notifyOnGraphSwap(prev: GraphResponse | null, next: GraphRespons
   } catch {
     // Any failure here is cosmetic by definition — the graph is already fresh.
   }
-}
-
-/** Test seam: forget the remembered workspace so each case starts clean. */
-export function resetNotifyBaseline(): void {
-  lastWorkspaceId = undefined
 }
