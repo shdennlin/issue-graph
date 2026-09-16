@@ -1,4 +1,9 @@
+import { useMemo } from 'react'
 import { useNotificationStore } from '../store/notificationStore'
+import { useGraphStore } from '../store/graphStore'
+import { buildNameLookup, describeScope } from '../lib/describeScope'
+import { parseScope } from '../lib/notificationScope'
+import { useLocale } from '../i18n'
 import { useSavedViewsStore } from '../store/savedViewsStore'
 import { currentQuery } from '../store/urlSync'
 import { useT } from '../i18n'
@@ -22,7 +27,21 @@ export function NotificationSettings({ webhookConfigured }: { webhookConfigured:
   const scopeQuery = useNotificationStore((s) => s.scopeQuery)
   const setScopeQuery = useNotificationStore((s) => s.setScopeQuery)
   const savedViews = useSavedViewsStore((s) => s.views)
+  const graph = useGraphStore((s) => s.graph)
   const t = useT()
+  const locale = useLocale()
+
+  // Both passes are O(issues) and the scope changes only on an explicit click,
+  // so without memoising they would rerun on every keystroke elsewhere in
+  // Settings. React Compiler is not enabled here — see CLAUDE.md.
+  const names = useMemo(
+    () => buildNameLookup(graph?.data.issues ?? [], graph?.data.labels ?? []),
+    [graph],
+  )
+  const scopeLines = useMemo(() => {
+    const parsed = parseScope(scopeQuery)
+    return parsed ? describeScope(parsed.filters, names, t, locale) : []
+  }, [scopeQuery, names, t, locale])
 
   // Three states, like capabilityStore's write controls: impossible here /
   // possible but not granted / available. `null` would mean "not asked yet",
@@ -106,11 +125,26 @@ export function NotificationSettings({ webhookConfigured }: { webhookConfigured:
           constrained dimension could vanish from the summary. Under-reporting
           the scope of a *notification* filter reads as "I am told about more
           than I am", which is the worse direction to be wrong in. */}
-      <div className="settings-help" style={{ marginBottom: 6 }}>
-        {scoped
-          ? t('notifications.scopeSummaryCustom', { count: conditionCount(scopeQuery) })
-          : t('notifications.scopeSummaryAll')}
-      </div>
+      {scoped ? (
+        <div className="notif-scope-lines">
+          {scopeLines.map((line) => (
+            <div key={line.label} className="notif-scope-line">
+              <span className="notif-scope-dim">{line.label}</span>
+              <span className="notif-scope-op">
+                {line.negated ? t('notifications.scopeIsNot') : t('notifications.scopeIs')}
+              </span>
+              <span className="notif-scope-vals">{line.values.join(', ') || '✓'}</span>
+            </div>
+          ))}
+          {scopeLines.length === 0 && (
+            <div className="settings-help">{t('notifications.scopeSummaryEmpty')}</div>
+          )}
+        </div>
+      ) : (
+        <div className="settings-help" style={{ marginBottom: 6 }}>
+          {t('notifications.scopeSummaryAll')}
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
         <button type="button" onClick={() => setScopeQuery(currentQuery())}>
@@ -127,10 +161,4 @@ export function NotificationSettings({ webhookConfigured }: { webhookConfigured:
       </div>
     </>
   )
-}
-
-/** How many params the stored scope carries. A count, not a rendering — see
- *  the comment above the summary for why this deliberately says less. */
-function conditionCount(query: string): number {
-  return [...new URLSearchParams(query).keys()].length
 }

@@ -651,6 +651,9 @@ export const en = {
     scopeCurrent: 'Use my current filters',
     scopeCurrentHint:
       'Takes a copy of the filters you have on right now. It does not follow the view afterwards.',
+    scopeIs: 'is',
+    scopeIsNot: 'is not',
+    scopeSummaryEmpty: 'This snapshot constrains nothing — it behaves like Everything.',
     scopeSummaryAll: 'Every issue in this workspace.',
     scopeSummaryCustom: 'A snapshot with {count} condition(s).',
     scopeReset: 'Notify about everything again',

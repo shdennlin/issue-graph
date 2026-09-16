@@ -3618,3 +3618,27 @@ label + .settings-help {
   color: var(--fg-muted);
   white-space: nowrap;
 }
+.notif-scope-lines {
+  margin: 2px 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.notif-scope-line {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-size: var(--fs-meta);
+}
+.notif-scope-dim {
+  color: var(--fg-muted);
+  min-width: 96px;
+}
+.notif-scope-op {
+  color: var(--fg-muted);
+  opacity: 0.75;
+}
+.notif-scope-vals {
+  color: var(--fg);
+  font-weight: 600;
+}
