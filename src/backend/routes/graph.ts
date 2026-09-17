@@ -10,6 +10,7 @@ import {
   readAnnotations,
   readIssueStages,
   readLiveAgentSessions,
+  readWorkstreamSummaries,
   readLifecycleStages,
   readMeta,
   readLastSyncOutcome,
@@ -40,6 +41,7 @@ graphRoutes.get('/api/graph', async (c) => {
   const lifecycle = readLifecycleStages()
   const stages = readIssueStages()
   const agentSessions = readLiveAgentSessions()
+  const workstreams = readWorkstreamSummaries()
   const viewer = readViewerCached()
   const fetchedAt = readLastSyncMs() ?? 0
   const adapter = getActiveDesignDocAdapter(cfg.REPO_PATH, cfg.DESIGNDOC_ADAPTER)
@@ -63,6 +65,7 @@ graphRoutes.get('/api/graph', async (c) => {
       lifecycle,
       stages,
       agentSessions,
+      workstreams,
       viewer,
       fetchedAt,
     },

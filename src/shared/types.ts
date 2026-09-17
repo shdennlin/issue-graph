@@ -357,6 +357,23 @@ export interface AgentSessionDTO {
   lastSeen: number
 }
 
+/**
+ * A workstream as the graph needs it: who belongs, not how far along.
+ *
+ * Progress and claims are deliberately absent — the Workstreams panel fetches
+ * those per stream, and putting them here would grow every graph response for
+ * data only one view reads. Membership alone is what draws the containers.
+ *
+ * Order is not carried either: the view lays members out with dagre inside a
+ * container, and the `blocks` edges that decide sequence are already on the
+ * issues.
+ */
+export interface WorkstreamSummaryDTO {
+  id: number
+  name: string
+  members: string[]
+}
+
 export interface GraphData {
   issues: NormalizedIssue[]
   labels: NormalizedLabel[]
@@ -368,6 +385,8 @@ export interface GraphData {
   stages?: IssueStageDTO[]
   /** Live agent sessions. Already filtered by TTL — a row here is alive. */
   agentSessions?: AgentSessionDTO[]
+  /** Workstreams and their membership, for the workstream view. */
+  workstreams?: WorkstreamSummaryDTO[]
   viewer?: Viewer | null
   fetchedAt: number
 }

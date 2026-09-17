@@ -64,6 +64,10 @@ export const zhTW: Dict = {
     settingsAria: '設定',
   },
   views: {
+    workstream: {
+      label: '工作線',
+      description: '每條進行中的 feature 一個容器。卡片上直接看得到每張 issue 的 stage、Linear 狀態，以及有沒有 session 在做。',
+    },
     dependency: {
       label: '相依關係',
       description: '議題與 blocks 連線。最適合回答「接下來該做什麼？」。',

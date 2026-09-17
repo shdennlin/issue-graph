@@ -4,6 +4,7 @@ import type {
   NormalizedLabel,
   AnnotationDTO,
   AgentSessionDTO,
+  WorkstreamSummaryDTO,
   IssueStageDTO,
   LifecycleStageDTO,
   WorkflowState,
@@ -289,6 +290,25 @@ export function readLifecycleStages(): LifecycleStageDTO[] {
     )
     .all() as LifecycleStageRow[]
   return rows.map(lifecycleRowToDTO)
+}
+
+/** Workstreams with their membership, for the workstream view. */
+export function readWorkstreamSummaries(): WorkstreamSummaryDTO[] {
+  const db = getDb()
+  const rows = db.prepare('SELECT id, name FROM batch ORDER BY created_at DESC, id DESC').all() as {
+    id: number
+    name: string
+  }[]
+  const members = db
+    .prepare('SELECT batch_id, identifier FROM batch_member')
+    .all() as { batch_id: number; identifier: string }[]
+  const byBatch = new Map<number, string[]>()
+  for (const m of members) {
+    const list = byBatch.get(m.batch_id)
+    if (list) list.push(m.identifier)
+    else byBatch.set(m.batch_id, [m.identifier])
+  }
+  return rows.map((r) => ({ id: r.id, name: r.name, members: byBatch.get(r.id) ?? [] }))
 }
 
 /**

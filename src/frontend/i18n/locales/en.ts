@@ -64,6 +64,10 @@ export const en = {
     settingsAria: 'Settings',
   },
   views: {
+    workstream: {
+      label: 'Workstreams',
+      description: 'One container per feature in flight. Cards show each issue\u2019s stage, its Linear state, and whether a session is on it.',
+    },
     dependency: {
       label: 'Dependency',
       description: 'Issues + blocks edges. Best for "what should I work on next?".',
