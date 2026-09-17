@@ -21,6 +21,7 @@ import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react'
 import type { LifecycleStageDTO } from '@shared/types'
 import { api } from '../lib/api'
 import { useGraphStore } from '../store/graphStore'
+import { useSchemaStore } from '../store/schemaStore'
 import { stageUsage } from '../lib/lifecycle'
 import { useT } from '../i18n'
 
@@ -34,12 +35,27 @@ export function LifecycleSettings() {
   const [busy, setBusy] = useState(false)
 
   const usage = stageUsage(graph?.data.stages)
-  // Every distinct Linear state name currently in the cache, for the picker.
-  // Taken from the issues rather than the workflow-state list because a name
-  // nothing uses is not worth offering.
+  const workflowStates = useSchemaStore((s) => s.workflowStates)
+
+  // Every state the WORKSPACE has, not every state currently in use.
+  //
+  // Deriving this from cached issues (which is what it used to do) hides any
+  // state nothing happens to sit in right now — "In Review" vanished from the
+  // picker whenever no issue was under review, so the two stages that expect it
+  // could not be configured at all. A workflow state with nothing in it is
+  // exactly the one a pipeline is heading towards.
+  //
+  // Names from the cache are still folded in, so a state that has since been
+  // removed from Linear stays visible while issues still carry it — otherwise a
+  // stage would silently reference a name the editor cannot show.
   const stateNames = Array.from(
-    new Set((graph?.data.issues ?? []).map((i) => i.state.name)),
-  ).sort()
+    new Set([
+      ...workflowStates.map((w) => w.name),
+      ...(graph?.data.issues ?? []).map((i) => i.state.name),
+    ]),
+  )
+    .filter((n) => n.length > 0)
+    .sort()
 
   useEffect(() => {
     let live = true
