@@ -518,11 +518,11 @@ export const en = {
     title: 'Lifecycle',
     // The config describes and suggests; it never moves an issue by itself.
     // Saying so here stops anyone expecting the states below to be automation.
-    hint: 'Your pipeline, in order. Each stage names the Linear states it expects and the command that moves work on. Nothing here changes an issue on its own.',
+    hint: 'Your pipeline, in order. Each stage names the Linear states it expects, and a note about what usually happens there — a hint for whoever picks the issue up, not a rule. Nothing here changes an issue on its own.',
     empty: 'No stages yet. Add the first step of your pipeline below.',
     stageName: 'Stage name',
-    nextCommand: 'Next command',
-    nextCommandPlaceholder: 'e.g. /spectra-apply',
+    nextCommand: 'Typical next step',
+    nextCommandPlaceholder: 'usually run here, e.g. /spectra-apply',
     newStage: 'New stage name',
     newStagePlaceholder: 'e.g. Review spec',
     addStage: 'Add stage',

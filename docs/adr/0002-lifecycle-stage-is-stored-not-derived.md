@@ -98,6 +98,15 @@ That is the trigger for a node-graph editor, and nothing else is.
 **Three or more pull requests are routinely in flight at once.** Then CI status stops
 being a passive wait and a GitHub source starts paying for itself.
 
+**A workspace holds two teams whose pipelines genuinely differ.** There is one
+lifecycle per workspace, while Linear's workflow states are per team — so today two
+teams in one workspace can only share a lifecycle whose compatible-state lists are the
+union of both, which loosens conflict detection for each. The additive fix is a nullable
+`team_key` on `lifecycle_stage` (null meaning "applies to every team"), and the trigger
+is the union becoming loose enough that a conflict stops meaning anything. Not before:
+most workspaces are one team, and per-team configuration nobody needs is a second thing
+to keep in sync.
+
 **Stages and states converge to one per one.** If a workspace's lifecycle ever collapses
 to exactly its Linear states, storing the stage buys nothing there and derivation becomes
 the honest answer for that workspace.
