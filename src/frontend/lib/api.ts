@@ -43,7 +43,18 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
     const { code, message } = extractApiError(text)
     throw new ApiError(message, res.status, code)
   }
-  return (await res.json()) as T
+  // 204 carries no body, and neither does a 200 with an empty one. Calling
+  // res.json() on either throws "Unexpected end of JSON input" — which reads
+  // as a failure even though the request succeeded, so the caller skips its
+  // refresh and leaves a row on screen that the server has already deleted.
+  // Clicking it again then 404s, which is how this surfaced.
+  //
+  // Pre-existing: DELETE /api/saved-views has always returned 204, so
+  // savedViewsStore's delete path has had the same defect.
+  if (res.status === 204) return undefined as T
+  const text = await res.text()
+  if (text.length === 0) return undefined as T
+  return JSON.parse(text) as T
 }
 
 export interface LabelsResponse {

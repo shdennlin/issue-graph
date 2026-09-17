@@ -65,12 +65,18 @@ export function LifecycleSettings() {
     setError(null)
     try {
       await fn()
-      await refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(false)
     }
+    // Refresh even when the action failed. A rejected write leaves the editor
+    // showing what the user tried, not what the server holds, and the next
+    // click then acts on a row that may no longer exist.
+    try {
+      await refresh()
+    } catch {
+      /* The error from the action above is the more useful one to keep. */
+    }
+    setBusy(false)
   }
 
   const add = () => {
