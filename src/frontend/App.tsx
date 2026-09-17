@@ -43,6 +43,7 @@ const SyncHistoryModal = lazy(() =>
 const CoverageModal = lazy(() => import('./components/CoverageModal').then((m) => ({ default: m.CoverageModal })))
 const SettingsPage = lazy(() => import('./components/SettingsPage').then((m) => ({ default: m.SettingsPage })))
 const ShortcutsModal = lazy(() => import('./components/ShortcutsModal').then((m) => ({ default: m.ShortcutsModal })))
+const WorkstreamsPanel = lazy(() => import('./components/WorkstreamsPanel').then((m) => ({ default: m.WorkstreamsPanel })))
 const NotesModal = lazy(() => import('./components/notes/NotesModal').then((m) => ({ default: m.NotesModal })))
 
 export function App() {
@@ -63,6 +64,7 @@ export function App() {
   const settingsOpen = useViewStore((s) => s.settingsOpen)
   const shortcutsOpen = useViewStore((s) => s.shortcutsOpen)
   const notesOpen = useViewStore((s) => s.notesOpen)
+  const workstreamsOpen = useViewStore((s) => s.workstreamsOpen)
 
   // Bootstrap step 1 — resolve this tab's workspace + tab list BEFORE any
   // graph/schema calls. The fetch helpers in lib/api.ts inject `?w=` from
@@ -407,7 +409,7 @@ export function App() {
         // issue you were on, no jump), the next Esc unfocuses. Chain is
         // peeled BEFORE focus precisely so the recenter has a focus target.
         const s = useViewStore.getState()
-        const modalOpen = s.settingsOpen || s.syncHistoryOpen || s.coverageOpen || s.shortcutsOpen || s.notesOpen
+        const modalOpen = s.settingsOpen || s.syncHistoryOpen || s.coverageOpen || s.shortcutsOpen || s.notesOpen || s.workstreamsOpen
         if (modalOpen) return
         // Peels before the inline finder: an anchored popover is the top-most
         // non-modal surface, so it is what Esc should reach first.
@@ -753,6 +755,7 @@ export function App() {
         {settingsOpen && <SettingsPage />}
         {shortcutsOpen && <ShortcutsModal />}
         {notesOpen && <NotesModal />}
+        {workstreamsOpen && <WorkstreamsPanel />}
       </Suspense>
       <ContextMenu />
       <NotificationToast />

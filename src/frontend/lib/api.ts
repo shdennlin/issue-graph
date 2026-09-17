@@ -240,6 +240,20 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ name, members }),
     }),
+  fetchBatch: (id: number) =>
+    http<{
+      id: number
+      name: string
+      progress: { total: number; done: number; claimed: number }
+      members: { identifier: string; claimedBy: string | null; doneAt: number | null; blockedBy: string[] }[]
+    }>(`/api/batches/${id}`),
+  renameBatch: (id: number, name: string) =>
+    http<unknown>(`/api/batches/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+  addBatchMembers: (id: number, members: string[]) =>
+    http<unknown>(`/api/batches/${id}/members`, { method: 'POST', body: JSON.stringify({ members }) }),
+  removeBatchMember: (id: number, identifier: string) =>
+    http<unknown>(`/api/batches/${id}/members/${identifier}`, { method: 'DELETE' }),
+  deleteBatch: (id: number) => http<unknown>(`/api/batches/${id}`, { method: 'DELETE' }),
   fetchBatches: () =>
     http<{ entries: { id: number; name: string; progress: { total: number; done: number } }[] }>(
       '/api/batches',

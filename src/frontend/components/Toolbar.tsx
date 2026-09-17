@@ -1,22 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  BarChart3,
-  Camera,
-  Eye,
-  EyeOff,
-  FileDown,
-  FileText,
-  Keyboard,
-  ListTree,
-  Loader2,
-  Monitor,
-  Moon,
-  MoreHorizontal,
-  PanelRightClose,
-  PanelRightOpen,
-  Settings,
-  Sun,
-} from 'lucide-react'
+import { BarChart3, Camera, Eye, EyeOff, FileDown, FileText, Keyboard, Layers, ListTree, Loader2, Monitor, Moon, MoreHorizontal, PanelRightClose, PanelRightOpen, Settings, Sun } from 'lucide-react'
 import { useClickOutside } from '../hooks/useClickOutside'
 import { useGraphStore } from '../store/graphStore'
 import { useSchemaStore } from '../store/schemaStore'
@@ -400,6 +383,14 @@ export function Toolbar() {
           aria-label={t('toolbar.notesAria')}
         >
           <FileText size={ICON_SIZE} />
+        </button>
+        <button
+          className="icon-only"
+          onClick={() => useViewStore.getState().setWorkstreamsOpen(true)}
+          title={t('toolbar.workstreamsTitle')}
+          aria-label={t('toolbar.workstreamsTitle')}
+        >
+          <Layers size={ICON_SIZE} />
         </button>
         <button
           className={`icon-text${detailPanelAutoOpen ? ' active' : ''}`}

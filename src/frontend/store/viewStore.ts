@@ -142,6 +142,8 @@ export interface ViewState {
   // Workspace notes modal. `notesOpen` controls the modal; `focusedNoteId`
   // null → grid view, number → editor view for that note.
   notesOpen: boolean
+  /** Workstreams panel — the cross-feature overview. */
+  workstreamsOpen: boolean
   focusedNoteId: number | null
   /** True while the in-note find bar (Cmd+F inside NoteEditor) is open.
    *  NotesModal's window-level Esc handler checks this so the find bar
@@ -276,6 +278,7 @@ export interface ViewState {
   setShortcutsOpen: (b: boolean) => void
   setNotificationsOpen: (b: boolean) => void
   setNotesOpen: (b: boolean) => void
+  setWorkstreamsOpen: (b: boolean) => void
   setFocusedNoteId: (id: number | null) => void
   setNoteFindOpen: (b: boolean) => void
   requestPanToFocused: () => void
@@ -371,6 +374,7 @@ export const useViewStore = create<ViewState>((set) => ({
   shortcutsOpen: false,
   notificationsOpen: false,
   notesOpen: false,
+  workstreamsOpen: false,
   focusedNoteId: null,
   noteFindOpen: false,
   panToFocusedSeq: 0,
@@ -490,6 +494,7 @@ export const useViewStore = create<ViewState>((set) => ({
   // button (or Esc-peel) to drop back to the grid explicitly.
   setNotificationsOpen: (b) => set({ notificationsOpen: b }),
   setNotesOpen: (b) => set({ notesOpen: b }),
+  setWorkstreamsOpen: (b) => set({ workstreamsOpen: b }),
   setFocusedNoteId: (id) => set({ focusedNoteId: id, noteFindOpen: false }),
   setNoteFindOpen: (b) => set({ noteFindOpen: b }),
   requestPanToFocused: () => set((s) => ({ panToFocusedSeq: s.panToFocusedSeq + 1 })),

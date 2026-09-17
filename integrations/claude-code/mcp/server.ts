@@ -115,35 +115,83 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: 'list_batches',
-      description: 'Batches of issues queued for agent sessions, with progress.',
+      name: 'list_workstreams',
+      description:
+        'Every workstream (a feature in flight: its issues, their progress, and who holds what).',
       inputSchema: { type: 'object', properties: {} },
+    },
+    {
+      name: 'get_workstream',
+      description:
+        'One workstream in detail: its issues in dependency order, each with its stage, who is working on it, and what is blocking it.',
+      inputSchema: {
+        type: 'object',
+        properties: { workstreamId: { type: 'number' } },
+        required: ['workstreamId'],
+      },
+    },
+    {
+      name: 'create_workstream',
+      description:
+        'Group issues into a workstream so they can be tracked and worked as one feature.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'What this feature is, in a few words.' },
+          members: { type: 'array', items: { type: 'string' }, description: 'e.g. ["ONE-1","ONE-2"]' },
+        },
+        required: ['name', 'members'],
+      },
+    },
+    {
+      name: 'update_workstream',
+      description:
+        'Rename a workstream, and/or add and remove issues. Removing an issue drops its claim and progress with it.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          workstreamId: { type: 'number' },
+          name: { type: 'string' },
+          add: { type: 'array', items: { type: 'string' } },
+          remove: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['workstreamId'],
+      },
+    },
+    {
+      name: 'delete_workstream',
+      description: 'Delete a workstream. The issues themselves are untouched.',
+      inputSchema: {
+        type: 'object',
+        properties: { workstreamId: { type: 'number' } },
+        required: ['workstreamId'],
+      },
     },
     {
       name: 'next_issue',
       description:
-        'Claim the next issue from a batch. Respects dependency order — a blocker is always handed out before what it blocks — and will not hand you an issue another session holds.',
+        'Claim the next issue from a workstream. Respects dependency order — a blocker is always handed out before what it blocks — and will not hand you an issue another session holds.',
       inputSchema: {
         type: 'object',
         properties: {
-          batchId: { type: 'number' },
+          workstreamId: { type: 'number' },
           claimant: { type: 'string', description: 'This session id.' },
         },
-        required: ['batchId', 'claimant'],
+        required: ['workstreamId', 'claimant'],
       },
     },
     {
       name: 'report_done',
       description:
-        'Mark a claimed batch issue finished, unblocking whatever depended on it. Only the session holding the claim may do this.',
+        'Mark a claimed workstream issue finished, unblocking whatever depended on it. Only the session holding the claim may do this.',
       inputSchema: {
         type: 'object',
         properties: {
-          batchId: { type: 'number' },
+          workstreamId: { type: 'number' },
           identifier: { type: 'string' },
           claimant: { type: 'string' },
         },
-        required: ['batchId', 'identifier', 'claimant'],
+        required: ['workstreamId', 'identifier', 'claimant'],
       },
     },
   ],
@@ -208,14 +256,63 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         return text(`${identifier} → ${stageKey ?? '(cleared)'}`)
       }
 
-      case 'list_batches': {
+      case 'list_workstreams': {
         const r = await call<{ entries: unknown[] }>('/api/batches')
         return text(r.entries)
       }
 
+      case 'get_workstream': {
+        // Joined with stages here rather than server-side: the stage table is a
+        // separate resource, and a workstream is not the only thing that wants
+        // it. Two small reads beat a bespoke endpoint.
+        const [ws, stages] = await Promise.all([
+          call<{ members: { identifier: string }[] }>(`/api/batches/${Number(a.workstreamId)}`),
+          call<{ entries: IssueStage[] }>('/api/stage'),
+        ])
+        const stageOf = new Map(stages.entries.map((s) => [s.identifier, s.stageKey]))
+        return text({
+          ...ws,
+          members: ws.members.map((m) => ({ ...m, stageKey: stageOf.get(m.identifier) ?? null })),
+        })
+      }
+
+      case 'create_workstream': {
+        const r = await call<unknown>('/api/batches', {
+          method: 'POST',
+          body: JSON.stringify({ name: String(a.name ?? ''), members: a.members }),
+        })
+        return text(r)
+      }
+
+      case 'update_workstream': {
+        const id = Number(a.workstreamId)
+        const done: string[] = []
+        if (typeof a.name === 'string' && a.name.trim()) {
+          await call(`/api/batches/${id}`, { method: 'PATCH', body: JSON.stringify({ name: a.name }) })
+          done.push(`renamed to "${a.name}"`)
+        }
+        if (Array.isArray(a.add) && a.add.length > 0) {
+          await call(`/api/batches/${id}/members`, {
+            method: 'POST',
+            body: JSON.stringify({ members: a.add }),
+          })
+          done.push(`added ${a.add.join(', ')}`)
+        }
+        for (const m of Array.isArray(a.remove) ? a.remove : []) {
+          await call(`/api/batches/${id}/members/${String(m).toUpperCase()}`, { method: 'DELETE' })
+          done.push(`removed ${String(m).toUpperCase()}`)
+        }
+        return text(done.length > 0 ? done.join('; ') : 'nothing to change')
+      }
+
+      case 'delete_workstream': {
+        await call(`/api/batches/${Number(a.workstreamId)}`, { method: 'DELETE' })
+        return text(`workstream ${Number(a.workstreamId)} deleted; its issues are untouched`)
+      }
+
       case 'next_issue': {
         const r = await call<{ identifier: string | null; reason?: string }>(
-          `/api/batches/${Number(a.batchId)}/next`,
+          `/api/batches/${Number(a.workstreamId)}/next`,
           { method: 'POST', body: JSON.stringify({ claimant: String(a.claimant ?? '') }) },
         )
         if (r.identifier === null) {
@@ -229,7 +326,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       }
 
       case 'report_done': {
-        const r = await call<unknown>(`/api/batches/${Number(a.batchId)}/done`, {
+        const r = await call<unknown>(`/api/batches/${Number(a.workstreamId)}/done`, {
           method: 'POST',
           body: JSON.stringify({
             identifier: String(a.identifier ?? '').toUpperCase(),

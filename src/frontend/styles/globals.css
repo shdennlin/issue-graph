@@ -3802,3 +3802,22 @@ label + .settings-help {
 }
 .lifecycle-state-toggle.is-on { color: var(--fg); border-color: var(--accent); background: var(--chip-bg); }
 .settings-error { color: var(--danger); font-size: var(--fs-meta); }
+
+/* Workstreams panel — the cross-feature overview. */
+.workstreams-modal { width: min(760px, 92vw); }
+.workstream { border: 1px solid var(--node-border); border-radius: 6px; margin-bottom: 8px; }
+.workstream-head { display: flex; align-items: center; gap: 6px; padding: 6px 8px; }
+.workstream-toggle { background: none; border: 0; color: var(--fg-muted); cursor: pointer; padding: 0; }
+.workstream-name { flex: 1 1 0; min-width: 0; }
+.workstream-progress { font-variant-numeric: tabular-nums; color: var(--fg-muted); font-size: var(--fs-meta); }
+.workstream-members { list-style: none; margin: 0; padding: 0 8px 8px; }
+.workstream-member { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: var(--fs-meta); }
+/* Done members stay listed rather than disappearing: a workstream's shape
+   includes what is already finished, and a list that shrinks as work lands
+   hides how far along it is. */
+.workstream-member.is-done { opacity: 0.45; }
+.workstream-member.is-done .workstream-title { text-decoration: line-through; }
+.workstream-id { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font-variant-numeric: tabular-nums; }
+.workstream-title { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-muted); }
+.workstream-blocked { color: var(--warn); white-space: nowrap; }
+.workstream-remove { background: none; border: 0; color: var(--fg-muted); cursor: pointer; padding: 0; }

@@ -55,6 +55,7 @@ export const en = {
     themeLight: 'light',
     themeAuto: 'auto',
     notesTitle: 'Workspace notes (n)',
+    workstreamsTitle: 'Workstreams — features in flight',
     notesAria: 'Workspace notes',
     detailAutoOn: 'Auto-open detail panel on click: ON (Space / Enter still opens ad-hoc when off)',
     detailAutoOff: 'Auto-open detail panel on click: OFF — click an issue to focus only, Space / Enter to open detail',
@@ -508,6 +509,17 @@ export const en = {
     badgeVisible: 'Visible in current view:',
     badgeCacheWideNote:
       '(Counts above are cache-wide; some connections are hidden by chain isolation or filters.)',
+  },
+  workstreams: {
+    title: 'Workstreams',
+    hint: 'Features in flight. Each groups the issues that make one thing, in dependency order — a blocker always sits above what it blocks. The order is recomputed from Linear on every read, so editing a relation there reorders this.',
+    empty: 'No workstreams yet. Select issues on the graph, right-click, and queue them.',
+    name: 'Workstream name',
+    namePrompt: 'Name this workstream',
+    isolate: 'Show only this workstream on the graph',
+    isolateShort: 'Isolate',
+    delete: 'Delete workstream (the issues are untouched)',
+    removeMember: 'Remove from this workstream',
   },
   session: {
     active: 'A Claude session is working on this',

@@ -32,6 +32,8 @@ import {
 const CreateSchema = z.object({ name: z.string(), members: z.unknown() })
 const ClaimSchema = z.object({ claimant: z.string().min(1).max(200) })
 const DoneSchema = z.object({ identifier: z.string(), claimant: z.string().min(1).max(200) })
+const RenameSchema = z.object({ name: z.string() })
+const MembersSchema = z.object({ members: z.unknown() })
 
 const denied = () => ({ error: { code: 'denied', message: 'same-origin or agent token required' } }) as const
 const invalid = (message: string) => ({ error: { code: 'invalid', message } }) as const
@@ -120,6 +122,60 @@ batchRoutes.post('/api/batches', async (c) => {
   })(members)
 
   return c.json({ id: batchId, name, createdAt: now, members }, 201)
+})
+
+batchRoutes.patch('/api/batches/:id', async (c) => {
+  if (!mayWrite(c)) return c.json(denied(), 403)
+  const id = Number(c.req.param('id'))
+  if (!Number.isInteger(id)) return c.json(invalid('bad id'), 400)
+  const body = await c.req.json().catch(() => null)
+  const parsed = RenameSchema.safeParse(body)
+  if (!parsed.success) return c.json(invalid(parsed.error.message), 400)
+  const name = normalizeBatchName(parsed.data.name)
+  if (name === null) return c.json(invalid('bad name'), 400)
+  const r = getDb().prepare(`UPDATE batch SET name = ? WHERE id = ?`).run(name, id)
+  if (r.changes === 0) return c.json(notFound(), 404)
+  return c.json({ id, name })
+})
+
+batchRoutes.post('/api/batches/:id/members', async (c) => {
+  if (!mayWrite(c)) return c.json(denied(), 403)
+  const id = Number(c.req.param('id'))
+  if (!Number.isInteger(id)) return c.json(invalid('bad id'), 400)
+  const body = await c.req.json().catch(() => null)
+  const parsed = MembersSchema.safeParse(body)
+  if (!parsed.success) return c.json(invalid(parsed.error.message), 400)
+  const members = normalizeMembers(parsed.data.members)
+  if (members === null) return c.json(invalid('bad members'), 400)
+
+  const db = getDb()
+  if (!db.prepare(`SELECT id FROM batch WHERE id = ?`).get(id)) return c.json(notFound(), 404)
+  // OR IGNORE on the (batch_id, identifier) primary key: adding an issue that
+  // is already a member is a no-op, not an error. The caller — a person or an
+  // agent — is expressing "this belongs here", and it already does.
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO batch_member(batch_id, identifier) VALUES(?, ?)`,
+  )
+  db.transaction((ids: string[]) => {
+    for (const m of ids) insert.run(id, m)
+  })(members)
+  return c.json({ ok: true, members: membersOf(id).map((m) => m.identifier) })
+})
+
+batchRoutes.delete('/api/batches/:id/members/:identifier', (c) => {
+  if (!mayWrite(c)) return c.json(denied(), 403)
+  const id = Number(c.req.param('id'))
+  if (!Number.isInteger(id)) return c.json(invalid('bad id'), 400)
+  const identifier = c.req.param('identifier').toUpperCase()
+  // Removing a member drops its claim and its done mark with it. That is the
+  // point: the issue is no longer part of this workstream, so its progress
+  // here is meaningless — and re-adding it should start clean rather than
+  // resurrect a claim held by a session that has long since exited.
+  const r = getDb()
+    .prepare(`DELETE FROM batch_member WHERE batch_id = ? AND identifier = ?`)
+    .run(id, identifier)
+  if (r.changes === 0) return c.json(notFound(), 404)
+  return c.body(null, 204)
 })
 
 batchRoutes.post('/api/batches/:id/next', async (c) => {
