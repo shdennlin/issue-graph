@@ -19,8 +19,14 @@ import { fillLegacyState } from '../store/filterCodec'
  *  serializer no longer writes it, but views saved before the removal still
  *  carry `active=0` — and a string compare would never match them again, so
  *  every one of those views would silently read as edited-away-from. Dropping
- *  it on both sides retires the param without retiring the views. */
-const IGNORED = ['w', 'focus', 'detail', 'chain', 'note', 'notes', 'active']
+ *  it on both sides retires the param without retiring the views.
+ *
+ *  `stream` — which workstream the Workstreams view has expanded — is
+ *  navigational in exactly the way `focus` and `chain` are: where you are
+ *  looking, not what you filtered to. Leaving it out would be the same trap
+ *  from the other end, since every view saved before this existed would stop
+ *  matching the moment anyone expanded a workstream. */
+const IGNORED = ['w', 'focus', 'detail', 'chain', 'note', 'notes', 'active', 'stream']
 
 /**
  * Canonical form of a query string: ignored params removed, pairs sorted.

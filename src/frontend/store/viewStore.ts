@@ -129,6 +129,15 @@ export interface ViewState {
   // primary group), which is the historical behavior. Encoding and the
   // stale-key fallback live in lib/mixGrouping.ts.
   mixGroupBy: string | null
+  /**
+   * Which workstream the Workstreams view expands, or null for the overview.
+   *
+   * The view is stage-first either way: null draws the workspace's pipeline
+   * once with every workstream marked on the stage it reached, and an id draws
+   * that one workstream's own row of stages with each stage's contents. Null is
+   * not "no workstream" — it is the other mode.
+   */
+  focusedWorkstreamId: number | null
   search: string                 // toolbar filter search (narrows visible set)
   inlineSearch: { open: boolean; query: string; activeIdx: number }
   settingsOpen: boolean
@@ -259,6 +268,7 @@ export interface ViewState {
   setFontSize: (f: FontSize) => void
   setMaxColsPerRow: (n: number) => void
   setMixGroupBy: (key: string | null) => void
+  setFocusedWorkstreamId: (id: number | null) => void
   setSearch: (q: string) => void
   openInlineSearch: () => void
   closeInlineSearch: () => void
@@ -348,6 +358,7 @@ export const useViewStore = create<ViewState>((set) => ({
   theme: readTheme(),
   density: 'default',
   mixGroupBy: null,
+  focusedWorkstreamId: null,
   fontSize: (() => {
     if (typeof window === 'undefined') return 'md' as FontSize
     const raw = window.localStorage?.getItem('ig-font-size')
@@ -458,6 +469,7 @@ export const useViewStore = create<ViewState>((set) => ({
   },
   setDensity: (d) => set({ density: d }),
   setMixGroupBy: (key) => set({ mixGroupBy: key }),
+  setFocusedWorkstreamId: (id) => set({ focusedWorkstreamId: id }),
   setFontSize: (f) => {
     if (typeof window !== 'undefined') {
       window.localStorage?.setItem('ig-font-size', String(f))
