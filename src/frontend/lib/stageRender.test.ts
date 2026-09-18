@@ -272,12 +272,34 @@ describe('pullRequests', () => {
     expect(renderStage(c, t)[0]?.hints).toEqual(['stage.contributes'])
   })
 
-  it('keeps both qualifiers when both apply', () => {
+  it('says "contributes" but shows conflicts as a glyph, not a word', () => {
+    // A PR's STATE is an icon and a colour, the way GitHub and Linear both do
+    // it. `contributes` is not a state — it is a real PR that does not finish
+    // the issue — so that one stays a word.
     const c = ctx({
       members: [mk('A-1', { prs: [{ linkKind: 'contributes', hasConflicts: true }] })],
       stage: shows,
     })
-    expect(renderStage(c, t)[0]?.hints).toEqual(['stage.contributes', 'stage.conflicts'])
+    const pr = renderStage(c, t)[0]
+    expect(pr?.hints).toEqual(['stage.contributes'])
+    expect(pr?.icon).toBe('pr-conflict')
+  })
+
+  it('leads with the state glyph and drops the status word from the text', () => {
+    const iconFor = (status: string) =>
+      renderStage(ctx({ members: [mk('A-1', { prs: [{ status }] })], stage: shows }), t)[0]
+    expect(iconFor('merged')).toMatchObject({ text: 'r#1', icon: 'pr-merged' })
+    expect(iconFor('open')).toMatchObject({ icon: 'pr-open' })
+    expect(iconFor('closed')).toMatchObject({ icon: 'pr-closed' })
+    expect(iconFor('draft')).toMatchObject({ icon: 'pr-draft' })
+  })
+
+  it('keeps the status and target branch in the title, where there is room', () => {
+    const c = ctx({
+      members: [mk('A-1', { prs: [{ status: 'merged' }] })],
+      stage: shows,
+    })
+    expect(renderStage(c, t)[0]?.title).toContain('merged')
   })
 
   it('warns on an abandoned PR as well as a conflicted one', () => {

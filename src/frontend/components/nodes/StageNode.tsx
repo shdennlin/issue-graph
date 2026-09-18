@@ -2,7 +2,15 @@ import { memo, useMemo } from 'react'
 import type { MouseEvent, PointerEvent } from 'react'
 import type { NodeProps } from 'reactflow'
 import { Handle, Position } from 'reactflow'
-import { MoveRight } from 'lucide-react'
+import {
+  Activity,
+  GitMerge,
+  GitMergeConflict,
+  GitPullRequest,
+  GitPullRequestClosed,
+  GitPullRequestDraft,
+  MoveRight,
+} from 'lucide-react'
 import { useT, type DictKey } from '../../i18n'
 import { useViewStore } from '../../store/viewStore'
 import { renderStage, type StageContext, type StageItem } from '../../lib/stageRender'
@@ -30,6 +38,17 @@ const AGE_UNIT_KEYS: Record<'m' | 'h' | 'd', DictKey> = {
   h: 'issueNode.ageHours',
   d: 'issueNode.ageDays',
 }
+
+/** The glyph set, mapped from the icon `stageRender` chose. Kept here because
+ *  it is drawing; the CHOICE is in the pure module, where it is tested. */
+const ICONS = {
+  'pr-open': GitPullRequest,
+  'pr-merged': GitMerge,
+  'pr-closed': GitPullRequestClosed,
+  'pr-draft': GitPullRequestDraft,
+  'pr-conflict': GitMergeConflict,
+  ci: Activity,
+} as const
 
 const HANDLES = [
   ['l', Position.Left],
@@ -89,8 +108,13 @@ function ItemRow({ item, onDetach }: { item: StageItem; onDetach?: (value: strin
   // also drags the stage. Same trick as MixedContainerNode.
   const stop = (e: PointerEvent) => e.stopPropagation()
 
+  const Icon = item.icon ? ICONS[item.icon] : null
   const body = (
     <>
+      {/* State as a glyph, the way GitHub and Linear both show a PR — a purple
+          merge arrow is read faster than the word "merged", and costs a third
+          less of the pill. */}
+      {Icon && <Icon className="stage-item-icon" size={11} aria-hidden />}
       {/* The kind, when the app has no special box for it. For a custom field
           the NAME is the point — `runbook` says what a bare link cannot. */}
       {item.kind && <span className="stage-item-kind">{item.kind}</span>}
@@ -140,14 +164,22 @@ function ItemRow({ item, onDetach }: { item: StageItem; onDetach?: (value: strin
     .join(' ')
   if (item.url) {
     return (
-      <a className={cls} href={item.url} target="_blank" rel="noreferrer" onPointerDown={stop} onClick={(e) => e.stopPropagation()}>
+      <a
+        className={cls}
+        href={item.url}
+        target="_blank"
+        rel="noreferrer"
+        title={item.title ?? undefined}
+        onPointerDown={stop}
+        onClick={(e) => e.stopPropagation()}
+      >
         {body}
       </a>
     )
   }
   if (item.issue) {
     return (
-      <button type="button" className={cls} onClick={open} onPointerDown={stop}>
+      <button type="button" className={cls} title={item.title ?? undefined} onClick={open} onPointerDown={stop}>
         {body}
       </button>
     )
@@ -255,17 +287,17 @@ function StageImpl({ data }: NodeProps<StageNodeData>) {
 
       {data.render && (
         <div className="stage-body">
-          {items.length === 0 ? (
-            <span className="stage-empty">{t('stage.nothingHere')}</span>
-          ) : (
-            items.map((item, i) => (
+          {/* An empty stage says nothing. "nothing to show" is a sentence in
+              every box the workstream has not reached yet, which on a
+              seven-stage pipeline is most of them — noise that reads like
+              content. An empty box already says empty. */}
+          {items.map((item, i) => (
               <ItemRow
                 key={`${item.token}:${item.text}:${i}`}
                 item={item}
                 onDetach={detach}
               />
-            ))
-          )}
+          ))}
         </div>
       )}
 

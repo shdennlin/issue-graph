@@ -48,6 +48,13 @@ export interface StageItem {
    *  view sums these to size the stage, because nothing measures a stage node
    *  after the fact — see the height comment in views/workstream.ts. */
   rows: number
+  /** A glyph the row leads with, from a closed set the component maps to an
+   *  icon. Chosen here rather than there so the CHOICE is testable and only
+   *  the drawing is not. */
+  icon: StageItemIcon | null
+  /** The long form, for the title attribute — whatever the pill had to drop to
+   *  stay one line. */
+  title: string | null
   /** The attachment's kind, when it is one the app has no special box for —
    *  `runbook`, `incident`, whatever the workstream needed. Drawn as the row's
    *  own label, because for a custom field the NAME is the whole point. Null
@@ -60,6 +67,21 @@ export interface StageItem {
   /** Something to open externally, or null. */
   url: string | null
 }
+
+/**
+ * Row glyphs.
+ *
+ * The pull-request set follows the convention GitHub and Linear both use and
+ * which people already read fluently: a PR's state is an ICON and a COLOUR,
+ * never a word. Spelling out "merged" beside a number costs a third of the
+ * pill's width to say what a purple merge arrow says instantly.
+ *
+ * `ci` is deliberately stateless. A check run reaches this app only by hand —
+ * no query path reaches a PullRequest from an issue, and there is no GitHub
+ * source — so the app knows a run EXISTS and nothing about how it went.
+ * Borrowing the green tick would be inventing a result.
+ */
+export type StageItemIcon = 'pr-open' | 'pr-merged' | 'pr-closed' | 'pr-draft' | 'pr-conflict' | 'ci'
 
 export interface StageContext {
   workstream: WorkstreamSummaryDTO
@@ -128,7 +150,18 @@ export function indexBlockedBy(issues: NormalizedIssue[]): Map<string, Normalize
 }
 
 function item(over: Partial<StageItem> & Pick<StageItem, 'token' | 'text'>): StageItem {
-  return { hints: [], tone: 'muted', manual: false, rows: 1, kind: null, issue: null, url: null, ...over }
+  return {
+    hints: [],
+    tone: 'muted',
+    manual: false,
+    rows: 1,
+    icon: null,
+    title: null,
+    kind: null,
+    issue: null,
+    url: null,
+    ...over,
+  }
 }
 
 /**
@@ -253,13 +286,31 @@ function renderPullRequests(ctx: StageContext, t: Translate): StageItem[] {
       // 'contributes' is said rather than hidden: it is a real PR doing real
       // work, it simply does not finish the issue, so it must not read as
       // progress towards closing it.
+      // The STATE is not said — that is the icon's job. `contributes` still is,
+      // because it is not a state: it is a real PR doing real work that simply
+      // does not finish the issue, and it must not read as progress to closing.
       if (pr.linkKind === 'contributes') hints.push(t('stage.contributes'))
-      if (pr.hasConflicts) hints.push(t('stage.conflicts'))
+      const ref = `${pr.repo ?? 'pr'}${pr.number === null ? '' : `#${pr.number}`}`
       out.push(
         item({
+          // `core-api#91`, and nothing else. The status word used to sit here
+          // and spend a third of the pill saying what the glyph says at a
+          // glance; it moved to the tooltip with the target branch.
           token: 'pullRequests',
-          text: `${pr.repo ?? 'pr'}${pr.number === null ? '' : `#${pr.number}`} ${pr.status ?? '?'}`.trim(),
+          text: ref,
           hints,
+          icon: pr.hasConflicts
+            ? 'pr-conflict'
+            : status === 'merged'
+              ? 'pr-merged'
+              : status === 'closed'
+                ? 'pr-closed'
+                : status === 'draft'
+                  ? 'pr-draft'
+                  : 'pr-open',
+          title: [ref, pr.status ?? null, pr.targetBranch ? `\u2192 ${pr.targetBranch}` : null]
+            .filter(Boolean)
+            .join(' \u00b7 '),
           // A closed-unmerged PR is abandoned work still attached to the issue,
           // which is worth noticing rather than greying out.
           tone: pr.hasConflicts || status === 'closed' ? 'warn' : status === 'merged' ? 'ok' : 'muted',
@@ -275,7 +326,11 @@ function renderPullRequests(ctx: StageContext, t: Translate): StageItem[] {
     if (l.stageKey !== ctx.stage.key || l.kind !== 'pr') continue
     if (seen.has(l.value)) continue
     seen.add(l.value)
-    out.push(item({ token: 'pullRequests', text: l.label ?? l.value, manual: true, url: l.value }))
+    // A hand-attached PR has no state either — nothing fetched it — so it
+    // gets the neutral open glyph rather than a claim.
+    out.push(
+      item({ token: 'pullRequests', text: l.label ?? l.value, icon: 'pr-open', manual: true, url: l.value }),
+    )
   }
   return out
 }
@@ -367,7 +422,7 @@ function renderCi(ctx: StageContext, _t: Translate): StageItem[] {
   const out: StageItem[] = []
   for (const l of ctx.workstream.links) {
     if (l.stageKey !== ctx.stage.key || l.kind !== 'ci') continue
-    out.push(item({ token: 'ci', text: l.label ?? l.value, manual: true, url: l.value }))
+    out.push(item({ token: 'ci', text: l.label ?? l.value, icon: 'ci', manual: true, url: l.value }))
   }
   return out
 }
