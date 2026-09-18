@@ -19,6 +19,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react'
 import type { LifecycleStageDTO } from '@shared/types'
+import { SHOW_TOKENS } from '@shared/showTokens.js'
 import { api } from '../lib/api'
 import { useGraphStore } from '../store/graphStore'
 import { useSchemaStore } from '../store/schemaStore'
@@ -129,6 +130,17 @@ export function LifecycleSettings() {
     void run(() => api.patchStage(stage.id, { states }))
   }
 
+  // What the stage DRAWS, as opposed to which Linear states it expects. These
+  // are projections — `pullRequests` means "read the members' PRs", never
+  // "this stage stores PRs" — so turning one on changes only what is rendered.
+  // There was no way to set this outside the MCP, which made a whole half of a
+  // stage's configuration invisible to anyone using the app.
+  const toggleShow = (stage: LifecycleStageDTO, token: string) => {
+    const on = stage.shows.includes(token)
+    const shows = on ? stage.shows.filter((s) => s !== token) : [...stage.shows, token]
+    void run(() => api.patchStage(stage.id, { shows }))
+  }
+
   return (
     <div className="lifecycle-settings">
       <p className="settings-hint">{t('lifecycle.hint')}</p>
@@ -178,6 +190,7 @@ export function LifecycleSettings() {
               </button>
             </div>
 
+            <div className="lifecycle-field-label">{t('lifecycle.expectsLabel')}</div>
             <div className="lifecycle-states">
               {stateNames.map((name) => {
                 const on = stage.states.some((s) => s.toLowerCase() === name.toLowerCase())
@@ -201,6 +214,42 @@ export function LifecycleSettings() {
                 ? t('lifecycle.constrainsNothing')
                 : t('lifecycle.usage').replace('{n}', String(usage.get(stage.key) ?? 0))}
             </p>
+
+            <div className="lifecycle-field-label">{t('lifecycle.showsLabel')}</div>
+            <div className="lifecycle-states">
+              {SHOW_TOKENS.map((token) => (
+                <button
+                  key={token}
+                  className={`lifecycle-state-toggle${stage.shows.includes(token) ? ' is-on' : ''}`}
+                  disabled={busy}
+                  onClick={() => toggleShow(stage, token)}
+                >
+                  {t(`lifecycle.show_${token}` as 'lifecycle.show_issues')}
+                </button>
+              ))}
+            </div>
+
+            <div className="lifecycle-stale">
+              <label htmlFor={`stale-${stage.id}`}>{t('lifecycle.staleLabel')}</label>
+              <input
+                id={`stale-${stage.id}`}
+                type="number"
+                min={0}
+                max={3650}
+                defaultValue={stage.staleAfterDays ?? ''}
+                placeholder={t('lifecycle.staleNever')}
+                disabled={busy}
+                onBlur={(e) => {
+                  const raw = e.target.value.trim()
+                  // Blank means "never", which is a real setting and the honest
+                  // one for a stage that legitimately runs for weeks.
+                  const next = raw === '' ? null : Number(raw)
+                  if (next !== null && !Number.isInteger(next)) return
+                  if (next === (stage.staleAfterDays ?? null)) return
+                  void run(() => api.patchStage(stage.id, { staleAfterDays: next }))
+                }}
+              />
+            </div>
           </li>
         ))}
       </ol>

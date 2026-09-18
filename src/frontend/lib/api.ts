@@ -311,7 +311,17 @@ export const api = {
     http<LifecycleStageDTO>('/api/lifecycle', { method: 'POST', body: JSON.stringify(s) }),
   patchStage: (
     id: number,
-    patch: { key?: string; name?: string; states?: string[]; nextCommand?: string | null },
+    patch: {
+      key?: string
+      name?: string
+      states?: string[]
+      nextCommand?: string | null
+      /** Which projections this stage draws. See SHOW_TOKENS. */
+      shows?: string[]
+      /** Null means this stage never goes stale — the honest setting for a
+       *  Discuss stage that legitimately runs for a fortnight. */
+      staleAfterDays?: number | null
+    },
   ) => http<{ ok: boolean }>(`/api/lifecycle/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   deleteStage: (id: number) => http<unknown>(`/api/lifecycle/${id}`, { method: 'DELETE' }),
   /** The full key list, always — the server refuses a partial reorder rather

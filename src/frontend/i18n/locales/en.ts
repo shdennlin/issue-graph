@@ -563,6 +563,17 @@ export const en = {
     moveDown: 'Move later',
     delete: 'Delete stage',
     constrainsNothing: 'Expects any Linear state — never reports a conflict.',
+    expectsLabel: 'Linear states that belong here',
+    showsLabel: 'What this stage shows',
+    staleLabel: 'Nudge after (days)',
+    staleNever: 'never',
+    show_issues: 'Issues',
+    show_sessions: 'Sessions',
+    show_pullRequests: 'Pull requests',
+    show_designdocs: 'Specs',
+    show_note: 'Note',
+    show_blockers: 'Blockers',
+    show_ci: 'CI',
     // Counts WORKSTREAMS. It said "issues" while counting workstreams, left
     // over from when a stage was a property of an issue; the pipeline belongs
     // to the workstream now and an issue has no stage of its own.
