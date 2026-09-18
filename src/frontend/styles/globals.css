@@ -4582,3 +4582,11 @@ button.stage-pill:hover .stage-item-text { text-decoration: underline; }
 .stage-note-md h4 { margin: 8px 0 3px; font-size: var(--fs-base); }
 .stage-note-md code { font-size: var(--fs-meta); }
 .stage-note-md pre { padding: 6px 8px; overflow-x: auto; }
+
+.lifecycle-fields {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 4px;
+  font: inherit;
+  font-size: var(--fs-meta);
+}

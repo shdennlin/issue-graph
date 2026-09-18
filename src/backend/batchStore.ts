@@ -326,6 +326,25 @@ export function normalizeLinkKind(raw: unknown): string | null {
   return LINK_KIND_RE.test(v) ? v : null
 }
 
+/**
+ * A stage's declared field list: kinds, deduped, in the order given.
+ *
+ * Validated by the same shape rule as an attachment's kind and normalised the
+ * same way, so a stage declaring "Pull Request" and an agent attaching
+ * `pull-request` are talking about one field rather than two.
+ */
+export function normalizeFields(raw: unknown): string[] | null {
+  if (!Array.isArray(raw)) return null
+  if (raw.length > 20) return null
+  const out: string[] = []
+  for (const item of raw) {
+    const kind = normalizeLinkKind(item)
+    if (kind === null) return null
+    if (!out.includes(kind)) out.push(kind)
+  }
+  return out
+}
+
 export function normalizeLinkValue(raw: unknown): string | null {
   if (typeof raw !== 'string') return null
   const v = raw.trim()

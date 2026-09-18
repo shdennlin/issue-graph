@@ -135,6 +135,19 @@ export function LifecycleSettings() {
   // "this stage stores PRs" — so turning one on changes only what is rendered.
   // There was no way to set this outside the MCP, which made a whole half of a
   // stage's configuration invisible to anyone using the app.
+  // What somebody is expected to HANG on this stage, as opposed to what it
+  // draws. Advisory: an attachment of any other kind is still accepted, because
+  // a list that gated writes would leave an agent with something genuinely new
+  // nowhere to put it.
+  const setFields = (stage: LifecycleStageDTO, raw: string) => {
+    const fields = raw
+      .split(',')
+      .map((f) => f.trim().toLowerCase().replace(/[\s_]+/g, '-'))
+      .filter(Boolean)
+    if (fields.join(',') === stage.fields.join(',')) return
+    void run(() => api.patchStage(stage.id, { fields }))
+  }
+
   const toggleShow = (stage: LifecycleStageDTO, token: string) => {
     const on = stage.shows.includes(token)
     const shows = on ? stage.shows.filter((s) => s !== token) : [...stage.shows, token]
@@ -228,6 +241,17 @@ export function LifecycleSettings() {
                 </button>
               ))}
             </div>
+
+            <div className="lifecycle-field-label">{t('lifecycle.fieldsLabel')}</div>
+            <input
+              className="lifecycle-fields"
+              defaultValue={stage.fields.join(', ')}
+              placeholder={t('lifecycle.fieldsPlaceholder')}
+              aria-label={t('lifecycle.fieldsLabel')}
+              disabled={busy}
+              onBlur={(e) => setFields(stage, e.target.value)}
+            />
+            <p className="settings-hint">{t('lifecycle.fieldsHint')}</p>
 
             <div className="lifecycle-stale">
               <label htmlFor={`stale-${stage.id}`}>{t('lifecycle.staleLabel')}</label>

@@ -345,6 +345,24 @@ const MIGRATIONS: string[] = [
   // sentinel key: it is a property of the workstream, and a sentinel would put
   // a thing that is not a stage into a table keyed by stage.
   `ALTER TABLE batch ADD COLUMN note TEXT;`,
+
+  // 15. What a stage EXPECTS to be attached to it.
+  //
+  // Distinct from `shows`, and the pair is easy to conflate. `shows` is what
+  // the stage DRAWS — projections, "go and read the members' PRs". `fields` is
+  // what somebody is expected to HANG on it: a Waiting-CI stage wants a `ci`
+  // run and a `runbook`, and nothing upstream will ever supply either.
+  //
+  // It exists mostly for the agent. Attachment kinds are free labels now, which
+  // is right — but it left an agent guessing what THIS stage wanted, and
+  // guessing produces five spellings of the same field across five
+  // workstreams. A stage that declares `["ci", "runbook"]` answers it, and
+  // `list_stages` hands that answer over.
+  //
+  // Advisory, never enforced: a kind outside the list is still accepted. The
+  // list says what is expected here, not what is permitted — the moment it
+  // gates writes, an agent with something genuinely new has nowhere to put it.
+  `ALTER TABLE lifecycle_stage ADD COLUMN fields TEXT NOT NULL DEFAULT '[]';`,
 ]
 
 // One Database instance per workspace id. Each profile has its own SQLITE_PATH

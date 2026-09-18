@@ -69,6 +69,7 @@ function stage(over: Partial<LifecycleStageDTO> = {}): LifecycleStageDTO {
     states: [],
     nextCommand: null,
     shows: [],
+    fields: [],
     staleAfterDays: null,
     createdAt: 0,
     updatedAt: 0,

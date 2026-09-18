@@ -64,6 +64,7 @@ export function StagePanel() {
   // app draws in their own box; any other name is accepted and drawn as a row
   // carrying that name, which is how a workstream defines its own fields.
   const [kind, setKind] = useState<string>('pr')
+  const [kindSeededFor, setKindSeededFor] = useState<string | null>(null)
   const [customKind, setCustomKind] = useState(false)
   const [value, setValue] = useState('')
   const [label, setLabel] = useState('')
@@ -93,6 +94,16 @@ export function StagePanel() {
 
   if (target && draft.key !== target.stageKey) {
     setDraft({ key: target.stageKey, note: noteFromServer })
+  }
+  // Default to the first thing the stage says it expects, once per stage — a
+  // CI stage should not open on "Pull request" when it declared `ci`.
+  if (target && kindSeededFor !== target.stageKey) {
+    setKindSeededFor(target.stageKey)
+    const first = stage?.fields[0]
+    if (first) {
+      setKind(first)
+      setCustomKind(!(RICH_LINK_KINDS as readonly string[]).includes(first))
+    }
   }
   if (!target || !workstream || !stage) return null
   const note = draft.key === target.stageKey ? draft.note : noteFromServer
@@ -242,7 +253,26 @@ export function StagePanel() {
         <div className="stage-panel-add">
           {/* Radio-style buttons, not a <select>: in the popover the picker
               read as a label and nobody found the other five kinds. */}
+          {/* The stage's own declared fields come FIRST: this stage said it
+              expects a runbook, so offering it here is the difference between
+              one field and five spellings of it across five workstreams. The
+              rich kinds follow, and Custom is always last. */}
           <div className="stage-panel-kinds">
+            {stage.fields
+              .filter((f) => !(RICH_LINK_KINDS as readonly string[]).includes(f))
+              .map((f) => (
+                <button
+                  key={f}
+                  className={!customKind && kind === f ? 'is-on' : ''}
+                  onClick={() => {
+                    setCustomKind(false)
+                    setKind(f)
+                  }}
+                  title={t('stage.expectedField')}
+                >
+                  {f}
+                </button>
+              ))}
             {RICH_LINK_KINDS.map((k) => (
               <button
                 key={k}

@@ -30,7 +30,7 @@ import {
   slugifyStageName,
   type LifecycleStageRow,
 } from '../lifecycleStore.js'
-import { normalizeShows, normalizeStaleAfterDays } from '../batchStore.js'
+import { normalizeFields, normalizeShows, normalizeStaleAfterDays } from '../batchStore.js'
 
 const CreateSchema = z.object({
   key: z.string().optional(),
@@ -38,6 +38,7 @@ const CreateSchema = z.object({
   states: z.unknown().optional(),
   nextCommand: z.unknown().optional(),
   shows: z.unknown().optional(),
+  fields: z.unknown().optional(),
   staleAfterDays: z.unknown().optional(),
 })
 
@@ -48,6 +49,7 @@ const PatchSchema = z
     states: z.unknown().optional(),
     nextCommand: z.unknown().optional(),
     shows: z.unknown().optional(),
+    fields: z.unknown().optional(),
     staleAfterDays: z.unknown().optional(),
   })
   .refine(
@@ -57,6 +59,7 @@ const PatchSchema = z
       v.states !== undefined ||
       v.nextCommand !== undefined ||
       v.shows !== undefined ||
+      v.fields !== undefined ||
       v.staleAfterDays !== undefined,
     { message: 'nothing to update' },
   )
@@ -91,6 +94,8 @@ lifecycleRoutes.post('/api/lifecycle', async (c) => {
   if (nextCommand === undefined) return c.json(invalid('bad nextCommand'), 400)
   const shows = normalizeShows(parsed.data.shows)
   if (shows === null) return c.json(invalid('unknown shows token'), 400)
+  const fields = normalizeFields(parsed.data.fields ?? [])
+  if (fields === null) return c.json(invalid('bad fields'), 400)
   const staleAfterDays = normalizeStaleAfterDays(parsed.data.staleAfterDays)
   if (staleAfterDays === undefined) return c.json(invalid('bad staleAfterDays'), 400)
 
@@ -120,8 +125,8 @@ lifecycleRoutes.post('/api/lifecycle', async (c) => {
   const sortOrder = nextSortOrder(rows)
   const r = db
     .prepare(
-      `INSERT INTO lifecycle_stage(key, name, sort_order, states, next_command, shows, stale_after_days, created_at, updated_at)
-       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO lifecycle_stage(key, name, sort_order, states, next_command, shows, fields, stale_after_days, created_at, updated_at)
+       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       key,
@@ -130,6 +135,7 @@ lifecycleRoutes.post('/api/lifecycle', async (c) => {
       JSON.stringify(states),
       nextCommand,
       JSON.stringify(shows),
+      JSON.stringify(fields),
       staleAfterDays,
       now,
       now,
@@ -143,6 +149,7 @@ lifecycleRoutes.post('/api/lifecycle', async (c) => {
       states: JSON.stringify(states),
       next_command: nextCommand,
       shows: JSON.stringify(shows),
+      fields: JSON.stringify(fields),
       stale_after_days: staleAfterDays,
       created_at: now,
       updated_at: now,
@@ -208,6 +215,12 @@ lifecycleRoutes.patch('/api/lifecycle/:id', async (c) => {
     if (shows === null) return c.json(invalid('unknown shows token'), 400)
     sets.push('shows = ?')
     args.push(JSON.stringify(shows))
+  }
+  if (parsed.data.fields !== undefined) {
+    const fields = normalizeFields(parsed.data.fields)
+    if (fields === null) return c.json(invalid('bad fields'), 400)
+    sets.push('fields = ?')
+    args.push(JSON.stringify(fields))
   }
   if (parsed.data.staleAfterDays !== undefined) {
     const days = normalizeStaleAfterDays(parsed.data.staleAfterDays)

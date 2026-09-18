@@ -9,6 +9,7 @@ import {
   daysOnStage,
   isStale,
   normalizeAssignees,
+  normalizeFields,
   normalizeLinkKind,
   RICH_LINK_KINDS,
   normalizeLinkValue,
@@ -409,5 +410,31 @@ describe('tallyPullRequests', () => {
 
   it('handles members with no PRs at all', () => {
     expect(tallyPullRequests([{}, { pullRequests: [] }])).toMatchObject({ total: 0, closesTotal: 0 })
+  })
+})
+
+describe('normalizeFields', () => {
+  it('normalises each entry the way a link kind is normalised', () => {
+    // A stage declaring "Pull Request" and an agent attaching `pull-request`
+    // must be talking about one field, not two.
+    expect(normalizeFields(['CI', 'Pull Request', ' runbook '])).toEqual(['ci', 'pull-request', 'runbook'])
+  })
+
+  it('dedupes, keeping the order declared', () => {
+    expect(normalizeFields(['ci', 'CI', 'runbook'])).toEqual(['ci', 'runbook'])
+  })
+
+  it('accepts an empty list — most stages expect nothing in particular', () => {
+    expect(normalizeFields([])).toEqual([])
+  })
+
+  it('refuses a list with something that is not a kind', () => {
+    expect(normalizeFields(['ci', 'has/slash'])).toBeNull()
+    expect(normalizeFields(['ci', 7])).toBeNull()
+    expect(normalizeFields('ci')).toBeNull()
+  })
+
+  it('caps the list, since a stage with thirty expected fields expects nothing', () => {
+    expect(normalizeFields(Array.from({ length: 21 }, (_, i) => `f${i}`))).toBeNull()
   })
 })

@@ -43,6 +43,10 @@ interface LifecycleStage {
   sortOrder: number
   states: string[]
   nextCommand: string | null
+  /** Projections this stage draws — what it READS, not what you write to it. */
+  shows: string[]
+  /** Attachment kinds this stage EXPECTS — what to hang on it. Advisory. */
+  fields: string[]
 }
 
 /** Append the workspace selector the server's middleware reads from `?w=`. */
@@ -82,7 +86,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
       name: 'list_stages',
-      description: "The workspace's lifecycle, in pipeline order.",
+      description:
+        "The workspace's lifecycle, in pipeline order. Each stage carries `states` (the Linear states whose issues belong to it), `shows` (what it draws from projections) and `fields` — the attachment kinds it EXPECTS. Read `fields` before attaching: a stage declaring ['ci','runbook'] is telling you the names to use, and using them is what keeps one field from becoming five spellings of itself across five workstreams.",
       inputSchema: { type: 'object', properties: {} },
     },
     {
@@ -145,7 +150,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'attach_to_stage',
       description:
-        "Attach a field to a stage. `kind` is a FREE LABEL, not a fixed list: any short lowercase slug works, so give the field the name that describes it — 'runbook', 'incident', 'design', whatever this workstream needs. It is stored and displayed under that name.\n\nFive kinds are drawn specially, so prefer them when they fit: 'spec' (a path, shown with the scanned design docs), 'pr' (a pull request URL, shown beside the ones Linear linked itself), 'ci' (a check run), 'issue' (a ticket that matters at this stage without being a member of the workstream) and 'url' (a plain link, with no name shown). Anything else renders as a labelled row carrying its kind — which is a first-class outcome, not a fallback.\n\nEverything attached this way shows a 'manual' mark. Where an upstream link COULD exist — a `Linear:` line in the spec, an issue id in the PR body — fixing it there is better, because the item then appears on its own and stays correct.",
+        "Attach a field to a stage. `kind` is a FREE LABEL, not a fixed list: any short lowercase slug works, so give the field the name that describes it — 'runbook', 'incident', 'design', whatever this workstream needs. It is stored and displayed under that name.\n\nCheck the stage's own `fields` from list_stages FIRST — those are the names this stage expects, and matching them is how one field stays one field. Five kinds are drawn specially, so prefer them when they fit: 'spec' (a path, shown with the scanned design docs), 'pr' (a pull request URL, shown beside the ones Linear linked itself), 'ci' (a check run), 'issue' (a ticket that matters at this stage without being a member of the workstream) and 'url' (a plain link, with no name shown). Anything else renders as a labelled row carrying its kind — which is a first-class outcome, not a fallback.\n\nEverything attached this way shows a 'manual' mark. Where an upstream link COULD exist — a `Linear:` line in the spec, an issue id in the PR body — fixing it there is better, because the item then appears on its own and stays correct.",
       inputSchema: {
         type: 'object',
         properties: {

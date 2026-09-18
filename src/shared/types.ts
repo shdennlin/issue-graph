@@ -344,6 +344,17 @@ export interface LifecycleStageDTO {
    * there is nothing to update on the stage — you update upstream.
    */
   shows: string[]
+  /**
+   * Attachment kinds this stage EXPECTS — a Waiting-CI stage wants a `ci` run
+   * and a `runbook`, and nothing upstream will ever supply either.
+   *
+   * Distinct from `shows`, and the pair is easy to conflate: `shows` is what
+   * the stage DRAWS from projections, this is what somebody is expected to
+   * HANG on it. Advisory, never enforced — it says what is expected here, not
+   * what is permitted, or an agent with something genuinely new would have
+   * nowhere to put it.
+   */
+  fields: string[]
   /** How long a workstream may sit here before it is worth a nudge. Per stage,
    *  because the honest answer differs wildly — Discuss can take a fortnight,
    *  CI sitting for a day is wrong. Null means this stage never goes stale. */

@@ -318,6 +318,8 @@ export const api = {
       nextCommand?: string | null
       /** Which projections this stage draws. See SHOW_TOKENS. */
       shows?: string[]
+      /** Attachment kinds this stage EXPECTS. Advisory — see migration 15. */
+      fields?: string[]
       /** Null means this stage never goes stale — the honest setting for a
        *  Discuss stage that legitimately runs for a fortnight. */
       staleAfterDays?: number | null

@@ -15,6 +15,7 @@ const stage = (
   states,
   nextCommand,
   shows: [],
+  fields: [],
   staleAfterDays: null,
   createdAt: 0,
   updatedAt: 0,
