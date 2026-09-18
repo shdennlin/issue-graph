@@ -4217,57 +4217,6 @@ button.stage-item:hover,
    views/workstream.ts computes each stage's height from its item count and
    GraphCanvas never measures a stage node, so a form that grew the box in flow
    would overlap the row below with nothing to correct it. */
-/* The node clips its own content, so the form has to be let out — otherwise
-   the hint and part of the controls are simply cut off at the box edge, which
-   is what made the form look broken rather than cramped. It is also wider than
-   the stage: a URL does not fit in 340px, and the node must not be resized to
-   suit a transient form. */
-.stage-attaching {
-  overflow: visible;
-  z-index: 20;
-}
-.stage-attach {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 320px;
-  z-index: 20;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 8px;
-  background: var(--bg-elev);
-  border: 1px solid var(--accent);
-  border-radius: 4px;
-  box-shadow: var(--node-shadow);
-}
-.stage-attach-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.stage-attach-row > select,
-.stage-attach input,
-.stage-attach-note {
-  flex: 1 1 auto;
-  min-width: 0;
-  font: inherit;
-  font-size: 12px;
-}
-.stage-attach-note { resize: vertical; }
-.stage-attach-save { margin-left: auto; }
-.stage-attach-hint {
-  margin: 0;
-  font-size: 10px;
-  line-height: 1.35;
-  color: var(--fg-muted);
-}
-.stage-node { position: relative; }
-
-/* Hit targets, not glyphs. These were 13x11 CSS pixels, and the canvas renders
-   at 0.8 zoom, so they landed on screen around ten pixels across. Miss by two
-   and the pointerdown reaches the node instead, where React Flow reads it as a
-   DRAG — which feels exactly like "I clicked and nothing happened". */
 .stage-attach-btn {
   flex: 0 0 auto;
   margin-left: auto;
@@ -4411,4 +4360,76 @@ button.stage-item:hover,
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   line-height: 22px;
+}
+
+/* Stage panel — same dock and resize behaviour as ProjectPanel. */
+.stage-panel {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  height: 100%;
+  background: var(--bg-elev);
+  border-left: 1px solid var(--node-border);
+  overflow: hidden;
+}
+.stage-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--node-border);
+}
+.stage-panel-ws {
+  font-size: 11px;
+  color: var(--fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stage-panel-title { margin: 0; font-size: 15px; }
+.stage-panel-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+.stage-panel-body h4 { margin: 8px 0 0; font-size: 12px; }
+.stage-panel-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--fg-muted);
+}
+.stage-panel-states { margin: 0; color: var(--fg-muted); }
+.stage-panel-note { width: 100%; box-sizing: border-box; font: inherit; resize: vertical; }
+.stage-panel-row { display: flex; gap: 6px; justify-content: flex-end; }
+.stage-panel-primary { color: var(--accent); }
+.stage-panel-links { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.stage-panel-links li { display: flex; align-items: center; gap: 6px; }
+.stage-panel-links li > :nth-child(2) { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stage-panel-kind {
+  flex: 0 0 auto;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 4px;
+  border: 1px dashed var(--fg-muted);
+  border-radius: 3px;
+  color: var(--fg-muted);
+}
+.stage-panel-add { display: flex; flex-direction: column; gap: 6px; }
+.stage-panel-add input { font: inherit; }
+/* Buttons, not a <select>: in the popover the picker read as a label and
+   nobody found the other five kinds behind it. */
+.stage-panel-kinds { display: flex; flex-wrap: wrap; gap: 4px; }
+.stage-panel-kinds button { font-size: 11px; padding: 3px 8px; }
+.stage-panel-kinds .is-on {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }

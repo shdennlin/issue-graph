@@ -886,6 +886,14 @@ function CanvasInner() {
       }
       return
     }
+    if (node.type === 'stage') {
+      // Clicking the stage itself opens its panel. The small header controls
+      // remain for the two things worth doing without leaving the board, but
+      // the whole box being the target is what people reach for.
+      const d = node.data as { render?: { workstream: { id: number }; stage: { key: string } } | null }
+      if (d.render) useViewStore.getState().openStagePanel(d.render.workstream.id, d.render.stage.key)
+      return
+    }
     if (node.type === 'issue') {
       setFocusedId(node.id)
       // A plain click starts fresh — drop any multi-selection so its dashed

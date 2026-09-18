@@ -149,6 +149,10 @@ export interface ViewState {
    *  after panning, the same way `focusedMilestoneId` works, so asking twice
    *  for the same one pans twice instead of doing nothing the second time. */
   workstreamJumpId: number | null
+  /** Which stage the side panel is editing, or null. A pair, because a stage
+   *  key alone means nothing — the same stage exists on every workstream, and
+   *  what you edit is one workstream's occupancy of it. */
+  stagePanel: { workstreamId: number; stageKey: string } | null
   search: string                 // toolbar filter search (narrows visible set)
   inlineSearch: { open: boolean; query: string; activeIdx: number }
   settingsOpen: boolean
@@ -282,6 +286,8 @@ export interface ViewState {
   setFocusedWorkstreamId: (id: number | null) => void
   setLifecycleEditorOpen: (b: boolean) => void
   setWorkstreamJumpId: (id: number | null) => void
+  openStagePanel: (workstreamId: number, stageKey: string) => void
+  closeStagePanel: () => void
   setSearch: (q: string) => void
   openInlineSearch: () => void
   closeInlineSearch: () => void
@@ -374,6 +380,7 @@ export const useViewStore = create<ViewState>((set) => ({
   focusedWorkstreamId: null,
   lifecycleEditorOpen: false,
   workstreamJumpId: null,
+  stagePanel: null,
   fontSize: (() => {
     if (typeof window === 'undefined') return 'md' as FontSize
     const raw = window.localStorage?.getItem('ig-font-size')
@@ -487,6 +494,8 @@ export const useViewStore = create<ViewState>((set) => ({
   setFocusedWorkstreamId: (id) => set({ focusedWorkstreamId: id }),
   setLifecycleEditorOpen: (b) => set({ lifecycleEditorOpen: b }),
   setWorkstreamJumpId: (id) => set({ workstreamJumpId: id }),
+  openStagePanel: (workstreamId, stageKey) => set({ stagePanel: { workstreamId, stageKey } }),
+  closeStagePanel: () => set({ stagePanel: null }),
   setFontSize: (f) => {
     if (typeof window !== 'undefined') {
       window.localStorage?.setItem('ig-font-size', String(f))

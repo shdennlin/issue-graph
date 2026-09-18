@@ -45,6 +45,7 @@ const SettingsPage = lazy(() => import('./components/SettingsPage').then((m) => 
 const ShortcutsModal = lazy(() => import('./components/ShortcutsModal').then((m) => ({ default: m.ShortcutsModal })))
 const WorkstreamsPanel = lazy(() => import('./components/WorkstreamsPanel').then((m) => ({ default: m.WorkstreamsPanel })))
 const WorkstreamJumpList = lazy(() => import('./components/WorkstreamJumpList').then((m) => ({ default: m.WorkstreamJumpList })))
+const StagePanel = lazy(() => import('./components/StagePanel').then((m) => ({ default: m.StagePanel })))
 const LifecyclePanel = lazy(() => import('./components/LifecyclePanel').then((m) => ({ default: m.LifecyclePanel })))
 const NotesModal = lazy(() => import('./components/notes/NotesModal').then((m) => ({ default: m.NotesModal })))
 
@@ -68,6 +69,10 @@ export function App() {
   const notesOpen = useViewStore((s) => s.notesOpen)
   const workstreamsOpen = useViewStore((s) => s.workstreamsOpen)
   const lifecycleEditorOpen = useViewStore((s) => s.lifecycleEditorOpen)
+  const stagePanel = useViewStore((s) => s.stagePanel)
+  // Any panel docked on the right edge. The jump list lives in that corner too,
+  // and would otherwise sit on top of the panel's own header.
+  const rightPanelOpen = (focusedId !== null && detailPanelOpen) || (focusedProjectId !== null && projectPanelOpen)
   const activeViewId = useViewStore((s) => s.activeView)
 
   // Bootstrap step 1 — resolve this tab's workspace + tab list BEFORE any
@@ -740,9 +745,10 @@ export function App() {
             canvas, not the page — at the app root it sat under the toolbar.
             Only over the view it configures: a pipeline editor floating over
             the dependency graph would be editing something off-screen. */}
-        {/* Hidden while the pipeline editor is open — they share the top-right
-            corner, and you are not navigating while editing the pipeline. */}
-        {activeViewId === 'workstream' && !lifecycleEditorOpen && (
+        {/* Hidden while any right-hand panel is open: they share that edge, and
+            the list would sit on top of the panel's own header. You are reading
+            one thing at that point, not choosing between several. */}
+        {activeViewId === 'workstream' && !lifecycleEditorOpen && !stagePanel && !rightPanelOpen && (
           <Suspense fallback={null}>
             <WorkstreamJumpList />
           </Suspense>
@@ -756,6 +762,11 @@ export function App() {
         {focusedId && detailPanelOpen && (
           <Suspense fallback={null}>
             <DetailPanel />
+          </Suspense>
+        )}
+        {stagePanel && (
+          <Suspense fallback={null}>
+            <StagePanel />
           </Suspense>
         )}
         {focusedProjectId && projectPanelOpen && (

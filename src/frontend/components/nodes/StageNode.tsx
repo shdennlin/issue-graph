@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react'
+import { memo, useMemo } from 'react'
 import type { MouseEvent, PointerEvent } from 'react'
 import type { NodeProps } from 'reactflow'
 import { Handle, Position } from 'reactflow'
@@ -7,7 +7,6 @@ import { useT, type DictKey } from '../../i18n'
 import { useViewStore } from '../../store/viewStore'
 import { renderStage, type StageContext, type StageItem } from '../../lib/stageRender'
 import { api } from '../../lib/api'
-import { StageAttach } from './StageAttach'
 import { useGraphStore } from '../../store/graphStore'
 
 // One step of the pipeline, drawn as a wide numbered BAR.
@@ -145,7 +144,7 @@ function ItemRow({ item, onDetach }: { item: StageItem; onDetach?: (value: strin
 function StageImpl({ data }: NodeProps<StageNodeData>) {
   const t = useT()
   const refetchSilent = useGraphStore((s) => s.refetchSilent)
-  const [attaching, setAttaching] = useState(false)
+  const openStagePanel = useViewStore((s) => s.openStagePanel)
   // Wording never changes how many items there are, so the view's height
   // estimate and this stay in step — which matters more here than elsewhere,
   // because GraphCanvas only measures `.react-flow__node-issue` and a stage
@@ -171,19 +170,7 @@ function StageImpl({ data }: NodeProps<StageNodeData>) {
     : undefined
 
   return (
-    <div
-      className={`stage-node${data.current ? ' stage-current' : ''}${data.stale ? ' stage-stale' : ''}${
-        attaching ? ' stage-attaching' : ''
-      }`}
-    >
-      {attaching && data.render && (
-        <StageAttach
-          batchId={data.render.workstream.id}
-          stageKey={data.render.stage.key}
-          existingNote={data.render.workstream.notes[data.render.stage.key] ?? ''}
-          onClose={() => setAttaching(false)}
-        />
-      )}
+    <div className={`stage-node${data.current ? ' stage-current' : ''}${data.stale ? ' stage-stale' : ''}`}>
       {/* Four positions, each as both source and target, because the pipeline
           runs in boustrophedon: a row reads left-to-right, drops, and the next
           reads right-to-left, so an edge can leave any side. They are hidden in
@@ -231,7 +218,7 @@ function StageImpl({ data }: NodeProps<StageNodeData>) {
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation()
-              setAttaching((v) => !v)
+              if (data.render) openStagePanel(data.render.workstream.id, data.render.stage.key)
             }}
           >
             +
