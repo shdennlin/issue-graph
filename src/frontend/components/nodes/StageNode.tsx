@@ -124,7 +124,7 @@ function ItemRow({ item, onDetach }: { item: StageItem; onDetach?: (value: strin
     </>
   )
 
-  const cls = `stage-item stage-item-${item.tone}`
+  const cls = `stage-item stage-item-${item.tone}${item.rows > 1 ? ' stage-item-wrap' : ''}`
   if (item.url) {
     return (
       <a className={cls} href={item.url} target="_blank" rel="noreferrer" onPointerDown={stop} onClick={(e) => e.stopPropagation()}>
@@ -171,7 +171,11 @@ function StageImpl({ data }: NodeProps<StageNodeData>) {
     : undefined
 
   return (
-    <div className={`stage-node${data.current ? ' stage-current' : ''}${data.stale ? ' stage-stale' : ''}`}>
+    <div
+      className={`stage-node${data.current ? ' stage-current' : ''}${data.stale ? ' stage-stale' : ''}${
+        attaching ? ' stage-attaching' : ''
+      }`}
+    >
       {attaching && data.render && (
         <StageAttach
           batchId={data.render.workstream.id}

@@ -376,14 +376,31 @@ describe('designdocs', () => {
 describe('note', () => {
   const shows = stage({ shows: ['note'] })
 
-  it('leaves the note BODY to its own card rather than truncating it here', () => {
-    // A note is prose. The first line alone never carried the reason, which is
-    // the only thing anybody writes one for — StageNotesNode shows it in full.
+  it('renders the note whole, over as many rows as it needs', () => {
+    // An earlier cut showed only the first line, truncated — almost useless,
+    // because a note is prose and the reason never fits on line one. The fix
+    // was to give it room, not to take it away.
     const c = ctx({
       stage: shows,
       workstream: ws({ notes: { impl: '  first line\nsecond line\nthird  ' } }),
     })
-    expect(renderStage(c, t)).toEqual([])
+    const items = renderStage(c, t)
+    expect(items[0]?.text).toBe('first line\nsecond line\nthird')
+    expect(items[0]?.rows).toBe(3)
+    expect(items[0]?.manual).toBe(false)
+  })
+
+  it('counts a long single line as several rows so the stage reserves room', () => {
+    // Nothing measures a stage node after the fact, so an undercount is
+    // clipped text that never corrects itself.
+    const long = 'x'.repeat(100)
+    const c = ctx({ stage: shows, workstream: ws({ notes: { impl: long } }) })
+    expect(renderStage(c, t)[0]?.rows).toBe(3)
+  })
+
+  it('caps the rows a note may claim', () => {
+    const c = ctx({ stage: shows, workstream: ws({ notes: { impl: 'y'.repeat(4000) } }) })
+    expect(renderStage(c, t)[0]?.rows).toBe(4)
   })
 
   it('marks a hand-attached url and carries it as a url, not an issue', () => {

@@ -44,6 +44,10 @@ export interface StageItem {
    *  projected one it would quietly become the default, and the upstream
    *  convention that makes projection work would stop being maintained. */
   manual: boolean
+  /** How many rows this item occupies. Almost always 1; a note wraps. The
+   *  view sums these to size the stage, because nothing measures a stage node
+   *  after the fact — see the height comment in views/workstream.ts. */
+  rows: number
   /** An issue to focus in the graph, or null. Kept apart from `url` because
    *  "centre that card" and "open a tab" are different actions, and a single
    *  field would make the component guess which one it was holding. */
@@ -119,7 +123,18 @@ export function indexBlockedBy(issues: NormalizedIssue[]): Map<string, Normalize
 }
 
 function item(over: Partial<StageItem> & Pick<StageItem, 'token' | 'text'>): StageItem {
-  return { hints: [], tone: 'muted', manual: false, issue: null, url: null, ...over }
+  return { hints: [], tone: 'muted', manual: false, rows: 1, issue: null, url: null, ...over }
+}
+
+/** Rows a wrapped note needs, capped. Approximate on purpose: the exact count
+ *  depends on the font, and over-reserving a row costs a little whitespace
+ *  while under-reserving clips the text with nothing to correct it. */
+const NOTE_COLS = 38
+const NOTE_MAX_ROWS = 4
+export function noteRows(body: string): number {
+  const lines = body.split('\n')
+  const rows = lines.reduce((n, l) => n + Math.max(1, Math.ceil(l.length / NOTE_COLS)), 0)
+  return Math.min(NOTE_MAX_ROWS, Math.max(1, rows))
 }
 
 function renderIssues(ctx: StageContext, t: Translate): StageItem[] {
@@ -282,12 +297,16 @@ function renderDesignDocs(ctx: StageContext, _t: Translate): StageItem[] {
 
 function renderNote(ctx: StageContext, _t: Translate): StageItem[] {
   const out: StageItem[] = []
-  // The note BODY is not here any more — it renders in full on its own card at
-  // the end of the pipeline (StageNotesNode). A truncated first line inside a
-  // stage box was almost useless: a note is prose, and the one line you could
-  // see never carried the reason, which is why anyone writes one.
-  //
-  // What stays is the hand-attached links, which are one line by nature.
+  // The note reads ON its stage, wrapped over as many rows as it needs. An
+  // earlier cut showed only its first line, truncated, which was almost
+  // useless — a note is prose and the reason never fits on line one. The fix
+  // was to give it room, not to take it away; the Notes card still carries
+  // every note in full, for reading them together.
+  const body = (ctx.workstream.notes[ctx.stage.key] ?? '').trim()
+  if (body.length > 0) {
+    // Not `manual` — a note is authored, not a workaround for a broken link.
+    out.push(item({ token: 'note', text: body, rows: noteRows(body) }))
+  }
 
   for (const l of ctx.workstream.links) {
     if (l.stageKey !== ctx.stage.key || l.kind !== 'url') continue

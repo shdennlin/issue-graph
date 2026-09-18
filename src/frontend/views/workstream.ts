@@ -123,7 +123,11 @@ export const workstreamView: ViewDefinition = {
           blockedBy,
           pipeline: stages,
         }
-        return { stage, i, render, items: renderStage(render, IDENT).length }
+        // SUM of rows, not a count of items: a note wraps over several. A
+        // stage node is never measured after the fact, so an undercount shows
+        // up as clipped text that nothing corrects.
+        const rows = renderStage(render, IDENT).reduce((n, it) => n + it.rows, 0)
+        return { stage, i, render, items: rows }
       })
       // Wraps at the user's "Issues per row" setting, and every other row runs
       // BACKWARDS, so the pipeline reads as one continuous line instead of
@@ -197,6 +201,13 @@ export const workstreamView: ViewDefinition = {
           width: STAGE_W,
           height: h,
           style: { width: STAGE_W, height: h },
+          // A stage's position is COMPUTED from its index in the pipeline, so
+          // dragging one can only ever be undone by the next re-layout. Worse,
+          // React Flow reads a pointerdown that misses a button as the start of
+          // a drag — so every near-miss on the small header controls looked
+          // like "I clicked and nothing happened". A near-miss now does
+          // nothing, which is at least honest.
+          draggable: false,
         })
       }
 
@@ -221,6 +232,7 @@ export const workstreamView: ViewDefinition = {
         width: STAGE_W,
         height: cellH,
         style: { width: STAGE_W, height: cellH },
+        draggable: false,
       })
 
       // The pipeline arrow, within this workstream only. Handles are chosen
