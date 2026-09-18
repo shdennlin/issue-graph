@@ -575,6 +575,7 @@ export const en = {
     // clipped words rather than sentences. The fact itself — an identifier, a
     // state name, `repo#12` — is never translated.
     lagging: 'not in this stage yet',
+    unmappedState: 'no stage expects this state',
     notCached: 'outside the synced range',
     needsYou: 'needs you',
     yourMove: 'your move',

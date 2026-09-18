@@ -8,7 +8,7 @@ import type {
   NormalizedPullRequest,
   WorkstreamSummaryDTO,
 } from '@shared/types.js'
-import { indexBlockedBy, laggingMembers, renderStage, type StageContext } from './stageRender'
+import { indexBlockedBy, renderStage, stageForIssue, type StageContext } from './stageRender'
 
 // Echoes the key back, so an assertion names the key rather than a translation
 // that could change without the behaviour changing. Same trick, and the same
@@ -101,6 +101,7 @@ function ctx(over: Partial<StageContext> = {}): StageContext {
     sessionsByIssue: new Map(),
     designdocs: [],
     blockedBy: new Map(),
+    pipeline: [over.stage ?? stage()],
     ...over,
   }
 }
@@ -132,44 +133,90 @@ describe('renderStage — dispatch', () => {
   })
 })
 
-describe('issues', () => {
-  const shows = stage({ shows: ['issues'], states: ['In Progress'] })
+describe('issues — each member drawn once, where its state puts it', () => {
+  const discuss = stage({ key: 'discuss', shows: ['issues'], states: ['Todo'], sortOrder: 0 })
+  const impl = stage({ key: 'impl', shows: ['issues'], states: ['In Progress'], sortOrder: 1 })
+  const pipeline = [discuss, impl]
 
-  it('flags a member whose Linear state is not one the stage expects', () => {
-    const c = ctx({ members: [mk('A-1'), mk('A-2', { state: 'Done', type: 'completed' })], stage: shows })
-    const items = renderStage(c, t)
-    expect(items.map((i) => [i.text, i.tone, i.hints])).toEqual([
-      ['A-1 · In Progress', 'ok', []],
-      ['A-2 · Done', 'warn', ['stage.lagging']],
-    ])
+  const on = (st: LifecycleStageDTO, members: NormalizedIssue[]) =>
+    renderStage(
+      ctx({
+        members,
+        stage: st,
+        pipeline,
+        workstream: ws({ members: members.map((m) => m.identifier), stage: 'impl' }),
+      }),
+      t,
+    )
+
+  it('puts each member on the stage its Linear state maps to, and nowhere else', () => {
+    // Drawing every member on every stage repeated one fact seven times and
+    // marked six of them "not in this stage yet" — noise wearing the costume
+    // of a warning.
+    const members = [mk('A-1', { state: 'Todo' }), mk('A-2', { state: 'In Progress' })]
+    expect(texts(on(discuss, members))).toEqual(['A-1 · Todo'])
+    expect(texts(on(impl, members))).toEqual(['A-2 · In Progress'])
   })
 
-  it('flags nothing when the stage expects any state', () => {
-    // An empty `states` is how a stage Linear cannot see — "Discuss" — opts out
-    // of the comparison rather than flagging every member it has.
-    const c = ctx({ members: [mk('A-1', { state: 'Anything' })], stage: stage({ shows: ['issues'] }) })
-    expect(renderStage(c, t)[0]?.hints).toEqual([])
-    expect(laggingMembers(c)).toEqual([])
+  it('sends a member no stage claims to the current stage, and says why', () => {
+    // An unmapped state is a gap in the pipeline config. The issue still has to
+    // be somewhere visible, and somebody should widen a stage.
+    const members = [mk('A-1', { state: 'Blocked On Legal' })]
+    expect(on(discuss, members)).toEqual([])
+    const here = on(impl, members)
+    expect(here[0]).toMatchObject({ text: 'A-1 · Blocked On Legal', tone: 'warn' })
+    expect(here[0]?.hints).toEqual(['stage.unmappedState'])
   })
 
-  it('says so when a member is outside the synced range rather than shortening the list', () => {
-    // Silently showing two of three is a stage lying about its own size.
+  it('lists an uncached member on the current stage rather than dropping it', () => {
+    // No state means no stage can claim it, and silently showing two of three
+    // makes the workstream lie about its own size.
     const c = ctx({
-      members: [mk('A-1')],
-      stage: stage({ shows: ['issues'] }),
-      workstream: ws({ members: ['A-1', 'A-9'] }),
+      members: [mk('A-1', { state: 'In Progress' })],
+      stage: impl,
+      pipeline,
+      workstream: ws({ members: ['A-1', 'GONE-9'], stage: 'impl' }),
     })
     const items = renderStage(c, t)
-    expect(texts(items)).toEqual(['A-1 · In Progress', 'A-9'])
-    expect(items[1]).toMatchObject({ hints: ['stage.notCached'], tone: 'muted', issue: null })
+    expect(texts(items)).toEqual(['A-1 · In Progress', 'GONE-9'])
+    expect(items[1]?.hints).toEqual(['stage.notCached'])
   })
 
-  it('compares state names case- and space-insensitively', () => {
+  it('does not repeat an uncached member on every stage', () => {
     const c = ctx({
-      members: [mk('A-1', { state: ' in progress ' })],
-      stage: stage({ shows: ['issues'], states: ['In Progress'] }),
+      members: [],
+      stage: discuss,
+      pipeline,
+      workstream: ws({ members: ['GONE-9'], stage: 'impl' }),
     })
-    expect(renderStage(c, t)[0]?.tone).toBe('ok')
+    expect(renderStage(c, t)).toEqual([])
+  })
+})
+
+describe('stageForIssue', () => {
+  const a = stage({ key: 'a', states: ['Todo'], sortOrder: 0 })
+  const b = stage({ key: 'b', states: ['In Progress'], sortOrder: 1 })
+
+  it('matches case- and space-insensitively', () => {
+    expect(stageForIssue(mk('X', { state: '  todo ' }), [a, b])?.key).toBe('a')
+  })
+
+  it('gives an unclaimed state no stage at all', () => {
+    expect(stageForIssue(mk('X', { state: 'Paused' }), [a, b])).toBeNull()
+  })
+
+  it('takes the FIRST stage when two claim the same state', () => {
+    // A nine-step pipeline over eight Linear states does this constantly —
+    // ADR-0002 is about exactly that. Drawing the issue twice would be worse
+    // than picking deterministically.
+    const dup = stage({ key: 'b2', states: ['Todo'], sortOrder: 2 })
+    expect(stageForIssue(mk('X', { state: 'Todo' }), [a, b, dup])?.key).toBe('a')
+  })
+
+  it('never matches a stage that expects any state', () => {
+    // Empty `states` opts out of the comparison; it must not become a magnet
+    // that swallows every issue in the workstream.
+    expect(stageForIssue(mk('X', { state: 'Todo' }), [stage({ key: 'any', states: [] })])).toBeNull()
   })
 })
 

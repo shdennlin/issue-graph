@@ -63,6 +63,36 @@ export interface StageContext {
   designdocs: DesignDocChange[]
   /** Who blocks whom, across the WHOLE graph — see `indexBlockedBy`. */
   blockedBy: Map<string, NormalizedIssue[]>
+  /** The whole pipeline, in order. Needed because which stage an issue is
+   *  DRAWN on is a property of the pipeline, not of this stage alone: the
+   *  answer is "the first stage whose `states` claims it", which this stage
+   *  cannot work out by looking only at itself. */
+  pipeline: LifecycleStageDTO[]
+}
+
+/**
+ * Which stage an issue is drawn on: the first whose `states` names its Linear
+ * state, or null when no stage claims it.
+ *
+ * DERIVED, never stored — an issue's position in the pipeline is already
+ * recorded, by Linear, as its state. Storing a second copy would be two
+ * writers on one fact, which is the `activeOnly` trap at a larger scale. What
+ * IS stored is the workstream's own stage, because nothing else records where
+ * a FEATURE has got to; the two disagreeing is the evidence signal, not a bug.
+ *
+ * `states` is matched case- and space-insensitively, like everywhere else. The
+ * FIRST match wins so that two stages listing the same state (a nine-step
+ * pipeline over eight Linear states does this constantly — see ADR-0002) puts
+ * the issue in the earlier one deterministically rather than drawing it twice.
+ */
+export function stageForIssue(
+  issue: NormalizedIssue,
+  pipeline: LifecycleStageDTO[],
+): LifecycleStageDTO | null {
+  const name = issue.state.name.trim().toLowerCase()
+  return (
+    pipeline.find((s) => s.states.some((v) => v.trim().toLowerCase() === name)) ?? null
+  )
 }
 
 /**
@@ -88,35 +118,41 @@ export function indexBlockedBy(issues: NormalizedIssue[]): Map<string, Normalize
   return map
 }
 
-/** Members whose Linear state is not one this stage expects. */
-export function laggingMembers(ctx: StageContext): NormalizedIssue[] {
-  // An empty `states` opts the stage out of the comparison entirely, which is
-  // how a stage Linear cannot see — "Discuss" — avoids flagging everything.
-  if (ctx.stage.states.length === 0) return []
-  const want = new Set(ctx.stage.states.map((s) => s.trim().toLowerCase()))
-  return ctx.members.filter((m) => !want.has(m.state.name.trim().toLowerCase()))
-}
-
 function item(over: Partial<StageItem> & Pick<StageItem, 'token' | 'text'>): StageItem {
   return { hints: [], tone: 'muted', manual: false, issue: null, url: null, ...over }
 }
 
 function renderIssues(ctx: StageContext, t: Translate): StageItem[] {
-  const lagging = new Set(laggingMembers(ctx).map((m) => m.identifier))
-  const out = ctx.members.map((m) =>
-    item({
-      token: 'issues',
-      text: `${m.identifier} · ${m.state.name}`,
-      // The useful signal is which member is holding the workstream where it
-      // is; restating the stage's own name for the rest would say nothing.
-      hints: lagging.has(m.identifier) ? [t('stage.lagging')] : [],
-      tone: lagging.has(m.identifier) ? 'warn' : 'ok',
-      issue: m.identifier,
-    }),
-  )
+  const out: StageItem[] = []
 
-  // A member outside the sync window has no card and no state, and silently
-  // showing two of three would make the stage lie about its own size.
+  // Each member is drawn ONCE, on the stage its Linear state maps to. Drawing
+  // every member on every stage repeated one fact seven times and marked six of
+  // them "not in this stage yet" — the same three identifiers over and over, in
+  // a colour that means "wrong", which is noise wearing the costume of a
+  // warning.
+  //
+  // A member whose state no stage claims falls to the workstream's CURRENT
+  // stage rather than vanishing: an unmapped state is a gap in the pipeline
+  // config, and the issue still has to be somewhere you can see it.
+  const currentIsFallback = ctx.workstream.stage === ctx.stage.key
+  for (const m of ctx.members) {
+    const home = stageForIssue(m, ctx.pipeline)
+    const belongsHere = home ? home.key === ctx.stage.key : currentIsFallback
+    if (!belongsHere) continue
+    out.push(
+      item({
+        token: 'issues',
+        text: `${m.identifier} \u00b7 ${m.state.name}`,
+        // Only said on the fallback path, where it is true and useful: this
+        // issue's state is in nobody's `states`, so the pipeline cannot place
+        // it and somebody should widen a stage.
+        hints: home ? [] : [t('stage.unmappedState')],
+        tone: home ? 'ok' : 'warn',
+        issue: m.identifier,
+      }),
+    )
+  }
+
   // A ticket that matters here without being a member — somebody else's
   // dependency, an incident that blocked the merge. Unlike the rest of the
   // manual kinds this is not a broken projection: there is nothing upstream
@@ -134,18 +170,15 @@ function renderIssues(ctx: StageContext, t: Translate): StageItem[] {
     )
   }
 
-  const resolved = new Set(ctx.members.map((m) => m.identifier))
-  for (const id of ctx.workstream.members) {
-    if (resolved.has(id)) continue
-    out.push({
-      token: 'issues',
-      text: id,
-      hints: [t('stage.notCached')],
-      tone: 'muted',
-      manual: false,
-      issue: null,
-      url: null,
-    })
+  // A member outside the sync window has no card and no state, so no stage can
+  // claim it. Listed on the current stage, because silently showing two of
+  // three makes the workstream lie about its own size.
+  if (currentIsFallback) {
+    const resolved = new Set(ctx.members.map((m) => m.identifier))
+    for (const id of ctx.workstream.members) {
+      if (resolved.has(id)) continue
+      out.push(item({ token: 'issues', text: id, hints: [t('stage.notCached')] }))
+    }
   }
   return out
 }

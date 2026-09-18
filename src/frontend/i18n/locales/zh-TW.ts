@@ -552,6 +552,7 @@ export const zhTW: Dict = {
     // 這些是畫在 stage 方塊裡、貼在事實旁邊的短標註，所以是詞不是句子。事實本身
     // — 議題編號、狀態名稱、`repo#12` — 一律不翻譯。
     lagging: '還沒進到這個 stage',
+    unmappedState: '沒有 stage 預期這個狀態',
     notCached: '不在同步範圍內',
     needsYou: '等你回覆',
     yourMove: '換你了',

@@ -114,7 +114,15 @@ export const workstreamView: ViewDefinition = {
       const visits = stageVisits(workstream.stageEvents, now)
 
       const built = stages.map((stage, i) => {
-        const render: StageContext = { workstream, stage, members, sessionsByIssue, designdocs, blockedBy }
+        const render: StageContext = {
+          workstream,
+          stage,
+          members,
+          sessionsByIssue,
+          designdocs,
+          blockedBy,
+          pipeline: stages,
+        }
         return { stage, i, render, items: renderStage(render, IDENT).length }
       })
       // Wraps at the user's "Issues per row" setting, and every other row runs
