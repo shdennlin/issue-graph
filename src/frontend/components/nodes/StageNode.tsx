@@ -3,7 +3,7 @@ import type { MouseEvent, PointerEvent } from 'react'
 import type { NodeProps } from 'reactflow'
 import { Handle, Position } from 'reactflow'
 import { MoveRight } from 'lucide-react'
-import { useT } from '../../i18n'
+import { useT, type DictKey } from '../../i18n'
 import { useViewStore } from '../../store/viewStore'
 import { renderStage, type StageContext, type StageItem } from '../../lib/stageRender'
 import { api } from '../../lib/api'
@@ -22,6 +22,15 @@ import { useGraphStore } from '../../store/graphStore'
 // The component decides nothing. `renderStage` in lib/ decides what appears,
 // because vitest's glob excludes `.tsx` and a decision made here could not be
 // tested at all.
+
+/** Shared with IssueNode's badge: translated rather than concatenated, because
+ *  both of this repo's relative-time helpers hardcoded English and a zh-TW
+ *  session read "3d ago". */
+const AGE_UNIT_KEYS: Record<'m' | 'h' | 'd', DictKey> = {
+  m: 'issueNode.ageMinutes',
+  h: 'issueNode.ageHours',
+  d: 'issueNode.ageDays',
+}
 
 const HANDLES = [
   ['l', Position.Left],
@@ -44,17 +53,19 @@ export interface StageNodeData {
   /** Focused mode: what to render for the one expanded workstream. Null in the
    *  overview, where a stage shows who is standing on it instead. */
   render: StageContext | null
-  /** Overview mode: the workstreams currently on this stage. */
-  streams: { id: number; name: string; days: number | null; stale: boolean }[]
-  /** Days on this stage — for the stage it is on now that is "still running",
-   *  and for a stage it has left, how long it took. Null only when it has
-   *  never been here. */
-  daysHere: number | null
-  /** Has this workstream ever arrived here? Distinguishes "0 days, arrived
-   *  today" from "never been", which `daysHere` alone cannot. */
+  /** How long on this stage — still running for the one it is on, settled for
+   *  one it has left. Already reduced to a number and a unit, because the view
+   *  is where the clock is read. Null when it has never been here.
+   *
+   *  Minutes and hours matter: a pipeline is walked several times in an
+   *  afternoon while it is being set up, and every stage reading `0d` told you
+   *  nothing about which of them just happened. */
+  age: { value: number; unit: 'm' | 'h' | 'd' } | null
+  /** Has this workstream ever arrived here? Distinguishes "arrived a moment
+   *  ago" from "never been", which `age` alone cannot. */
   visited: boolean
-  /** How many separate arrivals. Shown above 1, because going round twice is
-   *  the shape of a review that failed and is worth seeing. */
+  /** How many separate arrivals. Reported in the tooltip rather than as a
+   *  chip — `\u00d74` beside a duration reads as arithmetic on the duration. */
   visits: number
   /** True once `daysHere` passes the stage's own threshold. */
   stale: boolean
@@ -135,7 +146,6 @@ function StageImpl({ data }: NodeProps<StageNodeData>) {
   const t = useT()
   const refetchSilent = useGraphStore((s) => s.refetchSilent)
   const [attaching, setAttaching] = useState(false)
-  const setFocusedWorkstreamId = useViewStore((s) => s.setFocusedWorkstreamId)
   // Wording never changes how many items there are, so the view's height
   // estimate and this stay in step — which matters more here than elsewhere,
   // because GraphCanvas only measures `.react-flow__node-issue` and a stage
@@ -223,16 +233,17 @@ function StageImpl({ data }: NodeProps<StageNodeData>) {
             +
           </button>
         )}
-        {data.visits > 1 && (
-          <span className="stage-visits" title={t('stage.visitsHint')}>
-            {t('stage.visits', { n: data.visits })}
-          </span>
-        )}
-        {data.visited && data.daysHere !== null && (
-          <span className={`stage-days${data.stale ? ' stage-days-stale' : ''}`}>
+        {data.visited && data.age !== null && (
+          <span
+            className={`stage-days${data.stale ? ' stage-days-stale' : ''}`}
+            title={data.visits > 1 ? t('stage.visitsHint', { n: data.visits }) : undefined}
+          >
             {/* "4d here" while it is still here, "4d" once it has moved on —
                 the first is a duration still running, the second is settled. */}
-            {data.current ? t('stage.daysHere', { n: data.daysHere }) : t('stage.daysTook', { n: data.daysHere })}
+            {data.current
+              ? t('stage.ageHere', { age: t(AGE_UNIT_KEYS[data.age.unit], { count: data.age.value }) })
+              : t(AGE_UNIT_KEYS[data.age.unit], { count: data.age.value })}
+            {data.visits > 1 && <span className="stage-revisit" aria-hidden>{'\u21ba'}</span>}
           </span>
         )}
       </div>
@@ -253,32 +264,6 @@ function StageImpl({ data }: NodeProps<StageNodeData>) {
         </div>
       )}
 
-      {!data.render && (
-        <div className="stage-body">
-          {data.streams.length === 0 ? (
-            <span className="stage-empty">{t('stage.noStreams')}</span>
-          ) : (
-            data.streams.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                className={`stage-stream${s.stale ? ' stage-stream-stale' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setFocusedWorkstreamId(s.id)
-                }}
-                onPointerDown={(e) => e.stopPropagation()}
-                title={t('stage.expandStream')}
-              >
-                <span className="stage-item-text">{s.name}</span>
-                {s.days !== null && (
-                  <span className="stage-item-hint">{t('stage.daysHere', { n: s.days })}</span>
-                )}
-              </button>
-            ))
-          )}
-        </div>
-      )}
     </div>
   )
 }

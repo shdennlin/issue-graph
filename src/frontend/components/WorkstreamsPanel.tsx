@@ -23,8 +23,14 @@ import { api } from '../lib/api'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { indexSessionsByIssue, sessionPresence } from '../lib/agentSession'
-import { compactAge } from '../lib/relativeTime'
-import { useT } from '../i18n'
+import { compactAge, formatAbsolute } from '../lib/relativeTime'
+import { useT, type DictKey } from '../i18n'
+
+const AGE_UNIT_KEYS: Record<'m' | 'h' | 'd', DictKey> = {
+  m: 'issueNode.ageMinutes',
+  h: 'issueNode.ageHours',
+  d: 'issueNode.ageDays',
+}
 
 interface Member {
   identifier: string
@@ -43,11 +49,18 @@ interface Summary {
   name: string
   stage: string | null
   status: 'active' | 'archived'
+  createdAt: number
+  updatedAt: number
+  archivedAt: number | null
   progress: { total: number; done: number }
 }
 
 export function WorkstreamsPanel() {
   const t = useT()
+  const ageText = (ts: number) => {
+    const a = compactAge(ts)
+    return t(AGE_UNIT_KEYS[a.unit], { count: a.value })
+  }
   const close = () => useViewStore.getState().setWorkstreamsOpen(false)
   const setFocusedId = useViewStore((s) => s.setFocusedId)
   const setChainRootIds = useViewStore((s) => s.setChainRootIds)
@@ -219,6 +232,24 @@ export function WorkstreamsPanel() {
                   </select>
                   <span className="workstream-progress">
                     {ws.progress.done}/{ws.progress.total}
+                  </span>
+                  {/* Last touched, not created: a list sorted by creation puts
+                      a workstream nobody has looked at in three weeks above one
+                      that moved this morning. The full dates are in the title,
+                      because the badge has room for one number. */}
+                  <span
+                    className="workstream-when"
+                    title={[
+                      `${t('workstreams.created')}: ${formatAbsolute(ws.createdAt)}`,
+                      `${t('workstreams.updated')}: ${formatAbsolute(ws.updatedAt)}`,
+                      ws.archivedAt
+                        ? `${t('workstreams.archived')}: ${formatAbsolute(ws.archivedAt)}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join('\n')}
+                  >
+                    {ageText(ws.archivedAt ?? ws.updatedAt)}
                   </span>
                   {isOpen && d && (
                     <button onClick={() => isolate(d)} title={t('workstreams.isolate')}>

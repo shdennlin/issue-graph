@@ -169,8 +169,8 @@ describe('time on every stage, not just the current one', () => {
       ],
     })
     const [discuss, impl] = stageNodes(w)
-    expect(discuss).toMatchObject({ visited: true, daysHere: 3, current: false })
-    expect(impl).toMatchObject({ visited: true, daysHere: 2, current: true })
+    expect(discuss).toMatchObject({ visited: true, age: { value: 3, unit: 'd' }, current: false })
+    expect(impl).toMatchObject({ visited: true, age: { value: 2, unit: 'd' }, current: true })
   })
 
   it('leaves a stage it has never reached undated', () => {
@@ -178,8 +178,8 @@ describe('time on every stage, not just the current one', () => {
     // `daysHere: 0` cannot say which.
     const w = ws(1, { stage: 'discuss', stageEvents: [{ stageKey: 'discuss', at: Date.now() }] })
     const [discuss, impl] = stageNodes(w)
-    expect(discuss).toMatchObject({ visited: true, daysHere: 0 })
-    expect(impl).toMatchObject({ visited: false, daysHere: null })
+    expect(discuss).toMatchObject({ visited: true, age: { value: 0, unit: 'm' } })
+    expect(impl).toMatchObject({ visited: false, age: null })
   })
 
   it('counts a second lap rather than averaging it away', () => {
@@ -192,7 +192,7 @@ describe('time on every stage, not just the current one', () => {
       ],
     })
     const [discuss] = stageNodes(w)
-    expect(discuss).toMatchObject({ visits: 2, daysHere: 1, current: true })
+    expect(discuss).toMatchObject({ visits: 2, age: { value: 1, unit: 'd' }, current: true })
   })
 
   it('never marks a stage stale when the workstream is not on it', () => {
@@ -274,12 +274,12 @@ describe('wrapping honours the Issues-per-row setting', () => {
   it('drops straight down at a row break and sideways within a row', () => {
     // The handles are picked per edge; getting this wrong sends the row-break
     // edge out of the side and across the whole container.
-    // Six stages at three per row: edges 0-1 run across row 0, edge 2 is the
-    // break, edges 3-4 run back across row 1.
+    // Three per row, and the NOTES card takes cell 0 — so row 0 is
+    // [notes, s0, s1] and row 1 is [s4, s3, s2] read right-to-left.
     const { edges } = layout(3)
     expect(edges[0]).toMatchObject({ sourceHandle: 's-r', targetHandle: 't-l' })
-    expect(edges[2]).toMatchObject({ sourceHandle: 's-b', targetHandle: 't-t' })
+    expect(edges[1]).toMatchObject({ sourceHandle: 's-b', targetHandle: 't-t' })
     // Second row runs right-to-left, so it leaves the LEFT side.
-    expect(edges[3]).toMatchObject({ sourceHandle: 's-l', targetHandle: 't-r' })
+    expect(edges[2]).toMatchObject({ sourceHandle: 's-l', targetHandle: 't-r' })
   })
 })

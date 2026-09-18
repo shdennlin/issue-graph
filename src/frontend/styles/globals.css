@@ -4346,3 +4346,19 @@ button.stage-item:hover,
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+.workstream-when {
+  flex: 0 0 auto;
+  min-width: 30px;
+  text-align: right;
+  font-size: 11px;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+/* A revisited stage. The glyph rather than a "×4" chip, which read as
+   arithmetic on the duration sitting next to it. */
+.stage-revisit {
+  margin-left: 3px;
+  opacity: 0.75;
+}

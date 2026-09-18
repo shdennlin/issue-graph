@@ -23,6 +23,12 @@ export interface BatchRow {
   stage_entered_at: number | null
   /** JSON array of agent names/ids. Text column, read tolerantly. */
   assignees: string
+  /** Last change to the workstream ITSELF — never its members' Linear
+   *  activity, which is Linear's clock and moves on every comment. */
+  updated_at: number | null
+  /** Null while active. Dates the CURRENT shelving: cleared on unarchive, for
+   *  the same reason `stage_entered_at` times the current occupancy. */
+  archived_at: number | null
 }
 
 export type WorkstreamStatus = 'active' | 'archived'

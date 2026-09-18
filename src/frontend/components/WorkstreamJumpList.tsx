@@ -4,6 +4,8 @@ import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { useT } from '../i18n'
 import { stageVisits } from '@shared/stageHistory.js'
+import { compactAge } from '../lib/relativeTime'
+import type { DictKey } from '../i18n'
 import { isStale } from '@shared/staleness.js'
 
 // A standing index of what is in flight, over the top-right of the canvas.
@@ -16,6 +18,12 @@ import { isStale } from '@shared/staleness.js'
 //
 // Isolation is still there, on the second control, because sometimes one
 // workstream really is the whole job.
+const AGE_UNIT_KEYS: Record<'m' | 'h' | 'd', DictKey> = {
+  m: 'issueNode.ageMinutes',
+  h: 'issueNode.ageHours',
+  d: 'issueNode.ageDays',
+}
+
 export function WorkstreamJumpList() {
   const t = useT()
   const graph = useGraphStore((s) => s.graph)
@@ -59,6 +67,7 @@ export function WorkstreamJumpList() {
       {streams.map((w) => {
         const stage = stages.find((s) => s.key === w.stage) ?? null
         const visit = w.stage ? stageVisits(w.stageEvents, now).get(w.stage) : undefined
+        const age = visit ? compactAge(visit.enteredAt, visit.leftAt ?? now) : null
         const stale = isStale(w.stageEnteredAt, stage?.staleAfterDays ?? null, now)
         return (
           <div key={w.id} className={`ws-jump-row${focused === w.id ? ' ws-jump-on' : ''}`}>
@@ -66,7 +75,11 @@ export function WorkstreamJumpList() {
               <span className="ws-jump-name">{w.name}</span>
               <span className={`ws-jump-where${stale ? ' ws-jump-stale' : ''}`}>
                 {stage
-                  ? `${stage.name}${visit ? ` · ${t('stage.daysHere', { n: visit.days })}` : ''}`
+                  ? `${stage.name}${
+                      age
+                        ? ` · ${t('stage.ageHere', { age: t(AGE_UNIT_KEYS[age.unit], { count: age.value }) })}`
+                        : ''
+                    }`
                   : t('stage.notStarted')}
               </span>
             </button>

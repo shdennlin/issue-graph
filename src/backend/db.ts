@@ -303,6 +303,30 @@ const MIGRATIONS: string[] = [
      at INTEGER NOT NULL
    );`,
   `CREATE INDEX IF NOT EXISTS idx_stage_event_batch ON workstream_stage_event(batch_id, at);`,
+
+  // 13. When a workstream was last touched, and when it was shelved.
+  //
+  // `created_at` was the only date it had, which answers the least interesting
+  // question: a list sorted by it puts a workstream nobody has looked at in
+  // three weeks above one that moved this morning.
+  //
+  // `updated_at` counts a change to the workstream ITSELF — its name, stage,
+  // status, assignees, notes and hand attachments. Deliberately NOT its
+  // members' Linear activity: that is Linear's clock, it moves whenever anyone
+  // comments, and letting it bump this would make "last touched" mean
+  // "somebody typed anywhere near this", which is the same trap `updatedAt`
+  // already falls into on an issue (see `lastCommentAt` in shared/types.ts).
+  //
+  // Backfilled from `created_at` rather than left null, so ordering by it is
+  // total from the first read — a null would sort unpredictably and the row
+  // would look older or newer than everything depending on the collation.
+  `ALTER TABLE batch ADD COLUMN updated_at INTEGER;`,
+  `UPDATE batch SET updated_at = created_at WHERE updated_at IS NULL;`,
+  // Null while active, stamped on archive, CLEARED on unarchive: it dates the
+  // current shelving, not the first one ever, for the same reason
+  // `stage_entered_at` times the current occupancy.
+  `ALTER TABLE batch ADD COLUMN archived_at INTEGER;`,
+  `UPDATE batch SET archived_at = updated_at WHERE status = 'archived' AND archived_at IS NULL;`,
 ]
 
 // One Database instance per workspace id. Each profile has its own SQLITE_PATH

@@ -294,6 +294,9 @@ export const api = {
         name: string
         stage: string | null
         status: 'active' | 'archived'
+        createdAt: number
+        updatedAt: number
+        archivedAt: number | null
         progress: { total: number; done: number }
       }[]
     }>(

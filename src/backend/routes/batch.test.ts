@@ -18,6 +18,8 @@ interface Member {
 interface Batch {
   id: number
   name: string
+  updated_at?: number | null
+  archived_at?: number | null
   created_at: number
   stage_key: string | null
   status: string
@@ -73,8 +75,13 @@ vi.mock('../db.js', () => ({
           return { changes: 1 }
         }
         if (s.startsWith('INSERT INTO batch')) {
-          const [name, created_at, stage_key, stage_entered_at] = args as [
+          // POSITIONAL, so it has to track the route's column list. Adding
+          // `updated_at` to the INSERT once shifted `stage_key` one place along
+          // and a rejected PATCH appeared to have set a stage to a timestamp —
+          // a failure that pointed at the route and was entirely the mock's.
+          const [name, created_at, updated_at, stage_key, stage_entered_at] = args as [
             string,
+            number,
             number,
             string | null,
             number | null,
@@ -83,6 +90,8 @@ vi.mock('../db.js', () => ({
             id: nextId,
             name,
             created_at,
+            updated_at,
+            archived_at: null,
             stage_key: stage_key ?? null,
             status: 'active',
             stage_entered_at: stage_entered_at ?? null,

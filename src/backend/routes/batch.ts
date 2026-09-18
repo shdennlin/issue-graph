@@ -88,7 +88,7 @@ const notFound = () => ({ error: { code: 'not_found' } }) as const
 const mayWrite = (c: Parameters<typeof originAllowed>[0]): boolean =>
   originAllowed(c) || agentTokenValid(c.req.header('Authorization'))
 
-const BATCH_SELECT = `SELECT id, name, created_at, stage_key, status, stage_entered_at, assignees FROM batch`
+const BATCH_SELECT = `SELECT id, name, created_at, updated_at, archived_at, stage_key, status, stage_entered_at, assignees FROM batch`
 
 const notesOf = (batchId: number): StageNoteRow[] =>
   getDb()
@@ -128,6 +128,8 @@ batchRoutes.get('/api/batches', (c) => {
         id: b.id,
         name: b.name,
         createdAt: b.created_at,
+        updatedAt: b.updated_at ?? b.created_at,
+        archivedAt: b.archived_at,
         stage: b.stage_key,
         stageEnteredAt: b.stage_entered_at,
         status: b.status,
@@ -199,9 +201,9 @@ batchRoutes.post('/api/batches', async (c) => {
   if (stage !== null && !stageExists(db, stage)) return c.json(invalid('unknown stage'), 400)
   const r = db
     .prepare(
-      `INSERT INTO batch(name, created_at, stage_key, stage_entered_at) VALUES(?, ?, ?, ?)`,
+      `INSERT INTO batch(name, created_at, updated_at, stage_key, stage_entered_at) VALUES(?, ?, ?, ?, ?)`,
     )
-    .run(name, now, stage, stage === null ? null : now)
+    .run(name, now, now, stage, stage === null ? null : now)
   const batchId = Number(r.lastInsertRowid)
   // Work is often already underway when someone starts tracking it, so a
   // workstream can be born on stage 4. That arrival is history like any other.
@@ -235,6 +237,13 @@ function recordStageEntry(
     stageKey,
     at,
   )
+}
+
+/** A note, a hand attachment or a membership change is a change to the
+ *  workstream, so it moves the same clock the PATCH route moves. Without this,
+ *  "last touched" would only ever mean "renamed or re-staged". */
+function touchBatch(db: ReturnType<typeof getDb>, batchId: number): void {
+  db.prepare(`UPDATE batch SET updated_at = ? WHERE id = ?`).run(Date.now(), batchId)
 }
 
 function stageExists(db: ReturnType<typeof getDb>, key: string): boolean {
@@ -286,6 +295,12 @@ batchRoutes.patch('/api/batches/:id', async (c) => {
   if (parsed.data.status !== undefined) {
     const status = normalizeStatus(parsed.data.status)
     if (status === null) return c.json(invalid('bad status'), 400)
+    // Stamped on the way in, CLEARED on the way out: it dates the current
+    // shelving, not the first one ever.
+    if (status !== row.status) {
+      sets.push('archived_at = ?')
+      args.push(status === 'archived' ? Date.now() : null)
+    }
     sets.push('status = ?')
     args.push(status)
   }
@@ -296,6 +311,9 @@ batchRoutes.patch('/api/batches/:id', async (c) => {
     args.push(JSON.stringify(assignees))
   }
 
+  // Appended last so it covers every branch above without each remembering.
+  sets.push('updated_at = ?')
+  args.push(Date.now())
   db.prepare(`UPDATE batch SET ${sets.join(', ')} WHERE id = ?`).run(...args, id)
   if (stageEntryPending) recordStageEntry(db, id, stageEntryPending.stage, stageEntryPending.at)
   return c.json({ ok: true })
@@ -336,6 +354,7 @@ batchRoutes.put('/api/batches/:id/notes/:stageKey', async (c) => {
     `INSERT INTO workstream_stage_note(batch_id, stage_key, body, updated_at) VALUES(?, ?, ?, ?)
      ON CONFLICT(batch_id, stage_key) DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at`,
   ).run(id, stageKey, next, Date.now())
+  touchBatch(db, id)
   return c.json({ ok: true, body: next })
 })
 
@@ -343,9 +362,12 @@ batchRoutes.delete('/api/batches/:id/notes/:stageKey', (c) => {
   if (!mayWrite(c)) return c.json(denied(), 403)
   const id = Number(c.req.param('id'))
   if (!Number.isInteger(id)) return c.json(invalid('bad id'), 400)
-  getDb()
-    .prepare(`DELETE FROM workstream_stage_note WHERE batch_id = ? AND stage_key = ?`)
-    .run(id, c.req.param('stageKey'))
+  const db = getDb()
+  db.prepare(`DELETE FROM workstream_stage_note WHERE batch_id = ? AND stage_key = ?`).run(
+    id,
+    c.req.param('stageKey'),
+  )
+  touchBatch(db, id)
   return c.body(null, 204)
 })
 
@@ -362,12 +384,12 @@ batchRoutes.post('/api/batches/:id/links/:stageKey', async (c) => {
   if (value === null) return c.json(invalid('bad value'), 400)
 
   // OR IGNORE: attaching the same thing twice is a no-op, not an error.
-  getDb()
-    .prepare(
-      `INSERT OR IGNORE INTO workstream_stage_link(batch_id, stage_key, kind, value, label, created_at)
-       VALUES(?, ?, ?, ?, ?, ?)`,
-    )
-    .run(id, c.req.param('stageKey'), kind, value, parsed.data.label ?? null, Date.now())
+  const db = getDb()
+  db.prepare(
+    `INSERT OR IGNORE INTO workstream_stage_link(batch_id, stage_key, kind, value, label, created_at)
+     VALUES(?, ?, ?, ?, ?, ?)`,
+  ).run(id, c.req.param('stageKey'), kind, value, parsed.data.label ?? null, Date.now())
+  touchBatch(db, id)
   return c.json({ ok: true })
 })
 
@@ -378,9 +400,13 @@ batchRoutes.delete('/api/batches/:id/links/:stageKey', async (c) => {
   const body = await c.req.json().catch(() => null)
   const value = normalizeLinkValue((body as { value?: unknown } | null)?.value)
   if (value === null) return c.json(invalid('bad value'), 400)
-  getDb()
-    .prepare(`DELETE FROM workstream_stage_link WHERE batch_id = ? AND stage_key = ? AND value = ?`)
-    .run(id, c.req.param('stageKey'), value)
+  const db = getDb()
+  db.prepare(`DELETE FROM workstream_stage_link WHERE batch_id = ? AND stage_key = ? AND value = ?`).run(
+    id,
+    c.req.param('stageKey'),
+    value,
+  )
+  touchBatch(db, id)
   return c.body(null, 204)
 })
 
@@ -405,6 +431,7 @@ batchRoutes.post('/api/batches/:id/members', async (c) => {
   )
   db.transaction((ids: string[]) => {
     for (const m of ids) insert.run(id, m)
+    touchBatch(db, id)
   })(members)
   return c.json({ ok: true, members: membersOf(id).map((m) => m.identifier) })
 })
@@ -418,10 +445,10 @@ batchRoutes.delete('/api/batches/:id/members/:identifier', (c) => {
   // point: the issue is no longer part of this workstream, so its progress
   // here is meaningless — and re-adding it should start clean rather than
   // resurrect a claim held by a session that has long since exited.
-  const r = getDb()
-    .prepare(`DELETE FROM batch_member WHERE batch_id = ? AND identifier = ?`)
-    .run(id, identifier)
+  const db = getDb()
+  const r = db.prepare(`DELETE FROM batch_member WHERE batch_id = ? AND identifier = ?`).run(id, identifier)
   if (r.changes === 0) return c.json(notFound(), 404)
+  touchBatch(db, id)
   return c.body(null, 204)
 })
 

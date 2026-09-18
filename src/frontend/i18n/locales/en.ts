@@ -528,6 +528,9 @@ export const en = {
     delete: 'Delete workstream (the issues are untouched)',
     removeMember: 'Remove from this workstream',
     showArchived: 'Show archived',
+    created: 'Created',
+    updated: 'Last touched',
+    archived: 'Archived',
     archive: 'Archive (takes it off the board, keeps everything)',
     unarchive: 'Put back on the board',
   },
@@ -588,10 +591,8 @@ export const en = {
     // Node chrome. `current` and `daysHere` are the rot signal: a stage nobody
     // has moved off is the failure mode this whole view exists to make visible.
     current: 'current',
-    daysHere: '{n}d here',
-    daysTook: '{n}d',
-    visits: '\u00d7{n}',
-    visitsHint: 'Entered this stage more than once.',
+    ageHere: '{age} here',
+    visitsHint: 'Entered this stage {n} times.',
     nothingHere: 'nothing to show',
     noStreams: 'no workstreams here',
     expandStream: 'Show this workstream\u2019s stages',

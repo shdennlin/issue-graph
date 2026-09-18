@@ -31,6 +31,7 @@
 import { MarkerType, type Edge, type Node } from 'reactflow'
 import { isStale } from '@shared/staleness.js'
 import { stageVisits } from '@shared/stageHistory.js'
+import { compactAge } from '../lib/relativeTime'
 import type { ViewDefinition } from './types'
 import { buildChainLayout } from './chainLayout'
 import { indexBlockedBy, renderStage, type StageContext } from '../lib/stageRender'
@@ -122,8 +123,10 @@ export const workstreamView: ViewDefinition = {
       //   1 → 2 → 3 → 4
       //               ↓
       //   8 ← 7 ← 6 ← 5
-      // The notes card is simply the cell AFTER the last stage, so it costs no
-      // layout arithmetic — it is the next step in the same walk.
+      // The notes card is the FIRST cell, before stage 1. It is the context
+      // you want before reading where the thing has got to — and at the end of
+      // a serpentine walk it landed in whichever corner the wrap happened to
+      // leave, which was never the same place twice.
       const cellCount = stages.length + 1
       const cols = Math.max(1, Math.min(cellCount, maxColsPerRow))
       const rows = Math.ceil(cellCount / cols)
@@ -157,7 +160,7 @@ export const workstreamView: ViewDefinition = {
         const visit = visits.get(b.stage.key)
         const current = workstream.stage === b.stage.key
         const h = cellH
-        const cell = serpentine(b.i, cols)
+        const cell = serpentine(b.i + 1, cols)
         nodes.push({
           id: `${containerId}/stage:${b.stage.key}`,
           type: 'stage',
@@ -168,11 +171,13 @@ export const workstreamView: ViewDefinition = {
             placeholder: null,
             current,
             render: b.render,
-            streams: [],
             // Every stage now carries a time, not just the one it is on. That
             // is the difference between showing a position and showing a
             // journey — six of seven stages used to be blank.
-            daysHere: visit ? visit.days : null,
+            // Reduced here rather than in the component: the view is where the
+            // clock is read, and a component that calls Date.now() in render is
+            // the impurity `react-hooks` flags.
+            age: visit ? compactAge(visit.enteredAt, visit.leftAt ?? now) : null,
             visited: visit !== undefined,
             visits: visit?.visits ?? 0,
             stale: current && isStale(workstream.stageEnteredAt, b.stage.staleAfterDays, now),
@@ -187,7 +192,7 @@ export const workstreamView: ViewDefinition = {
         })
       }
 
-      const notesCell = serpentine(stages.length, cols)
+      const notesCell = serpentine(0, cols)
       nodes.push({
         id: `${containerId}/notes`,
         type: 'stageNotes',
@@ -216,8 +221,8 @@ export const workstreamView: ViewDefinition = {
       for (let i = 0; i + 1 < built.length; i++) {
         const a = `${containerId}/stage:${built[i]!.stage.key}`
         const b = `${containerId}/stage:${built[i + 1]!.stage.key}`
-        const from = serpentine(i, cols)
-        const to = serpentine(i + 1, cols)
+        const from = serpentine(i + 1, cols)
+        const to = serpentine(i + 2, cols)
         const sides =
           from.row !== to.row
             ? { sourceHandle: 's-b', targetHandle: 't-t' }
@@ -253,8 +258,7 @@ function emptyPipelineNode(): Node {
       placeholder: 'noStages',
       current: false,
       render: null,
-      streams: [],
-      daysHere: null,
+      age: null,
       visited: false,
       visits: 0,
       stale: false,

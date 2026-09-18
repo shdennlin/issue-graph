@@ -517,6 +517,9 @@ export const zhTW: Dict = {
     delete: '刪除工作線（issue 本身不動）',
     removeMember: '從這條工作線移除',
     showArchived: '顯示已封存',
+    created: '建立於',
+    updated: '最後變動',
+    archived: '封存於',
     archive: '封存（從版面移除，資料都留著）',
     unarchive: '放回版面',
   },
@@ -564,10 +567,8 @@ export const zhTW: Dict = {
     // 節點上的文字。`current` 和 `daysHere` 就是腐化訊號：沒人推進的 stage
     // 正是整個 view 要讓它現形的失敗模式。
     current: '目前',
-    daysHere: '已 {n} 天',
-    daysTook: '{n} 天',
-    visits: '\u00d7{n}',
-    visitsHint: '進入這一格超過一次。',
+    ageHere: '已 {age}',
+    visitsHint: '進入這一格 {n} 次。',
     nothingHere: '沒有東西可顯示',
     noStreams: '這個 stage 沒有工作線',
     expandStream: '展開這條工作線的 stages',
