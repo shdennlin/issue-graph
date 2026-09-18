@@ -433,6 +433,16 @@ export interface WorkstreamSummaryDTO {
    *  right now is still whose job the work is, which is what separates this
    *  from AgentSessionDTO. */
   assignees: string[]
+  createdAt: number
+  /** Last change to the workstream ITSELF — never its members' Linear
+   *  activity, which moves on every comment. */
+  updatedAt: number
+  /** Null while active; dates the CURRENT shelving. */
+  archivedAt: number | null
+  /** A note about the FEATURE as a whole: why it exists, what was decided,
+   *  what somebody needs to know before reading the pipeline. Distinct from
+   *  `notes`, which is per stage and says what a given STEP is waiting on. */
+  note: string | null
   /** Per-stage notes, keyed by stage key. Carried in full rather than as a
    *  flag: they are short, user-typed lines, and a truncated copy here plus a
    *  full one behind a click would be two versions of one thing. */

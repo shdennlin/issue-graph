@@ -298,7 +298,7 @@ export function readWorkstreamSummaries(): WorkstreamSummaryDTO[] {
   const db = getDb()
   const rows = db
     .prepare(
-      'SELECT id, name, stage_key, status, stage_entered_at, assignees FROM batch ORDER BY created_at DESC, id DESC',
+      'SELECT id, name, created_at, updated_at, archived_at, stage_key, status, stage_entered_at, assignees, note FROM batch ORDER BY created_at DESC, id DESC',
     )
     .all() as {
     id: number
@@ -307,6 +307,10 @@ export function readWorkstreamSummaries(): WorkstreamSummaryDTO[] {
     status: string
     stage_entered_at: number | null
     assignees: string
+    note: string | null
+    created_at: number
+    updated_at: number | null
+    archived_at: number | null
   }[]
   const members = db
     .prepare('SELECT batch_id, identifier FROM batch_member')
@@ -336,6 +340,10 @@ export function readWorkstreamSummaries(): WorkstreamSummaryDTO[] {
     name: r.name,
     members: byBatch.get(r.id) ?? [],
     stage: r.stage_key,
+    note: r.note,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at ?? r.created_at,
+    archivedAt: r.archived_at,
     stageEnteredAt: r.stage_entered_at,
     stageEvents: eventRows
       .filter((e) => e.batch_id === r.id)

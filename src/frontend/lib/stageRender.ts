@@ -126,15 +126,24 @@ function item(over: Partial<StageItem> & Pick<StageItem, 'token' | 'text'>): Sta
   return { hints: [], tone: 'muted', manual: false, rows: 1, issue: null, url: null, ...over }
 }
 
-/** Rows a wrapped note needs, capped. Approximate on purpose: the exact count
- *  depends on the font, and over-reserving a row costs a little whitespace
- *  while under-reserving clips the text with nothing to correct it. */
+/**
+ * Rows a wrapped note needs, capped.
+ *
+ * Approximate on purpose: the exact count depends on the font, and
+ * over-reserving a row costs a little whitespace while under-reserving clips
+ * the text with nothing to correct it.
+ *
+ * The cap differs by where the note is drawn, which is why it is a parameter.
+ * Inside a STAGE a note is one item among several and must not crowd out the
+ * issues, so four rows and the rest is read in the panel. On the workstream's
+ * own CARD holding the note is the entire job, so it may run much longer
+ * before the card starts scrolling.
+ */
 const NOTE_COLS = 38
-const NOTE_MAX_ROWS = 4
-export function noteRows(body: string): number {
+export function noteRows(body: string, maxRows = 4): number {
   const lines = body.split('\n')
   const rows = lines.reduce((n, l) => n + Math.max(1, Math.ceil(l.length / NOTE_COLS)), 0)
-  return Math.min(NOTE_MAX_ROWS, Math.max(1, rows))
+  return Math.min(maxRows, Math.max(1, rows))
 }
 
 function renderIssues(ctx: StageContext, t: Translate): StageItem[] {

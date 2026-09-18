@@ -153,6 +153,9 @@ export interface ViewState {
    *  key alone means nothing — the same stage exists on every workstream, and
    *  what you edit is one workstream's occupancy of it. */
   stagePanel: { workstreamId: number; stageKey: string } | null
+  /** The workstream whose own panel is open — its note, status, assignees and
+   *  dates, none of which belong to any one stage. */
+  workstreamPanelId: number | null
   search: string                 // toolbar filter search (narrows visible set)
   inlineSearch: { open: boolean; query: string; activeIdx: number }
   settingsOpen: boolean
@@ -288,6 +291,8 @@ export interface ViewState {
   setWorkstreamJumpId: (id: number | null) => void
   openStagePanel: (workstreamId: number, stageKey: string) => void
   closeStagePanel: () => void
+  openWorkstreamPanel: (id: number) => void
+  closeWorkstreamPanel: () => void
   setSearch: (q: string) => void
   openInlineSearch: () => void
   closeInlineSearch: () => void
@@ -381,6 +386,7 @@ export const useViewStore = create<ViewState>((set) => ({
   lifecycleEditorOpen: false,
   workstreamJumpId: null,
   stagePanel: null,
+  workstreamPanelId: null,
   fontSize: (() => {
     if (typeof window === 'undefined') return 'md' as FontSize
     const raw = window.localStorage?.getItem('ig-font-size')
@@ -494,8 +500,12 @@ export const useViewStore = create<ViewState>((set) => ({
   setFocusedWorkstreamId: (id) => set({ focusedWorkstreamId: id }),
   setLifecycleEditorOpen: (b) => set({ lifecycleEditorOpen: b }),
   setWorkstreamJumpId: (id) => set({ workstreamJumpId: id }),
-  openStagePanel: (workstreamId, stageKey) => set({ stagePanel: { workstreamId, stageKey } }),
+  openStagePanel: (workstreamId, stageKey) =>
+    set({ stagePanel: { workstreamId, stageKey }, workstreamPanelId: null }),
   closeStagePanel: () => set({ stagePanel: null }),
+  // The two panels share an edge, so opening one closes the other.
+  openWorkstreamPanel: (id) => set({ workstreamPanelId: id, stagePanel: null }),
+  closeWorkstreamPanel: () => set({ workstreamPanelId: null }),
   setFontSize: (f) => {
     if (typeof window !== 'undefined') {
       window.localStorage?.setItem('ig-font-size', String(f))

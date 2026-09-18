@@ -57,12 +57,15 @@ const PatchSchema = z
     stage: z.string().nullable().optional(),
     status: z.unknown().optional(),
     assignees: z.unknown().optional(),
+    // null clears it, absent leaves it alone.
+    note: z.string().nullable().optional(),
   })
   .refine(
     (v) =>
       v.name !== undefined ||
       v.stage !== undefined ||
       v.status !== undefined ||
+      v.note !== undefined ||
       v.assignees !== undefined,
     { message: 'nothing to update' },
   )
@@ -88,7 +91,7 @@ const notFound = () => ({ error: { code: 'not_found' } }) as const
 const mayWrite = (c: Parameters<typeof originAllowed>[0]): boolean =>
   originAllowed(c) || agentTokenValid(c.req.header('Authorization'))
 
-const BATCH_SELECT = `SELECT id, name, created_at, updated_at, archived_at, stage_key, status, stage_entered_at, assignees FROM batch`
+const BATCH_SELECT = `SELECT id, name, created_at, updated_at, archived_at, note, stage_key, status, stage_entered_at, assignees FROM batch`
 
 const notesOf = (batchId: number): StageNoteRow[] =>
   getDb()
@@ -130,6 +133,7 @@ batchRoutes.get('/api/batches', (c) => {
         createdAt: b.created_at,
         updatedAt: b.updated_at ?? b.created_at,
         archivedAt: b.archived_at,
+        note: b.note,
         stage: b.stage_key,
         stageEnteredAt: b.stage_entered_at,
         status: b.status,
@@ -290,6 +294,20 @@ batchRoutes.patch('/api/batches/:id', async (c) => {
       // above, or a tool writing the current stage on every heartbeat would
       // fill the history with arrivals that never happened.
       if (stage !== null) stageEntryPending = { stage, at }
+    }
+  }
+  if (parsed.data.note !== undefined) {
+    // An explicit null clears it. Absent means "leave alone" — the same
+    // convention the issue write-back patches use, and for the same reason:
+    // a truthiness check makes clearing impossible.
+    if (parsed.data.note === null) {
+      sets.push('note = ?')
+      args.push(null)
+    } else {
+      const note = normalizeNote(parsed.data.note)
+      if (note === null) return c.json(invalid('bad note'), 400)
+      sets.push('note = ?')
+      args.push(note)
     }
   }
   if (parsed.data.status !== undefined) {

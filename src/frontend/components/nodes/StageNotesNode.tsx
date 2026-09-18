@@ -4,28 +4,30 @@ import { Handle, Position } from 'reactflow'
 import { useT } from '../../i18n'
 import { useViewStore } from '../../store/viewStore'
 
-// Every note this workstream has written, in pipeline order.
+// The workstream's own note: what this feature IS, and what somebody needs to
+// know before reading the pipeline at all.
 //
-// A note used to render as its FIRST LINE inside its stage, truncated with an
-// ellipsis. That was almost useless: a note is prose — "waiting on review of
-// the manifest-hash approach before ONE-380 can start" — and the one line you
-// could see never carried the reason, which is the whole point of writing one.
+// It used to collect every stage's note instead, which was two mistakes in
+// one. It showed each note a second time beside the stage that already showed
+// it — one fact in two places, the same defect as an issue drawn on seven
+// stages. And it conflated two different questions: a stage note says what a
+// STEP is waiting on ("the manifest-hash review has not come back"), while
+// this says what the WHOLE THING is ("the decision from the call on the 17th",
+// "blocked on legal until the 30th"). Neither is a substitute for the other.
 //
-// Collected into one card rather than one card per stage, because a stage that
-// grew to fit its note would push the serpentine row below it out of
-// alignment, and because reading the context of a workstream is one act, not
-// seven. It sits in the cell after the last stage, so it costs no layout
-// arithmetic at all — it is simply the next step in the walk.
+// First cell of the serpentine walk, before stage 1, because that is where
+// context belongs relative to a pipeline.
 export interface StageNotesData {
-  /** The workstream these belong to — a note is edited as that workstream's
-   *  occupancy of a stage, so the card cannot open an editor without it. */
   workstreamId: number
-  notes: { stageKey: string; stageName: string; body: string }[]
+  workstreamName: string
+  note: string | null
 }
 
 function StageNotesImpl({ data }: NodeProps<StageNotesData>) {
   const t = useT()
-  const openStagePanel = useViewStore((s) => s.openStagePanel)
+  const open = useViewStore((s) => s.openWorkstreamPanel)
+  const body = (data.note ?? '').trim()
+
   return (
     <div className="stage-notes">
       <Handle id="t-l" type="target" position={Position.Left} isConnectable={false} />
@@ -34,32 +36,25 @@ function StageNotesImpl({ data }: NodeProps<StageNotesData>) {
       <div className="stage-head">
         <span className="stage-name">{t('stage.notesTitle')}</span>
       </div>
-      <div className="stage-notes-body">
-        {data.notes.length === 0 ? (
+      {/* Editing happens in the panel, never in place: React Flow's default
+          `deleteKeyCode` is Backspace, so a textarea inside a node would delete
+          the node the first time anyone corrected a typo. */}
+      <button
+        type="button"
+        className="stage-notes-body"
+        onClick={(e) => {
+          e.stopPropagation()
+          open(data.workstreamId)
+        }}
+        onPointerDown={(e) => e.stopPropagation()}
+        title={t('workstreams.openPanel')}
+      >
+        {body.length === 0 ? (
           <span className="stage-empty">{t('stage.notesEmpty')}</span>
         ) : (
-          data.notes.map((n) => (
-            // Clicking an entry opens the stage that owns it. The card is
-            // where you READ the notes together; the panel is where each one is
-            // written, and having to find its stage on the board first was a
-            // step with no purpose.
-            <button
-              key={n.stageKey}
-              type="button"
-              className="stage-note-entry"
-              onClick={(e) => {
-                e.stopPropagation()
-                openStagePanel(data.workstreamId, n.stageKey)
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
-              title={t('stage.editNote')}
-            >
-              <div className="stage-note-stage">{n.stageName}</div>
-              <div className="stage-note-body">{n.body}</div>
-            </button>
-          ))
+          <span className="stage-note-body">{body}</span>
         )}
-      </div>
+      </button>
     </div>
   )
 }

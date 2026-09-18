@@ -249,6 +249,10 @@ export const api = {
   /** Move a workstream to a stage. Null takes it off the pipeline. The server
    *  only restamps its clock and records history on a REAL change, so calling
    *  this with the current stage is a no-op rather than a fake advance. */
+  /** The workstream's own note. Null clears it; the route treats an absent key
+   *  as "leave alone", so this always sends one. */
+  setBatchNote: (id: number, note: string | null) =>
+    http<unknown>(`/api/batches/${id}`, { method: 'PATCH', body: JSON.stringify({ note }) }),
   setBatchStage: (id: number, stage: string | null) =>
     http<unknown>(`/api/batches/${id}`, { method: 'PATCH', body: JSON.stringify({ stage }) }),
   /** Archiving is how you take a workstream off the board without claiming it

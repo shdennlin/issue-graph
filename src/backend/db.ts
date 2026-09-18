@@ -327,6 +327,24 @@ const MIGRATIONS: string[] = [
   // `stage_entered_at` times the current occupancy.
   `ALTER TABLE batch ADD COLUMN archived_at INTEGER;`,
   `UPDATE batch SET archived_at = updated_at WHERE status = 'archived' AND archived_at IS NULL;`,
+
+  // 14. A note about the WORKSTREAM, distinct from the notes on its stages.
+  //
+  // They answer different questions and were being conflated. A stage note is
+  // "what is this step waiting on" — "the manifest-hash review has not come
+  // back". A workstream note is "what is this feature, and what do I need to
+  // know before reading the pipeline at all" — the decision from a call, the
+  // reason it exists, who is blocked on legal.
+  //
+  // The symptom was duplication: the card that collected every stage's note
+  // showed each one a second time, beside the stage that already showed it.
+  // One fact in two places, which is the same defect as an issue drawn on
+  // seven stages.
+  //
+  // A column on `batch` rather than a row in `workstream_stage_note` with some
+  // sentinel key: it is a property of the workstream, and a sentinel would put
+  // a thing that is not a stage into a table keyed by stage.
+  `ALTER TABLE batch ADD COLUMN note TEXT;`,
 ]
 
 // One Database instance per workspace id. Each profile has its own SQLITE_PATH

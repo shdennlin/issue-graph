@@ -44,6 +44,11 @@ const GAP_X = 28
 const ROW_GAP = 34
 const PADDING = 20
 const ROW_GAP_INNER = 26
+// How tall the workstream's note card may grow before it scrolls. Generous,
+// because holding the note IS its job — but bounded, since every other cell in
+// the workstream is sized to the tallest one and an essay would make seven
+// empty stages that tall too.
+const NOTE_CARD_MAX_ROWS = 14
 // Matches .mixed-container-header — the container's own title bar, which the
 // stages have to start below.
 const HEADER = 32
@@ -142,23 +147,34 @@ export const workstreamView: ViewDefinition = {
       const cellCount = stages.length + 1
       const cols = Math.max(1, Math.min(cellCount, maxColsPerRow))
       const rows = Math.ceil(cellCount / cols)
-      // The notes card is a cell like any other, so it has to be measured like
-      // one — otherwise a workstream with several long notes gets a card fixed
-      // to the tallest STAGE, and the notes run past its edge.
-      const noteEntries = stages
-        .map((st) => (workstream.notes[st.key] ?? '').trim())
-        .filter((b) => b.length > 0)
-      // One row for each stage heading, plus the note's own wrapped rows.
-      const notesCellRows = noteEntries.reduce((n, b) => n + 1 + noteRows(b), 0)
 
-      // One height for every cell in the workstream rather than per row: a
-      // serpentine row above a taller one would otherwise leave the vertical
-      // drop landing in the middle of a box.
-      const cellH = Math.max(
-        ...built.map((b) => stageNodeHeight(b.items)),
-        stageNodeHeight(notesCellRows),
-      )
-      const containerH = HEADER + PADDING + rows * cellH + (rows - 1) * ROW_GAP_INNER + PADDING
+      // The card holds the WORKSTREAM's note now, not every stage's — see the
+      // header of StageNotesNode. Measured like any other cell so several
+      // paragraphs do not run past its edge.
+      const wsNote = (workstream.note ?? '').trim()
+      const notesCellRows = wsNote.length > 0 ? noteRows(wsNote, NOTE_CARD_MAX_ROWS) : 1
+
+      // Every stage is the same height as every other stage, so a row reads as
+      // a row — but the notes card is sized to its own note. One height for
+      // EVERYTHING made a long note drag seven empty stages up to its size,
+      // which is a lot of "nothing to show" to scroll past.
+      const stageH = Math.max(...built.map((b) => stageNodeHeight(b.items)))
+      const notesH = stageNodeHeight(notesCellRows)
+      const heightAt = (cellIndex: number) => (cellIndex === 0 ? notesH : stageH)
+
+      // Per ROW, so a tall cell only pushes down what is actually below it. The
+      // serpentine drop still lands cleanly: it runs from the bottom of one row
+      // to the top of the next, and both edges are row boundaries.
+      const rowHeights: number[] = []
+      for (let i = 0; i < cellCount; i++) {
+        const { row } = serpentine(i, cols)
+        rowHeights[row] = Math.max(rowHeights[row] ?? 0, heightAt(i))
+      }
+      const rowTop = (row: number) =>
+        HEADER + PADDING + rowHeights.slice(0, row).reduce((a, b) => a + b + ROW_GAP_INNER, 0)
+
+      const containerH =
+        rowTop(rows - 1) + (rowHeights[rows - 1] ?? stageH) + PADDING
       const containerW = PADDING * 2 + cols * STAGE_W + (cols - 1) * GAP_X
       const containerId = `workstream:${workstream.id}`
 
@@ -183,7 +199,7 @@ export const workstreamView: ViewDefinition = {
       for (const b of built) {
         const visit = visits.get(b.stage.key)
         const current = workstream.stage === b.stage.key
-        const h = cellH
+        const h = stageH
         const cell = serpentine(b.i + 1, cols)
         nodes.push({
           id: `${containerId}/stage:${b.stage.key}`,
@@ -208,7 +224,7 @@ export const workstreamView: ViewDefinition = {
           } satisfies StageNodeData,
           position: {
             x: PADDING + cell.col * (STAGE_W + GAP_X),
-            y: HEADER + PADDING + cell.row * (cellH + ROW_GAP_INNER),
+            y: rowTop(cell.row),
           },
           width: STAGE_W,
           height: h,
@@ -230,21 +246,16 @@ export const workstreamView: ViewDefinition = {
         parentNode: containerId,
         data: {
           workstreamId: workstream.id,
-          notes: stages
-            .filter((st) => (workstream.notes[st.key] ?? '').trim().length > 0)
-            .map((st) => ({
-              stageKey: st.key,
-              stageName: st.name,
-              body: (workstream.notes[st.key] ?? '').trim(),
-            })),
+          workstreamName: workstream.name,
+          note: workstream.note,
         } satisfies StageNotesData,
         position: {
           x: PADDING + notesCell.col * (STAGE_W + GAP_X),
-          y: HEADER + PADDING + notesCell.row * (cellH + ROW_GAP_INNER),
+          y: rowTop(notesCell.row),
         },
         width: STAGE_W,
-        height: cellH,
-        style: { width: STAGE_W, height: cellH },
+        height: notesH,
+        style: { width: STAGE_W, height: notesH },
         draggable: false,
       })
 

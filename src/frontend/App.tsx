@@ -45,6 +45,7 @@ const SettingsPage = lazy(() => import('./components/SettingsPage').then((m) => 
 const ShortcutsModal = lazy(() => import('./components/ShortcutsModal').then((m) => ({ default: m.ShortcutsModal })))
 const WorkstreamsPanel = lazy(() => import('./components/WorkstreamsPanel').then((m) => ({ default: m.WorkstreamsPanel })))
 const WorkstreamJumpList = lazy(() => import('./components/WorkstreamJumpList').then((m) => ({ default: m.WorkstreamJumpList })))
+const WorkstreamPanel = lazy(() => import('./components/WorkstreamPanel').then((m) => ({ default: m.WorkstreamPanel })))
 const StagePanel = lazy(() => import('./components/StagePanel').then((m) => ({ default: m.StagePanel })))
 const LifecyclePanel = lazy(() => import('./components/LifecyclePanel').then((m) => ({ default: m.LifecyclePanel })))
 const NotesModal = lazy(() => import('./components/notes/NotesModal').then((m) => ({ default: m.NotesModal })))
@@ -70,6 +71,7 @@ export function App() {
   const workstreamsOpen = useViewStore((s) => s.workstreamsOpen)
   const lifecycleEditorOpen = useViewStore((s) => s.lifecycleEditorOpen)
   const stagePanel = useViewStore((s) => s.stagePanel)
+  const workstreamPanelId = useViewStore((s) => s.workstreamPanelId)
   // Any panel docked on the right edge. The jump list lives in that corner too,
   // and would otherwise sit on top of the panel's own header.
   const rightPanelOpen = (focusedId !== null && detailPanelOpen) || (focusedProjectId !== null && projectPanelOpen)
@@ -442,6 +444,10 @@ export function App() {
           s.closeStagePanel()
           return
         }
+        if (s.workstreamPanelId !== null) {
+          s.closeWorkstreamPanel()
+          return
+        }
         if (s.lifecycleEditorOpen) {
           s.setLifecycleEditorOpen(false)
           return
@@ -760,7 +766,11 @@ export function App() {
         {/* Hidden while any right-hand panel is open: they share that edge, and
             the list would sit on top of the panel's own header. You are reading
             one thing at that point, not choosing between several. */}
-        {activeViewId === 'workstream' && !lifecycleEditorOpen && !stagePanel && !rightPanelOpen && (
+        {activeViewId === 'workstream' &&
+          !lifecycleEditorOpen &&
+          !stagePanel &&
+          workstreamPanelId === null &&
+          !rightPanelOpen && (
           <Suspense fallback={null}>
             <WorkstreamJumpList />
           </Suspense>
@@ -779,6 +789,11 @@ export function App() {
         {stagePanel && (
           <Suspense fallback={null}>
             <StagePanel />
+          </Suspense>
+        )}
+        {workstreamPanelId !== null && (
+          <Suspense fallback={null}>
+            <WorkstreamPanel />
           </Suspense>
         )}
         {focusedProjectId && projectPanelOpen && (

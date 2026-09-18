@@ -29,6 +29,8 @@ export interface BatchRow {
   /** Null while active. Dates the CURRENT shelving: cleared on unarchive, for
    *  the same reason `stage_entered_at` times the current occupancy. */
   archived_at: number | null
+  /** About the FEATURE, not about any one step — see migration 14. */
+  note: string | null
 }
 
 export type WorkstreamStatus = 'active' | 'archived'
