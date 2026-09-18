@@ -34,7 +34,7 @@ import { stageVisits } from '@shared/stageHistory.js'
 import { compactAge } from '../lib/relativeTime'
 import type { ViewDefinition } from './types'
 import { buildChainLayout } from './chainLayout'
-import { indexBlockedBy, renderStage, type StageContext } from '../lib/stageRender'
+import { indexBlockedBy, noteRows, renderStage, type StageContext } from '../lib/stageRender'
 import { indexSessionsByIssue } from '../lib/agentSession'
 import type { StageNodeData } from '../components/nodes/StageNode'
 import type { StageNotesData } from '../components/nodes/StageNotesNode'
@@ -142,10 +142,22 @@ export const workstreamView: ViewDefinition = {
       const cellCount = stages.length + 1
       const cols = Math.max(1, Math.min(cellCount, maxColsPerRow))
       const rows = Math.ceil(cellCount / cols)
-      // One height for every stage in the workstream rather than per row: a
+      // The notes card is a cell like any other, so it has to be measured like
+      // one — otherwise a workstream with several long notes gets a card fixed
+      // to the tallest STAGE, and the notes run past its edge.
+      const noteEntries = stages
+        .map((st) => (workstream.notes[st.key] ?? '').trim())
+        .filter((b) => b.length > 0)
+      // One row for each stage heading, plus the note's own wrapped rows.
+      const notesCellRows = noteEntries.reduce((n, b) => n + 1 + noteRows(b), 0)
+
+      // One height for every cell in the workstream rather than per row: a
       // serpentine row above a taller one would otherwise leave the vertical
       // drop landing in the middle of a box.
-      const cellH = Math.max(...built.map((b) => stageNodeHeight(b.items)))
+      const cellH = Math.max(
+        ...built.map((b) => stageNodeHeight(b.items)),
+        stageNodeHeight(notesCellRows),
+      )
       const containerH = HEADER + PADDING + rows * cellH + (rows - 1) * ROW_GAP_INNER + PADDING
       const containerW = PADDING * 2 + cols * STAGE_W + (cols - 1) * GAP_X
       const containerId = `workstream:${workstream.id}`
@@ -217,6 +229,7 @@ export const workstreamView: ViewDefinition = {
         type: 'stageNotes',
         parentNode: containerId,
         data: {
+          workstreamId: workstream.id,
           notes: stages
             .filter((st) => (workstream.notes[st.key] ?? '').trim().length > 0)
             .map((st) => ({

@@ -4433,3 +4433,24 @@ button.stage-item:hover,
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
+
+/* A note entry is a way into the stage that owns it. Reset the button so it
+   still reads as text, not a control. */
+button.stage-note-entry {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+button.stage-note-entry:hover .stage-note-stage { color: var(--accent); }
+button.stage-note-entry:hover .stage-note-body { text-decoration: underline; }
+
+.stage-panel-savestate {
+  margin-right: auto;
+  font-size: 11px;
+  color: var(--fg-muted);
+}

@@ -2,6 +2,7 @@ import { memo } from 'react'
 import type { NodeProps } from 'reactflow'
 import { Handle, Position } from 'reactflow'
 import { useT } from '../../i18n'
+import { useViewStore } from '../../store/viewStore'
 
 // Every note this workstream has written, in pipeline order.
 //
@@ -16,11 +17,15 @@ import { useT } from '../../i18n'
 // seven. It sits in the cell after the last stage, so it costs no layout
 // arithmetic at all — it is simply the next step in the walk.
 export interface StageNotesData {
+  /** The workstream these belong to — a note is edited as that workstream's
+   *  occupancy of a stage, so the card cannot open an editor without it. */
+  workstreamId: number
   notes: { stageKey: string; stageName: string; body: string }[]
 }
 
 function StageNotesImpl({ data }: NodeProps<StageNotesData>) {
   const t = useT()
+  const openStagePanel = useViewStore((s) => s.openStagePanel)
   return (
     <div className="stage-notes">
       <Handle id="t-l" type="target" position={Position.Left} isConnectable={false} />
@@ -34,10 +39,24 @@ function StageNotesImpl({ data }: NodeProps<StageNotesData>) {
           <span className="stage-empty">{t('stage.notesEmpty')}</span>
         ) : (
           data.notes.map((n) => (
-            <div key={n.stageKey} className="stage-note-entry">
+            // Clicking an entry opens the stage that owns it. The card is
+            // where you READ the notes together; the panel is where each one is
+            // written, and having to find its stage on the board first was a
+            // step with no purpose.
+            <button
+              key={n.stageKey}
+              type="button"
+              className="stage-note-entry"
+              onClick={(e) => {
+                e.stopPropagation()
+                openStagePanel(data.workstreamId, n.stageKey)
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              title={t('stage.editNote')}
+            >
               <div className="stage-note-stage">{n.stageName}</div>
               <div className="stage-note-body">{n.body}</div>
-            </div>
+            </button>
           ))
         )}
       </div>

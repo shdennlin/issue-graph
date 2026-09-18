@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { STAGE_LINK_KINDS } from '@shared/showTokens.js'
 import { stageVisits } from '@shared/stageHistory.js'
@@ -61,10 +61,16 @@ export function StagePanel() {
   // setState is what `react-hooks` flags.
   const noteFromServer = workstream && stage ? (workstream.notes[stage.key] ?? '') : ''
   const [draft, setDraft] = useState(() => ({ key: target?.stageKey ?? '', note: noteFromServer }))
+  const saveTimer = useRef<number | null>(null)
   const [kind, setKind] = useState<Kind>('pr')
   const [value, setValue] = useState('')
   const [label, setLabel] = useState('')
   const [busy, setBusy] = useState(false)
+  // 'clean' once what is on screen matches what the server has. Saving is
+  // automatic — an explicit Save on a free-text note is a step you can only
+  // get wrong, and losing a paragraph because you clicked elsewhere is a
+  // worse outcome than a redundant write.
+  const [noteState, setNoteState] = useState<'clean' | 'dirty' | 'saving'>('clean')
   // Read once and refreshed on a timer, above the early return so the hook
   // order is stable. Reading the clock in the render body is the impurity
   // `react-hooks` flags, and it is right to — the same render would otherwise
@@ -73,6 +79,14 @@ export function StagePanel() {
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 60_000)
     return () => window.clearInterval(id)
+  }, [])
+  // Flush a pending save when the panel closes or moves to another stage —
+  // otherwise the last keystrokes before an Esc are lost, which is exactly the
+  // moment someone finishes a thought.
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current !== null) window.clearTimeout(saveTimer.current)
+    }
   }, [])
 
   if (target && draft.key !== target.stageKey) {
@@ -85,6 +99,22 @@ export function StagePanel() {
   const age = visit ? compactAge(visit.enteredAt, visit.leftAt ?? now) : null
   const isCurrent = workstream.stage === stage.key
   const links = workstream.links.filter((l) => l.stageKey === stage.key)
+
+  const saveNote = async (body: string) => {
+    if (body.trim() === noteFromServer.trim()) {
+      setNoteState('clean')
+      return
+    }
+    setNoteState('saving')
+    // An empty note is a DELETE, not an empty string: the server rejects a
+    // blank body, and "I cleared it" is what the user meant either way.
+    const trimmed = body.trim()
+    await (trimmed.length === 0
+      ? api.clearStageNote(workstream.id, stage.key)
+      : api.setStageNote(workstream.id, stage.key, trimmed))
+    await refetchSilent()
+    setNoteState('clean')
+  }
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true)
@@ -145,9 +175,22 @@ export function StagePanel() {
           rows={5}
           value={note}
           placeholder={t('stage.attachNotePlaceholder')}
-          onChange={(e) => setDraft({ key: target.stageKey, note: e.target.value })}
+          onChange={(e) => {
+            const next = e.target.value
+            setDraft({ key: target.stageKey, note: next })
+            setNoteState('dirty')
+            if (saveTimer.current !== null) window.clearTimeout(saveTimer.current)
+            // Debounced rather than per-keystroke: a note is written in
+            // sentences, and one request per character would be absurd.
+            saveTimer.current = window.setTimeout(() => void saveNote(next), 700)
+          }}
+          onBlur={() => {
+            if (saveTimer.current !== null) window.clearTimeout(saveTimer.current)
+            void saveNote(note)
+          }}
         />
         <div className="stage-panel-row">
+          <span className="stage-panel-savestate">{t(`stage.note_${noteState}` as 'stage.note_clean')}</span>
           {noteFromServer.length > 0 && (
             <button
               disabled={busy}
@@ -156,13 +199,6 @@ export function StagePanel() {
               {t('stage.attachClear')}
             </button>
           )}
-          <button
-            className="stage-panel-primary"
-            disabled={busy || note.trim() === noteFromServer.trim()}
-            onClick={() => void run(() => api.setStageNote(workstream.id, stage.key, note.trim()))}
-          >
-            {t('stage.attachSave')}
-          </button>
         </div>
 
         <h4>{t('stage.attachedTitle')}</h4>

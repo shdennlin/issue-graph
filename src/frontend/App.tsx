@@ -400,17 +400,18 @@ export function App() {
         //
         //   1. Find on canvas        — closes Find
         //   2. Context menu          — closes the menu
-        //   3. DetailPanel open      — closes the panel (focus retained,
+        //   3. StagePanel / pipeline editor — closes it
+        //   4. DetailPanel open      — closes the panel (focus retained,
         //                               chain mode / find / connectivity
         //                               highlights still work on the
         //                               focused issue)
-        //   4. Chain isolation       — exits chain, KEEPING the focused
+        //   5. Chain isolation       — exits chain, KEEPING the focused
         //                               issue so the full graph recenters
         //                               on it (GraphCanvas chain-clear
         //                               bump → preserveFocus path) instead
         //                               of snapping back to the pre-chain
         //                               viewport
-        //   5. focusedId             — clears the focus
+        //   6. focusedId             — clears the focus
         //
         // Two-step Esc, DetailPanel-style: each layer peels without losing
         // the focused issue until the final step. In chain mode the first
@@ -432,6 +433,17 @@ export function App() {
         }
         if (s.contextMenu) {
           s.setContextMenu(null)
+          return
+        }
+        // Above DetailPanel in the order because it can be opened FROM it —
+        // clicking an issue inside a stage focuses that issue, so both can be
+        // open at once and Esc should peel the one you opened last.
+        if (s.stagePanel) {
+          s.closeStagePanel()
+          return
+        }
+        if (s.lifecycleEditorOpen) {
+          s.setLifecycleEditorOpen(false)
           return
         }
         if (s.detailPanelOpen) {

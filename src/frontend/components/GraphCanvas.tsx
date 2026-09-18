@@ -187,6 +187,12 @@ function CanvasInner() {
     // gets a chance to paint. setTimeout's macrotask survives that race.
     // 150ms is long enough for RF to mount nodes and CSS to compute heights,
     // but short enough that the user perceives it as a single layout pass.
+    // A view with no issue cards has nothing to measure, so the wait is pure
+    // latency — and it is latency with teeth: the fit that follows MOVES every
+    // node, so a click inside the window lands where a node used to be and
+    // appears to do nothing. Still a macrotask rather than a synchronous set,
+    // because setState in an effect body is what `react-hooks` flags.
+    const hasIssueNodesNow = built.nodes.some((n) => n.type === 'issue')
     const handle = window.setTimeout(() => {
       const map = new Map<string, number>()
       const els = document.querySelectorAll('.react-flow__node-issue')
@@ -210,8 +216,7 @@ function CanvasInner() {
       // Without the second case a card-less view is never fitted: the first
       // stage sits under the floating panels and the last is off-screen, with
       // nothing to tell the user the canvas even moved.
-      const hasIssueNodes = built.nodes.some((n) => n.type === 'issue')
-      if (map.size === 0 && hasIssueNodes) return
+      if (map.size === 0 && hasIssueNodesNow) return
       // Skip update if every height matches existing within 1px — avoids
       // unnecessary rerenders that would just produce identical output.
       let differs = true
@@ -227,7 +232,7 @@ function CanvasInner() {
       }
       measuredSigRef.current = sig
       if (differs) setMeasuredHeights(map)
-    }, 150)
+    }, hasIssueNodesNow ? 150 : 0)
     return () => window.clearTimeout(handle)
   }, [built.nodes, activeView, density, measuredHeights])
 
