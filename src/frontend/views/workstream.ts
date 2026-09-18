@@ -6,13 +6,19 @@
 // the sessions, the PRs and the specs appear inside the stage that asked for
 // them, via `shows` — see lib/stageRender.ts, which decides all of it.
 //
-// Two modes, on `focusedWorkstreamId`:
+// EVERY workstream is drawn, each as its own container with its own row of
+// stages inside — the same `mixedContainer` + `parentNode` arrangement the mix
+// and project views use, so nothing new had to be invented for the layout.
 //
-//   null   overview — the workspace's pipeline drawn once, with every
-//          workstream standing on the stage it reached. "Which of my features
-//          is stuck, and where."
-//   <id>   focused  — that one workstream's own row of stages, each filled in
-//          with what it shows. "What is the state of this one feature."
+// An earlier cut drew ONE shared pipeline with the workstreams as name chips
+// on the stage each had reached. It answered "who is where" and nothing else:
+// you could not see a single workstream's contents without leaving the
+// overview, so the two questions people actually hold at once — "what is in
+// flight" and "how far has each got" — needed two different screens.
+//
+// `focusedWorkstreamId` now ISOLATES rather than switching mode: null draws
+// every container, an id draws that one alone. Same picture either way, which
+// is why coming back from an isolation costs nothing to re-read.
 //
 // A DEPARTURE worth knowing about: this view does not apply the filter bar.
 // Every other container view draws a subset of the graph, so filtering it is
@@ -22,10 +28,10 @@
 // Members are resolved straight from `data.issues`, and a member outside the
 // sync window is listed as missing rather than dropped.
 
-import type { Edge, Node } from 'reactflow'
-import type { LifecycleStageDTO, WorkstreamSummaryDTO } from '@shared/types.js'
-import { daysOnStage, isStale } from '@shared/staleness.js'
-import type { ViewContext, ViewDefinition } from './types'
+import { MarkerType, type Edge, type Node } from 'reactflow'
+import { isStale } from '@shared/staleness.js'
+import { stageVisits } from '@shared/stageHistory.js'
+import type { ViewDefinition } from './types'
 import { buildChainLayout } from './chainLayout'
 import { indexBlockedBy, renderStage, type StageContext } from '../lib/stageRender'
 import { indexSessionsByIssue } from '../lib/agentSession'
@@ -34,7 +40,12 @@ import type { StageNodeData } from '../components/nodes/StageNode'
 const STAGE_W = 340
 const GAP_X = 28
 const ROW_GAP = 34
-const MAX_PER_ROW = 4
+const PADDING = 20
+const ROW_GAP_INNER = 26
+// Matches .mixed-container-header — the container's own title bar, which the
+// stages have to start below.
+const HEADER = 32
+const COLOR = 'var(--accent)'
 
 // These must track .stage-node in globals.css. GraphCanvas measures only
 // `.react-flow__node-issue`, so a stage node never receives a corrected height
@@ -47,184 +58,183 @@ const BODY_PAD = 10
  *  translator gives exactly the height the component will render. */
 const IDENT = ((k: string) => k) as Parameters<typeof renderStage>[1]
 
-export function stageNodeHeight(itemCount: number): number {
-  return HEAD_H + BODY_PAD * 2 + Math.max(1, itemCount) * ITEM_H
+/** Where stage `index` sits, given `cols` per row and alternating direction.
+ *  An odd row is mirrored, which is the whole trick. */
+export function serpentine(index: number, cols: number): { row: number; col: number } {
+  const row = Math.floor(index / cols)
+  const within = index % cols
+  return { row, col: row % 2 === 0 ? within : cols - 1 - within }
 }
 
-/**
- * The slot for workstreams that have not been put on a stage yet.
- *
- * They must land somewhere visible: a workstream someone created and never
- * staged is precisely the one at risk of being forgotten, and dropping it would
- * make this view quietly disagree with the Workstreams panel about how many
- * exist. The parentheses are what make it safe — a real stage key matches
- * `^[a-z0-9]+(-[a-z0-9]+)*$`, so no key can ever collide with this one.
- */
-const NOT_STARTED = '(not-started)'
-
-function place(index: number): { x: number; y: number } {
-  const col = index % MAX_PER_ROW
-  const row = Math.floor(index / MAX_PER_ROW)
-  // Rows are spaced for a six-item stage rather than measured, so a tall stage
-  // in one row cannot push the next row down on top of a short one.
-  return { x: col * (STAGE_W + GAP_X), y: row * (stageNodeHeight(6) + ROW_GAP) }
+export function stageNodeHeight(itemCount: number): number {
+  return HEAD_H + BODY_PAD * 2 + Math.max(1, itemCount) * ITEM_H
 }
 
 export const workstreamView: ViewDefinition = {
   id: 'workstream',
   label: 'Workstreams',
   description:
-    'Your pipeline, stage by stage. Shows where each feature in flight has got to, and what is sitting on every step.',
+    'Every feature in flight, each with its own pipeline. Shows how far each has got and what is sitting on every step.',
   build(ctx) {
-    const { data, chainRootIds, focusedWorkstreamId } = ctx
+    const { data, chainRootIds, focusedWorkstreamId, maxColsPerRow } = ctx
 
     // Chain mode dissolves this like every other container view — the chain is
     // the subject then, and a pipeline has nothing to say about it.
     if (chainRootIds.length > 0) return buildChainLayout(ctx, () => null)
 
     const stages = [...(data.lifecycle ?? [])].sort((a, b) => a.sortOrder - b.sortOrder)
-    const streams = (data.workstreams ?? []).filter((w) => w.status !== 'archived')
+    if (stages.length === 0) return { nodes: [emptyPipelineNode()], edges: [] }
 
-    if (stages.length === 0) {
-      // A blank canvas reads as "nothing is happening" when the truth is
-      // "nothing is configured", and those need different actions.
-      return {
-        nodes: [
-          {
-            id: 'stage:none',
-            type: 'stage',
-            data: {
-              ordinal: 0,
-              name: '',
-              placeholder: 'noStages',
-              current: false,
-              render: null,
-              streams: [],
-              daysHere: null,
-              stale: false,
-            } satisfies StageNodeData,
-            position: { x: 0, y: 0 },
-            width: STAGE_W,
-            height: stageNodeHeight(0),
-            style: { width: STAGE_W, height: stageNodeHeight(0) },
-          },
-        ],
-        edges: [],
-      }
-    }
+    const all = (data.workstreams ?? []).filter((w) => w.status !== 'archived')
+    // An id that matches nothing falls back to everything rather than blanking
+    // the canvas — a stale `?stream=` in a bookmark must not look like "no
+    // workstreams exist".
+    const streams = focusedWorkstreamId === null ? all : all.filter((w) => w.id === focusedWorkstreamId)
+    const shown = streams.length > 0 ? streams : all
 
-    const focused = streams.find((w) => w.id === focusedWorkstreamId) ?? null
-    const nodes: Node[] = focused ? buildFocused(focused, stages, ctx) : buildOverview(streams, stages)
+    const now = Date.now()
+    // Built once for the whole canvas and shared by every stage of every
+    // workstream. `blockedBy` scans the entire graph, which is exactly why it
+    // must not happen per stage.
+    const byId = new Map(data.issues.map((i) => [i.identifier, i]))
+    const sessionsByIssue = indexSessionsByIssue(data.agentSessions)
+    const blockedBy = indexBlockedBy(data.issues)
+    const designdocs = data.designdocs ?? []
 
-    // The pipeline arrow. Edges follow the ORDER, not the wrapping, so a
-    // pipeline that wraps onto a second row still reads as one sequence.
+    const nodes: Node[] = []
     const edges: Edge[] = []
-    for (let i = 0; i + 1 < nodes.length; i++) {
-      const a = nodes[i]!
-      const b = nodes[i + 1]!
-      edges.push({ id: `${a.id}->${b.id}`, source: a.id, target: b.id })
+    let y = 0
+
+    for (const workstream of shown) {
+      const members = workstream.members
+        .map((id) => byId.get(id))
+        .filter((i): i is NonNullable<typeof i> => i !== undefined)
+      const visits = stageVisits(workstream.stageEvents, now)
+
+      const built = stages.map((stage, i) => {
+        const render: StageContext = { workstream, stage, members, sessionsByIssue, designdocs, blockedBy }
+        return { stage, i, render, items: renderStage(render, IDENT).length }
+      })
+      // Wraps at the user's "Issues per row" setting, and every other row runs
+      // BACKWARDS, so the pipeline reads as one continuous line instead of
+      // making the eye jump back to the left margin between rows:
+      //   1 → 2 → 3 → 4
+      //               ↓
+      //   8 ← 7 ← 6 ← 5
+      const cols = Math.max(1, Math.min(stages.length, maxColsPerRow))
+      const rows = Math.ceil(stages.length / cols)
+      // One height for every stage in the workstream rather than per row: a
+      // serpentine row above a taller one would otherwise leave the vertical
+      // drop landing in the middle of a box.
+      const cellH = Math.max(...built.map((b) => stageNodeHeight(b.items)))
+      const containerH = HEADER + PADDING + rows * cellH + (rows - 1) * ROW_GAP_INNER + PADDING
+      const containerW = PADDING * 2 + cols * STAGE_W + (cols - 1) * GAP_X
+      const containerId = `workstream:${workstream.id}`
+
+      nodes.push({
+        id: containerId,
+        type: 'mixedContainer',
+        data: {
+          bucket: {
+            id: String(workstream.id),
+            name: workstream.name,
+            color: COLOR,
+            count: workstream.members.length,
+            projectId: null,
+          },
+        },
+        position: { x: 0, y },
+        width: containerW,
+        height: containerH,
+        style: { width: containerW, height: containerH },
+      })
+
+      for (const b of built) {
+        const visit = visits.get(b.stage.key)
+        const current = workstream.stage === b.stage.key
+        const h = cellH
+        const cell = serpentine(b.i, cols)
+        nodes.push({
+          id: `${containerId}/stage:${b.stage.key}`,
+          type: 'stage',
+          parentNode: containerId,
+          data: {
+            ordinal: b.i + 1,
+            name: b.stage.name,
+            placeholder: null,
+            current,
+            render: b.render,
+            streams: [],
+            // Every stage now carries a time, not just the one it is on. That
+            // is the difference between showing a position and showing a
+            // journey — six of seven stages used to be blank.
+            daysHere: visit ? visit.days : null,
+            visited: visit !== undefined,
+            visits: visit?.visits ?? 0,
+            stale: current && isStale(workstream.stageEnteredAt, b.stage.staleAfterDays, now),
+          } satisfies StageNodeData,
+          position: {
+            x: PADDING + cell.col * (STAGE_W + GAP_X),
+            y: HEADER + PADDING + cell.row * (cellH + ROW_GAP_INNER),
+          },
+          width: STAGE_W,
+          height: h,
+          style: { width: STAGE_W, height: h },
+        })
+      }
+
+      // The pipeline arrow, within this workstream only. Handles are chosen
+      // per edge because the direction changes: within a row it leaves the
+      // trailing edge, and at a row break it drops straight down.
+      for (let i = 0; i + 1 < built.length; i++) {
+        const a = `${containerId}/stage:${built[i]!.stage.key}`
+        const b = `${containerId}/stage:${built[i + 1]!.stage.key}`
+        const from = serpentine(i, cols)
+        const to = serpentine(i + 1, cols)
+        const sides =
+          from.row !== to.row
+            ? { sourceHandle: 's-b', targetHandle: 't-t' }
+            : to.col > from.col
+              ? { sourceHandle: 's-r', targetHandle: 't-l' }
+              : { sourceHandle: 's-l', targetHandle: 't-r' }
+        edges.push({
+          id: `${a}->${b}`,
+          source: a,
+          target: b,
+          ...sides,
+          markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 },
+        })
+      }
+
+      y += containerH + ROW_GAP
     }
+
     return { nodes, edges }
   },
 }
 
-export function buildOverview(streams: WorkstreamSummaryDTO[], stages: LifecycleStageDTO[]): Node[] {
-  const now = Date.now()
-  const byStage = new Map<string, StageNodeData['streams']>()
-  const known = new Map(stages.map((s) => [s.key, s]))
-  for (const w of streams) {
-    // A stage key that no longer exists reads as unstaged rather than vanishing:
-    // deleting a stage from the lifecycle must not take the workstreams that
-    // were standing on it off the board.
-    const key = w.stage !== null && known.has(w.stage) ? w.stage : NOT_STARTED
-    const list = byStage.get(key) ?? []
-    list.push({
-      id: w.id,
-      name: w.name,
-      days: daysOnStage(w.stageEnteredAt, now),
-      stale: isStale(w.stageEnteredAt, known.get(key)?.staleAfterDays ?? null, now),
-    })
-    byStage.set(key, list)
+/** A blank canvas reads as "nothing is happening" when the truth is "nothing
+ *  is configured", and those want different actions. */
+function emptyPipelineNode(): Node {
+  const h = stageNodeHeight(0)
+  return {
+    id: 'stage:none',
+    type: 'stage',
+    data: {
+      ordinal: 0,
+      name: '',
+      placeholder: 'noStages',
+      current: false,
+      render: null,
+      streams: [],
+      daysHere: null,
+      visited: false,
+      visits: 0,
+      stale: false,
+    } satisfies StageNodeData,
+    position: { x: 0, y: 0 },
+    width: STAGE_W,
+    height: h,
+    style: { width: STAGE_W, height: h },
   }
-
-  const slots: { key: string; name: string; placeholder: 'notStarted' | null; ordinal: number }[] = [
-    // Ordinal 0, before the first real step: this is not part of the pipeline,
-    // it is what has not entered it. Drawn only when somebody is in it.
-    ...(byStage.has(NOT_STARTED)
-      ? [{ key: NOT_STARTED, name: '', placeholder: 'notStarted' as const, ordinal: 0 }]
-      : []),
-    ...stages.map((s, i) => ({ key: s.key, name: s.name, placeholder: null, ordinal: i + 1 })),
-  ]
-
-  return slots.map((slot, i) => {
-    const on = byStage.get(slot.key) ?? []
-    return {
-      id: `stage:${slot.key}`,
-      type: 'stage',
-      data: {
-        ordinal: slot.ordinal,
-        name: slot.name,
-        placeholder: slot.placeholder,
-        // "Current" in the overview means somebody is standing here. The stages
-        // with nobody on them are the ones you can skip reading.
-        current: on.length > 0,
-        render: null,
-        streams: on,
-        daysHere: null,
-        stale: on.some((s) => s.stale),
-      } satisfies StageNodeData,
-      position: place(i),
-      width: STAGE_W,
-      height: stageNodeHeight(on.length),
-      // React Flow v11 takes the rendered size from `style`; the width/height
-      // props above are only its own bookkeeping. Without this a long note or
-      // a long workstream name widens the node and it overlaps its neighbour.
-      style: { width: STAGE_W, height: stageNodeHeight(on.length) },
-    }
-  })
-}
-
-export function buildFocused(
-  workstream: WorkstreamSummaryDTO,
-  stages: LifecycleStageDTO[],
-  ctx: ViewContext,
-): Node[] {
-  const { data } = ctx
-  const now = Date.now()
-  const byId = new Map(data.issues.map((i) => [i.identifier, i]))
-  const members = workstream.members
-    .map((id) => byId.get(id))
-    .filter((i): i is NonNullable<typeof i> => i !== undefined)
-
-  // Built once and shared by every stage. `blockedBy` scans the whole graph,
-  // which is exactly why it must not happen once per stage.
-  const sessionsByIssue = indexSessionsByIssue(data.agentSessions)
-  const blockedBy = indexBlockedBy(data.issues)
-  const designdocs = data.designdocs ?? []
-
-  return stages.map((stage, i) => {
-    const render: StageContext = { workstream, stage, members, sessionsByIssue, designdocs, blockedBy }
-    const current = workstream.stage === stage.key
-    return {
-      id: `stage:${stage.key}`,
-      type: 'stage',
-      data: {
-        ordinal: i + 1,
-        name: stage.name,
-        placeholder: null,
-        current,
-        render,
-        streams: [],
-        // Only on the stage it is actually on: `stageEnteredAt` times the
-        // CURRENT occupancy, so showing it elsewhere would date a stay that is
-        // not happening.
-        daysHere: current ? daysOnStage(workstream.stageEnteredAt, now) : null,
-        stale: current && isStale(workstream.stageEnteredAt, stage.staleAfterDays, now),
-      } satisfies StageNodeData,
-      position: place(i),
-      width: STAGE_W,
-      height: stageNodeHeight(renderStage(render, IDENT).length),
-      style: { width: STAGE_W, height: stageNodeHeight(renderStage(render, IDENT).length) },
-    }
-  })
 }

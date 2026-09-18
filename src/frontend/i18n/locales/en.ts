@@ -522,6 +522,8 @@ export const en = {
     namePrompt: 'Name this workstream',
     isolate: 'Show only this workstream on the graph',
     isolateShort: 'Isolate',
+    jumpHint: 'Pan to this workstream',
+    create: 'New workstream',
     delete: 'Delete workstream (the issues are untouched)',
     removeMember: 'Remove from this workstream',
   },
@@ -583,6 +585,9 @@ export const en = {
     // has moved off is the failure mode this whole view exists to make visible.
     current: 'current',
     daysHere: '{n}d here',
+    daysTook: '{n}d',
+    visits: '\u00d7{n}',
+    visitsHint: 'Entered this stage more than once.',
     nothingHere: 'nothing to show',
     noStreams: 'no workstreams here',
     expandStream: 'Show this workstream\u2019s stages',
@@ -590,6 +595,7 @@ export const en = {
     manual: 'by hand',
     manualHint: 'Attached by hand because nothing links it automatically. Adding the Linear id upstream makes it appear on its own.',
     notStarted: 'Not started',
+    moveHere: 'Move this workstream to this stage',
     noStages: 'No stages yet \u2014 define your pipeline to use this view.',
   },
   states: {

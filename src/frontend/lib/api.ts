@@ -246,6 +246,11 @@ export const api = {
       progress: { total: number; done: number; claimed: number }
       members: { identifier: string; claimedBy: string | null; doneAt: number | null; blockedBy: string[] }[]
     }>(`/api/batches/${id}`),
+  /** Move a workstream to a stage. Null takes it off the pipeline. The server
+   *  only restamps its clock and records history on a REAL change, so calling
+   *  this with the current stage is a no-op rather than a fake advance. */
+  setBatchStage: (id: number, stage: string | null) =>
+    http<unknown>(`/api/batches/${id}`, { method: 'PATCH', body: JSON.stringify({ stage }) }),
   renameBatch: (id: number, name: string) =>
     http<unknown>(`/api/batches/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
   addBatchMembers: (id: number, members: string[]) =>

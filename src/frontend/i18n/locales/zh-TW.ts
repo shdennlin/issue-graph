@@ -511,6 +511,8 @@ export const zhTW: Dict = {
     namePrompt: '為這條工作線命名',
     isolate: '圖上只顯示這條工作線',
     isolateShort: '隔離',
+    jumpHint: '移動畫面到這條工作線',
+    create: '新增工作線',
     delete: '刪除工作線（issue 本身不動）',
     removeMember: '從這條工作線移除',
   },
@@ -559,6 +561,9 @@ export const zhTW: Dict = {
     // 正是整個 view 要讓它現形的失敗模式。
     current: '目前',
     daysHere: '已 {n} 天',
+    daysTook: '{n} 天',
+    visits: '\u00d7{n}',
+    visitsHint: '進入這一格超過一次。',
     nothingHere: '沒有東西可顯示',
     noStreams: '這個 stage 沒有工作線',
     expandStream: '展開這條工作線的 stages',
@@ -566,6 +571,7 @@ export const zhTW: Dict = {
     manual: '手動',
     manualHint: '因為沒有東西能自動關聯，所以是手動掛上的。把 Linear 議題編號加到上游，它就會自己出現。',
     notStarted: '尚未開始',
+    moveHere: '把這條工作線移到這一格',
     noStages: '還沒有 stage \u2014 先定義你的 pipeline 才能用這個 view。',
   },
   states: {

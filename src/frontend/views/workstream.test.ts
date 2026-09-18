@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest'
+import type { Node } from 'reactflow'
 import type {
   DetectedSchema,
   GraphData,
   LifecycleStageDTO,
-  NormalizedIssue,
   WorkstreamSummaryDTO,
 } from '@shared/types.js'
 import type { Filters } from '../store/viewStore'
 import type { StageNodeData } from '../components/nodes/StageNode'
 import type { ViewContext } from './types'
-import { buildFocused, buildOverview, stageNodeHeight, workstreamView } from './workstream'
+import { serpentine, workstreamView } from './workstream'
 
 const DAY = 86_400_000
 
@@ -36,6 +36,7 @@ function ws(id: number, over: Partial<WorkstreamSummaryDTO> = {}): WorkstreamSum
     members: [],
     stage: null,
     stageEnteredAt: null,
+    stageEvents: [],
     status: 'active',
     assignees: [],
     notes: {},
@@ -43,27 +44,6 @@ function ws(id: number, over: Partial<WorkstreamSummaryDTO> = {}): WorkstreamSum
     ...over,
   }
 }
-
-function issue(identifier: string): NormalizedIssue {
-  return {
-    id: identifier,
-    identifier,
-    title: identifier,
-    url: '',
-    priority: 0,
-    state: { name: 'In Progress', type: 'started' },
-    assignee: null,
-    labels: [],
-    parent: null,
-    children: [],
-    relations: [],
-    createdAt: '',
-    updatedAt: '',
-    completedAt: null,
-  }
-}
-
-const d = (n: { data: unknown }) => n.data as StageNodeData
 
 function ctx(over: Partial<ViewContext> = {}): ViewContext {
   const { data: dataOver, ...rest } = over
@@ -91,168 +71,215 @@ function ctx(over: Partial<ViewContext> = {}): ViewContext {
   }
 }
 
-describe('overview — where everyone is standing', () => {
-  const stages = [stage('discuss', { sortOrder: 0 }), stage('impl', { sortOrder: 1 })]
-
-  it('numbers stages from 1 in sortOrder, whatever order they arrive in', () => {
-    const nodes = buildOverview([], [stages[1]!, stages[0]!].sort((a, b) => a.sortOrder - b.sortOrder))
-    expect(nodes.map((n) => [d(n).ordinal, d(n).name])).toEqual([
-      [1, 'discuss'],
-      [2, 'impl'],
-    ])
-  })
-
-  it('puts an unstaged workstream in a slot before the pipeline, not nowhere', () => {
-    // A workstream someone created and never staged is exactly the one at risk
-    // of being forgotten. Dropping it would also make this view disagree with
-    // the Workstreams panel about how many exist.
-    const nodes = buildOverview([ws(1)], stages)
-    expect(d(nodes[0]!)).toMatchObject({ ordinal: 0, placeholder: 'notStarted' })
-    expect(d(nodes[0]!).streams.map((s) => s.name)).toEqual(['W1'])
-  })
-
-  it('draws no such slot when nobody is unstaged', () => {
-    const nodes = buildOverview([ws(1, { stage: 'impl' })], stages)
-    expect(nodes.map((n) => d(n).ordinal)).toEqual([1, 2])
-  })
-
-  it('keeps a workstream whose stage was deleted from the lifecycle', () => {
-    // Deleting a stage must not take the workstreams standing on it off the
-    // board — they would simply stop existing here with nothing to explain it.
-    const nodes = buildOverview([ws(1, { stage: 'retired-stage' })], stages)
-    expect(d(nodes[0]!).placeholder).toBe('notStarted')
-    expect(d(nodes[0]!).streams).toHaveLength(1)
-  })
-
-  it('marks a stage current when anyone is on it, and not otherwise', () => {
-    const nodes = buildOverview([ws(1, { stage: 'impl' })], stages)
-    expect(nodes.map((n) => d(n).current)).toEqual([false, true])
-  })
-
-  it('counts days on the stage and flags the ones past their own threshold', () => {
-    // Per stage, because the honest answer differs wildly: a Discuss stage can
-    // legitimately run for a fortnight, CI sitting for a day is wrong.
-    const streams = [ws(1, { stage: 'discuss', stageEnteredAt: Date.now() - 6 * DAY })]
-    const lenient = buildOverview(streams, [stage('discuss', { staleAfterDays: null })])
-    const strict = buildOverview(streams, [stage('discuss', { staleAfterDays: 5 })])
-    expect(d(lenient[0]!).streams[0]).toMatchObject({ days: 6, stale: false })
-    expect(d(strict[0]!).streams[0]).toMatchObject({ days: 6, stale: true })
-    expect(d(strict[0]!).stale).toBe(true)
-  })
-
-  it('grows the node with the number of workstreams on it', () => {
-    const one = buildOverview([ws(1, { stage: 'impl' })], stages)
-    const three = buildOverview(
-      [ws(1, { stage: 'impl' }), ws(2, { stage: 'impl' }), ws(3, { stage: 'impl' })],
-      stages,
-    )
-    expect(three[1]!.height!).toBeGreaterThan(one[1]!.height!)
-  })
-})
-
-describe('focused — one workstream across the whole pipeline', () => {
-  const stages = [stage('discuss', { sortOrder: 0 }), stage('impl', { sortOrder: 1, shows: ['issues'] })]
-
-  it('draws every stage, not only the one it is on', () => {
-    // The point of the row is seeing what is behind and ahead; drawing only the
-    // current stage would answer a question the panel already answers.
-    const nodes = buildFocused(ws(1, { stage: 'impl' }), stages, ctx())
-    expect(nodes).toHaveLength(2)
-  })
-
-  it('dates only the stage it is actually on', () => {
-    // `stageEnteredAt` times the CURRENT occupancy, so putting it on any other
-    // stage would date a stay that is not happening.
-    const w = ws(1, { stage: 'impl', stageEnteredAt: Date.now() - 2 * DAY })
-    const nodes = buildFocused(w, stages, ctx())
-    expect(d(nodes[0]!)).toMatchObject({ current: false, daysHere: null })
-    expect(d(nodes[1]!)).toMatchObject({ current: true, daysHere: 2 })
-  })
-
-  it('never marks a stage stale when the workstream is not on it', () => {
-    const w = ws(1, { stage: 'discuss', stageEnteredAt: Date.now() - 99 * DAY })
-    const nodes = buildFocused(w, [stage('discuss'), stage('impl', { staleAfterDays: 1 })], ctx())
-    expect(d(nodes[1]!).stale).toBe(false)
-  })
-
-  it('resolves members from the cache and sizes the stage by what it will draw', () => {
-    const w = ws(1, { stage: 'impl', members: ['A-1', 'A-2'] })
-    const nodes = buildFocused(w, stages, ctx({ data: { issues: [issue('A-1'), issue('A-2')], labels: [], fetchedAt: 0 } }))
-    expect(d(nodes[1]!).render?.members.map((m) => m.identifier)).toEqual(['A-1', 'A-2'])
-    expect(nodes[1]!.height).toBe(stageNodeHeight(2))
-  })
-
-  it('sizes a stage for its missing members too, because they are still drawn', () => {
-    // An uncached member is listed as missing rather than dropped, so it takes
-    // a row — and a height computed without it would overlap the next node.
-    const w = ws(1, { stage: 'impl', members: ['A-1', 'GONE-9'] })
-    const nodes = buildFocused(w, stages, ctx({ data: { issues: [issue('A-1')], labels: [], fetchedAt: 0 } }))
-    expect(nodes[1]!.height).toBe(stageNodeHeight(2))
-  })
-})
-
 describe('the view as a whole', () => {
   it('says the pipeline is unconfigured rather than drawing an empty canvas', () => {
     // A blank canvas reads as "nothing is happening" when the truth is
     // "nothing is configured", and those want different actions.
-    const { nodes, edges } = workstreamView.build(ctx({ data: { issues: [], labels: [], fetchedAt: 0, workstreams: [ws(1)] } }))
+    const { nodes, edges } = workstreamView.build(
+      ctx({ data: { issues: [], labels: [], fetchedAt: 0, workstreams: [ws(1)] } }),
+    )
     expect(nodes).toHaveLength(1)
     expect((nodes[0]!.data as StageNodeData).placeholder).toBe('noStages')
     expect(edges).toEqual([])
   })
 
-  it('leaves archived workstreams off the board', () => {
+  it('draws nothing but the pipeline when no workstream exists yet', () => {
     const { nodes } = workstreamView.build(
-      ctx({
-        data: {
-          issues: [],
-          labels: [],
-          fetchedAt: 0,
-          lifecycle: [stage('impl')],
-          workstreams: [ws(1, { stage: 'impl' }), ws(2, { stage: 'impl', status: 'archived' })],
-        },
-      }),
+      ctx({ data: { issues: [], labels: [], fetchedAt: 0, lifecycle: [stage('impl')], workstreams: [] } }),
     )
-    expect((nodes[0]!.data as StageNodeData).streams.map((s) => s.id)).toEqual([1])
+    expect(nodes).toEqual([])
+  })
+})
+
+describe('one container per workstream', () => {
+  const lifecycle = [
+    stage('discuss', { sortOrder: 0 }),
+    stage('impl', { sortOrder: 1, shows: ['issues'] }),
+  ]
+
+  const build = (over: Partial<GraphData> = {}, focused: number | null = null) =>
+    workstreamView.build(
+      ctx({ focusedWorkstreamId: focused, data: { issues: [], labels: [], fetchedAt: 0, lifecycle, ...over } }),
+    )
+
+  const containers = (nodes: Node[]) => nodes.filter((n) => n.type === 'mixedContainer')
+
+  it('draws every workstream, each with the whole pipeline inside it', () => {
+    // The earlier cut drew ONE shared pipeline with workstreams as name chips,
+    // which answered "who is where" and nothing else.
+    const { nodes } = build({ workstreams: [ws(1, { stage: 'impl' }), ws(2, { stage: 'discuss' })] })
+    expect(containers(nodes)).toHaveLength(2)
+    const stages = nodes.filter((n) => n.type === 'stage')
+    expect(stages).toHaveLength(4)
+    expect(stages.every((n) => typeof n.parentNode === 'string')).toBe(true)
   })
 
-  it('chains the stages in pipeline order so a wrapped row still reads as one sequence', () => {
-    const { edges } = workstreamView.build(
-      ctx({
-        data: {
-          issues: [],
-          labels: [],
-          fetchedAt: 0,
-          lifecycle: [stage('a', { sortOrder: 0 }), stage('b', { sortOrder: 1 }), stage('c', { sortOrder: 2 })],
-          workstreams: [],
-        },
-      }),
-    )
-    expect(edges.map((e) => `${e.source}>${e.target}`)).toEqual(['stage:a>stage:b', 'stage:b>stage:c'])
-  })
-
-  it('expands the workstream named by focusedWorkstreamId', () => {
-    const base = {
-      issues: [],
-      labels: [],
-      fetchedAt: 0,
-      lifecycle: [stage('impl')],
-      workstreams: [ws(7, { stage: 'impl' })],
+  it('keeps each workstream on its own pipeline, with no edge between them', () => {
+    const { edges } = build({ workstreams: [ws(1), ws(2)] })
+    expect(edges).toHaveLength(2)
+    for (const e of edges) {
+      expect(e.source.split('/')[0]).toBe(e.target.split('/')[0])
     }
-    const overview = workstreamView.build(ctx({ data: base }))
-    const focused = workstreamView.build(ctx({ data: base, focusedWorkstreamId: 7 }))
-    expect((overview.nodes[0]!.data as StageNodeData).render).toBeNull()
-    expect((focused.nodes[0]!.data as StageNodeData).render).not.toBeNull()
   })
 
-  it('falls back to the overview when the focused workstream is gone', () => {
-    // A stale `?stream=` in a bookmark must not blank the view.
-    const { nodes } = workstreamView.build(
+  it('stacks the containers so two workstreams cannot overlap', () => {
+    const { nodes } = build({ workstreams: [ws(1), ws(2)] })
+    const [a, b] = containers(nodes)
+    expect(b!.position.y).toBeGreaterThanOrEqual(a!.position.y + (a!.height ?? 0))
+  })
+
+  it('isolates to one workstream when focusedWorkstreamId is set', () => {
+    const { nodes } = build({ workstreams: [ws(1), ws(2)] }, 2)
+    expect(containers(nodes)).toHaveLength(1)
+    expect(nodes[0]!.id).toBe('workstream:2')
+  })
+
+  it('falls back to every workstream when the isolated one is gone', () => {
+    // A stale `?stream=` in a bookmark must not look like "no workstreams
+    // exist", which is a different and much more alarming thing.
+    const { nodes } = build({ workstreams: [ws(1), ws(2)] }, 999)
+    expect(containers(nodes)).toHaveLength(2)
+  })
+
+  it('leaves archived workstreams off the board entirely', () => {
+    const { nodes } = build({ workstreams: [ws(1), ws(2, { status: 'archived' })] })
+    expect(containers(nodes)).toHaveLength(1)
+  })
+})
+
+describe('time on every stage, not just the current one', () => {
+  const lifecycle = [stage('discuss', { sortOrder: 0 }), stage('impl', { sortOrder: 1 })]
+  const NOW_DAYS = (n: number) => Date.now() - n * DAY
+
+  const stageNodes = (w: WorkstreamSummaryDTO) =>
+    workstreamView
+      .build(ctx({ data: { issues: [], labels: [], fetchedAt: 0, lifecycle, workstreams: [w] } }))
+      .nodes.filter((n) => n.type === 'stage')
+      .map((n) => n.data as StageNodeData)
+
+  it('dates a stage the workstream has already left', () => {
+    // This is the whole point of the history table: before it, six of seven
+    // stages were blank and the picture showed a position without a journey.
+    const w = ws(1, {
+      stage: 'impl',
+      stageEnteredAt: NOW_DAYS(2),
+      stageEvents: [
+        { stageKey: 'discuss', at: NOW_DAYS(5) },
+        { stageKey: 'impl', at: NOW_DAYS(2) },
+      ],
+    })
+    const [discuss, impl] = stageNodes(w)
+    expect(discuss).toMatchObject({ visited: true, daysHere: 3, current: false })
+    expect(impl).toMatchObject({ visited: true, daysHere: 2, current: true })
+  })
+
+  it('leaves a stage it has never reached undated', () => {
+    // `visited` is what separates "arrived today, 0 days" from "never been" —
+    // `daysHere: 0` cannot say which.
+    const w = ws(1, { stage: 'discuss', stageEvents: [{ stageKey: 'discuss', at: Date.now() }] })
+    const [discuss, impl] = stageNodes(w)
+    expect(discuss).toMatchObject({ visited: true, daysHere: 0 })
+    expect(impl).toMatchObject({ visited: false, daysHere: null })
+  })
+
+  it('counts a second lap rather than averaging it away', () => {
+    const w = ws(1, {
+      stage: 'discuss',
+      stageEvents: [
+        { stageKey: 'discuss', at: NOW_DAYS(9) },
+        { stageKey: 'impl', at: NOW_DAYS(6) },
+        { stageKey: 'discuss', at: NOW_DAYS(1) },
+      ],
+    })
+    const [discuss] = stageNodes(w)
+    expect(discuss).toMatchObject({ visits: 2, daysHere: 1, current: true })
+  })
+
+  it('never marks a stage stale when the workstream is not on it', () => {
+    const w = ws(1, {
+      stage: 'discuss',
+      stageEnteredAt: NOW_DAYS(99),
+      stageEvents: [{ stageKey: 'discuss', at: NOW_DAYS(99) }],
+    })
+    const nodes = workstreamView.build(
       ctx({
-        focusedWorkstreamId: 999,
-        data: { issues: [], labels: [], fetchedAt: 0, lifecycle: [stage('impl')], workstreams: [ws(1)] },
+        data: {
+          issues: [],
+          labels: [],
+          fetchedAt: 0,
+          lifecycle: [stage('discuss'), stage('impl', { sortOrder: 1, staleAfterDays: 1 })],
+          workstreams: [w],
+        },
+      }),
+    ).nodes.filter((n) => n.type === 'stage')
+    expect((nodes[1]!.data as StageNodeData).stale).toBe(false)
+  })
+})
+
+describe('serpentine layout', () => {
+  it('runs every other row backwards so the flow never jumps back to the margin', () => {
+    //   0 → 1 → 2 → 3
+    //               ↓
+    //   7 ← 6 ← 5 ← 4
+    const cols = 4
+    expect([0, 1, 2, 3].map((i) => serpentine(i, cols))).toEqual([
+      { row: 0, col: 0 },
+      { row: 0, col: 1 },
+      { row: 0, col: 2 },
+      { row: 0, col: 3 },
+    ])
+    expect([4, 5, 6, 7].map((i) => serpentine(i, cols))).toEqual([
+      { row: 1, col: 3 },
+      { row: 1, col: 2 },
+      { row: 1, col: 1 },
+      { row: 1, col: 0 },
+    ])
+  })
+
+  it('puts the row break directly below its predecessor, so the drop is vertical', () => {
+    const cols = 4
+    expect(serpentine(3, cols).col).toBe(serpentine(4, cols).col)
+    expect(serpentine(7, cols).col).toBe(serpentine(8, cols).col)
+  })
+
+  it('degrades to a single column', () => {
+    expect([0, 1, 2].map((i) => serpentine(i, 1))).toEqual([
+      { row: 0, col: 0 },
+      { row: 1, col: 0 },
+      { row: 2, col: 0 },
+    ])
+  })
+})
+
+describe('wrapping honours the Issues-per-row setting', () => {
+  const lifecycle = Array.from({ length: 6 }, (_, i) => stage(`s${i}`, { sortOrder: i }))
+
+  const layout = (maxColsPerRow: number) => {
+    const { nodes, edges } = workstreamView.build(
+      ctx({
+        maxColsPerRow,
+        data: { issues: [], labels: [], fetchedAt: 0, lifecycle, workstreams: [ws(1, { stage: 's0' })] },
       }),
     )
-    expect((nodes[0]!.data as StageNodeData).render).toBeNull()
+    return { container: nodes.find((n) => n.type === 'mixedContainer')!, edges }
+  }
+
+  it('narrows the container and adds rows as the setting drops', () => {
+    const wide = layout(6)
+    const narrow = layout(3)
+    expect(narrow.container.width!).toBeLessThan(wide.container.width!)
+    expect(narrow.container.height!).toBeGreaterThan(wide.container.height!)
+  })
+
+  it('drops straight down at a row break and sideways within a row', () => {
+    // The handles are picked per edge; getting this wrong sends the row-break
+    // edge out of the side and across the whole container.
+    // Six stages at three per row: edges 0-1 run across row 0, edge 2 is the
+    // break, edges 3-4 run back across row 1.
+    const { edges } = layout(3)
+    expect(edges[0]).toMatchObject({ sourceHandle: 's-r', targetHandle: 't-l' })
+    expect(edges[2]).toMatchObject({ sourceHandle: 's-b', targetHandle: 't-t' })
+    // Second row runs right-to-left, so it leaves the LEFT side.
+    expect(edges[3]).toMatchObject({ sourceHandle: 's-l', targetHandle: 't-r' })
   })
 })

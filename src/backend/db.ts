@@ -277,6 +277,32 @@ const MIGRATIONS: string[] = [
   // Folding that into `waiting` (the turn merely ended) loses the only state
   // that should pull a person over.
   `ALTER TABLE agent_session ADD COLUMN label TEXT;`,
+
+  // 12. Where a workstream has BEEN, not just where it is.
+  //
+  // `batch.stage_entered_at` is one column, overwritten on every move, so it
+  // times the CURRENT occupancy and nothing else. That was enough to say "9
+  // days on Spec review" and not enough to draw a pipeline: six of seven
+  // stages had no time on them at all, so the picture showed a position
+  // without a journey — you could not tell what had already happened.
+  //
+  // Append-only, one row per ENTRY. A stage's duration is the gap to the next
+  // entry, and the current stage's is the gap to now, so nothing needs
+  // updating in place and a crash between writes loses at most the last move.
+  // Moving backwards is recorded like any other move and simply produces a
+  // second row for that stage — the pipeline is a chain, but a workstream
+  // walking it is not obliged to go forwards.
+  //
+  // Not in resetCache's delete list, like every other table here: a
+  // re-sync rebuilds issues from Linear and must not erase a history Linear
+  // never had. See cacheReset.test.ts, which guards that omission.
+  `CREATE TABLE IF NOT EXISTS workstream_stage_event (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     batch_id INTEGER NOT NULL,
+     stage_key TEXT NOT NULL,
+     at INTEGER NOT NULL
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_stage_event_batch ON workstream_stage_event(batch_id, at);`,
 ]
 
 // One Database instance per workspace id. Each profile has its own SQLITE_PATH

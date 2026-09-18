@@ -420,6 +420,14 @@ export interface WorkstreamSummaryDTO {
   /** When the stage last changed, rewritten on a move backwards too: staleness
    *  times the CURRENT occupancy, not the first one. */
   stageEnteredAt: number | null
+  /** Every stage this workstream has ARRIVED at, oldest first.
+   *
+   *  Carried raw rather than as computed durations because the duration of the
+   *  current stage depends on `now`, which only the client knows — a server
+   *  that pre-computed it would ship a number that was already stale. Small by
+   *  nature: a workstream moves a handful of times over its life.
+   *  `shared/stageHistory.ts` turns these into per-stage durations. */
+  stageEvents: { stageKey: string; at: number }[]
   status: 'active' | 'archived'
   /** Agents this feature is assigned to. Durable — an agent that is not running
    *  right now is still whose job the work is, which is what separates this

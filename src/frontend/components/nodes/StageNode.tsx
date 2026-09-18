@@ -5,6 +5,8 @@ import { Handle, Position } from 'reactflow'
 import { useT } from '../../i18n'
 import { useViewStore } from '../../store/viewStore'
 import { renderStage, type StageContext, type StageItem } from '../../lib/stageRender'
+import { api } from '../../lib/api'
+import { useGraphStore } from '../../store/graphStore'
 
 // One step of the pipeline, drawn as a wide numbered BAR.
 //
@@ -18,6 +20,13 @@ import { renderStage, type StageContext, type StageItem } from '../../lib/stageR
 // The component decides nothing. `renderStage` in lib/ decides what appears,
 // because vitest's glob excludes `.tsx` and a decision made here could not be
 // tested at all.
+
+const HANDLES = [
+  ['l', Position.Left],
+  ['r', Position.Right],
+  ['t', Position.Top],
+  ['b', Position.Bottom],
+] as const
 
 export interface StageNodeData {
   /** 1-based position in the pipeline. The glyph that carries the "step" idea. */
@@ -35,9 +44,16 @@ export interface StageNodeData {
   render: StageContext | null
   /** Overview mode: the workstreams currently on this stage. */
   streams: { id: number; name: string; days: number | null; stale: boolean }[]
-  /** Days the expanded workstream has been on this stage — only ever set on
-   *  the stage it is actually on, because it times the CURRENT occupancy. */
+  /** Days on this stage — for the stage it is on now that is "still running",
+   *  and for a stage it has left, how long it took. Null only when it has
+   *  never been here. */
   daysHere: number | null
+  /** Has this workstream ever arrived here? Distinguishes "0 days, arrived
+   *  today" from "never been", which `daysHere` alone cannot. */
+  visited: boolean
+  /** How many separate arrivals. Shown above 1, because going round twice is
+   *  the shape of a review that failed and is worth seeing. */
+  visits: number
   /** True once `daysHere` passes the stage's own threshold. */
   stale: boolean
 }
@@ -100,6 +116,7 @@ function ItemRow({ item }: { item: StageItem }) {
 
 function StageImpl({ data }: NodeProps<StageNodeData>) {
   const t = useT()
+  const refetchSilent = useGraphStore((s) => s.refetchSilent)
   const setFocusedWorkstreamId = useViewStore((s) => s.setFocusedWorkstreamId)
   // Wording never changes how many items there are, so the view's height
   // estimate and this stay in step — which matters more here than elsewhere,
@@ -107,18 +124,63 @@ function StageImpl({ data }: NodeProps<StageNodeData>) {
   // node never gets a corrected height.
   const items = useMemo(() => (data.render ? renderStage(data.render, t) : []), [data.render, t])
 
+  // Only when this node belongs to a workstream and is not the one it is on.
+  const moveTarget =
+    data.render && !data.current ? { id: data.render.workstream.id, key: data.render.stage.key } : null
+  const move = (e: MouseEvent) => {
+    e.stopPropagation()
+    if (!moveTarget) return
+    // The server is authoritative and records the move; a refetch is cheaper
+    // than reasoning about what an optimistic paint would owe the history.
+    void api.setBatchStage(moveTarget.id, moveTarget.key).then(() => refetchSilent())
+  }
+
   return (
     <div className={`stage-node${data.current ? ' stage-current' : ''}${data.stale ? ' stage-stale' : ''}`}>
-      <Handle type="target" position={Position.Left} isConnectable={false} />
+      {/* Four positions, each as both source and target, because the pipeline
+          runs in boustrophedon: a row reads left-to-right, drops, and the next
+          reads right-to-left, so an edge can leave any side. They are hidden in
+          CSS — a visible dot on every side turned the flow into a row of
+          disconnected boxes with beads between them. */}
+      {HANDLES.map(([id, position]) => (
+        <Handle key={`s-${id}`} id={`s-${id}`} type="source" position={position} isConnectable={false} />
+      ))}
+      {HANDLES.map(([id, position]) => (
+        <Handle key={`t-${id}`} id={`t-${id}`} type="target" position={position} isConnectable={false} />
+      ))}
       <div className="stage-head">
         <span className="stage-ordinal">{data.ordinal}</span>
-        <span className="stage-name">
-          {data.placeholder ? t(`stage.${data.placeholder}`) : data.name}
-        </span>
+        {/* The header is how you move a workstream. Clicking the stage you want
+            is the shortest possible expression of "it is here now", and it was
+            previously only reachable through the MCP or a hand-written PATCH.
+            Only a stage it is NOT on is clickable — moving somewhere you
+            already are should not restamp anything. */}
+        {moveTarget !== null ? (
+          <button
+            type="button"
+            className="stage-name stage-name-btn"
+            onClick={move}
+            onPointerDown={(e) => e.stopPropagation()}
+            title={t('stage.moveHere')}
+          >
+            {data.name}
+          </button>
+        ) : (
+          <span className="stage-name">
+            {data.placeholder ? t(`stage.${data.placeholder}`) : data.name}
+          </span>
+        )}
         {data.current && <span className="stage-badge">{t('stage.current')}</span>}
-        {data.daysHere !== null && (
+        {data.visits > 1 && (
+          <span className="stage-visits" title={t('stage.visitsHint')}>
+            {t('stage.visits', { n: data.visits })}
+          </span>
+        )}
+        {data.visited && data.daysHere !== null && (
           <span className={`stage-days${data.stale ? ' stage-days-stale' : ''}`}>
-            {t('stage.daysHere', { n: data.daysHere })}
+            {/* "4d here" while it is still here, "4d" once it has moved on —
+                the first is a duration still running, the second is settled. */}
+            {data.current ? t('stage.daysHere', { n: data.daysHere }) : t('stage.daysTook', { n: data.daysHere })}
           </span>
         )}
       </div>
@@ -159,7 +221,6 @@ function StageImpl({ data }: NodeProps<StageNodeData>) {
           )}
         </div>
       )}
-      <Handle type="source" position={Position.Right} isConnectable={false} />
     </div>
   )
 }

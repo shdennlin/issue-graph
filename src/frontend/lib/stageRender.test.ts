@@ -83,6 +83,7 @@ function ws(over: Partial<WorkstreamSummaryDTO> = {}): WorkstreamSummaryDTO {
     members: [],
     stage: 'impl',
     stageEnteredAt: 0,
+    stageEvents: [],
     status: 'active',
     assignees: [],
     notes: {},

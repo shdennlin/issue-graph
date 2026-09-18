@@ -203,6 +203,9 @@ batchRoutes.post('/api/batches', async (c) => {
     )
     .run(name, now, stage, stage === null ? null : now)
   const batchId = Number(r.lastInsertRowid)
+  // Work is often already underway when someone starts tracking it, so a
+  // workstream can be born on stage 4. That arrival is history like any other.
+  if (stage !== null) recordStageEntry(db, batchId, stage, now)
   const insert = db.prepare(`INSERT INTO batch_member(batch_id, identifier) VALUES(?, ?)`)
   db.transaction((ids: string[]) => {
     for (const id of ids) insert.run(batchId, id)
@@ -219,6 +222,21 @@ batchRoutes.post('/api/batches', async (c) => {
  * strict comparison let every unknown key through. A hand-rolled test mock
  * returning `undefined` hid it; a real server did not.
  */
+/** Append one arrival. Only ever called after the stage actually changed —
+ *  see the guards at both call sites. */
+function recordStageEntry(
+  db: ReturnType<typeof getDb>,
+  batchId: number,
+  stageKey: string,
+  at: number,
+): void {
+  db.prepare(`INSERT INTO workstream_stage_event(batch_id, stage_key, at) VALUES(?, ?, ?)`).run(
+    batchId,
+    stageKey,
+    at,
+  )
+}
+
 function stageExists(db: ReturnType<typeof getDb>, key: string): boolean {
   return Boolean(db.prepare(`SELECT key FROM lifecycle_stage WHERE key = ?`).get(key))
 }
@@ -237,6 +255,9 @@ batchRoutes.patch('/api/batches/:id', async (c) => {
 
   const sets: string[] = []
   const args: (string | number | null)[] = []
+  // Held until the UPDATE succeeds: a history row for a move that was then
+  // rejected would be a lie, and this handler can still bail out below.
+  let stageEntryPending: { stage: string; at: number } | null = null
 
   if (parsed.data.name !== undefined) {
     const name = normalizeBatchName(parsed.data.name)
@@ -253,8 +274,13 @@ batchRoutes.patch('/api/batches/:id', async (c) => {
     // no-op, so a tool that writes the current value on every heartbeat cannot
     // keep a stalled workstream looking fresh.
     if (stage !== row.stage_key) {
+      const at = Date.now()
       sets.push('stage_entered_at = ?')
-      args.push(stage === null ? null : Date.now())
+      args.push(stage === null ? null : at)
+      // Append-only, and only on a REAL move — the same guard as the clock
+      // above, or a tool writing the current stage on every heartbeat would
+      // fill the history with arrivals that never happened.
+      if (stage !== null) stageEntryPending = { stage, at }
     }
   }
   if (parsed.data.status !== undefined) {
@@ -271,6 +297,7 @@ batchRoutes.patch('/api/batches/:id', async (c) => {
   }
 
   db.prepare(`UPDATE batch SET ${sets.join(', ')} WHERE id = ?`).run(...args, id)
+  if (stageEntryPending) recordStageEntry(db, id, stageEntryPending.stage, stageEntryPending.at)
   return c.json({ ok: true })
 })
 

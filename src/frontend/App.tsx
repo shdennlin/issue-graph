@@ -44,6 +44,7 @@ const CoverageModal = lazy(() => import('./components/CoverageModal').then((m) =
 const SettingsPage = lazy(() => import('./components/SettingsPage').then((m) => ({ default: m.SettingsPage })))
 const ShortcutsModal = lazy(() => import('./components/ShortcutsModal').then((m) => ({ default: m.ShortcutsModal })))
 const WorkstreamsPanel = lazy(() => import('./components/WorkstreamsPanel').then((m) => ({ default: m.WorkstreamsPanel })))
+const WorkstreamJumpList = lazy(() => import('./components/WorkstreamJumpList').then((m) => ({ default: m.WorkstreamJumpList })))
 const LifecyclePanel = lazy(() => import('./components/LifecyclePanel').then((m) => ({ default: m.LifecyclePanel })))
 const NotesModal = lazy(() => import('./components/notes/NotesModal').then((m) => ({ default: m.NotesModal })))
 
@@ -739,6 +740,13 @@ export function App() {
             canvas, not the page — at the app root it sat under the toolbar.
             Only over the view it configures: a pipeline editor floating over
             the dependency graph would be editing something off-screen. */}
+        {/* Hidden while the pipeline editor is open — they share the top-right
+            corner, and you are not navigating while editing the pipeline. */}
+        {activeViewId === 'workstream' && !lifecycleEditorOpen && (
+          <Suspense fallback={null}>
+            <WorkstreamJumpList />
+          </Suspense>
+        )}
         {lifecycleEditorOpen && activeViewId === 'workstream' && (
           <Suspense fallback={null}>
             <LifecyclePanel />

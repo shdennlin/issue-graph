@@ -145,6 +145,10 @@ export interface ViewState {
    *  step: it configures the view rather than changing what the view is about,
    *  so it stays out of the URL and out of significantSignature. */
   lifecycleEditorOpen: boolean
+  /** A workstream the canvas should centre on. One-shot: GraphCanvas clears it
+   *  after panning, the same way `focusedMilestoneId` works, so asking twice
+   *  for the same one pans twice instead of doing nothing the second time. */
+  workstreamJumpId: number | null
   search: string                 // toolbar filter search (narrows visible set)
   inlineSearch: { open: boolean; query: string; activeIdx: number }
   settingsOpen: boolean
@@ -277,6 +281,7 @@ export interface ViewState {
   setMixGroupBy: (key: string | null) => void
   setFocusedWorkstreamId: (id: number | null) => void
   setLifecycleEditorOpen: (b: boolean) => void
+  setWorkstreamJumpId: (id: number | null) => void
   setSearch: (q: string) => void
   openInlineSearch: () => void
   closeInlineSearch: () => void
@@ -368,6 +373,7 @@ export const useViewStore = create<ViewState>((set) => ({
   mixGroupBy: null,
   focusedWorkstreamId: null,
   lifecycleEditorOpen: false,
+  workstreamJumpId: null,
   fontSize: (() => {
     if (typeof window === 'undefined') return 'md' as FontSize
     const raw = window.localStorage?.getItem('ig-font-size')
@@ -480,6 +486,7 @@ export const useViewStore = create<ViewState>((set) => ({
   setMixGroupBy: (key) => set({ mixGroupBy: key }),
   setFocusedWorkstreamId: (id) => set({ focusedWorkstreamId: id }),
   setLifecycleEditorOpen: (b) => set({ lifecycleEditorOpen: b }),
+  setWorkstreamJumpId: (id) => set({ workstreamJumpId: id }),
   setFontSize: (f) => {
     if (typeof window !== 'undefined') {
       window.localStorage?.setItem('ig-font-size', String(f))

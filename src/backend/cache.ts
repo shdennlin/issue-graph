@@ -314,6 +314,12 @@ export function readWorkstreamSummaries(): WorkstreamSummaryDTO[] {
   const noteRows = db
     .prepare('SELECT batch_id, stage_key, body FROM workstream_stage_note')
     .all() as { batch_id: number; stage_key: string; body: string }[]
+  // Ordered by `at` then `id`: two moves inside the same millisecond tie on
+  // `at`, and the autoincrement id is the only thing that can break that tie
+  // in the order they actually happened.
+  const eventRows = db
+    .prepare('SELECT batch_id, stage_key, at FROM workstream_stage_event ORDER BY at ASC, id ASC')
+    .all() as { batch_id: number; stage_key: string; at: number }[]
   const linkRows = db
     .prepare('SELECT batch_id, stage_key, kind, value, label FROM workstream_stage_link')
     .all() as { batch_id: number; stage_key: string; kind: string; value: string; label: string | null }[]
@@ -331,6 +337,9 @@ export function readWorkstreamSummaries(): WorkstreamSummaryDTO[] {
     members: byBatch.get(r.id) ?? [],
     stage: r.stage_key,
     stageEnteredAt: r.stage_entered_at,
+    stageEvents: eventRows
+      .filter((e) => e.batch_id === r.id)
+      .map((e) => ({ stageKey: e.stage_key, at: e.at })),
     status: r.status === 'archived' ? ('archived' as const) : ('active' as const),
     assignees: parseStringArray(r.assignees),
     notes: Object.fromEntries(

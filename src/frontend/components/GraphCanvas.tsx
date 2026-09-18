@@ -60,6 +60,7 @@ function CanvasInner() {
   const maxColsPerRow = useViewStore((s) => s.maxColsPerRow)
   const mixGroupBy = useViewStore((s) => s.mixGroupBy)
   const focusedWorkstreamId = useViewStore((s) => s.focusedWorkstreamId)
+  const workstreamJumpId = useViewStore((s) => s.workstreamJumpId)
   const search = useViewStore((s) => s.search)
   const theme = useViewStore((s) => s.theme)
   const colorMode = theme === 'auto'
@@ -416,6 +417,24 @@ function CanvasInner() {
       },
     )
   }, [rf])
+
+  // Pan to a workstream the jump list asked for. One-shot: cleared as soon as
+  // it is applied, so asking for the same one twice pans twice rather than
+  // doing nothing the second time. `built.nodes` rather than rf.getNode(),
+  // because RF's store lags the nodes prop by a render frame.
+  useEffect(() => {
+    if (workstreamJumpId === null) return
+    const node = built.nodes.find((n) => n.id === `workstream:${workstreamJumpId}`)
+    useViewStore.getState().setWorkstreamJumpId(null)
+    if (!node) return
+    const w = node.width ?? 0
+    const h = node.height ?? 0
+    rf.setCenter(node.position.x + w / 2, node.position.y + h / 2, {
+      zoom: rf.getZoom(),
+      // House style: no animation on programmatic pan.
+      duration: 0,
+    })
+  }, [workstreamJumpId, built.nodes, rf])
 
   // history.state ↔ viewport bridge. On popstate, urlSync pulls the
   // viewport that was stashed when this history entry was first created
@@ -1025,6 +1044,11 @@ function CanvasInner() {
         // Producer 1 + the consumer effect below, which is the same pipeline
         // every other fit (re-layout, view switch) already uses — single
         // source of truth, no race.
+        // Every edge in this app comes from a Linear relation or a pipeline
+        // order — none is drawn by hand. React Flow defaults this to true, so
+        // until now you could drag a connection line off any card and have it
+        // silently go nowhere, because no `onConnect` was ever wired.
+        nodesConnectable={false}
         nodesDraggable
         // Two-finger trackpad / mouse-wheel scroll = pan. Pinch-zoom on trackpad
         // and Ctrl/Cmd+scroll still zoom. Buttons in <Controls /> also zoom.

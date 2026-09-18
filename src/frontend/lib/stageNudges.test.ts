@@ -61,6 +61,7 @@ function ws(id: number, over: Partial<WorkstreamSummaryDTO> = {}): WorkstreamSum
     members: [],
     stage: 'impl',
     stageEnteredAt: NOW - DAY,
+    stageEvents: [],
     status: 'active',
     assignees: [],
     notes: {},

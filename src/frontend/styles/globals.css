@@ -4036,3 +4036,140 @@ button.stage-item:hover,
   font-size: 11px;
   color: var(--fg-muted);
 }
+
+/* Handles are structural everywhere in this app, never interactive — see
+   `nodesConnectable={false}` in GraphCanvas. An edge already shows where it
+   attaches, so the dot adds nothing when there IS an edge and is pure noise
+   when there is not: an issue card with no relations wore two white beads for
+   no reason, and a stage node carries one on all four sides so a boustrophedon
+   pipeline can leave from any of them. */
+.react-flow__handle {
+  opacity: 0;
+  pointer-events: none;
+  width: 1px;
+  height: 1px;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+}
+
+/* Standing index of what is in flight, over the top-right of the canvas.
+   Every workstream is drawn now, stacked, so the board runs several screens
+   tall and the one you want is usually off screen. */
+.ws-jump {
+  position: absolute;
+  top: 8px;
+  right: 46px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  min-width: 188px;
+  max-width: 280px;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+  background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-lg);
+  font-size: 12px;
+}
+.ws-jump-head {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-muted);
+  padding: 0 4px 2px;
+}
+.ws-jump-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 4px;
+}
+.ws-jump-row:hover { background: color-mix(in srgb, var(--fg) 7%, transparent); }
+.ws-jump-on { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.ws-jump-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  padding: 3px 4px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ws-jump-name {
+  font-weight: 600;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-jump-where {
+  font-size: 10px;
+  color: var(--fg-muted);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-jump-stale { color: var(--warn); }
+.ws-jump-iso {
+  flex: 0 0 auto;
+  padding: 2px 5px;
+  border: 0;
+  background: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+.ws-jump-iso:hover { color: var(--accent); }
+
+.ws-jump-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.ws-jump-new {
+  padding: 0 5px;
+  border: 0;
+  background: none;
+  color: var(--fg-muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.ws-jump-new:hover { color: var(--accent); }
+.ws-jump-empty {
+  padding: 4px;
+  font-size: 11px;
+  color: var(--fg-muted);
+  font-style: italic;
+}
+
+/* A stage you can move the workstream to. Underlined only on hover, so the
+   pipeline does not read as a row of links at rest. */
+.stage-name-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stage-name-btn:hover { color: var(--accent); text-decoration: underline; }
