@@ -146,9 +146,19 @@ describe('POST /api/agent-sessions', () => {
 
   it('upserts on heartbeat instead of duplicating', async () => {
     await post({ sessionId: 'a', branch: 'fix/one-1-x' })
+    // 'idle' is what an already-installed plugin reports; it is read as
+    // 'waiting', because the wire format cannot be renegotiated once installs
+    // exist in the wild.
     await post({ sessionId: 'a', branch: 'fix/one-1-x', status: 'idle' })
     expect(rows).toHaveLength(1)
-    expect(rows[0]?.status).toBe('idle')
+    expect(rows[0]?.status).toBe('waiting')
+  })
+
+  it('records a Notification as blocked, distinct from waiting', async () => {
+    // The only state worth walking over for: stopped on a permission prompt
+    // with nothing running behind it.
+    await post({ sessionId: 'a', status: 'blocked', phase: 'needs permission' })
+    expect(rows[0]?.status).toBe('blocked')
   })
 
   it('keeps the last phase when a heartbeat carries none', async () => {
