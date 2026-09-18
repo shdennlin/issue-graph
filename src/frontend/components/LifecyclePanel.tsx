@@ -3,30 +3,33 @@ import { useT } from '../i18n'
 import { useViewStore } from '../store/viewStore'
 import { LifecycleSettings } from './LifecycleSettings'
 
-// The lifecycle editor, over the view it configures.
+// The lifecycle editor, as a centred modal.
 //
-// It used to live in Settings. It moved because the pipeline is the subject of
-// the Workstreams view, not a preference: you notice a stage is missing while
-// looking at the board, and a round trip through a settings page to fix it is
-// where "I'll do it later" comes from.
+// It used to float over the top-right of the canvas, which put it in the same
+// corner as the stage and workstream panels and had it landing on top of them.
+// A dock was the wrong shape anyway: those panels INSPECT one thing while the
+// board stays readable beside them, and this CONFIGURES the workspace's
+// pipeline — you are not reading the board while rewriting the stages it is
+// drawn from. A modal says that, and it has room for the stage list besides.
 //
-// There is exactly ONE editor. Leaving a copy behind in Settings would have
-// been the kind thing to do for anyone used to finding it there, and it is also
-// how two editors for one config drift apart — so Settings now has nothing, not
-// a second copy.
+// There is exactly ONE editor. Leaving a copy in Settings would have been kind
+// to anyone used to finding it there, and it is also how two editors for one
+// config drift apart — so Settings has nothing, not a second copy.
 export function LifecyclePanel() {
   const t = useT()
   const close = () => useViewStore.getState().setLifecycleEditorOpen(false)
   return (
-    <div className="lifecycle-panel">
-      <div className="lifecycle-panel-header">
-        <h4>{t('lifecycle.title')}</h4>
-        <button onClick={close} aria-label={t('common.close')}>
-          <X size={16} />
-        </button>
-      </div>
-      <div className="lifecycle-panel-body">
-        <LifecycleSettings />
+    <div className="modal-backdrop" onClick={close}>
+      <div className="modal lifecycle-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>{t('lifecycle.title')}</h3>
+          <button onClick={close} aria-label={t('common.close')}>
+            <X size={16} />
+          </button>
+        </div>
+        <div className="modal-body">
+          <LifecycleSettings />
+        </div>
       </div>
     </div>
   )

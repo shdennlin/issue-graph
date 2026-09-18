@@ -425,6 +425,12 @@ export function App() {
         if (modalOpen) return
         // Peels before the inline finder: an anchored popover is the top-most
         // non-modal surface, so it is what Esc should reach first.
+        // The pipeline editor is a centred modal, so it is above everything
+        // else that is dismissable and Esc reaches it first.
+        if (s.lifecycleEditorOpen) {
+          s.setLifecycleEditorOpen(false)
+          return
+        }
         if (s.notificationsOpen) {
           s.setNotificationsOpen(false)
           return
@@ -446,10 +452,6 @@ export function App() {
         }
         if (s.workstreamPanelId !== null) {
           s.closeWorkstreamPanel()
-          return
-        }
-        if (s.lifecycleEditorOpen) {
-          s.setLifecycleEditorOpen(false)
           return
         }
         if (s.detailPanelOpen) {
@@ -767,17 +769,11 @@ export function App() {
             the list would sit on top of the panel's own header. You are reading
             one thing at that point, not choosing between several. */}
         {activeViewId === 'workstream' &&
-          !lifecycleEditorOpen &&
           !stagePanel &&
           workstreamPanelId === null &&
           !rightPanelOpen && (
           <Suspense fallback={null}>
             <WorkstreamJumpList />
-          </Suspense>
-        )}
-        {lifecycleEditorOpen && activeViewId === 'workstream' && (
-          <Suspense fallback={null}>
-            <LifecyclePanel />
           </Suspense>
         )}
         <GraphCanvas />
@@ -814,6 +810,9 @@ export function App() {
         {shortcutsOpen && <ShortcutsModal />}
         {notesOpen && <NotesModal />}
         {workstreamsOpen && <WorkstreamsPanel />}
+        {/* A centred modal now, so it no longer shares the right edge with the
+            inspector panels. Still gated on the view it configures. */}
+        {lifecycleEditorOpen && activeViewId === 'workstream' && <LifecyclePanel />}
       </Suspense>
       <ContextMenu />
       <NotificationToast />

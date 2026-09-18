@@ -498,10 +498,9 @@ export const useViewStore = create<ViewState>((set) => ({
   setDensity: (d) => set({ density: d }),
   setMixGroupBy: (key) => set({ mixGroupBy: key }),
   setFocusedWorkstreamId: (id) => set({ focusedWorkstreamId: id }),
-  // The editor and the two panels all dock on the right, and they are about
-  // different things — the editor configures the WORKSPACE's pipeline, a panel
-  // inspects ONE workstream. Opening either closed the other visually anyway;
-  // this makes it happen on purpose rather than as an overlap.
+  // Closes the inspector panels on the way in: the editor is a modal that owns
+  // the screen, and coming back out to a panel about a stage you may have just
+  // renamed or deleted is worse than coming back to the board.
   setLifecycleEditorOpen: (b) =>
     set(b ? { lifecycleEditorOpen: true, stagePanel: null, workstreamPanelId: null } : { lifecycleEditorOpen: false }),
   setWorkstreamJumpId: (id) => set({ workstreamJumpId: id }),
