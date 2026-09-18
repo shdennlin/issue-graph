@@ -474,8 +474,19 @@ describe('hand-attached links', () => {
   })
 
   it('refuses a kind outside the closed vocabulary', async () => {
-    const res = await req('/api/batches/1/links/ci', 'POST', { kind: 'pr', value: 'https://x' })
+    const res = await req('/api/batches/1/links/ci', 'POST', { kind: 'branch', value: 'x' })
     expect(res.status).toBe(400)
     expect(links).toHaveLength(0)
+  })
+
+  it('accepts a PR attached by hand', async () => {
+    // The case the whole feature exists for: a PR whose body names no issue, so
+    // Linear never linked it and nothing can project it onto the stage.
+    const res = await req('/api/batches/1/links/ci', 'POST', {
+      kind: 'pr',
+      value: 'https://github.com/o/r/pull/3',
+    })
+    expect(res.status).toBe(200)
+    expect(links).toHaveLength(1)
   })
 })

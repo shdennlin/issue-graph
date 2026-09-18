@@ -556,6 +556,16 @@ export const en = {
     // resolves neither, because Linear's automation and the person who set the
     // stage are both legitimate writers. See ADR-0002.
     conflictHint: 'Stage "{stage}" does not expect the Linear state "{state}"',
+    // Short qualifiers drawn beside a fact inside a stage box, so they are
+    // clipped words rather than sentences. The fact itself — an identifier, a
+    // state name, `repo#12` — is never translated.
+    lagging: 'not in this stage yet',
+    notCached: 'outside the synced range',
+    needsYou: 'needs you',
+    yourMove: 'your move',
+    contributes: 'does not close',
+    conflicts: 'conflicts',
+    blocking: 'blocking {target}',
   },
   states: {
     started: 'In Progress',

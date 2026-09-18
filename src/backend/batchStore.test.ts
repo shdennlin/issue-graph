@@ -10,6 +10,7 @@ import {
   isStale,
   normalizeAssignees,
   normalizeLinkKind,
+  STAGE_LINK_KINDS,
   normalizeLinkValue,
   normalizeShows,
   normalizeStaleAfterDays,
@@ -286,10 +287,14 @@ describe('normalizeStaleAfterDays', () => {
 })
 
 describe('normalizeLinkKind / normalizeLinkValue', () => {
-  it('accepts the two kinds and refuses others', () => {
-    expect(normalizeLinkKind('spec')).toBe('spec')
-    expect(normalizeLinkKind('url')).toBe('url')
-    expect(normalizeLinkKind('pr')).toBeNull()
+  it('accepts every kind in the vocabulary and refuses the rest', () => {
+    // Each kind exists because it renders somewhere different — a `pr` sits
+    // with the PRs Linear linked itself, where sending it as a `url` would put
+    // it under the stage's note instead, on a stage that may not show notes.
+    for (const kind of STAGE_LINK_KINDS) expect(normalizeLinkKind(kind)).toBe(kind)
+    expect(normalizeLinkKind('branch')).toBeNull()
+    expect(normalizeLinkKind('')).toBeNull()
+    expect(normalizeLinkKind(7)).toBeNull()
   })
 
   it('trims a value and refuses blank or over-long', () => {

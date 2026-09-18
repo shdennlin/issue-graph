@@ -26,6 +26,7 @@ import {
   normalizeNote,
   normalizeStatus,
   parseStringArray,
+  STAGE_LINK_KINDS,
   type StageLinkRow,
   type StageNoteRow,
   nextCandidate,
@@ -329,7 +330,7 @@ batchRoutes.post('/api/batches/:id/links/:stageKey', async (c) => {
   const parsed = LinkSchema.safeParse(body)
   if (!parsed.success) return c.json(invalid(parsed.error.message), 400)
   const kind = normalizeLinkKind(parsed.data.kind)
-  if (kind === null) return c.json(invalid("kind must be 'spec' or 'url'"), 400)
+  if (kind === null) return c.json(invalid(`kind must be one of ${STAGE_LINK_KINDS.join(', ')}`), 400)
   const value = normalizeLinkValue(parsed.data.value)
   if (value === null) return c.json(invalid('bad value'), 400)
 

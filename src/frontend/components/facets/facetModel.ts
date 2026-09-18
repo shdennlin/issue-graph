@@ -18,7 +18,7 @@
 
 import type { IssueStateType } from '@shared/types.js'
 import type { Filters } from '../../store/viewStore'
-import type { DictKey } from '../../i18n'
+import type { DictKey, Translate } from '../../i18n'
 import { RECENCY_PRESETS, type RecencyWindow } from '../../lib/recency'
 import { stateNameKey } from '../../views/filters'
 import type { ProjectRow, StateNameRow } from './useFilterCounts'
@@ -101,7 +101,7 @@ export interface ChipDescriptor {
   active?: boolean
 }
 
-export type Translate = (key: DictKey, params?: Record<string, string | number>) => string
+export type { Translate }
 
 /** A filter value the user keeps visible in the bar for one-click toggling.
  *  Stored per workspace in localStorage — see lib/pinnedFilters.ts. */

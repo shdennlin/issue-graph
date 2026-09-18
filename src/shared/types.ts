@@ -425,6 +425,14 @@ export interface WorkstreamSummaryDTO {
    *  right now is still whose job the work is, which is what separates this
    *  from AgentSessionDTO. */
   assignees: string[]
+  /** Per-stage notes, keyed by stage key. Carried in full rather than as a
+   *  flag: they are short, user-typed lines, and a truncated copy here plus a
+   *  full one behind a click would be two versions of one thing. */
+  notes: Record<string, string>
+  /** Items attached by hand because the upstream link is missing. Kept apart
+   *  from anything projected so the UI can mark them — see the migration
+   *  comment on why that mark matters. */
+  links: { stageKey: string; kind: string; value: string; label: string | null }[]
 }
 
 export interface GraphData {

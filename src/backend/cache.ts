@@ -287,7 +287,13 @@ export function readLifecycleStages(): LifecycleStageDTO[] {
   return rows.map(lifecycleRowToDTO)
 }
 
-/** Workstreams with their membership, for the workstream view. */
+/**
+ * Workstreams with everything the stage view draws from.
+ *
+ * Archived ones are left out: archiving a workstream means taking it off the
+ * board, and a container for it would contradict that. `?status=all` on the
+ * batches route is where they come back.
+ */
 export function readWorkstreamSummaries(): WorkstreamSummaryDTO[] {
   const db = getDb()
   const rows = db
@@ -305,13 +311,21 @@ export function readWorkstreamSummaries(): WorkstreamSummaryDTO[] {
   const members = db
     .prepare('SELECT batch_id, identifier FROM batch_member')
     .all() as { batch_id: number; identifier: string }[]
+  const noteRows = db
+    .prepare('SELECT batch_id, stage_key, body FROM workstream_stage_note')
+    .all() as { batch_id: number; stage_key: string; body: string }[]
+  const linkRows = db
+    .prepare('SELECT batch_id, stage_key, kind, value, label FROM workstream_stage_link')
+    .all() as { batch_id: number; stage_key: string; kind: string; value: string; label: string | null }[]
   const byBatch = new Map<number, string[]>()
   for (const m of members) {
     const list = byBatch.get(m.batch_id)
     if (list) list.push(m.identifier)
     else byBatch.set(m.batch_id, [m.identifier])
   }
-  return rows.map((r) => ({
+  return rows
+    .filter((r) => r.status !== 'archived')
+    .map((r) => ({
     id: r.id,
     name: r.name,
     members: byBatch.get(r.id) ?? [],
@@ -319,6 +333,12 @@ export function readWorkstreamSummaries(): WorkstreamSummaryDTO[] {
     stageEnteredAt: r.stage_entered_at,
     status: r.status === 'archived' ? ('archived' as const) : ('active' as const),
     assignees: parseStringArray(r.assignees),
+    notes: Object.fromEntries(
+      noteRows.filter((n) => n.batch_id === r.id).map((n) => [n.stage_key, n.body]),
+    ),
+    links: linkRows
+      .filter((l) => l.batch_id === r.id)
+      .map((l) => ({ stageKey: l.stage_key, kind: l.kind, value: l.value, label: l.label })),
   }))
 }
 

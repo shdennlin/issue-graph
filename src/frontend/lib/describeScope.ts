@@ -13,7 +13,7 @@
 // display nicety, not a correctness requirement — the gate runs on ids.
 
 import type { NormalizedIssue, NormalizedLabel } from '@shared/types.js'
-import type { DictKey } from '../i18n'
+import type { DictKey, Translate } from '../i18n'
 import type { Locale } from '../i18n/store'
 import { priorityLabelFor } from './colors'
 import type { Filters } from '../store/viewStore'
@@ -32,7 +32,7 @@ export interface ScopeLine {
 /** Translator, taken as an argument so this module stays pure and testable —
  *  the same shape `facetModel.chipsFromFilters` uses. Typing it against
  *  `DictKey` is what turns a mistyped key into a compile error. */
-export type Translate = (key: DictKey, params?: Record<string, string | number>) => string
+export type { Translate }
 
 export interface NameLookup {
   label: (id: string) => string

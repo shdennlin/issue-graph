@@ -10,6 +10,8 @@
 // fact, and it would go stale silently.
 
 import type { NormalizedIssue, NormalizedPullRequest } from '../shared/types.js'
+import { SHOW_TOKENS, STAGE_LINK_KINDS } from '../shared/showTokens.js'
+import type { ShowToken, StageLinkKind } from '../shared/showTokens.js'
 
 export interface BatchRow {
   id: number
@@ -24,27 +26,12 @@ export interface BatchRow {
 
 export type WorkstreamStatus = 'active' | 'archived'
 
-/**
- * What a stage may render.
- *
- * A CLOSED vocabulary, because the app can only draw what it holds data for —
- * but which tokens a stage uses is entirely the workspace's choice. Adding a
- * source later (CI checks, once a GitHub source exists) is a new token here and
- * nothing else.
- *
- * These are PROJECTIONS, not fields. `pullRequests` means "go and read the
- * members' PRs", never "this stage stores PRs" — so for most of what a stage
- * shows there is nothing to update on the stage at all. You update upstream.
- */
-export const SHOW_TOKENS = [
-  'issues',
-  'sessions',
-  'pullRequests',
-  'designdocs',
-  'note',
-  'blockers',
-] as const
-export type ShowToken = (typeof SHOW_TOKENS)[number]
+// Re-exported so this module stays the one place the rest of the backend
+// imports stage vocabulary from, while the list itself lives in `shared/` —
+// the lifecycle editor and the stage renderer need the same one, and the web
+// build cannot see `src/backend`.
+export { SHOW_TOKENS, STAGE_LINK_KINDS }
+export type { ShowToken, StageLinkKind }
 
 export interface StageNoteRow {
   batch_id: number
@@ -52,8 +39,6 @@ export interface StageNoteRow {
   body: string
   updated_at: number
 }
-
-export type StageLinkKind = 'spec' | 'url'
 
 export interface StageLinkRow {
   batch_id: number
@@ -315,7 +300,9 @@ export function normalizeNote(raw: unknown): string | null {
 }
 
 export function normalizeLinkKind(raw: unknown): StageLinkKind | null {
-  return raw === 'spec' || raw === 'url' ? raw : null
+  return typeof raw === 'string' && (STAGE_LINK_KINDS as readonly string[]).includes(raw)
+    ? (raw as StageLinkKind)
+    : null
 }
 
 export function normalizeLinkValue(raw: unknown): string | null {

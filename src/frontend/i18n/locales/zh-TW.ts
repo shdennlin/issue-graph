@@ -538,7 +538,16 @@ export const zhTW: Dict = {
     loadFailed: '無法載入生命週期設定。',
   },
   stage: {
-    conflictHint: '階段「{stage}」不預期 Linear 狀態「{state}」',
+    conflictHint: 'Stage「{stage}」不預期 Linear 狀態「{state}」',
+    // 這些是畫在 stage 方塊裡、貼在事實旁邊的短標註，所以是詞不是句子。事實本身
+    // — 議題編號、狀態名稱、`repo#12` — 一律不翻譯。
+    lagging: '還沒進到這個 stage',
+    notCached: '不在同步範圍內',
+    needsYou: '等你回覆',
+    yourMove: '換你了',
+    contributes: '不會關閉議題',
+    conflicts: '有衝突',
+    blocking: '卡住 {target}',
   },
   states: {
     started: '進行中',

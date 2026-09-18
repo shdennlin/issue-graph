@@ -145,13 +145,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'attach_to_stage',
       description:
-        "Attach something by hand when the automatic link is missing — a spec with no `Linear:` line, a PR naming no issue. kind is 'spec' (a path whose task progress is still read) or 'url' (rendered as a link). These show a 'manual' mark: prefer fixing the upstream link, which makes the item appear on its own.",
+        "Attach something by hand when the automatic link is missing — a spec with no `Linear:` line, a PR naming no issue. kind is 'spec' (a path whose task progress is still read), 'pr' (a pull request URL, shown beside the ones Linear linked itself) or 'url' (any other link). Pick the kind by where it belongs: a PR sent as 'url' lands under the stage's note instead of with the other PRs, and a CI stage need not show notes at all. These show a 'manual' mark: prefer fixing the upstream link, which makes the item appear on its own.",
       inputSchema: {
         type: 'object',
         properties: {
           workstreamId: { type: 'number' },
           stageKey: { type: 'string' },
-          kind: { type: 'string', enum: ['spec', 'url'] },
+          kind: { type: 'string', enum: ['spec', 'pr', 'url'] },
           value: { type: 'string' },
           label: { type: 'string' },
         },
