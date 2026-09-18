@@ -549,6 +549,12 @@ export const zhTW: Dict = {
     contributes: '不會關閉議題',
     conflicts: '有衝突',
     blocking: '卡住 {target}',
+    // 提醒。evidence 的措辭只陳述不一致，不提出建議：這裡不會自動推進任何
+    // stage，而且就算 Linear 不同意，設定 stage 的人也是合法的寫入者。
+    nudgeEvidence: '所有 issue 都完成了，但還停在「{stage}」',
+    nudgeStale: '在「{stage}」已經 {n} 天',
+    nudgeDismiss: '先不要',
+    nudgeDismissHint: '先隱藏，等這條工作線換到別的 stage 再提醒。',
     // 節點上的文字。`current` 和 `daysHere` 就是腐化訊號：沒人推進的 stage
     // 正是整個 view 要讓它現形的失敗模式。
     current: '目前',

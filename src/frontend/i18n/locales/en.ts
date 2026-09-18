@@ -572,6 +572,13 @@ export const en = {
     contributes: 'does not close',
     conflicts: 'conflicts',
     blocking: 'blocking {target}',
+    // Nudges. The evidence wording states the discrepancy and proposes nothing:
+    // nothing here advances a stage, and the person who set it is a legitimate
+    // writer even when Linear disagrees.
+    nudgeEvidence: 'every issue is finished, but it is still on "{stage}"',
+    nudgeStale: '{n} days on "{stage}"',
+    nudgeDismiss: 'not now',
+    nudgeDismissHint: 'Hide this until the workstream moves to another stage.',
     // Node chrome. `current` and `daysHere` are the rot signal: a stage nobody
     // has moved off is the failure mode this whole view exists to make visible.
     current: 'current',

@@ -16,7 +16,6 @@ import {
   normalizeStaleAfterDays,
   normalizeStatus,
   parseStringArray,
-  stageAdvanceEvidence,
   tallyPullRequests,
   batchProgress,
   nextCandidate,
@@ -327,43 +326,6 @@ describe('isStale', () => {
     expect(daysOnStage(now - 9.5 * DAY, now)).toBe(9)
     expect(daysOnStage(now + DAY, now)).toBe(0)
     expect(daysOnStage(null, now)).toBeNull()
-  })
-})
-
-describe('stageAdvanceEvidence', () => {
-  const at = (id: string, type: 'completed' | 'canceled' | 'started'): NormalizedIssue =>
-    ({ identifier: id, state: { name: type, type }, relations: [] }) as unknown as NormalizedIssue
-  const done = (id: string) => at(id, 'completed')
-  const open = (id: string) => at(id, 'started')
-
-  it('fires when every member is finished but the stage is not the last', () => {
-    // The proof signal: not "this looks stuck" but "the stage is lying".
-    expect(
-      stageAdvanceEvidence([member('ONE-1'), member('ONE-2')], [done('ONE-1'), done('ONE-2')], false),
-    ).toBe(true)
-  })
-
-  it('counts canceled as finished', () => {
-    const canceled = at('ONE-2', 'canceled')
-    expect(stageAdvanceEvidence([member('ONE-1'), member('ONE-2')], [done('ONE-1'), canceled], false)).toBe(true)
-  })
-
-  it('stays quiet while any member is open', () => {
-    expect(stageAdvanceEvidence([member('ONE-1'), member('ONE-2')], [done('ONE-1'), open('ONE-2')], false)).toBe(false)
-  })
-
-  it('stays quiet on the last stage — that is the expected end state', () => {
-    expect(stageAdvanceEvidence([member('ONE-1')], [done('ONE-1')], true)).toBe(false)
-  })
-
-  it('stays quiet for an empty workstream', () => {
-    expect(stageAdvanceEvidence([], [], false)).toBe(false)
-  })
-
-  it('stays quiet when a member is not in the cache', () => {
-    // Absent proves nothing either way — it may be outside the scope window
-    // rather than finished.
-    expect(stageAdvanceEvidence([member('ONE-1'), member('ONE-9')], [done('ONE-1')], false)).toBe(false)
   })
 })
 

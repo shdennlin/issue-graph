@@ -3981,3 +3981,51 @@ button.stage-item:hover,
   overflow-y: auto;
   padding: 12px;
 }
+
+/* Stage nudges, above the change log in the bell.
+   Visually separated from the log rows because they are a different kind of
+   thing: a log row is something that happened, a nudge is something still
+   true that you can act on. */
+.notif-nudges {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--node-border);
+}
+.notif-nudge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-left: 3px solid var(--warn);
+}
+/* Evidence is a proof the stage is wrong, staleness only a suspicion — the
+   stronger signal gets the stronger colour. */
+.notif-nudge-evidence { border-left-color: var(--danger); }
+.notif-nudge-main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  align-items: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+.notif-nudge-main:hover .notif-nudge-name { text-decoration: underline; }
+.notif-nudge-name {
+  font-weight: 600;
+  font-size: 12px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notif-nudge-why {
+  font-size: 11px;
+  color: var(--fg-muted);
+}

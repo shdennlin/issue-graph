@@ -314,37 +314,6 @@ export function normalizeLinkValue(raw: unknown): string | null {
 }
 
 
-/**
- * Is every member finished while the stage says otherwise?
- *
- * This is the EVIDENCE signal, and it is stronger than staleness: staleness is
- * a suspicion that something is stuck, this is a proof that the stage is lying.
- * A hand-maintained stage is the part of this design most likely to rot, and
- * nothing advances it automatically — so the system has to be able to say so.
- *
- * Returns false for an empty workstream and for the last stage, where "every
- * member done" is simply the expected end state rather than a discrepancy.
- */
-export function stageAdvanceEvidence(
-  members: BatchMemberRow[],
-  issues: NormalizedIssue[],
-  isLastStage: boolean,
-): boolean {
-  if (isLastStage || members.length === 0) return false
-  const byId = new Map(issues.map((i) => [i.identifier, i]))
-  let seen = 0
-  for (const m of members) {
-    const issue = byId.get(m.identifier)
-    // An unknown member proves nothing either way — it may be outside the cache
-    // window rather than finished.
-    if (!issue) return false
-    const t = issue.state?.type
-    if (t !== 'completed' && t !== 'canceled') return false
-    seen++
-  }
-  return seen > 0
-}
-
 export interface PullRequestTally {
   /** PRs whose linkKind says they finish the issue. */
   closesTotal: number

@@ -1,8 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bell } from 'lucide-react'
 import { useClickOutside } from '../hooks/useClickOutside'
 import type { ChangedField } from '../lib/issueDiff'
 import { unreadCount, useNotificationStore } from '../store/notificationStore'
+import { useGraphStore } from '../store/graphStore'
+import { useWorkspaceStore } from '../store/workspaceStore'
+import {
+  computeNudges,
+  pruneDismissals,
+  readDismissals,
+  writeDismissals,
+} from '../lib/stageNudges'
 import { useViewStore } from '../store/viewStore'
 import { currentQuery } from '../store/urlSync'
 import { useT, useLocale, type DictKey } from '../i18n'
@@ -17,6 +25,8 @@ import type { Locale } from '../i18n/store'
  * visible behind it — a modal backdrop would mean dismissing before you could
  * see the thing you asked for.
  */
+const EMPTY_DISMISSALS: ReadonlySet<string> = new Set()
+
 export function NotificationBell({ iconSize }: { iconSize: number }) {
   const open = useViewStore((s) => s.notificationsOpen)
   const setOpen = useViewStore((s) => s.setNotificationsOpen)
@@ -44,7 +54,51 @@ export function NotificationBell({ iconSize }: { iconSize: number }) {
     return () => window.clearInterval(id)
   }, [open])
 
-  const unread = unreadCount(entries)
+  // Standing conditions, re-derived rather than stored — see stageNudges.ts.
+  // A nudge stops being true the moment someone acts on it, so persisting one
+  // would mean it outlived the thing it was reporting.
+  const graph = useGraphStore((s) => s.graph)
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  const setActiveView = useViewStore((s) => s.setActiveView)
+  const setFocusedWorkstreamId = useViewStore((s) => s.setFocusedWorkstreamId)
+  // Ordinary state that happens to be persisted, carrying the workspace it was
+  // loaded for. Two rules pushed it into this shape and both are right: an
+  // effect that re-reads it on a workspace change is set-state-in-effect, and
+  // reading localStorage inside the memo instead makes the memo impure and its
+  // cache key a lie. Adjusting during render is React's documented answer for
+  // state that must reset when an input changes, and it needs no effect.
+  const [dismissals, setDismissals] = useState(() => ({
+    wid: workspaceId,
+    keys: readDismissals(workspaceId) as ReadonlySet<string>,
+  }))
+  if (dismissals.wid !== workspaceId) {
+    setDismissals({ wid: workspaceId, keys: readDismissals(workspaceId) })
+  }
+  // Until that re-render lands, treat the other workspace's dismissals as
+  // absent rather than applying them to this one's workstreams.
+  const dismissed = dismissals.wid === workspaceId ? dismissals.keys : EMPTY_DISMISSALS
+
+  const nudges = useMemo(
+    () => (graph ? computeNudges(graph.data, now, dismissed) : []),
+    [graph, now, dismissed],
+  )
+
+  const dismiss = (key: string) => {
+    const next = new Set(dismissed)
+    next.add(key)
+    // Pruned on write as well as on read: a key whose workstream is gone can
+    // never match again, and nothing else would ever clean it up.
+    const kept: ReadonlySet<string> = new Set(
+      pruneDismissals(next, graph?.data.workstreams ?? []),
+    )
+    setDismissals({ wid: workspaceId, keys: kept })
+    writeDismissals(workspaceId, kept)
+  }
+
+  // A nudge nobody has seen is unread by any reasonable reading of the word,
+  // so it has to move the badge — otherwise the whole feature is invisible
+  // until someone happens to open the bell.
+  const unread = unreadCount(entries) + nudges.length
 
   return (
     <div className="notif-anchor" ref={ref}>
@@ -103,7 +157,46 @@ export function NotificationBell({ iconSize }: { iconSize: number }) {
             </div>
           )}
 
-          {entries.length === 0 ? (
+          {/* Above the change log, because a nudge is something to DO and the
+              log is something that happened. Each row is its own dismiss: the
+              log's "clear" is about entries and must not silence a condition
+              that is still true. */}
+          {nudges.length > 0 && (
+            <div className="notif-nudges">
+              {nudges.map((n) => (
+                <div key={n.key} className={`notif-nudge notif-nudge-${n.kind}`}>
+                  <button
+                    type="button"
+                    className="notif-nudge-main"
+                    onClick={() => {
+                      // The target is a STAGE, not an issue — so this expands
+                      // the workstream rather than focusing a card.
+                      setActiveView('workstream')
+                      setFocusedWorkstreamId(n.workstreamId)
+                      setOpen(false)
+                    }}
+                  >
+                    <span className="notif-nudge-name">{n.workstreamName}</span>
+                    <span className="notif-nudge-why">
+                      {n.kind === 'evidence'
+                        ? t('stage.nudgeEvidence', { stage: n.stageName })
+                        : t('stage.nudgeStale', { stage: n.stageName, n: n.days ?? 0 })}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="notif-popover-link"
+                    onClick={() => dismiss(n.key)}
+                    title={t('stage.nudgeDismissHint')}
+                  >
+                    {t('stage.nudgeDismiss')}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {entries.length === 0 && nudges.length === 0 ? (
             <div className="notif-popover-empty">{t('notifications.empty')}</div>
           ) : (
             <div className="notif-popover-list">
