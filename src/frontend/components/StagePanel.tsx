@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
-import { STAGE_LINK_KINDS } from '@shared/showTokens.js'
+import { RICH_LINK_KINDS } from '@shared/showTokens.js'
 import { stageVisits } from '@shared/stageHistory.js'
 import { api } from '../lib/api'
 import { useGraphStore } from '../store/graphStore'
@@ -25,8 +25,6 @@ const AGE_UNIT_KEYS: Record<'m' | 'h' | 'd', DictKey> = {
   h: 'issueNode.ageHours',
   d: 'issueNode.ageDays',
 }
-
-type Kind = 'note' | (typeof STAGE_LINK_KINDS)[number]
 
 export function StagePanel() {
   const t = useT()
@@ -62,7 +60,11 @@ export function StagePanel() {
   const noteFromServer = workstream && stage ? (workstream.notes[stage.key] ?? '') : ''
   const [draft, setDraft] = useState(() => ({ key: target?.stageKey ?? '', note: noteFromServer }))
   const saveTimer = useRef<number | null>(null)
-  const [kind, setKind] = useState<Kind>('pr')
+  // Free text, seeded from the rich kinds. `RICH_LINK_KINDS` are the ones the
+  // app draws in their own box; any other name is accepted and drawn as a row
+  // carrying that name, which is how a workstream defines its own fields.
+  const [kind, setKind] = useState<string>('pr')
+  const [customKind, setCustomKind] = useState(false)
   const [value, setValue] = useState('')
   const [label, setLabel] = useState('')
   const [busy, setBusy] = useState(false)
@@ -208,7 +210,13 @@ export function StagePanel() {
           <ul className="stage-panel-links">
             {links.map((l) => (
               <li key={`${l.kind}:${l.value}`}>
-                <span className="stage-panel-kind">{t(`stage.attachKind_${l.kind}` as 'stage.attachKind_pr')}</span>
+                <span className="stage-panel-kind">
+                  {/* A custom kind has no dict entry, and should not: it is a
+                      name the workstream chose, so it shows verbatim. */}
+                  {(RICH_LINK_KINDS as readonly string[]).includes(l.kind)
+                    ? t(`stage.attachKind_${l.kind}` as 'stage.attachKind_pr')
+                    : l.kind}
+                </span>
                 {l.value.startsWith('http') ? (
                   <a href={l.value} target="_blank" rel="noreferrer">
                     {l.label ?? l.value}
@@ -235,25 +243,49 @@ export function StagePanel() {
           {/* Radio-style buttons, not a <select>: in the popover the picker
               read as a label and nobody found the other five kinds. */}
           <div className="stage-panel-kinds">
-            {STAGE_LINK_KINDS.map((k) => (
+            {RICH_LINK_KINDS.map((k) => (
               <button
                 key={k}
-                className={kind === k ? 'is-on' : ''}
-                onClick={() => setKind(k)}
+                className={!customKind && kind === k ? 'is-on' : ''}
+                onClick={() => {
+                  setCustomKind(false)
+                  setKind(k)
+                }}
               >
                 {t(`stage.attachKind_${k}` as 'stage.attachKind_pr')}
               </button>
             ))}
+            <button
+              className={customKind ? 'is-on' : ''}
+              onClick={() => {
+                setCustomKind(true)
+                setKind('')
+              }}
+              title={t('stage.attachKindCustomHint')}
+            >
+              {t('stage.attachKindCustom')}
+            </button>
           </div>
+          {customKind && (
+            <input
+              value={kind}
+              onChange={(e) => setKind(e.target.value)}
+              placeholder={t('stage.attachKindPlaceholder')}
+            />
+          )}
           <input
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            placeholder={t(`stage.attachPlaceholder_${kind}` as 'stage.attachPlaceholder_pr')}
+            placeholder={
+              customKind
+                ? t('stage.attachValuePlaceholder')
+                : t(`stage.attachPlaceholder_${kind}` as 'stage.attachPlaceholder_pr')
+            }
           />
           <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t('stage.attachLabel')} />
           <button
             className="stage-panel-primary"
-            disabled={busy || value.trim().length === 0}
+            disabled={busy || value.trim().length === 0 || kind.trim().length === 0}
             onClick={() =>
               void run(async () => {
                 await api.attachToStage(workstream.id, stage.key, kind, value.trim(), label.trim() || undefined)

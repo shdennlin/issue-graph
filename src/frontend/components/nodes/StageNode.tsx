@@ -91,6 +91,9 @@ function ItemRow({ item, onDetach }: { item: StageItem; onDetach?: (value: strin
 
   const body = (
     <>
+      {/* The kind, when the app has no special box for it. For a custom field
+          the NAME is the point — `runbook` says what a bare link cannot. */}
+      {item.kind && <span className="stage-item-kind">{item.kind}</span>}
       <span className="stage-item-text">{item.text}</span>
       {item.hints.map((h) => (
         <span key={h} className="stage-item-hint">
@@ -123,7 +126,18 @@ function ItemRow({ item, onDetach }: { item: StageItem; onDetach?: (value: strin
     </>
   )
 
-  const cls = `stage-item stage-item-${item.tone}${item.rows > 1 ? ' stage-item-wrap' : ''}`
+  // Token drives the shape and colour, tone drives the emphasis. A PR should
+  // not look like a blocker even when both are fine, and a blocker should look
+  // like a blocker even on a stage full of them.
+  const cls = [
+    'stage-item',
+    `stage-item-${item.tone}`,
+    `stage-tok-${item.token}`,
+    item.rows > 1 ? 'stage-item-wrap' : 'stage-pill',
+    item.manual ? 'stage-item-manual-row' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
   if (item.url) {
     return (
       <a className={cls} href={item.url} target="_blank" rel="noreferrer" onPointerDown={stop} onClick={(e) => e.stopPropagation()}>

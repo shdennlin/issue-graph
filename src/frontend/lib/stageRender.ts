@@ -48,6 +48,11 @@ export interface StageItem {
    *  view sums these to size the stage, because nothing measures a stage node
    *  after the fact — see the height comment in views/workstream.ts. */
   rows: number
+  /** The attachment's kind, when it is one the app has no special box for —
+   *  `runbook`, `incident`, whatever the workstream needed. Drawn as the row's
+   *  own label, because for a custom field the NAME is the whole point. Null
+   *  for anything projected or drawn in its own box. */
+  kind: string | null
   /** An issue to focus in the graph, or null. Kept apart from `url` because
    *  "centre that card" and "open a tab" are different actions, and a single
    *  field would make the component guess which one it was holding. */
@@ -123,7 +128,7 @@ export function indexBlockedBy(issues: NormalizedIssue[]): Map<string, Normalize
 }
 
 function item(over: Partial<StageItem> & Pick<StageItem, 'token' | 'text'>): StageItem {
-  return { hints: [], tone: 'muted', manual: false, rows: 1, issue: null, url: null, ...over }
+  return { hints: [], tone: 'muted', manual: false, rows: 1, kind: null, issue: null, url: null, ...over }
 }
 
 /**
@@ -369,8 +374,12 @@ function renderCi(ctx: StageContext, _t: Translate): StageItem[] {
 
 /**
  * Which `shows` token renders a hand attachment of each kind, when that token
- * is switched on. A kind with no entry — `url` — is never claimed by a token,
- * so it always falls to `renderAttachments`.
+ * is switched on.
+ *
+ * A kind with no entry is never claimed by a token, so it always falls to
+ * `renderAttachments`. That covers `url` and every custom name a workstream
+ * invents — which is the mechanism by which an unknown kind degrades to a
+ * labelled row instead of being rejected.
  */
 const KIND_TOKEN: Record<string, ShowToken | undefined> = {
   spec: 'designdocs',
@@ -403,6 +412,10 @@ function renderAttachments(ctx: StageContext, _t: Translate): StageItem[] {
       item({
         token: 'note',
         text: l.label ?? l.value,
+        // `url` is the deliberately generic kind, so naming it says nothing.
+        // Every other name is the field the workstream chose and is the most
+        // informative thing on the row.
+        kind: l.kind === 'url' ? null : l.kind,
         manual: true,
         url: l.value.startsWith('http') ? l.value : null,
         issue: l.kind === 'issue' && !l.value.startsWith('http') ? l.value : null,

@@ -145,7 +145,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'attach_to_stage',
       description:
-        "Attach something by hand when the automatic link is missing — a spec with no `Linear:` line, a PR naming no issue. kind is 'spec' (a path whose task progress is still read), 'pr' (a pull request URL, shown beside the ones Linear linked itself) or 'url' (any other link). Pick the kind by where it belongs: a PR sent as 'url' lands under the stage's note instead of with the other PRs, and a CI stage need not show notes at all. These show a 'manual' mark: prefer fixing the upstream link, which makes the item appear on its own.",
+        "Attach a field to a stage. `kind` is a FREE LABEL, not a fixed list: any short lowercase slug works, so give the field the name that describes it — 'runbook', 'incident', 'design', whatever this workstream needs. It is stored and displayed under that name.\n\nFive kinds are drawn specially, so prefer them when they fit: 'spec' (a path, shown with the scanned design docs), 'pr' (a pull request URL, shown beside the ones Linear linked itself), 'ci' (a check run), 'issue' (a ticket that matters at this stage without being a member of the workstream) and 'url' (a plain link, with no name shown). Anything else renders as a labelled row carrying its kind — which is a first-class outcome, not a fallback.\n\nEverything attached this way shows a 'manual' mark. Where an upstream link COULD exist — a `Linear:` line in the spec, an issue id in the PR body — fixing it there is better, because the item then appears on its own and stays correct.",
       inputSchema: {
         type: 'object',
         properties: {

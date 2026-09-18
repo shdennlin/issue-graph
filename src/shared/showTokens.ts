@@ -34,24 +34,33 @@ export const SHOW_TOKENS = [
 export type ShowToken = (typeof SHOW_TOKENS)[number]
 
 /**
- * What may be attached to a stage by hand, when the upstream link is missing.
+ * Attachment kinds the app RENDERS RICHLY — it knows where each belongs, so a
+ * `pr` sits beside the pull requests Linear linked itself and a `spec` beside
+ * the scanned ones.
  *
- * Each kind exists because it renders somewhere different: a `spec` is a path
- * the design-doc scanner can still read progress from, a `pr` sits beside the
- * projected pull requests, a `ci` is a check run, an `issue` is a ticket that
- * matters at this stage without being a member of the workstream, and a `url`
- * is just a link. Sending a PR as a `url` would put it under the note rather
- * than with the other PRs — and a CI stage need not even show notes.
+ * This list is NOT a whitelist. A kind is a free label, and any other name is
+ * accepted and drawn as a row carrying that name. That polarity matters: the
+ * known kinds are an ENHANCEMENT, not a gate.
  *
- * `issue` is the one that is NOT a broken projection. A workstream's members
- * are projected onto every stage already; this is for a ticket that is somebody
- * else's — a dependency in another team, an incident that blocked the merge —
- * which belongs to this stage and to nothing else.
+ * An earlier version rejected everything outside this list, on the reasoning
+ * that a kind with no renderer behind it is only a synonym for `url`. That
+ * described the rendering correctly and drew the wrong conclusion from it. The
+ * value of a kind is not what it draws — it is what it NAMES. A field called
+ * `runbook` or `incident` tells the person reading the board, and the agent
+ * writing it, something that a generic link does not, and it does so whether
+ * or not the app has special handling for it.
  *
- * Deliberately NOT a CHECK constraint on the table: growing this list should
- * not need a migration. The cost is that a hand-edited row can hold anything,
- * which is why readers ignore an unknown kind rather than failing.
+ * The one thing the list still owes is honesty about which are which: an agent
+ * is told these render richly and that anything else renders as a label, so it
+ * can reach for the right one when it exists and invent a name when it does
+ * not.
  */
-export const STAGE_LINK_KINDS = ['spec', 'pr', 'ci', 'issue', 'url'] as const
+export const RICH_LINK_KINDS = ['spec', 'pr', 'ci', 'issue', 'url'] as const
 
-export type StageLinkKind = (typeof STAGE_LINK_KINDS)[number]
+export type RichLinkKind = (typeof RICH_LINK_KINDS)[number]
+
+/** How long a kind name may be, and the shape it must take. Lowercase slug so
+ *  two agents writing "Pull Request" and "pull-request" do not create two
+ *  kinds that read the same. */
+export const LINK_KIND_MAX = 24
+export const LINK_KIND_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/

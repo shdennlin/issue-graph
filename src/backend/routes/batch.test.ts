@@ -482,8 +482,16 @@ describe('hand-attached links', () => {
     expect(links).toHaveLength(1)
   })
 
-  it('refuses a kind outside the closed vocabulary', async () => {
-    const res = await req('/api/batches/1/links/ci', 'POST', { kind: 'branch', value: 'x' })
+  it('accepts a kind the app has never heard of', async () => {
+    // Kinds are free labels. The app draws five of them specially; any other
+    // name is the field this workstream needed and renders carrying that name.
+    const res = await req('/api/batches/1/links/ci', 'POST', { kind: 'runbook', value: 'ops/rollback.md' })
+    expect(res.status).toBe(200)
+    expect(links[0]?.kind).toBe('runbook')
+  })
+
+  it('refuses something that is not a kind at all', async () => {
+    const res = await req('/api/batches/1/links/ci', 'POST', { kind: 'has/slash', value: 'x' })
     expect(res.status).toBe(400)
     expect(links).toHaveLength(0)
   })

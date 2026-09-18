@@ -10,9 +10,9 @@
 // fact, and it would go stale silently.
 
 import type { NormalizedIssue, NormalizedPullRequest } from '../shared/types.js'
-import { SHOW_TOKENS, STAGE_LINK_KINDS } from '../shared/showTokens.js'
+import { LINK_KIND_MAX, LINK_KIND_RE, RICH_LINK_KINDS, SHOW_TOKENS } from '../shared/showTokens.js'
 import { daysOnStage, isStale } from '../shared/staleness.js'
-import type { ShowToken, StageLinkKind } from '../shared/showTokens.js'
+import type { ShowToken } from '../shared/showTokens.js'
 
 export interface BatchRow {
   id: number
@@ -39,8 +39,8 @@ export type WorkstreamStatus = 'active' | 'archived'
 // imports stage vocabulary from, while the list itself lives in `shared/` —
 // the lifecycle editor and the stage renderer need the same one, and the web
 // build cannot see `src/backend`.
-export { SHOW_TOKENS, STAGE_LINK_KINDS, daysOnStage, isStale }
-export type { ShowToken, StageLinkKind }
+export { SHOW_TOKENS, RICH_LINK_KINDS, daysOnStage, isStale }
+export type { ShowToken }
 
 export interface StageNoteRow {
   batch_id: number
@@ -308,10 +308,22 @@ export function normalizeNote(raw: unknown): string | null {
   return raw
 }
 
-export function normalizeLinkKind(raw: unknown): StageLinkKind | null {
-  return typeof raw === 'string' && (STAGE_LINK_KINDS as readonly string[]).includes(raw)
-    ? (raw as StageLinkKind)
-    : null
+/**
+ * Validate a kind's SHAPE, not its membership.
+ *
+ * Any lowercase slug is a kind. `RICH_LINK_KINDS` names the ones the app draws
+ * specially; everything else draws as a row carrying its own name, which is
+ * the point — a workstream's fields are the workstream's business, and an
+ * agent filling one should be able to call a runbook a runbook.
+ *
+ * Normalised rather than merely checked, so "Pull Request" and "pull request"
+ * both become `pull-request` instead of becoming two kinds that read the same.
+ */
+export function normalizeLinkKind(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const v = raw.trim().toLowerCase().replace(/[\s_]+/g, '-')
+  if (v.length === 0 || v.length > LINK_KIND_MAX) return null
+  return LINK_KIND_RE.test(v) ? v : null
 }
 
 export function normalizeLinkValue(raw: unknown): string | null {

@@ -10,7 +10,7 @@ import {
   isStale,
   normalizeAssignees,
   normalizeLinkKind,
-  STAGE_LINK_KINDS,
+  RICH_LINK_KINDS,
   normalizeLinkValue,
   normalizeShows,
   normalizeStaleAfterDays,
@@ -286,14 +286,32 @@ describe('normalizeStaleAfterDays', () => {
 })
 
 describe('normalizeLinkKind / normalizeLinkValue', () => {
-  it('accepts every kind in the vocabulary and refuses the rest', () => {
-    // Each kind exists because it renders somewhere different — a `pr` sits
-    // with the PRs Linear linked itself, where sending it as a `url` would put
-    // it under the stage's note instead, on a stage that may not show notes.
-    for (const kind of STAGE_LINK_KINDS) expect(normalizeLinkKind(kind)).toBe(kind)
-    expect(normalizeLinkKind('branch')).toBeNull()
+  it('accepts the kinds the app draws specially', () => {
+    for (const kind of RICH_LINK_KINDS) expect(normalizeLinkKind(kind)).toBe(kind)
+  })
+
+  it('accepts a kind the app has never heard of', () => {
+    // The list is an ENHANCEMENT, not a gate. A kind's value is what it NAMES,
+    // not what it draws — `runbook` tells the reader, and the agent, something
+    // a generic link does not, whether or not there is special handling.
+    expect(normalizeLinkKind('runbook')).toBe('runbook')
+    expect(normalizeLinkKind('incident-report')).toBe('incident-report')
+  })
+
+  it('normalises rather than merely checking, so one thing is not two kinds', () => {
+    // Two agents writing "Pull Request" and "pull_request" must not create two
+    // kinds that read the same.
+    expect(normalizeLinkKind('Pull Request')).toBe('pull-request')
+    expect(normalizeLinkKind('  RUNBOOK  ')).toBe('runbook')
+    expect(normalizeLinkKind('design_doc')).toBe('design-doc')
+  })
+
+  it('still refuses what is not a kind at all', () => {
     expect(normalizeLinkKind('')).toBeNull()
+    expect(normalizeLinkKind('  ')).toBeNull()
     expect(normalizeLinkKind(7)).toBeNull()
+    expect(normalizeLinkKind('has/slash')).toBeNull()
+    expect(normalizeLinkKind('x'.repeat(40))).toBeNull()
   })
 
   it('trims a value and refuses blank or over-long', () => {
