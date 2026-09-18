@@ -27,12 +27,14 @@ import { findView } from '../views'
 import { IssueNode } from './nodes/IssueNode'
 import { MixedContainerNode } from './nodes/MixedContainerNode'
 import { ProjectBackdropNode } from './nodes/ProjectBackdropNode'
+import { StageNode } from './nodes/StageNode'
 import { InlineSearch } from './InlineSearch'
 
 const nodeTypes = {
   issue: IssueNode,
   mixedContainer: MixedContainerNode,
   projectBackdrop: ProjectBackdropNode,
+  stage: StageNode,
 }
 
 function CanvasInner() {
@@ -57,6 +59,7 @@ function CanvasInner() {
   const density = useViewStore((s) => s.density)
   const maxColsPerRow = useViewStore((s) => s.maxColsPerRow)
   const mixGroupBy = useViewStore((s) => s.mixGroupBy)
+  const focusedWorkstreamId = useViewStore((s) => s.focusedWorkstreamId)
   const search = useViewStore((s) => s.search)
   const theme = useViewStore((s) => s.theme)
   const colorMode = theme === 'auto'
@@ -103,9 +106,10 @@ function CanvasInner() {
       maxColsPerRow,
       search,
       mixGroupBy,
+      focusedWorkstreamId,
       measuredHeights: measuredHeights ?? undefined,
     })
-  }, [graph, schema, activeView, filters, staleDays, focusedId, chainRootIds, chainDepthUp, chainDepthDown, showRelated, showHierarchy, selection, myUserId, myUserName, density, maxColsPerRow, search, mixGroupBy, measuredHeights])
+  }, [graph, schema, activeView, filters, staleDays, focusedId, chainRootIds, chainDepthUp, chainDepthDown, showRelated, showHierarchy, selection, myUserId, myUserName, density, maxColsPerRow, search, mixGroupBy, focusedWorkstreamId, measuredHeights])
 
   // Local node state so user drags persist between renders within the same
   // layout-equivalent context. Anything that changes node sizes (density) or
@@ -129,8 +133,10 @@ function CanvasInner() {
   // instead of preserving the pre-measure (overlapping) positions.
   // mixGroupBy belongs here for the same reason activeView does: regrouping
   // reparents every issue node, so preserved drag positions would place cards
-  // at coordinates that belonged to a different container.
-  const layoutSig = `${activeView}|${density}|${mixGroupBy ?? ''}|${measuredHeights ? 'm' : 'e'}|${layoutBump}`
+  // at coordinates that belonged to a different container. focusedWorkstreamId
+  // is the same case one step further — it swaps the Workstreams view between
+  // its two modes, which replaces every node on the canvas.
+  const layoutSig = `${activeView}|${density}|${mixGroupBy ?? ''}|${focusedWorkstreamId ?? ''}|${measuredHeights ? 'm' : 'e'}|${layoutBump}`
   const lastSigRef = useRef(layoutSig)
   useEffect(() => {
     const sigChanged = lastSigRef.current !== layoutSig

@@ -3796,3 +3796,154 @@ label + .settings-help {
 .workstream-title { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-muted); }
 .workstream-blocked { color: var(--warn); white-space: nowrap; }
 .workstream-remove { background: none; border: 0; color: var(--fg-muted); cursor: pointer; padding: 0; }
+
+/* ── Pipeline stage bar (Workstreams view) ─────────────────────────────────
+   Deliberately a different SHAPE from an issue card, not a different colour:
+   a squat bar with a big ordinal on the left. Shape is the one difference
+   that survives dark mode, a colour-blind reader and a screenshot, and it is
+   what makes a row of these read as "step 3 of 8" rather than as more cards.
+   It must also not read as .mixed-container, which is a box that CONTAINS
+   cards and means something else entirely — hence solid border, square-ish
+   corners, and no tint fill.
+
+   Heights here are mirrored by HEAD_H / ITEM_H / BODY_PAD in
+   views/workstream.ts. GraphCanvas measures only `.react-flow__node-issue`,
+   so a stage node never gets a corrected height: if these drift, stages
+   overlap and nothing self-heals. */
+.stage-node {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  background: var(--node-bg);
+  border: 1px solid var(--node-border);
+  /* Squarer than a card on purpose. */
+  border-radius: 4px;
+  border-left: 4px solid var(--node-border);
+  font-size: 12px;
+  overflow: hidden;
+}
+.stage-node.stage-current {
+  border-left-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.stage-node.stage-stale {
+  border-left-color: var(--warn);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--warn) 45%, transparent);
+}
+
+.stage-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  flex: 0 0 34px;
+  padding: 0 10px;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--node-border);
+}
+.stage-ordinal {
+  flex: 0 0 auto;
+  min-width: 20px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-muted);
+}
+.stage-current .stage-ordinal { color: var(--accent); }
+.stage-name {
+  font-weight: 600;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stage-badge {
+  margin-left: auto;
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+}
+.stage-days {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+.stage-badge + .stage-days { margin-left: 0; }
+.stage-days:first-of-type { margin-left: auto; }
+.stage-days-stale { color: var(--warn); font-weight: 600; }
+
+.stage-body {
+  flex: 1 1 auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+}
+
+.stage-item,
+.stage-stream {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  flex: 0 0 22px;
+  box-sizing: border-box;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--fg);
+  text-align: left;
+  text-decoration: none;
+  overflow: hidden;
+}
+a.stage-item:hover,
+button.stage-item:hover,
+.stage-stream:hover {
+  text-decoration: underline;
+  cursor: pointer;
+}
+.stage-item-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stage-item-ok .stage-item-text { color: var(--fg); }
+.stage-item-muted .stage-item-text { color: var(--fg-muted); }
+.stage-item-warn .stage-item-text { color: var(--warn); font-weight: 600; }
+
+.stage-item-hint {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+/* The mark that keeps a hand attachment from looking as good as a projected
+   one. If it did, attaching by hand would quietly become the default and the
+   upstream convention that makes projection work would stop being kept up. */
+.stage-item-manual {
+  flex: 0 0 auto;
+  font-size: 9px;
+  padding: 0 4px;
+  border: 1px dashed var(--fg-muted);
+  border-radius: 3px;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.stage-stream-stale .stage-item-text { color: var(--warn); font-weight: 600; }
+.stage-empty {
+  font-size: 11px;
+  color: var(--fg-muted);
+  font-style: italic;
+}

@@ -548,6 +548,18 @@ export const zhTW: Dict = {
     contributes: '不會關閉議題',
     conflicts: '有衝突',
     blocking: '卡住 {target}',
+    // 節點上的文字。`current` 和 `daysHere` 就是腐化訊號：沒人推進的 stage
+    // 正是整個 view 要讓它現形的失敗模式。
+    current: '目前',
+    daysHere: '已 {n} 天',
+    nothingHere: '沒有東西可顯示',
+    noStreams: '這個 stage 沒有工作線',
+    expandStream: '展開這條工作線的 stages',
+    backToOverview: '所有工作線',
+    manual: '手動',
+    manualHint: '因為沒有東西能自動關聯，所以是手動掛上的。把 Linear 議題編號加到上游，它就會自己出現。',
+    notStarted: '尚未開始',
+    noStages: '還沒有 stage \u2014 先定義你的 pipeline 才能用這個 view。',
   },
   states: {
     started: '進行中',

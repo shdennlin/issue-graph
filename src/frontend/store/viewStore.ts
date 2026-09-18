@@ -16,7 +16,10 @@ import type { RecencyMode, RecencyWindow } from '../lib/recency'
 import * as ft from './filterToggles'
 import { toggle } from './filterToggles'
 
-export type ViewId = 'dependency' | 'mix' | 'project' | 'milestone' | 'designdoc'
+// Must list every view registered in views/index.ts. `workstream` was missing
+// here while the view itself shipped, which is why Toolbar had to cast its
+// setActiveView call — a cast that would equally have accepted a typo.
+export type ViewId = 'dependency' | 'mix' | 'project' | 'milestone' | 'designdoc' | 'workstream'
 export type Density = 'compact' | 'default' | 'verbose'
 export type ThemeMode = 'light' | 'dark' | 'auto'
 // Either a preset (sm/md/lg) or a custom base px value (e.g. 14). When a

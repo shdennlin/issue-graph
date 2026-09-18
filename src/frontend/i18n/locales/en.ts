@@ -566,6 +566,18 @@ export const en = {
     contributes: 'does not close',
     conflicts: 'conflicts',
     blocking: 'blocking {target}',
+    // Node chrome. `current` and `daysHere` are the rot signal: a stage nobody
+    // has moved off is the failure mode this whole view exists to make visible.
+    current: 'current',
+    daysHere: '{n}d here',
+    nothingHere: 'nothing to show',
+    noStreams: 'no workstreams here',
+    expandStream: 'Show this workstream\u2019s stages',
+    backToOverview: 'All workstreams',
+    manual: 'by hand',
+    manualHint: 'Attached by hand because nothing links it automatically. Adding the Linear id upstream makes it appear on its own.',
+    notStarted: 'Not started',
+    noStages: 'No stages yet \u2014 define your pipeline to use this view.',
   },
   states: {
     started: 'In Progress',

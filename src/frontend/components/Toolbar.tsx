@@ -55,6 +55,8 @@ export function Toolbar() {
   const primaryGroup = useSchemaStore((s) => s.schema.primaryGroup)
   const schema = useSchemaStore((s) => s.schema)
   const mixGroupBy = useViewStore((s) => s.mixGroupBy)
+  const focusedWorkstreamId = useViewStore((s) => s.focusedWorkstreamId)
+  const setFocusedWorkstreamId = useViewStore((s) => s.setFocusedWorkstreamId)
   const setMixGroupBy = useViewStore((s) => s.setMixGroupBy)
   const t = useT()
 
@@ -151,7 +153,7 @@ export function Toolbar() {
           <button
             key={v.id}
             className={activeView === v.id ? 'active' : ''}
-            onClick={() => setActiveView(v.id as any)}
+            onClick={() => setActiveView(v.id)}
             title={viewTooltip(v.id)}
           >
             {t(viewLabelKey(v.id))}
@@ -183,6 +185,19 @@ export function Toolbar() {
                 </option>
               ))}
             </select>
+          </div>
+        </>
+      )}
+      {activeView === 'workstream' && focusedWorkstreamId !== null && (
+        <>
+          <div className="sep" />
+          <div className="group">
+            {/* The way back out of a focused workstream. Back/Forward also work,
+                since expanding one is a significant change — but a mode you can
+                only leave through browser history is a mode people get stuck in. */}
+            <button onClick={() => setFocusedWorkstreamId(null)}>
+              {t('stage.backToOverview')}
+            </button>
           </div>
         </>
       )}
