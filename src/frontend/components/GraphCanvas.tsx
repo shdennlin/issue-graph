@@ -243,7 +243,15 @@ function CanvasInner() {
     // isn't a "derive from deps" alternative.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMeasuredHeights(null)
-  }, [activeView, density, layoutBump])
+    // `focusedWorkstreamId` belongs here for the same reason activeView does:
+    // isolating a workstream replaces every node on the canvas. It was missing,
+    // and the consequence was invisible until card-less views started settling
+    // with an EMPTY map — two empty maps compare equal, so `differs` stayed
+    // false, `setMeasuredHeights` never fired, and the fitView consumer never
+    // re-ran. The isolated board kept the previous layout's framing, which put
+    // its first row of stages under the toolbar where nothing could be clicked
+    // or hovered.
+  }, [activeView, density, layoutBump, focusedWorkstreamId])
   // Save viewport snapshot whenever user clicks fit-view, so they can revert.
   // Stored in a ref (not store) — purely UI ephemeral, doesn't affect rendering.
   const lastViewportRef = useRef<Viewport | null>(null)

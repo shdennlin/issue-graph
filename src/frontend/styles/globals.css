@@ -4300,7 +4300,10 @@ button.stage-item:hover,
   background: none;
   color: var(--fg-muted);
   cursor: pointer;
-  opacity: 0;
+  /* Faint, not invisible. At opacity 0 it was still hit-testable, so a click
+     in that spot moved the workstream with nothing on screen to explain it —
+     and nobody could find the control in the first place. */
+  opacity: 0.4;
 }
 .stage-node:hover .stage-move-btn { opacity: 1; }
 .stage-move-btn:hover {
