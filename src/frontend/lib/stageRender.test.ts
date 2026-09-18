@@ -121,10 +121,7 @@ describe('renderStage — dispatch', () => {
     const c = ctx({
       members: [mk('A-1')],
       stage: stage({ shows: ['note', 'issues'] }),
-      workstream: ws({
-        members: ['A-1'],
-        links: [{ stageKey: 'impl', kind: 'url', value: 'https://x', label: null }],
-      }),
+      workstream: ws({ members: ['A-1'], notes: { impl: 'a line' } }),
     })
     expect(renderStage(c, t).map((i) => i.token)).toEqual(['note', 'issues'])
   })
@@ -526,5 +523,61 @@ describe('ci and hand-attached issues', () => {
     // The attachment repeats a member, so it renders with the cached state
     // rather than as a bare identifier.
     expect(renderStage(c, t)[1]?.text).toBe('A-1 · Done')
+  })
+})
+
+describe('hand attachments always render', () => {
+  const link = (kind: string, value = 'https://x', label: string | null = null) => ({
+    stageKey: 'impl',
+    kind,
+    value,
+    label,
+  })
+
+  it('shows a url even on a stage that shows nothing at all', () => {
+    // The trap this replaces: a Figma link attached to a stage whose `shows`
+    // did not include `note` vanished with no trace. `shows` governs
+    // PROJECTIONS; an attachment is already here, put on THIS stage on
+    // purpose, usually because no projection could find it.
+    const c = ctx({
+      stage: stage({ shows: [] }),
+      workstream: ws({ links: [link('url', 'https://figma/abc', 'Figma')] }),
+    })
+    expect(renderStage(c, t)[0]).toMatchObject({ text: 'Figma', manual: true, url: 'https://figma/abc' })
+  })
+
+  it('renders an attachment inside its own box when that box is on', () => {
+    const c = ctx({
+      stage: stage({ shows: ['pullRequests'] }),
+      workstream: ws({ links: [link('pr', 'https://gh/pull/3', 'r#3')] }),
+    })
+    const items = renderStage(c, t)
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ token: 'pullRequests', text: 'r#3' })
+  })
+
+  it('renders it once, not twice, when its box is on', () => {
+    // The fallback must not duplicate what a token already drew.
+    const c = ctx({
+      stage: stage({ shows: ['designdocs'] }),
+      workstream: ws({ links: [link('spec', 'openspec/x/proposal.md', 'x')] }),
+    })
+    expect(renderStage(c, t)).toHaveLength(1)
+  })
+
+  it('falls back when the box for that kind is off', () => {
+    const c = ctx({
+      stage: stage({ shows: ['issues'] }),
+      workstream: ws({ links: [link('pr', 'https://gh/pull/3', 'r#3')] }),
+    })
+    expect(renderStage(c, t)[0]).toMatchObject({ text: 'r#3', manual: true })
+  })
+
+  it('keeps an attached issue clickable as an issue, not as a link', () => {
+    const c = ctx({
+      stage: stage({ shows: [] }),
+      workstream: ws({ links: [link('issue', 'OTHER-9')] }),
+    })
+    expect(renderStage(c, t)[0]).toMatchObject({ text: 'OTHER-9', issue: 'OTHER-9', url: null })
   })
 })

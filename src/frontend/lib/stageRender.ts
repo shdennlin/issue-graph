@@ -308,19 +308,17 @@ function renderNote(ctx: StageContext, _t: Translate): StageItem[] {
   const out: StageItem[] = []
   // The note reads ON its stage, wrapped over as many rows as it needs. An
   // earlier cut showed only its first line, truncated, which was almost
-  // useless — a note is prose and the reason never fits on line one. The fix
-  // was to give it room, not to take it away; the Notes card still carries
-  // every note in full, for reading them together.
+  // useless — a note is prose and the reason never fits on line one.
+  //
+  // Hand-attached URLs used to render here too, which was wrong twice over: a
+  // link is not a note, and a stage that did not show `note` swallowed them
+  // without trace. They come through `renderAttachments` now.
   const body = (ctx.workstream.notes[ctx.stage.key] ?? '').trim()
   if (body.length > 0) {
     // Not `manual` — a note is authored, not a workaround for a broken link.
     out.push(item({ token: 'note', text: body, rows: noteRows(body) }))
   }
 
-  for (const l of ctx.workstream.links) {
-    if (l.stageKey !== ctx.stage.key || l.kind !== 'url') continue
-    out.push(item({ token: 'note', text: l.label ?? l.value, manual: true, url: l.value }))
-  }
   return out
 }
 
@@ -369,6 +367,51 @@ function renderCi(ctx: StageContext, _t: Translate): StageItem[] {
   return out
 }
 
+/**
+ * Which `shows` token renders a hand attachment of each kind, when that token
+ * is switched on. A kind with no entry — `url` — is never claimed by a token,
+ * so it always falls to `renderAttachments`.
+ */
+const KIND_TOKEN: Record<string, ShowToken | undefined> = {
+  spec: 'designdocs',
+  pr: 'pullRequests',
+  ci: 'ci',
+  issue: 'issues',
+}
+
+/**
+ * Hand attachments that no active token has already drawn.
+ *
+ * `shows` governs PROJECTIONS — "go and read the members' PRs". An attachment
+ * is not a projection: it is already here, and a person put it on THIS stage
+ * deliberately, usually because the projection could not find it. Dropping it
+ * because a checkbox is off is the app overruling an explicit act, and it did
+ * so silently — a Figma link attached to a stage that did not show `note`
+ * vanished with no trace at all.
+ *
+ * So attachments always render. Inside its own box when that box is on, and
+ * here when it is not.
+ */
+function renderAttachments(ctx: StageContext, _t: Translate): StageItem[] {
+  const shown = new Set(ctx.stage.shows)
+  const out: StageItem[] = []
+  for (const l of ctx.workstream.links) {
+    if (l.stageKey !== ctx.stage.key) continue
+    const token = KIND_TOKEN[l.kind]
+    if (token && shown.has(token)) continue
+    out.push(
+      item({
+        token: 'note',
+        text: l.label ?? l.value,
+        manual: true,
+        url: l.value.startsWith('http') ? l.value : null,
+        issue: l.kind === 'issue' && !l.value.startsWith('http') ? l.value : null,
+      }),
+    )
+  }
+  return out
+}
+
 const RENDERERS: Record<ShowToken, (ctx: StageContext, t: Translate) => StageItem[]> = {
   issues: renderIssues,
   sessions: renderSessions,
@@ -393,5 +436,8 @@ export function renderStage(ctx: StageContext, t: Translate): StageItem[] {
     const fn = RENDERERS[token as ShowToken]
     if (fn) out.push(...fn(ctx, t))
   }
+  // Last, and outside the token loop on purpose: an attachment the stage's
+  // own boxes did not claim still has to appear somewhere.
+  out.push(...renderAttachments(ctx, t))
   return out
 }
