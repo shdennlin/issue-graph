@@ -52,6 +52,10 @@ const MUST_SURVIVE = [
   'lifecycle_stage',
   'batch',
   'batch_member',
+  // A workstream's notes and its hand-attached links are typed by a person and
+  // cannot be recomputed from anything.
+  'workstream_stage_note',
+  'workstream_stage_link',
   // A reset is not a reason to forget a session that is running right now.
   'agent_session',
   'annotation',

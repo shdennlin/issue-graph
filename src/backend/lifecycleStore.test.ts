@@ -167,6 +167,8 @@ describe('row → DTO', () => {
         sort_order: 2,
         states: '["In Progress"]',
         next_command: '/spectra-apply',
+        shows: '["pullRequests"]',
+        stale_after_days: 3,
         created_at: 10,
         updated_at: 20,
       }),
@@ -177,6 +179,8 @@ describe('row → DTO', () => {
       sortOrder: 2,
       states: ['In Progress'],
       nextCommand: '/spectra-apply',
+      shows: ['pullRequests'],
+      staleAfterDays: 3,
       createdAt: 10,
       updatedAt: 20,
     })

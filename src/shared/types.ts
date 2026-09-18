@@ -303,9 +303,21 @@ export interface LifecycleStageDTO {
   /** Compatible Linear state names, e.g. ["In Progress"]. Empty = compatible
    *  with everything, which is how a stage opts out of conflict detection. */
   states: string[]
-  /** What to run next while an issue sits here. Injected into an agent session
-   *  by the SessionStart hook; null when the stage has no obvious next step. */
+  /** What usually happens here — a hint for whoever picks the work up, not a
+   *  rule. Nothing validates it or triggers it. */
   nextCommand: string | null
+  /**
+   * Which facts this stage renders, from a closed vocabulary.
+   *
+   * These are PROJECTIONS, not fields: `pullRequests` means "read the members'
+   * PRs", never "this stage stores PRs". So for most of what a stage shows
+   * there is nothing to update on the stage — you update upstream.
+   */
+  shows: string[]
+  /** How long a workstream may sit here before it is worth a nudge. Per stage,
+   *  because the honest answer differs wildly — Discuss can take a fortnight,
+   *  CI sitting for a day is wrong. Null means this stage never goes stale. */
+  staleAfterDays: number | null
   createdAt: number
   updatedAt: number
 }
@@ -362,6 +374,18 @@ export interface WorkstreamSummaryDTO {
   id: number
   name: string
   members: string[]
+  /** Which pipeline stage this feature has reached, or null before one is set.
+   *  Stored and set explicitly — a pipeline describes a feature moving through
+   *  it, and nothing else records where it has got to. */
+  stage: string | null
+  /** When the stage last changed, rewritten on a move backwards too: staleness
+   *  times the CURRENT occupancy, not the first one. */
+  stageEnteredAt: number | null
+  status: 'active' | 'archived'
+  /** Agents this feature is assigned to. Durable — an agent that is not running
+   *  right now is still whose job the work is, which is what separates this
+   *  from AgentSessionDTO. */
+  assignees: string[]
 }
 
 export interface GraphData {

@@ -27,6 +27,9 @@ export interface LifecycleStageRow {
    *  hand-edited in the DB, so every read goes through parseStates. */
   states: string
   next_command: string | null
+  /** JSON array of show tokens, read tolerantly like `states`. */
+  shows: string
+  stale_after_days: number | null
   created_at: number
   updated_at: number
 }
@@ -158,6 +161,8 @@ export function lifecycleRowToDTO(row: LifecycleStageRow): LifecycleStageDTO {
     sortOrder: row.sort_order,
     states: parseStates(row.states),
     nextCommand: row.next_command,
+    shows: parseStates(row.shows),
+    staleAfterDays: row.stale_after_days,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

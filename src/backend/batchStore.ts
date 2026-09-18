@@ -15,6 +15,53 @@ export interface BatchRow {
   id: number
   name: string
   created_at: number
+  stage_key: string | null
+  status: string
+  stage_entered_at: number | null
+  /** JSON array of agent names/ids. Text column, read tolerantly. */
+  assignees: string
+}
+
+export type WorkstreamStatus = 'active' | 'archived'
+
+/**
+ * What a stage may render.
+ *
+ * A CLOSED vocabulary, because the app can only draw what it holds data for —
+ * but which tokens a stage uses is entirely the workspace's choice. Adding a
+ * source later (CI checks, once a GitHub source exists) is a new token here and
+ * nothing else.
+ *
+ * These are PROJECTIONS, not fields. `pullRequests` means "go and read the
+ * members' PRs", never "this stage stores PRs" — so for most of what a stage
+ * shows there is nothing to update on the stage at all. You update upstream.
+ */
+export const SHOW_TOKENS = [
+  'issues',
+  'sessions',
+  'pullRequests',
+  'designdocs',
+  'note',
+  'blockers',
+] as const
+export type ShowToken = (typeof SHOW_TOKENS)[number]
+
+export interface StageNoteRow {
+  batch_id: number
+  stage_key: string
+  body: string
+  updated_at: number
+}
+
+export type StageLinkKind = 'spec' | 'url'
+
+export interface StageLinkRow {
+  batch_id: number
+  stage_key: string
+  kind: string
+  value: string
+  label: string | null
+  created_at: number
 }
 
 export interface BatchMemberRow {
@@ -187,4 +234,150 @@ export function batchProgress(members: BatchMemberRow[]): BatchProgress {
     else if (m.claimed_by !== null) claimed++
   }
   return { total: members.length, done, claimed }
+}
+
+
+export const ASSIGNEES_MAX = 20
+export const NOTE_MAX = 16 * 1024
+export const LINK_VALUE_MAX = 1000
+
+/** Two adjectives about the workstream itself. Anything else is refused rather
+ *  than coerced, so a typo surfaces instead of silently filing something away. */
+export function normalizeStatus(raw: unknown): WorkstreamStatus | null {
+  if (raw === 'active' || raw === 'archived') return raw
+  return null
+}
+
+/** Agent names or ids. Deduped case-sensitively — an agent id is opaque and
+ *  two spellings may genuinely be two agents. */
+export function normalizeAssignees(raw: unknown): string[] | null {
+  if (raw == null) return []
+  if (!Array.isArray(raw)) return null
+  if (raw.length > ASSIGNEES_MAX) return null
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const item of raw) {
+    if (typeof item !== 'string') return null
+    const v = item.trim()
+    if (v.length === 0) continue
+    if (v.length > 200) return null
+    if (seen.has(v)) continue
+    seen.add(v)
+    out.push(v)
+  }
+  return out
+}
+
+/**
+ * Validate a stage's `shows` list.
+ *
+ * An unknown token is REJECTED rather than dropped. Dropping it would leave the
+ * stage rendering nothing with no explanation — a typo would look exactly like
+ * a deliberately empty stage, which is itself a valid configuration.
+ */
+export function normalizeShows(raw: unknown): ShowToken[] | null {
+  if (raw == null) return []
+  if (!Array.isArray(raw)) return null
+  if (raw.length > SHOW_TOKENS.length) return null
+  const seen = new Set<string>()
+  const out: ShowToken[] = []
+  for (const item of raw) {
+    if (typeof item !== 'string') return null
+    if (!(SHOW_TOKENS as readonly string[]).includes(item)) return null
+    if (seen.has(item)) continue
+    seen.add(item)
+    out.push(item as ShowToken)
+  }
+  return out
+}
+
+/** Tolerant read of a JSON text column, matching parseStates' contract: a
+ *  hand-edited bad row degrades to empty rather than throwing inside a response. */
+export function parseStringArray(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+export function normalizeStaleAfterDays(raw: unknown): number | null | undefined {
+  if (raw == null) return null
+  if (typeof raw !== 'number' || !Number.isInteger(raw) || raw < 0 || raw > 3650) return undefined
+  return raw
+}
+
+export function normalizeNote(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  if (raw.length > NOTE_MAX) return null
+  return raw
+}
+
+export function normalizeLinkKind(raw: unknown): StageLinkKind | null {
+  return raw === 'spec' || raw === 'url' ? raw : null
+}
+
+export function normalizeLinkValue(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const v = raw.trim()
+  if (v.length === 0 || v.length > LINK_VALUE_MAX) return null
+  return v
+}
+
+/**
+ * Has this workstream sat on its stage longer than that stage allows?
+ *
+ * A null threshold means the stage never goes stale — the honest setting for a
+ * Discuss stage, which can legitimately run for weeks. A null
+ * `stageEnteredAt` means nothing has set a stage yet, which is not stale either.
+ *
+ * Stalling is not by itself wrong: this work runs days to a month. What is
+ * wrong is stalling FOR THAT STAGE, which is why the threshold is per stage
+ * rather than one number for the pipeline.
+ */
+export function isStale(
+  stageEnteredAt: number | null,
+  staleAfterDays: number | null,
+  now: number,
+): boolean {
+  if (stageEnteredAt === null || staleAfterDays === null) return false
+  return now - stageEnteredAt > staleAfterDays * 86_400_000
+}
+
+/** Whole days a workstream has sat where it is, for the nudge's wording. */
+export function daysOnStage(stageEnteredAt: number | null, now: number): number | null {
+  if (stageEnteredAt === null) return null
+  return Math.max(0, Math.floor((now - stageEnteredAt) / 86_400_000))
+}
+
+/**
+ * Is every member finished while the stage says otherwise?
+ *
+ * This is the EVIDENCE signal, and it is stronger than staleness: staleness is
+ * a suspicion that something is stuck, this is a proof that the stage is lying.
+ * A hand-maintained stage is the part of this design most likely to rot, and
+ * nothing advances it automatically — so the system has to be able to say so.
+ *
+ * Returns false for an empty workstream and for the last stage, where "every
+ * member done" is simply the expected end state rather than a discrepancy.
+ */
+export function stageAdvanceEvidence(
+  members: BatchMemberRow[],
+  issues: NormalizedIssue[],
+  isLastStage: boolean,
+): boolean {
+  if (isLastStage || members.length === 0) return false
+  const byId = new Map(issues.map((i) => [i.identifier, i]))
+  let seen = 0
+  for (const m of members) {
+    const issue = byId.get(m.identifier)
+    // An unknown member proves nothing either way — it may be outside the cache
+    // window rather than finished.
+    if (!issue) return false
+    const t = issue.state?.type
+    if (t !== 'completed' && t !== 'canceled') return false
+    seen++
+  }
+  return seen > 0
 }

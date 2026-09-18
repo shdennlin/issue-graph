@@ -11,6 +11,7 @@ import type {
 import { getDb } from './db.js'
 import { liveSessions, type AgentSessionRow } from './agentSessionStore.js'
 import { lifecycleRowToDTO, type LifecycleStageRow } from './lifecycleStore.js'
+import { parseStringArray } from './batchStore.js'
 import { loadConfig } from './lib/env.js'
 import { settingInt } from './lib/settings.js'
 
@@ -289,9 +290,17 @@ export function readLifecycleStages(): LifecycleStageDTO[] {
 /** Workstreams with their membership, for the workstream view. */
 export function readWorkstreamSummaries(): WorkstreamSummaryDTO[] {
   const db = getDb()
-  const rows = db.prepare('SELECT id, name FROM batch ORDER BY created_at DESC, id DESC').all() as {
+  const rows = db
+    .prepare(
+      'SELECT id, name, stage_key, status, stage_entered_at, assignees FROM batch ORDER BY created_at DESC, id DESC',
+    )
+    .all() as {
     id: number
     name: string
+    stage_key: string | null
+    status: string
+    stage_entered_at: number | null
+    assignees: string
   }[]
   const members = db
     .prepare('SELECT batch_id, identifier FROM batch_member')
@@ -302,7 +311,15 @@ export function readWorkstreamSummaries(): WorkstreamSummaryDTO[] {
     if (list) list.push(m.identifier)
     else byBatch.set(m.batch_id, [m.identifier])
   }
-  return rows.map((r) => ({ id: r.id, name: r.name, members: byBatch.get(r.id) ?? [] }))
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    members: byBatch.get(r.id) ?? [],
+    stage: r.stage_key,
+    stageEnteredAt: r.stage_entered_at,
+    status: r.status === 'archived' ? ('archived' as const) : ('active' as const),
+    assignees: parseStringArray(r.assignees),
+  }))
 }
 
 /**

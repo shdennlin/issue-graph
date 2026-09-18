@@ -29,12 +29,15 @@ import {
   slugifyStageName,
   type LifecycleStageRow,
 } from '../lifecycleStore.js'
+import { normalizeShows, normalizeStaleAfterDays } from '../batchStore.js'
 
 const CreateSchema = z.object({
   key: z.string().optional(),
   name: z.string(),
   states: z.unknown().optional(),
   nextCommand: z.unknown().optional(),
+  shows: z.unknown().optional(),
+  staleAfterDays: z.unknown().optional(),
 })
 
 const PatchSchema = z
@@ -43,19 +46,23 @@ const PatchSchema = z
     name: z.string().optional(),
     states: z.unknown().optional(),
     nextCommand: z.unknown().optional(),
+    shows: z.unknown().optional(),
+    staleAfterDays: z.unknown().optional(),
   })
   .refine(
     (v) =>
       v.key !== undefined ||
       v.name !== undefined ||
       v.states !== undefined ||
-      v.nextCommand !== undefined,
+      v.nextCommand !== undefined ||
+      v.shows !== undefined ||
+      v.staleAfterDays !== undefined,
     { message: 'nothing to update' },
   )
 
 const ReorderSchema = z.object({ keys: z.unknown() })
 
-const SELECT = `SELECT id, key, name, sort_order, states, next_command, created_at, updated_at FROM lifecycle_stage`
+const SELECT = `SELECT id, key, name, sort_order, states, next_command, shows, stale_after_days, created_at, updated_at FROM lifecycle_stage`
 
 const denyOrigin = () => ({ error: { code: 'origin', message: 'cross-origin denied' } }) as const
 const invalid = (message: string) => ({ error: { code: 'invalid', message } }) as const
@@ -81,6 +88,10 @@ lifecycleRoutes.post('/api/lifecycle', async (c) => {
   if (states === null) return c.json(invalid('bad states'), 400)
   const nextCommand = normalizeNextCommand(parsed.data.nextCommand)
   if (nextCommand === undefined) return c.json(invalid('bad nextCommand'), 400)
+  const shows = normalizeShows(parsed.data.shows)
+  if (shows === null) return c.json(invalid('unknown shows token'), 400)
+  const staleAfterDays = normalizeStaleAfterDays(parsed.data.staleAfterDays)
+  if (staleAfterDays === undefined) return c.json(invalid('bad staleAfterDays'), 400)
 
   const db = getDb()
   const rows = db.prepare(`SELECT id, key, name, sort_order FROM lifecycle_stage`).all() as Pick<
@@ -108,10 +119,20 @@ lifecycleRoutes.post('/api/lifecycle', async (c) => {
   const sortOrder = nextSortOrder(rows)
   const r = db
     .prepare(
-      `INSERT INTO lifecycle_stage(key, name, sort_order, states, next_command, created_at, updated_at)
-       VALUES(?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO lifecycle_stage(key, name, sort_order, states, next_command, shows, stale_after_days, created_at, updated_at)
+       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(key, name, sortOrder, JSON.stringify(states), nextCommand, now, now)
+    .run(
+      key,
+      name,
+      sortOrder,
+      JSON.stringify(states),
+      nextCommand,
+      JSON.stringify(shows),
+      staleAfterDays,
+      now,
+      now,
+    )
   return c.json(
     lifecycleRowToDTO({
       id: Number(r.lastInsertRowid),
@@ -120,6 +141,8 @@ lifecycleRoutes.post('/api/lifecycle', async (c) => {
       sort_order: sortOrder,
       states: JSON.stringify(states),
       next_command: nextCommand,
+      shows: JSON.stringify(shows),
+      stale_after_days: staleAfterDays,
       created_at: now,
       updated_at: now,
     }),
@@ -177,6 +200,19 @@ lifecycleRoutes.patch('/api/lifecycle/:id', async (c) => {
     if (nextCommand === undefined) return c.json(invalid('bad nextCommand'), 400)
     sets.push('next_command = ?')
     args.push(nextCommand)
+  }
+
+  if (parsed.data.shows !== undefined) {
+    const shows = normalizeShows(parsed.data.shows)
+    if (shows === null) return c.json(invalid('unknown shows token'), 400)
+    sets.push('shows = ?')
+    args.push(JSON.stringify(shows))
+  }
+  if (parsed.data.staleAfterDays !== undefined) {
+    const days = normalizeStaleAfterDays(parsed.data.staleAfterDays)
+    if (days === undefined) return c.json(invalid('bad staleAfterDays'), 400)
+    sets.push('stale_after_days = ?')
+    args.push(days === null ? null : String(days))
   }
 
   sets.push('updated_at = ?')

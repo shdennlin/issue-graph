@@ -1,8 +1,21 @@
 import { describe, it, expect } from 'vitest'
 import type { NormalizedIssue } from '../shared/types.js'
 import {
+  ASSIGNEES_MAX,
   BATCH_MEMBERS_MAX,
   BATCH_NAME_MAX,
+  LINK_VALUE_MAX,
+  SHOW_TOKENS,
+  daysOnStage,
+  isStale,
+  normalizeAssignees,
+  normalizeLinkKind,
+  normalizeLinkValue,
+  normalizeShows,
+  normalizeStaleAfterDays,
+  normalizeStatus,
+  parseStringArray,
+  stageAdvanceEvidence,
   batchProgress,
   nextCandidate,
   normalizeBatchName,
@@ -178,5 +191,172 @@ describe('batchProgress', () => {
       done: 1,
       claimed: 0,
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The workstream's own fields
+// ---------------------------------------------------------------------------
+
+describe('normalizeStatus', () => {
+  it('accepts exactly the two values', () => {
+    expect(normalizeStatus('active')).toBe('active')
+    expect(normalizeStatus('archived')).toBe('archived')
+  })
+
+  it('refuses anything else rather than coercing', () => {
+    // A typo must surface. Coercing to a default would silently file a
+    // workstream away, or silently un-file one.
+    expect(normalizeStatus('paused')).toBeNull()
+    expect(normalizeStatus('Archived')).toBeNull()
+    expect(normalizeStatus(null)).toBeNull()
+  })
+})
+
+describe('normalizeAssignees', () => {
+  it('trims, drops blanks and de-duplicates', () => {
+    expect(normalizeAssignees([' claude-1 ', 'claude-1', '', 'claude-2'])).toEqual([
+      'claude-1',
+      'claude-2',
+    ])
+  })
+
+  it('treats absent as empty', () => {
+    expect(normalizeAssignees(null)).toEqual([])
+    expect(normalizeAssignees(undefined)).toEqual([])
+  })
+
+  it('rejects a non-array, a non-string member and an over-long list', () => {
+    expect(normalizeAssignees('claude-1')).toBeNull()
+    expect(normalizeAssignees([1])).toBeNull()
+    expect(normalizeAssignees(new Array(ASSIGNEES_MAX + 1).fill('a'))).toBeNull()
+  })
+})
+
+describe('normalizeShows', () => {
+  it('accepts tokens from the vocabulary, de-duplicated and in order', () => {
+    expect(normalizeShows(['pullRequests', 'note', 'pullRequests'])).toEqual([
+      'pullRequests',
+      'note',
+    ])
+  })
+
+  it('accepts an empty list — a stage may draw its name and nothing else', () => {
+    expect(normalizeShows([])).toEqual([])
+    expect(normalizeShows(null)).toEqual([])
+  })
+
+  it('REJECTS an unknown token rather than dropping it', () => {
+    // Dropping would leave the stage rendering nothing with no explanation, and
+    // a typo would look exactly like a deliberately empty stage — which is
+    // itself a valid configuration.
+    expect(normalizeShows(['pullRequests', 'pulRequests'])).toBeNull()
+    expect(normalizeShows(['checks'])).toBeNull()
+  })
+
+  it('covers every token the vocabulary declares', () => {
+    expect(normalizeShows([...SHOW_TOKENS])).toEqual([...SHOW_TOKENS])
+  })
+})
+
+describe('parseStringArray', () => {
+  it('reads a stored array and degrades a bad column to empty', () => {
+    expect(parseStringArray('["claude-1"]')).toEqual(['claude-1'])
+    expect(parseStringArray('not json')).toEqual([])
+    expect(parseStringArray('{"a":1}')).toEqual([])
+    expect(parseStringArray('[1,"ok",null]')).toEqual(['ok'])
+  })
+})
+
+describe('normalizeStaleAfterDays', () => {
+  it('accepts a whole number of days, and null for "never"', () => {
+    expect(normalizeStaleAfterDays(7)).toBe(7)
+    expect(normalizeStaleAfterDays(0)).toBe(0)
+    expect(normalizeStaleAfterDays(null)).toBeNull()
+  })
+
+  it('signals invalid input as undefined, distinct from a valid null', () => {
+    // null means "this stage never goes stale" and is stored; undefined means
+    // reject the request. Collapsing them would silently disable a nudge.
+    expect(normalizeStaleAfterDays(1.5)).toBeUndefined()
+    expect(normalizeStaleAfterDays(-1)).toBeUndefined()
+    expect(normalizeStaleAfterDays('7')).toBeUndefined()
+  })
+})
+
+describe('normalizeLinkKind / normalizeLinkValue', () => {
+  it('accepts the two kinds and refuses others', () => {
+    expect(normalizeLinkKind('spec')).toBe('spec')
+    expect(normalizeLinkKind('url')).toBe('url')
+    expect(normalizeLinkKind('pr')).toBeNull()
+  })
+
+  it('trims a value and refuses blank or over-long', () => {
+    expect(normalizeLinkValue('  openspec/changes/x  ')).toBe('openspec/changes/x')
+    expect(normalizeLinkValue('   ')).toBeNull()
+    expect(normalizeLinkValue('x'.repeat(LINK_VALUE_MAX + 1))).toBeNull()
+  })
+})
+
+describe('isStale', () => {
+  const DAY = 86_400_000
+  const now = 10 * DAY
+
+  it('is stale past the stage’s own threshold', () => {
+    expect(isStale(now - 6 * DAY, 5, now)).toBe(true)
+    expect(isStale(now - 4 * DAY, 5, now)).toBe(false)
+  })
+
+  it('never goes stale when the stage sets no threshold', () => {
+    // The honest setting for a Discuss stage, which can legitimately run for
+    // weeks. Stalling is only wrong relative to the stage.
+    expect(isStale(now - 100 * DAY, null, now)).toBe(false)
+  })
+
+  it('is not stale before any stage has been set', () => {
+    expect(isStale(null, 1, now)).toBe(false)
+  })
+
+  it('reports whole days for the wording', () => {
+    expect(daysOnStage(now - 9.5 * DAY, now)).toBe(9)
+    expect(daysOnStage(now + DAY, now)).toBe(0)
+    expect(daysOnStage(null, now)).toBeNull()
+  })
+})
+
+describe('stageAdvanceEvidence', () => {
+  const at = (id: string, type: 'completed' | 'canceled' | 'started'): NormalizedIssue =>
+    ({ identifier: id, state: { name: type, type }, relations: [] }) as unknown as NormalizedIssue
+  const done = (id: string) => at(id, 'completed')
+  const open = (id: string) => at(id, 'started')
+
+  it('fires when every member is finished but the stage is not the last', () => {
+    // The proof signal: not "this looks stuck" but "the stage is lying".
+    expect(
+      stageAdvanceEvidence([member('ONE-1'), member('ONE-2')], [done('ONE-1'), done('ONE-2')], false),
+    ).toBe(true)
+  })
+
+  it('counts canceled as finished', () => {
+    const canceled = at('ONE-2', 'canceled')
+    expect(stageAdvanceEvidence([member('ONE-1'), member('ONE-2')], [done('ONE-1'), canceled], false)).toBe(true)
+  })
+
+  it('stays quiet while any member is open', () => {
+    expect(stageAdvanceEvidence([member('ONE-1'), member('ONE-2')], [done('ONE-1'), open('ONE-2')], false)).toBe(false)
+  })
+
+  it('stays quiet on the last stage — that is the expected end state', () => {
+    expect(stageAdvanceEvidence([member('ONE-1')], [done('ONE-1')], true)).toBe(false)
+  })
+
+  it('stays quiet for an empty workstream', () => {
+    expect(stageAdvanceEvidence([], [], false)).toBe(false)
+  })
+
+  it('stays quiet when a member is not in the cache', () => {
+    // Absent proves nothing either way — it may be outside the scope window
+    // rather than finished.
+    expect(stageAdvanceEvidence([member('ONE-1'), member('ONE-9')], [done('ONE-1')], false)).toBe(false)
   })
 })

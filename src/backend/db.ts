@@ -202,6 +202,69 @@ const MIGRATIONS: string[] = [
   // stage cannot be derived and must be stored. Only its subject changed — which
   // is why lifecycle_stage needed no schema change at all.
   `DROP TABLE IF EXISTS issue_stage;`,
+
+  // 10. The workstream's own fields.
+  //
+  // `stage_key` is where the pipeline actually lives now. It is deliberately NOT
+  // a foreign key, for the reason issue_stage.stage_key was not: deleting a
+  // stage must degrade a workstream to "unknown", which is recoverable by
+  // re-creating the stage, rather than erase the assignment.
+  //
+  // `stage_entered_at` is rewritten on EVERY stage change, including a move
+  // backwards. Staleness has to time the current occupancy — a workstream that
+  // failed CI, went back to Implementing for three days and returned should not
+  // be told it has been at CI for five.
+  //
+  // `status` is `active` | `archived`. Two adjectives about the workstream
+  // itself, and `archived` is the word `note` already uses. A third value
+  // (`paused`) waits until someone actually wants to shelve one without calling
+  // it finished — a status nobody sets is a field that lies.
+  //
+  // `assignees` is durable and separate from agent_session: an agent that is not
+  // running right now is still whose job the work is.
+  `ALTER TABLE batch ADD COLUMN stage_key TEXT;`,
+  `ALTER TABLE batch ADD COLUMN status TEXT NOT NULL DEFAULT 'active';`,
+  `ALTER TABLE batch ADD COLUMN stage_entered_at INTEGER;`,
+  `ALTER TABLE batch ADD COLUMN assignees TEXT NOT NULL DEFAULT '[]';`,
+  `CREATE INDEX IF NOT EXISTS idx_batch_status ON batch(status);`,
+
+  // `shows` is a list of PROJECTIONS, not fields: `pullRequests` means "go and
+  // read the members' PRs", never "this stage stores PRs". The vocabulary is
+  // closed because the app can only draw what it holds data for; which tokens a
+  // stage uses is entirely the workspace's choice.
+  //
+  // `stale_after_days` is per stage because the honest answer differs wildly —
+  // a Discuss stage can sit for a fortnight, a CI stage sitting for a day is
+  // wrong. Null means this stage never goes stale.
+  `ALTER TABLE lifecycle_stage ADD COLUMN shows TEXT NOT NULL DEFAULT '[]';`,
+  `ALTER TABLE lifecycle_stage ADD COLUMN stale_after_days INTEGER;`,
+
+  // One free-markdown note per workstream per stage. Not an append-only log:
+  // a log nobody prunes is one more thing that rots, and an agent will fill it.
+  `CREATE TABLE IF NOT EXISTS workstream_stage_note (
+     batch_id INTEGER NOT NULL,
+     stage_key TEXT NOT NULL,
+     body TEXT NOT NULL,
+     updated_at INTEGER NOT NULL,
+     PRIMARY KEY (batch_id, stage_key)
+   );`,
+
+  // Hand-attached items, for when the upstream link is missing: a spec with no
+  // `Linear:` line, a PR whose branch and body name no issue. `kind` is closed —
+  // 'spec' (a path the scanner can still read progress from) or 'url' (rendered
+  // as a link and nothing more). These render with a visible "manual" mark: if a
+  // hand attachment looked as good as a projected one it would become the
+  // default, and the convention that makes projection work would stop being
+  // followed.
+  `CREATE TABLE IF NOT EXISTS workstream_stage_link (
+     batch_id INTEGER NOT NULL,
+     stage_key TEXT NOT NULL,
+     kind TEXT NOT NULL,
+     value TEXT NOT NULL,
+     label TEXT,
+     created_at INTEGER NOT NULL,
+     PRIMARY KEY (batch_id, stage_key, kind, value)
+   );`,
 ]
 
 // One Database instance per workspace id. Each profile has its own SQLITE_PATH
