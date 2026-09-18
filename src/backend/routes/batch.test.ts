@@ -15,8 +15,22 @@ interface Member {
   done_at: number | null
 }
 
-const batches: { id: number; name: string; created_at: number }[] = []
+interface Batch {
+  id: number
+  name: string
+  created_at: number
+  stage_key: string | null
+  status: string
+  stage_entered_at: number | null
+  assignees: string
+}
+
+const batches: Batch[] = []
 const members: Member[] = []
+const notes: { batch_id: number; stage_key: string; body: string }[] = []
+const links: { batch_id: number; stage_key: string; kind: string; value: string }[] = []
+/** Stage keys the fake lifecycle table defines. */
+const stageKeys: string[] = []
 let nextId = 1
 let token: string | undefined
 
@@ -27,11 +41,30 @@ vi.mock('../db.js', () => ({
       (items: unknown) =>
         fn(items),
     prepare: (sql: string) => ({
-      all: (batchId?: number) =>
-        sql.includes('FROM batch_member')
-          ? members.filter((m) => m.batch_id === batchId)
-          : [...batches],
-      get: (id: number) => batches.find((b) => b.id === id),
+      all: (batchId?: number) => {
+        if (sql.includes('FROM batch_member')) return members.filter((m) => m.batch_id === batchId)
+        if (sql.includes('FROM workstream_stage_note')) {
+          return notes.filter((n) => n.batch_id === batchId).map((n) => ({ ...n, updated_at: 0 }))
+        }
+        if (sql.includes('FROM workstream_stage_link')) {
+          return links
+            .filter((l) => l.batch_id === batchId)
+            .map((l) => ({ ...l, label: null, created_at: 0 }))
+        }
+        return [...batches]
+      },
+      // bun:sqlite answers a miss with NULL, not undefined. The mock does the
+      // same on purpose: a `!== undefined` check passed here and failed against
+      // a real server, letting every unknown stage key through.
+      get: (a: number | string, b?: string) => {
+        if (sql.includes('FROM lifecycle_stage')) {
+          return stageKeys.includes(String(a)) ? { key: a } : null
+        }
+        if (sql.includes('FROM workstream_stage_note')) {
+          return notes.find((n) => n.batch_id === a && n.stage_key === b) ?? null
+        }
+        return batches.find((x) => x.id === a) ?? null
+      },
       run: (...args: unknown[]) => {
         const s = sql.trimStart()
         if (s.startsWith('INSERT INTO batch_member')) {
@@ -40,10 +73,51 @@ vi.mock('../db.js', () => ({
           return { changes: 1 }
         }
         if (s.startsWith('INSERT INTO batch')) {
-          const [name, created_at] = args as [string, number]
-          batches.push({ id: nextId, name, created_at })
+          const [name, created_at, stage_key, stage_entered_at] = args as [
+            string,
+            number,
+            string | null,
+            number | null,
+          ]
+          batches.push({
+            id: nextId,
+            name,
+            created_at,
+            stage_key: stage_key ?? null,
+            status: 'active',
+            stage_entered_at: stage_entered_at ?? null,
+            assignees: '[]',
+          })
           return { lastInsertRowid: nextId++, changes: 1 }
         }
+        if (s.startsWith('INSERT INTO workstream_stage_note')) {
+          const [batch_id, stage_key, body] = args as [number, string, string]
+          const found = notes.find((n) => n.batch_id === batch_id && n.stage_key === stage_key)
+          if (found) found.body = body
+          else notes.push({ batch_id, stage_key, body })
+          return { changes: 1 }
+        }
+        if (s.startsWith('INSERT OR IGNORE INTO workstream_stage_link')) {
+          const [batch_id, stage_key, kind, value] = args as [number, string, string, string]
+          if (!links.some((l) => l.batch_id === batch_id && l.stage_key === stage_key && l.value === value)) {
+            links.push({ batch_id, stage_key, kind, value })
+          }
+          return { changes: 1 }
+        }
+        if (s.startsWith('UPDATE batch SET')) {
+          // The route builds the SET clause dynamically, so replay it by
+          // pairing each assignment with its argument, id last.
+          const cols = [...sql.matchAll(/(\w+) = \?/g)].map((m) => m[1])
+          const id = args[args.length - 1] as number
+          const row = batches.find((x) => x.id === id)
+          if (!row) return { changes: 0 }
+          cols.forEach((col, i) => {
+            ;(row as unknown as Record<string, unknown>)[col as string] = args[i]
+          })
+          return { changes: 1 }
+        }
+        if (s.startsWith('DELETE FROM workstream_stage_note')) return { changes: 1 }
+        if (s.startsWith('DELETE FROM workstream_stage_link')) return { changes: 1 }
         if (s.startsWith('UPDATE batch_member SET claimed_by')) {
           const [claimant, at, batchId, identifier, self] = args as [
             string,
@@ -112,6 +186,9 @@ const seed = async () =>
 beforeEach(() => {
   batches.length = 0
   members.length = 0
+  notes.length = 0
+  links.length = 0
+  stageKeys.length = 0
   nextId = 1
   token = 'secret'
 })
@@ -265,5 +342,140 @@ describe('DELETE /api/batches/:id', () => {
     expect(res.status).toBe(204)
     expect(batches).toHaveLength(0)
     expect(members).toHaveLength(0)
+  })
+})
+
+describe('PATCH /api/batches/:id — the workstream’s own fields', () => {
+  beforeEach(async () => {
+    await seed()
+    stageKeys.push('spec', 'impl')
+  })
+
+  it('sets a stage and stamps when it was entered', async () => {
+    const res = await req('/api/batches/1', 'PATCH', { stage: 'impl' })
+    expect(res.status).toBe(200)
+    expect(batches[0]?.stage_key).toBe('impl')
+    expect(batches[0]?.stage_entered_at).not.toBeNull()
+  })
+
+  it('does NOT restamp when the same stage is set again', async () => {
+    // A tool writing the current value on every heartbeat must not keep a
+    // stalled workstream looking fresh.
+    await req('/api/batches/1', 'PATCH', { stage: 'impl' })
+    const first = batches[0]?.stage_entered_at
+    await req('/api/batches/1', 'PATCH', { stage: 'impl' })
+    expect(batches[0]?.stage_entered_at).toBe(first)
+  })
+
+  it('restamps on a move BACKWARDS', async () => {
+    // CI going red and returning to Implementing is ordinary; staleness must
+    // time the current occupancy, not the first one.
+    await req('/api/batches/1', 'PATCH', { stage: 'impl' })
+    const first = batches[0]?.stage_entered_at ?? 0
+    batches[0]!.stage_entered_at = first - 1_000
+    await req('/api/batches/1', 'PATCH', { stage: 'spec' })
+    expect(batches[0]?.stage_key).toBe('spec')
+    expect(batches[0]?.stage_entered_at).toBeGreaterThan(first - 1_000)
+  })
+
+  it('refuses a stage no lifecycle defines', async () => {
+    // A typo must not park a workstream somewhere nothing will ever render.
+    const res = await req('/api/batches/1', 'PATCH', { stage: 'nope' })
+    expect(res.status).toBe(400)
+    expect(batches[0]?.stage_key).toBeNull()
+  })
+
+  it('clears the stage on an explicit null', async () => {
+    await req('/api/batches/1', 'PATCH', { stage: 'impl' })
+    await req('/api/batches/1', 'PATCH', { stage: null })
+    expect(batches[0]?.stage_key).toBeNull()
+  })
+
+  it('accepts the two statuses and refuses a third', async () => {
+    expect((await req('/api/batches/1', 'PATCH', { status: 'archived' })).status).toBe(200)
+    expect(batches[0]?.status).toBe('archived')
+    expect((await req('/api/batches/1', 'PATCH', { status: 'paused' })).status).toBe(400)
+  })
+
+  it('stores assignees', async () => {
+    await req('/api/batches/1', 'PATCH', { assignees: ['claude-1', 'claude-1', 'claude-2'] })
+    expect(JSON.parse(batches[0]?.assignees ?? '[]')).toEqual(['claude-1', 'claude-2'])
+  })
+
+  it('rejects an empty patch and 404s an unknown workstream', async () => {
+    expect((await req('/api/batches/1', 'PATCH', {})).status).toBe(400)
+    expect((await req('/api/batches/99', 'PATCH', { name: 'X' })).status).toBe(404)
+  })
+})
+
+describe('GET /api/batches — archived is off the board', () => {
+  it('hides archived by default and returns it under status=all', async () => {
+    await seed()
+    await req('/api/batches/1', 'PATCH', { status: 'archived' })
+    const hidden = (await (await req('/api/batches', 'GET')).json()) as { entries: unknown[] }
+    expect(hidden.entries).toHaveLength(0)
+    const all = (await (await req('/api/batches?status=all', 'GET')).json()) as { entries: unknown[] }
+    expect(all.entries).toHaveLength(1)
+  })
+})
+
+describe('stage notes', () => {
+  beforeEach(async () => {
+    await seed()
+  })
+
+  it('writes a note to a stage the workstream is not on', async () => {
+    // The spec folder is known before Spec review is reached. Unlike `stage`, a
+    // note has no second writer to coordinate with, so nothing is protected by
+    // restricting which stage may be written.
+    const res = await req('/api/batches/1/notes/spec', 'PUT', { body: 'openspec/changes/x' })
+    expect(res.status).toBe(200)
+    expect(notes[0]?.body).toBe('openspec/changes/x')
+  })
+
+  it('appends without clobbering what is already there', async () => {
+    await req('/api/batches/1/notes/ci', 'PUT', { body: 'waiting on core-api' })
+    await req('/api/batches/1/notes/ci', 'PUT', { append: 'frontend green' })
+    expect(notes[0]?.body).toBe('waiting on core-api\nfrontend green')
+  })
+
+  it('appends into an empty stage without a leading newline', async () => {
+    await req('/api/batches/1/notes/ci', 'PUT', { append: 'first line' })
+    expect(notes[0]?.body).toBe('first line')
+  })
+
+  it('rejects a write with neither body nor append', async () => {
+    expect((await req('/api/batches/1/notes/ci', 'PUT', {})).status).toBe(400)
+  })
+})
+
+describe('hand-attached links', () => {
+  beforeEach(async () => {
+    await seed()
+  })
+
+  it('attaches a spec path and a url', async () => {
+    expect(
+      (await req('/api/batches/1/links/spec', 'POST', { kind: 'spec', value: 'openspec/changes/x' }))
+        .status,
+    ).toBe(200)
+    expect(
+      (await req('/api/batches/1/links/ci', 'POST', { kind: 'url', value: 'https://gh/pr/9' }))
+        .status,
+    ).toBe(200)
+    expect(links).toHaveLength(2)
+  })
+
+  it('is a no-op when the same thing is attached twice', async () => {
+    const body = { kind: 'spec', value: 'openspec/changes/x' }
+    await req('/api/batches/1/links/spec', 'POST', body)
+    await req('/api/batches/1/links/spec', 'POST', body)
+    expect(links).toHaveLength(1)
+  })
+
+  it('refuses a kind outside the closed vocabulary', async () => {
+    const res = await req('/api/batches/1/links/ci', 'POST', { kind: 'pr', value: 'https://x' })
+    expect(res.status).toBe(400)
+    expect(links).toHaveLength(0)
   })
 })

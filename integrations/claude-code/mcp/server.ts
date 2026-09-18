@@ -115,6 +115,66 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: 'set_workstream_stage',
+      description:
+        'Move a workstream to a pipeline stage — the trigger that advances a feature. May move backwards (CI went red); pass null to clear. Does NOT touch any Linear state: use the Linear MCP for that.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          workstreamId: { type: 'number' },
+          stageKey: { type: 'string', description: 'A key from list_stages; null clears it.' },
+        },
+        required: ['workstreamId', 'stageKey'],
+      },
+    },
+    {
+      name: 'set_stage_note',
+      description:
+        "A note on one stage of one workstream — the spec folders at Spec review, a decision at Result review. Any stage, any time, not only the current one. Pass `append` to add a line without overwriting what a person wrote; pass `body` to replace it.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          workstreamId: { type: 'number' },
+          stageKey: { type: 'string' },
+          body: { type: 'string' },
+          append: { type: 'string' },
+        },
+        required: ['workstreamId', 'stageKey'],
+      },
+    },
+    {
+      name: 'attach_to_stage',
+      description:
+        "Attach something by hand when the automatic link is missing — a spec with no `Linear:` line, a PR naming no issue. kind is 'spec' (a path whose task progress is still read) or 'url' (rendered as a link). These show a 'manual' mark: prefer fixing the upstream link, which makes the item appear on its own.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          workstreamId: { type: 'number' },
+          stageKey: { type: 'string' },
+          kind: { type: 'string', enum: ['spec', 'url'] },
+          value: { type: 'string' },
+          label: { type: 'string' },
+        },
+        required: ['workstreamId', 'stageKey', 'kind', 'value'],
+      },
+    },
+    {
+      name: 'list_linear_states',
+      description:
+        "Every Linear workflow state this workspace has. Needed to fill a stage's `states` when designing a lifecycle.",
+      inputSchema: { type: 'object', properties: {} },
+    },
+    {
+      name: 'find_related',
+      description:
+        'What hangs together with an issue: its blocks chain (both directions) and the design-doc changes linked to it, plus the other issues those changes reach. Use it after finding an issue with the Linear MCP, to decide what belongs in a workstream. Not an issue search — Linear does that better.',
+      inputSchema: {
+        type: 'object',
+        properties: { identifier: { type: 'string' } },
+        required: ['identifier'],
+      },
+    },
+    {
       name: 'update_workstream',
       description:
         'Rename a workstream, and/or add and remove issues. Removing an issue drops its claim and progress with it.',
@@ -215,6 +275,98 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           done.push(`removed ${String(m).toUpperCase()}`)
         }
         return text(done.length > 0 ? done.join('; ') : 'nothing to change')
+      }
+
+      case 'set_workstream_stage': {
+        const stageKey = a.stageKey === null ? null : String(a.stageKey ?? '')
+        await call(`/api/batches/${Number(a.workstreamId)}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ stage: stageKey }),
+        })
+        return text(`workstream ${Number(a.workstreamId)} → ${stageKey ?? '(no stage)'}`)
+      }
+
+      case 'set_stage_note': {
+        const payload =
+          a.append !== undefined ? { append: String(a.append) } : { body: String(a.body ?? '') }
+        await call(
+          `/api/batches/${Number(a.workstreamId)}/notes/${encodeURIComponent(String(a.stageKey))}`,
+          { method: 'PUT', body: JSON.stringify(payload) },
+        )
+        return text('note saved')
+      }
+
+      case 'attach_to_stage': {
+        await call(
+          `/api/batches/${Number(a.workstreamId)}/links/${encodeURIComponent(String(a.stageKey))}`,
+          {
+            method: 'POST',
+            body: JSON.stringify({ kind: a.kind, value: a.value, label: a.label }),
+          },
+        )
+        return text(
+          `attached by hand. If this is a missing upstream link, adding the Linear id to the spec or PR makes it appear on its own and this can be removed.`,
+        )
+      }
+
+      case 'list_linear_states': {
+        const r = await call<{ workflowStates?: { name: string; type: string }[] }>('/api/labels')
+        return text((r.workflowStates ?? []).map((w) => w.name))
+      }
+
+      case 'find_related': {
+        const identifier = String(a.identifier ?? '').toUpperCase()
+        const g = await call<{
+          data: {
+            issues: {
+              identifier: string
+              title: string
+              state: { name: string }
+              relations: { type: string; targetIdentifier: string }[]
+            }[]
+            designdocs?: { name: string; issueIdentifiers: string[]; filePath: string }[]
+          }
+        }>('/api/graph')
+        const issues = g.data.issues
+        const byId = new Map(issues.map((i) => [i.identifier, i]))
+        if (!byId.has(identifier)) return text(`${identifier} is not in the cache`)
+
+        // Walk `blocks` in both directions — a chain is what hangs together,
+        // and which end you started from is an accident of how you searched.
+        const chain = new Set<string>([identifier])
+        for (let grew = true; grew; ) {
+          grew = false
+          for (const i of issues) {
+            for (const r of i.relations) {
+              if (r.type !== 'blocks') continue
+              if (chain.has(i.identifier) && !chain.has(r.targetIdentifier)) {
+                chain.add(r.targetIdentifier)
+                grew = true
+              } else if (chain.has(r.targetIdentifier) && !chain.has(i.identifier)) {
+                chain.add(i.identifier)
+                grew = true
+              }
+            }
+          }
+        }
+
+        const changes = (g.data.designdocs ?? []).filter((d) =>
+          d.issueIdentifiers.some((id) => chain.has(id)),
+        )
+        // A change can name issues outside the blocks chain — that is exactly
+        // the many-to-many that stops a workstream being one change's shadow.
+        const viaChanges = new Set<string>()
+        for (const d of changes) for (const id of d.issueIdentifiers) if (!chain.has(id)) viaChanges.add(id)
+
+        const describe = (id: string) => {
+          const i = byId.get(id)
+          return { identifier: id, title: i?.title ?? null, state: i?.state?.name ?? null }
+        }
+        return text({
+          blocksChain: [...chain].map(describe),
+          designDocs: changes.map((d) => ({ name: d.name, path: d.filePath, issues: d.issueIdentifiers })),
+          reachedViaDesignDocs: [...viaChanges].map(describe),
+        })
       }
 
       case 'delete_workstream': {
