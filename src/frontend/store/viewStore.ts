@@ -498,13 +498,19 @@ export const useViewStore = create<ViewState>((set) => ({
   setDensity: (d) => set({ density: d }),
   setMixGroupBy: (key) => set({ mixGroupBy: key }),
   setFocusedWorkstreamId: (id) => set({ focusedWorkstreamId: id }),
-  setLifecycleEditorOpen: (b) => set({ lifecycleEditorOpen: b }),
+  // The editor and the two panels all dock on the right, and they are about
+  // different things — the editor configures the WORKSPACE's pipeline, a panel
+  // inspects ONE workstream. Opening either closed the other visually anyway;
+  // this makes it happen on purpose rather than as an overlap.
+  setLifecycleEditorOpen: (b) =>
+    set(b ? { lifecycleEditorOpen: true, stagePanel: null, workstreamPanelId: null } : { lifecycleEditorOpen: false }),
   setWorkstreamJumpId: (id) => set({ workstreamJumpId: id }),
   openStagePanel: (workstreamId, stageKey) =>
-    set({ stagePanel: { workstreamId, stageKey }, workstreamPanelId: null }),
+    set({ stagePanel: { workstreamId, stageKey }, workstreamPanelId: null, lifecycleEditorOpen: false }),
   closeStagePanel: () => set({ stagePanel: null }),
   // The two panels share an edge, so opening one closes the other.
-  openWorkstreamPanel: (id) => set({ workstreamPanelId: id, stagePanel: null }),
+  openWorkstreamPanel: (id) =>
+    set({ workstreamPanelId: id, stagePanel: null, lifecycleEditorOpen: false }),
   closeWorkstreamPanel: () => set({ workstreamPanelId: null }),
   setFontSize: (f) => {
     if (typeof window !== 'undefined') {
