@@ -4,10 +4,8 @@ import {
   NAME_MAX,
   NEXT_COMMAND_MAX,
   STATES_MAX,
-  indexStages,
   isKeyTaken,
   isNameTaken,
-  issueStageRowToDTO,
   lifecycleRowToDTO,
   nextSortOrder,
   normalizeNextCommand,
@@ -184,11 +182,6 @@ describe('row → DTO', () => {
     })
   })
 
-  it('maps an issue-stage row, preserving a null attribution', () => {
-    expect(
-      issueStageRowToDTO({ identifier: 'ONE-393', stage_key: 'impl', updated_at: 5, updated_by: null }),
-    ).toEqual({ identifier: 'ONE-393', stageKey: 'impl', updatedAt: 5, updatedBy: null })
-  })
 })
 
 describe('nextSortOrder', () => {
@@ -305,14 +298,3 @@ describe('reorderStages', () => {
   })
 })
 
-describe('indexStages', () => {
-  it('keys assignments by identifier', () => {
-    const map = indexStages([
-      { identifier: 'ONE-1', stageKey: 'impl', updatedAt: 1, updatedBy: null },
-      { identifier: 'ONE-2', stageKey: 'review', updatedAt: 2, updatedBy: 'shawn' },
-    ])
-    expect(map.get('ONE-1')?.stageKey).toBe('impl')
-    expect(map.get('ONE-2')?.updatedBy).toBe('shawn')
-    expect(map.get('ONE-3')).toBeUndefined()
-  })
-})

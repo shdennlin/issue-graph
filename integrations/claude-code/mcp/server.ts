@@ -44,12 +44,6 @@ interface LifecycleStage {
   states: string[]
   nextCommand: string | null
 }
-interface IssueStage {
-  identifier: string
-  stageKey: string
-  updatedAt: number
-  updatedBy: string | null
-}
 
 /** Append the workspace selector the server's middleware reads from `?w=`. */
 function url(path: string): string {
@@ -87,32 +81,9 @@ const server = new Server(
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
-      name: 'get_stage',
-      description:
-        "Where an issue is in this workspace's lifecycle: its stage, the Linear state, whether those agree, and the command that moves it on.",
-      inputSchema: {
-        type: 'object',
-        properties: { identifier: { type: 'string', description: 'e.g. ONE-393' } },
-        required: ['identifier'],
-      },
-    },
-    {
       name: 'list_stages',
       description: "The workspace's lifecycle, in pipeline order.",
       inputSchema: { type: 'object', properties: {} },
-    },
-    {
-      name: 'set_stage',
-      description:
-        'Record which lifecycle stage an issue is on. This does NOT change the Linear state — use the Linear MCP for that.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          identifier: { type: 'string' },
-          stageKey: { type: 'string', description: 'null clears the assignment' },
-        },
-        required: ['identifier', 'stageKey'],
-      },
     },
     {
       name: 'list_workstreams',
@@ -206,74 +177,15 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         return text(r.entries)
       }
 
-      case 'get_stage': {
-        const identifier = String(a.identifier ?? '').toUpperCase()
-        const [lifecycle, stages, graph] = await Promise.all([
-          call<{ entries: LifecycleStage[] }>('/api/lifecycle'),
-          call<{ entries: IssueStage[] }>('/api/stage'),
-          call<{ data: { issues: { identifier: string; state: { name: string } }[] } }>('/api/graph'),
-        ])
-        const assignment = stages.entries.find((s) => s.identifier === identifier) ?? null
-        const stage = assignment
-          ? (lifecycle.entries.find((s) => s.key === assignment.stageKey) ?? null)
-          : null
-        const issue = graph.data.issues.find((i) => i.identifier === identifier) ?? null
-        const stateName = issue?.state?.name ?? null
-
-        // Mirrors lifecycleStore.stageVerdict. `unknown` is not `conflict`: an
-        // unstaged issue is unclassified, not in disagreement.
-        let verdict: 'ok' | 'conflict' | 'unknown' = 'unknown'
-        if (stage) {
-          if (stage.states.length === 0) verdict = 'ok'
-          else if (stateName) {
-            verdict = stage.states.some((s) => s.toLowerCase() === stateName.toLowerCase())
-              ? 'ok'
-              : 'conflict'
-          }
-        }
-
-        return text({
-          identifier,
-          linearState: stateName,
-          stage: stage ? { key: stage.key, name: stage.name } : null,
-          verdict,
-          nextCommand: stage?.nextCommand ?? null,
-          ...(verdict === 'conflict'
-            ? {
-                note: `The stage expects ${stage?.states.join(' / ')} but Linear says "${stateName}". Both are legitimate; issue-graph reports the disagreement and changes neither.`,
-              }
-            : {}),
-        })
-      }
-
-      case 'set_stage': {
-        const identifier = String(a.identifier ?? '').toUpperCase()
-        const stageKey = a.stageKey === null ? null : String(a.stageKey ?? '')
-        await call(`/api/stage/${identifier}`, {
-          method: 'PUT',
-          body: JSON.stringify({ stageKey, updatedBy: 'mcp' }),
-        })
-        return text(`${identifier} → ${stageKey ?? '(cleared)'}`)
-      }
-
       case 'list_workstreams': {
         const r = await call<{ entries: unknown[] }>('/api/batches')
         return text(r.entries)
       }
 
       case 'get_workstream': {
-        // Joined with stages here rather than server-side: the stage table is a
-        // separate resource, and a workstream is not the only thing that wants
-        // it. Two small reads beat a bespoke endpoint.
-        const [ws, stages] = await Promise.all([
-          call<{ members: { identifier: string }[] }>(`/api/batches/${Number(a.workstreamId)}`),
-          call<{ entries: IssueStage[] }>('/api/stage'),
-        ])
-        const stageOf = new Map(stages.entries.map((s) => [s.identifier, s.stageKey]))
-        return text({
-          ...ws,
-          members: ws.members.map((m) => ({ ...m, stageKey: stageOf.get(m.identifier) ?? null })),
-        })
+        // The stage belongs to the workstream itself, so there is nothing to
+        // join per member — an issue carries only its Linear state.
+        return text(await call<unknown>(`/api/batches/${Number(a.workstreamId)}`))
       }
 
       case 'create_workstream': {
@@ -320,9 +232,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           // finished, the other means come back later.
           return text({ ...r, hint: r.reason === 'blocked' ? 'Other sessions hold the unblocked issues; try again shortly.' : undefined })
         }
-        const stage = await call<{ entries: IssueStage[] }>('/api/stage')
-        const assignment = stage.entries.find((s) => s.identifier === r.identifier) ?? null
-        return text({ ...r, stageKey: assignment?.stageKey ?? null })
+        return text(r)
       }
 
       case 'report_done': {

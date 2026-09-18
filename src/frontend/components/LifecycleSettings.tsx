@@ -22,7 +22,6 @@ import type { LifecycleStageDTO } from '@shared/types'
 import { api } from '../lib/api'
 import { useGraphStore } from '../store/graphStore'
 import { useSchemaStore } from '../store/schemaStore'
-import { stageUsage } from '../lib/lifecycle'
 import { useT } from '../i18n'
 
 export function LifecycleSettings() {
@@ -34,7 +33,12 @@ export function LifecycleSettings() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const usage = stageUsage(graph?.data.stages)
+  // Counts WORKSTREAMS on each stage — an issue has no stage of its own.
+  const usage = new Map<string, number>()
+  for (const w of graph?.data.workstreams ?? []) {
+    const k = (w as { stage?: string | null }).stage
+    if (k) usage.set(k, (usage.get(k) ?? 0) + 1)
+  }
   const workflowStates = useSchemaStore((s) => s.workflowStates)
 
   // Every state the WORKSPACE has, not every state currently in use.

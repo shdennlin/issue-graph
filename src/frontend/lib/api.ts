@@ -6,7 +6,6 @@ import type {
   ProjectDetail,
   SavedViewDTO,
   LifecycleStageDTO,
-  IssueStageDTO,
   SyncLogEntry,
   Viewer,
   WorkflowState,
@@ -270,14 +269,6 @@ export const api = {
    *  than interleaving a stale order with the current one. */
   reorderStages: (keys: string[]) =>
     http<{ ok: boolean }>('/api/lifecycle/reorder', { method: 'POST', body: JSON.stringify({ keys }) }),
-  fetchIssueStages: () => http<{ entries: IssueStageDTO[] }>('/api/stage'),
-  /** `stageKey: null` clears the assignment. Omitting it is rejected, so
-   *  clearing is always deliberate. */
-  setIssueStage: (identifier: string, stageKey: string | null, updatedBy?: string) =>
-    http<unknown>(`/api/stage/${identifier}`, {
-      method: 'PUT',
-      body: JSON.stringify({ stageKey, updatedBy }),
-    }),
   fetchSavedViews: () => http<{ entries: SavedViewDTO[] }>('/api/saved-views'),
   createSavedView: (name: string, query: string) =>
     http<SavedViewDTO>('/api/saved-views', { method: 'POST', body: JSON.stringify({ name, query }) }),

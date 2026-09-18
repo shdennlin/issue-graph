@@ -5,18 +5,12 @@ import type {
   AnnotationDTO,
   AgentSessionDTO,
   WorkstreamSummaryDTO,
-  IssueStageDTO,
   LifecycleStageDTO,
   WorkflowState,
 } from '@shared/types.js'
 import { getDb } from './db.js'
 import { liveSessions, type AgentSessionRow } from './agentSessionStore.js'
-import {
-  issueStageRowToDTO,
-  lifecycleRowToDTO,
-  type IssueStageRow,
-  type LifecycleStageRow,
-} from './lifecycleStore.js'
+import { lifecycleRowToDTO, type LifecycleStageRow } from './lifecycleStore.js'
 import { loadConfig } from './lib/env.js'
 import { settingInt } from './lib/settings.js'
 
@@ -326,14 +320,6 @@ export function readLiveAgentSessions(now = Date.now()): AgentSessionDTO[] {
     )
     .all() as AgentSessionRow[]
   return liveSessions(rows, now)
-}
-
-/** Per-issue stage assignments. Sparse: most issues have no row. */
-export function readIssueStages(): IssueStageDTO[] {
-  const rows = getDb()
-    .prepare('SELECT identifier, stage_key, updated_at, updated_by FROM issue_stage')
-    .all() as IssueStageRow[]
-  return rows.map(issueStageRowToDTO)
 }
 
 export function readAnnotations(): AnnotationDTO[] {

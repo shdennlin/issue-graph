@@ -3,7 +3,7 @@
 //
 // No `bun:sqlite` import, and none allowed — vitest runs on Node and cannot
 // resolve that specifier, so any module reaching it becomes untestable. The
-// SQLite half lives in routes/lifecycle.ts and routes/stage.ts and stays thin
+// SQLite half lives in routes/lifecycle.ts and stays thin
 // enough not to need tests. Same split as savedViewStore.ts / savedViews.ts.
 //
 // What a lifecycle IS: a playbook mapping "this stage" to "the command that
@@ -12,8 +12,11 @@
 // The reason a stage is stored rather than derived is that stages are FINER
 // than states — one Linear state routinely covers several steps — so there is
 // not enough information in the state to recover the stage. See ADR-0002.
+//
+// The stage belongs to a WORKSTREAM, not to an issue: a pipeline describes one
+// feature moving through it, while an issue carries only its Linear state.
 
-import type { IssueStageDTO, LifecycleStageDTO, StageVerdict } from '../shared/types.js'
+import type { LifecycleStageDTO, StageVerdict } from '../shared/types.js'
 
 export interface LifecycleStageRow {
   id: number
@@ -28,13 +31,6 @@ export interface LifecycleStageRow {
   updated_at: number
 }
 
-export interface IssueStageRow {
-  identifier: string
-  stage_key: string
-  updated_at: number
-  updated_by: string | null
-}
-
 export const KEY_MAX = 64
 export const NAME_MAX = 80
 /** A command line, not a script. Long enough for a slash command with a couple
@@ -47,7 +43,8 @@ export const STATES_MAX = 40
 /**
  * Normalize a stage key.
  *
- * The key is the join to `issue_stage.stage_key` and outlives renames, so it is
+ * The key is what a workstream's `stage_key` points at, and it outlives
+ * renames, so it is
  * restricted to a slug rather than accepting whatever the name happens to be.
  * Returns null when unusable.
  */
@@ -166,15 +163,6 @@ export function lifecycleRowToDTO(row: LifecycleStageRow): LifecycleStageDTO {
   }
 }
 
-export function issueStageRowToDTO(row: IssueStageRow): IssueStageDTO {
-  return {
-    identifier: row.identifier,
-    stageKey: row.stage_key,
-    updatedAt: row.updated_at,
-    updatedBy: row.updated_by,
-  }
-}
-
 /** Next sort_order for an appended stage. Stages read top-to-bottom in the
  *  order the pipeline runs, so new ones land at the end. */
 export function nextSortOrder(rows: Pick<LifecycleStageRow, 'sort_order'>[]): number {
@@ -269,9 +257,3 @@ export function reorderStages(
   return out
 }
 
-/** Index stage assignments by identifier for O(1) lookup while rendering. */
-export function indexStages(stages: IssueStageDTO[]): Map<string, IssueStageDTO> {
-  const map = new Map<string, IssueStageDTO>()
-  for (const s of stages) map.set(s.identifier, s)
-  return map
-}

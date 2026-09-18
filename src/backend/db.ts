@@ -189,6 +189,19 @@ const MIGRATIONS: string[] = [
      PRIMARY KEY (batch_id, identifier)
    );`,
   `CREATE INDEX IF NOT EXISTS idx_batch_member_batch ON batch_member(batch_id);`,
+
+  // 9. Drop the per-issue stage.
+  //
+  // It was the right idea at the wrong level. A pipeline — discuss, spec review,
+  // implementing, CI, merge, archive — describes a FEATURE moving through it, not
+  // an individual issue; an issue has only its Linear state, and an agent moves
+  // that through the Linear MCP. The stage therefore belongs to the workstream,
+  // where migration 10 puts it.
+  //
+  // ADR-0002's argument survives untouched: stages are finer than states, so a
+  // stage cannot be derived and must be stored. Only its subject changed — which
+  // is why lifecycle_stage needed no schema change at all.
+  `DROP TABLE IF EXISTS issue_stage;`,
 ]
 
 // One Database instance per workspace id. Each profile has its own SQLITE_PATH

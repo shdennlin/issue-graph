@@ -2,7 +2,7 @@
 //
 // resetCache() is a deny-list: it deletes issue_cache, label_cache and a fixed
 // set of cache_meta keys. Every other table — annotation, note, saved_view,
-// setting, and now lifecycle_stage and issue_stage — survives because it is not
+// setting, and the lifecycle and workstream tables — survives because it is not
 // mentioned. There is no preserve-list to add a table to, so nothing in the
 // source says "keep these", and adding one line to the wrong place would
 // permanently destroy data nobody can recompute: a lifecycle and its stage
@@ -50,7 +50,8 @@ const DELETABLE = ['issue_cache', 'label_cache']
  *  not-rebuildable table is introduced. */
 const MUST_SURVIVE = [
   'lifecycle_stage',
-  'issue_stage',
+  'batch',
+  'batch_member',
   // A reset is not a reason to forget a session that is running right now.
   'agent_session',
   'annotation',

@@ -23,7 +23,6 @@ import { annotationRoutes } from './routes/annotations.js'
 import { notesRoutes } from './routes/notes.js'
 import { savedViewRoutes } from './routes/savedViews.js'
 import { lifecycleRoutes } from './routes/lifecycle.js'
-import { stageRoutes } from './routes/stage.js'
 import { agentSessionRoutes } from './routes/agentSessions.js'
 import { batchRoutes } from './routes/batch.js'
 import { settingsRoutes } from './routes/settings.js'
@@ -115,7 +114,6 @@ export function createApp(): Hono {
   app.route('/', notesRoutes)
   app.route('/', savedViewRoutes)
   app.route('/', lifecycleRoutes)
-  app.route('/', stageRoutes)
   app.route('/', agentSessionRoutes)
   app.route('/', batchRoutes)
   app.route('/', settingsRoutes)

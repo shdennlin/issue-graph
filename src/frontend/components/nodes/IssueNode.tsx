@@ -19,7 +19,6 @@ import type { HierarchyCounts } from '../../views/hierarchy'
 import { compactAge } from '../../lib/relativeTime'
 import { getLinkTouchIndex, linkOnlyTouchAt } from '../../lib/linkTouch'
 import { useT, type DictKey } from '../../i18n'
-import { indexLifecycle, indexStages, stageViewFor } from '../../lib/lifecycle'
 import { indexSessionsByIssue, sessionPresence } from '../../lib/agentSession'
 
 function formatDueDate(iso: string): string {
@@ -95,21 +94,9 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
   const density = useViewStore((s) => s.density)
   const annotations = useGraphStore((s) => s.graph?.data.annotations ?? EMPTY_ANNOTATIONS)
   const designdocs = useGraphStore((s) => s.graph?.data.designdocs)
-  const lifecycle = useGraphStore((s) => s.graph?.data.lifecycle)
-  const issueStages = useGraphStore((s) => s.graph?.data.stages)
   const agentSessions = useGraphStore((s) => s.graph?.data.agentSessions)
   const t = useT()
 
-  // Indexes are rebuilt only when the payload changes, not per hover: this
-  // component re-renders on every focus/dim pass, and building two maps over
-  // the whole graph each time would make it O(n^2). React Compiler is NOT
-  // enabled in this repo, so these memos are load-bearing.
-  const stagesByIssue = useMemo(() => indexStages(issueStages), [issueStages])
-  const lifecycleByKey = useMemo(() => indexLifecycle(lifecycle), [lifecycle])
-  const stageView = useMemo(
-    () => stageViewFor(issue, stagesByIssue, lifecycleByKey, lifecycle),
-    [issue, stagesByIssue, lifecycleByKey, lifecycle],
-  )
   const sessionsByIssue = useMemo(() => indexSessionsByIssue(agentSessions), [agentSessions])
   // `now` is read at render rather than ticked on a timer: the graph already
   // re-renders on the 30s poll and on every SSE refresh, which is finer than
@@ -416,30 +403,6 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
                 const { value, unit } = compactAge(presence.lastSeen)
                 return t(AGE_UNIT_KEYS[unit], { count: value })
               })()}
-            </span>
-          )}
-          {/* Stage sits INSIDE this existing flex group rather than in a row of
-              its own, so it adds no height. GraphCanvas measures offsetHeight
-              and feeds it to dagre; a new row would re-lay-out the graph, and
-              the first-paint estimates in views/types.ts would go stale. This
-              group is also the only part of .top that survives compact density. */}
-          {stageView.stage && (
-            <span
-              className={`stage-chip${stageView.verdict === 'conflict' ? ' is-conflict' : ''}`}
-              title={
-                stageView.verdict === 'conflict'
-                  ? t('stage.conflictHint')
-                      .replace('{stage}', stageView.stage.name)
-                      .replace('{state}', issue.state.name)
-                  : stageView.position
-                    ? `${stageView.stage.name} (${stageView.position}/${stageView.total})`
-                    : stageView.stage.name
-              }
-            >
-              {stageView.verdict === 'conflict' && (
-                <AlertTriangle size={11} strokeWidth={2} aria-hidden />
-              )}
-              {stageView.stage.name}
             </span>
           )}
         </span>

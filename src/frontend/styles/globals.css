@@ -1074,35 +1074,6 @@ body[data-detail-wide='1'] .inline-search { display: none; }
 }
 .issue-node .session-badge.is-idle { color: var(--accent); }
 
-/* Stage chip. Sits in .top's trailing flex group beside the state pill, so it
-   must not grow the card: no padding that would push the row taller than the
-   pill already makes it. Truncates rather than wrapping — a long stage name
-   must never turn one line into two, because the card height is measured and
-   fed back into the dagre layout. */
-.issue-node .stage-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  max-width: 96px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--fs-meta);
-  color: var(--fg-muted);
-  border: 1px solid var(--node-border);
-  border-radius: 4px;
-  padding: 0 4px;
-}
-
-/* Disagreement between the stored stage and the Linear state. Deliberately a
-   warning tint rather than an error: nothing is broken and nothing will be
-   changed automatically — the card is reporting that two legitimate writers
-   disagree. */
-.issue-node .stage-chip.is-conflict {
-  color: var(--warn);
-  border-color: var(--warn);
-}
-
 .priority-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .priority-0 { background: var(--priority-none); }
 .priority-1 { background: var(--priority-urgent); }

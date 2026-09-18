@@ -1,14 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import type { IssueStageDTO, LifecycleStageDTO } from '@shared/types'
-import {
-  EMPTY_STAGE_VIEW,
-  indexLifecycle,
-  indexStages,
-  nextStage,
-  stageUsage,
-  stageVerdict,
-  stageViewFor,
-} from './lifecycle'
+import type { LifecycleStageDTO } from '@shared/types'
+import { indexLifecycle, stageVerdict } from './lifecycle'
 
 const stage = (
   key: string,
@@ -32,22 +24,6 @@ const LIFECYCLE = [
   stage('review', ['In Review'], 2),
   stage('parked', [], 3),
 ]
-
-const assign = (identifier: string, stageKey: string): IssueStageDTO => ({
-  identifier,
-  stageKey,
-  updatedAt: 0,
-  updatedBy: null,
-})
-
-const issue = (identifier: string, stateName: string) =>
-  ({ identifier, state: { name: stateName, type: 'started' } }) as const
-
-const views = (stages: IssueStageDTO[], lifecycle = LIFECYCLE) => ({
-  byIssue: indexStages(stages),
-  byKey: indexLifecycle(lifecycle),
-  ordered: lifecycle,
-})
 
 describe('stageVerdict', () => {
   it('agrees when the state is listed, case- and space-insensitively', () => {
@@ -80,86 +56,12 @@ describe('stageVerdict', () => {
   })
 })
 
-describe('stageViewFor', () => {
-  it('resolves a stage with its position and next command', () => {
-    const { byIssue, byKey, ordered } = views([assign('ONE-1', 'impl')])
-    const v = stageViewFor(issue('ONE-1', 'In Progress'), byIssue, byKey, ordered)
-    expect(v.stage?.key).toBe('impl')
-    expect(v.verdict).toBe('ok')
-    expect(v.nextCommand).toBe('/spectra-verify')
-    expect(v.position).toBe(2)
-    expect(v.total).toBe(4)
-  })
 
-  it('surfaces a conflict without altering either side', () => {
-    const { byIssue, byKey, ordered } = views([assign('ONE-1', 'impl')])
-    const v = stageViewFor(issue('ONE-1', 'Done'), byIssue, byKey, ordered)
-    expect(v.verdict).toBe('conflict')
-    // The stage is still reported as-is — the view never silently re-points it
-    // at whatever stage would have matched the Linear state.
-    expect(v.stage?.key).toBe('impl')
-  })
-
-  it('reports an unstaged issue as unknown, still carrying the pipeline size', () => {
-    const { byIssue, byKey, ordered } = views([])
-    const v = stageViewFor(issue('ONE-1', 'In Progress'), byIssue, byKey, ordered)
-    expect(v).toEqual({ ...EMPTY_STAGE_VIEW, total: 4 })
-  })
-
-  it('degrades to unknown when the stage key no longer resolves', () => {
-    // A deleted stage leaves its assignments behind on purpose, so they come
-    // back if the key is re-created. Until then the issue is unclassified, not
-    // in conflict.
-    const { byIssue, byKey, ordered } = views([assign('ONE-1', 'deleted-stage')])
-    const v = stageViewFor(issue('ONE-1', 'In Progress'), byIssue, byKey, ordered)
-    expect(v.stage).toBeNull()
-    expect(v.verdict).toBe('unknown')
-  })
-
-  it('treats a stage that constrains nothing as agreeing with any state', () => {
-    const { byIssue, byKey, ordered } = views([assign('ONE-1', 'parked')])
-    expect(stageViewFor(issue('ONE-1', 'Canceled'), byIssue, byKey, ordered).verdict).toBe('ok')
-  })
-
-  it('copes with an empty lifecycle', () => {
-    const { byIssue, byKey } = views([assign('ONE-1', 'impl')], [])
-    const v = stageViewFor(issue('ONE-1', 'In Progress'), byIssue, byKey, [])
-    expect(v.stage).toBeNull()
-    expect(v.total).toBe(0)
-  })
-})
-
-describe('nextStage', () => {
-  it('returns the following stage in pipeline order', () => {
-    expect(nextStage(LIFECYCLE[1] ?? null, LIFECYCLE)?.key).toBe('review')
-  })
-
-  it('returns null at the end of the pipeline', () => {
-    expect(nextStage(LIFECYCLE[3] ?? null, LIFECYCLE)).toBeNull()
-  })
-
-  it('returns null for no current stage or an unknown one', () => {
-    expect(nextStage(null, LIFECYCLE)).toBeNull()
-    expect(nextStage(stage('ghost', [], 9), LIFECYCLE)).toBeNull()
-  })
-})
-
-describe('stageUsage', () => {
-  it('counts assignments per stage key', () => {
-    const counts = stageUsage([assign('ONE-1', 'impl'), assign('ONE-2', 'impl'), assign('ONE-3', 'spec')])
-    expect(counts.get('impl')).toBe(2)
-    expect(counts.get('spec')).toBe(1)
-    expect(counts.get('review')).toBeUndefined()
-  })
-
-  it('handles an absent list', () => {
-    expect(stageUsage(undefined).size).toBe(0)
-  })
-})
-
-describe('indexers', () => {
-  it('tolerate undefined input', () => {
-    expect(indexStages(undefined).size).toBe(0)
+describe('indexLifecycle', () => {
+  it('keys stages by their slug and tolerates no input', () => {
+    const map = indexLifecycle(LIFECYCLE)
+    expect(map.get('impl')?.name).toBe('impl')
+    expect(map.get('nope')).toBeUndefined()
     expect(indexLifecycle(undefined).size).toBe(0)
   })
 })

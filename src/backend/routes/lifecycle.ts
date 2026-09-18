@@ -147,9 +147,9 @@ lifecycleRoutes.patch('/api/lifecycle/:id', async (c) => {
       'id' | 'key'
     >[]
     if (isKeyTaken(rows, key, id)) return c.json(invalid('key already exists'), 409)
-    // Renaming a key orphans existing issue_stage rows rather than cascading —
-    // an unresolvable key reads as 'unknown', which is recoverable; a cascade
-    // that rewrote assignments would not be.
+    // Renaming a key orphans any workstream pointing at the old one rather than
+    // cascading — an unresolvable key reads as 'unknown', which is recoverable by
+    // renaming back; a cascade that rewrote assignments would not be.
     sets.push('key = ?')
     args.push(key)
   }
@@ -215,9 +215,9 @@ lifecycleRoutes.delete('/api/lifecycle/:id', (c) => {
   if (!originAllowed(c)) return c.json(denyOrigin(), 403)
   const id = Number(c.req.param('id'))
   if (!Number.isInteger(id)) return c.json(invalid('bad id'), 400)
-  // issue_stage rows pointing at this stage are left alone on purpose: they
-  // degrade to 'unknown' and come back if the stage is re-created. See the
-  // migration comment on why stage_key is not a foreign key.
+  // Workstreams pointing at this stage are left alone on purpose: they degrade
+  // to 'unknown' and come back if the stage is re-created. See the migration
+  // comment on why stage_key is not a foreign key.
   const r = getDb().prepare(`DELETE FROM lifecycle_stage WHERE id = ?`).run(id)
   if (r.changes === 0) return c.json({ error: { code: 'not_found' } }, 404)
   return c.body(null, 204)

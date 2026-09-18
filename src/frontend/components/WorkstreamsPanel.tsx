@@ -22,7 +22,6 @@ import { Bot, ChevronDown, ChevronRight, Pause, Trash2, X } from 'lucide-react'
 import { api } from '../lib/api'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
-import { indexLifecycle } from '../lib/lifecycle'
 import { indexSessionsByIssue, sessionPresence } from '../lib/agentSession'
 import { compactAge } from '../lib/relativeTime'
 import { useT } from '../i18n'
@@ -57,8 +56,6 @@ export function WorkstreamsPanel() {
   const [open, setOpen] = useState<Set<number>>(new Set())
   const [error, setError] = useState<string | null>(null)
 
-  const stagesByIssue = new Map((graph?.data.stages ?? []).map((s) => [s.identifier, s]))
-  const lifecycleByKey = indexLifecycle(graph?.data.lifecycle)
   const sessionsByIssue = indexSessionsByIssue(graph?.data.agentSessions)
   const issuesById = new Map((graph?.data.issues ?? []).map((i) => [i.identifier, i]))
 
@@ -185,10 +182,6 @@ export function WorkstreamsPanel() {
                 {isOpen && d && (
                   <ul className="workstream-members">
                     {d.members.map((m) => {
-                      const assignment = stagesByIssue.get(m.identifier)
-                      const stage = assignment
-                        ? (lifecycleByKey.get(assignment.stageKey) ?? null)
-                        : null
                       const presence = sessionPresence(sessionsByIssue.get(m.identifier))
                       const issue = issuesById.get(m.identifier)
                       return (
@@ -206,7 +199,6 @@ export function WorkstreamsPanel() {
                             {m.identifier}
                           </button>
                           <span className="workstream-title">{issue?.title ?? ''}</span>
-                          {stage && <span className="stage-chip">{stage.name}</span>}
                           {presence.kind !== 'none' && (
                             <span className={`session-badge is-${presence.kind}`}>
                               {presence.kind === 'active' ? <Bot size={11} /> : <Pause size={11} />}

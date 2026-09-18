@@ -295,7 +295,7 @@ export interface SavedViewDTO {
  */
 export interface LifecycleStageDTO {
   id: number
-  /** Stable slug referenced by IssueStageDTO.stageKey. Unique per workspace. */
+  /** Stable slug a workstream's stage points at. Unique per workspace. */
   key: string
   name: string
   /** Lower values sort first. Appended at max+1, same as SavedViewDTO. */
@@ -308,16 +308,6 @@ export interface LifecycleStageDTO {
   nextCommand: string | null
   createdAt: number
   updatedAt: number
-}
-
-/** Which stage an issue is on. Set by hand or by the MCP — NEVER derived from
- *  the Linear state, and never written by a sync. */
-export interface IssueStageDTO {
-  identifier: string
-  stageKey: string
-  updatedAt: number
-  /** Free-text attribution ("shawn", a session id, …). Null when unknown. */
-  updatedBy: string | null
 }
 
 /**
@@ -381,8 +371,6 @@ export interface GraphData {
   annotations?: AnnotationDTO[]
   /** The workspace's lifecycle, ordered by sortOrder. Empty until configured. */
   lifecycle?: LifecycleStageDTO[]
-  /** Per-issue stage assignments. Sparse — most issues have no row. */
-  stages?: IssueStageDTO[]
   /** Live agent sessions. Already filtered by TTL — a row here is alive. */
   agentSessions?: AgentSessionDTO[]
   /** Workstreams and their membership, for the workstream view. */

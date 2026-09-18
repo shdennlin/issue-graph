@@ -8,7 +8,6 @@ import {
   readDesigndocsCached,
   readLastSyncMs,
   readAnnotations,
-  readIssueStages,
   readLiveAgentSessions,
   readWorkstreamSummaries,
   readLifecycleStages,
@@ -39,7 +38,6 @@ graphRoutes.get('/api/graph', async (c) => {
   const designdocs = readDesigndocsCached()
   const annotations = readAnnotations()
   const lifecycle = readLifecycleStages()
-  const stages = readIssueStages()
   const agentSessions = readLiveAgentSessions()
   const workstreams = readWorkstreamSummaries()
   const viewer = readViewerCached()
@@ -63,7 +61,6 @@ graphRoutes.get('/api/graph', async (c) => {
       designdocs,
       annotations,
       lifecycle,
-      stages,
       agentSessions,
       workstreams,
       viewer,
