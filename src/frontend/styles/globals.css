@@ -3820,17 +3820,25 @@ label + .settings-help {
   border: 1px solid var(--node-border);
   /* Squarer than a card on purpose. */
   border-radius: 4px;
-  border-left: 4px solid var(--node-border);
   font-size: var(--fs-base);
   overflow: hidden;
 }
+/* Current and stale are carried by the ORDINAL and a thin even border, not by
+   a thick bar down one side. The bar was the loudest thing on the board and it
+   was decorating the edge furthest from the number it was about; the ordinal
+   is where the eye already goes, and the `CURRENT` chip says it in words
+   besides. */
 .stage-node.stage-current {
-  border-left-color: var(--accent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--node-border));
+}
+.stage-node.stage-current .stage-head {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
 }
 .stage-node.stage-stale {
-  border-left-color: var(--warn);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--warn) 45%, transparent);
+  border-color: color-mix(in srgb, var(--warn) 60%, var(--node-border));
+}
+.stage-node.stage-stale .stage-head {
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
 }
 
 .stage-head {
@@ -3845,14 +3853,30 @@ label + .settings-help {
 }
 .stage-ordinal {
   flex: 0 0 auto;
-  min-width: 20px;
-  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--node-border);
   font-weight: 700;
-  font-size: var(--fs-base);
+  font-size: var(--fs-chip);
   font-variant-numeric: tabular-nums;
   color: var(--fg-muted);
 }
-.stage-current .stage-ordinal { color: var(--accent); }
+/* Filled, so "which step is this" and "is it the current one" are one glance
+   at one place instead of two. */
+.stage-current .stage-ordinal {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+.stage-stale .stage-ordinal {
+  background: var(--warn);
+  border-color: var(--warn);
+  color: #1a1400;
+}
 .stage-name {
   font-weight: 600;
   color: var(--fg);
@@ -4569,3 +4593,22 @@ button.stage-pill:hover .stage-item-text { text-decoration: underline; }
    the stage, not like the muted metadata around it. */
 .stage-tok-note .stage-item-text { color: var(--fg); }
 .stage-note-body { color: var(--fg); }
+
+/* Markdown inside the notes card. Tight margins — a note is a paragraph or
+   two in a box, not a document, and the browser's default block spacing makes
+   a three-line note look like a page. */
+.stage-note-md > :first-child { margin-top: 0; }
+.stage-note-md > :last-child { margin-bottom: 0; }
+.stage-note-md p,
+.stage-note-md ul,
+.stage-note-md ol,
+.stage-note-md pre { margin: 0 0 6px; }
+.stage-note-md ul,
+.stage-note-md ol { padding-left: 18px; }
+.stage-note-md li { margin: 1px 0; }
+.stage-note-md h1,
+.stage-note-md h2,
+.stage-note-md h3,
+.stage-note-md h4 { margin: 8px 0 3px; font-size: var(--fs-base); }
+.stage-note-md code { font-size: var(--fs-meta); }
+.stage-note-md pre { padding: 6px 8px; overflow-x: auto; }

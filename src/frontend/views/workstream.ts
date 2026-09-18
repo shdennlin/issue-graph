@@ -36,6 +36,7 @@ import type { ViewDefinition } from './types'
 import { buildChainLayout } from './chainLayout'
 import { indexBlockedBy, noteRows, renderStage, type StageContext } from '../lib/stageRender'
 import { indexSessionsByIssue } from '../lib/agentSession'
+import { workstreamColor } from '../lib/colors'
 import type { StageNodeData } from '../components/nodes/StageNode'
 import type { StageNotesData } from '../components/nodes/StageNotesNode'
 
@@ -52,7 +53,6 @@ const NOTE_CARD_MAX_ROWS = 14
 // Matches .mixed-container-header — the container's own title bar, which the
 // stages have to start below.
 const HEADER = 32
-const COLOR = 'var(--accent)'
 
 // These must track .stage-node in globals.css. GraphCanvas measures only
 // `.react-flow__node-issue`, so a stage node never receives a corrected height
@@ -185,7 +185,10 @@ export const workstreamView: ViewDefinition = {
           bucket: {
             id: String(workstream.id),
             name: workstream.name,
-            color: COLOR,
+            // One colour per workstream, derived from its id — the board
+            // stacks several, and the container tint is what tells you which
+            // one you are reading without going back to the header.
+            color: workstreamColor(workstream.id),
             count: workstream.members.length,
             projectId: null,
           },

@@ -1,8 +1,17 @@
-import { memo } from 'react'
+import { lazy, memo, Suspense } from 'react'
 import type { NodeProps } from 'reactflow'
 import { Handle, Position } from 'reactflow'
 import { useT } from '../../i18n'
 import { useViewStore } from '../../store/viewStore'
+
+// Lazy, and that is a measurement not a habit: `marked` + `dompurify` are a
+// 21 kB gzipped chunk that today only lazy panels reach. Importing it here
+// would fold it into the main bundle, where every session pays for it —
+// including the ones that never open this view. The plain text renders first
+// and the formatting swaps in, which for a note is the right order anyway.
+const MarkdownBody = lazy(() =>
+  import('../MarkdownBody').then((m) => ({ default: m.MarkdownBody })),
+)
 
 // The workstream's own note: what this feature IS, and what somebody needs to
 // know before reading the pipeline at all.
@@ -52,7 +61,9 @@ function StageNotesImpl({ data }: NodeProps<StageNotesData>) {
         {body.length === 0 ? (
           <span className="stage-empty">{t('stage.notesEmpty')}</span>
         ) : (
-          <span className="stage-note-body">{body}</span>
+          <Suspense fallback={<span className="stage-note-body">{body}</span>}>
+            <MarkdownBody body={body} className="stage-note-body stage-note-md" />
+          </Suspense>
         )}
       </button>
     </div>
