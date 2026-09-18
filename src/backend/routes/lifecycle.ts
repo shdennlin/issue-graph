@@ -19,6 +19,7 @@ import {
   fallbackStageKey,
   isKeyTaken,
   isNameTaken,
+  LIFECYCLE_COLUMNS,
   lifecycleRowToDTO,
   nextSortOrder,
   normalizeNextCommand,
@@ -62,7 +63,7 @@ const PatchSchema = z
 
 const ReorderSchema = z.object({ keys: z.unknown() })
 
-const SELECT = `SELECT id, key, name, sort_order, states, next_command, shows, stale_after_days, created_at, updated_at FROM lifecycle_stage`
+const SELECT = `SELECT ${LIFECYCLE_COLUMNS} FROM lifecycle_stage`
 
 const denyOrigin = () => ({ error: { code: 'origin', message: 'cross-origin denied' } }) as const
 const invalid = (message: string) => ({ error: { code: 'invalid', message } }) as const

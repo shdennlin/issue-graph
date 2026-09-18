@@ -10,7 +10,7 @@ import type {
 } from '@shared/types.js'
 import { getDb } from './db.js'
 import { liveSessions, type AgentSessionRow } from './agentSessionStore.js'
-import { lifecycleRowToDTO, type LifecycleStageRow } from './lifecycleStore.js'
+import { LIFECYCLE_COLUMNS, lifecycleRowToDTO, type LifecycleStageRow } from './lifecycleStore.js'
 import { parseStringArray } from './batchStore.js'
 import { loadConfig } from './lib/env.js'
 import { settingInt } from './lib/settings.js'
@@ -281,7 +281,7 @@ export function resetCache(): { issues: number; labels: number } {
 export function readLifecycleStages(): LifecycleStageDTO[] {
   const rows = getDb()
     .prepare(
-      'SELECT id, key, name, sort_order, states, next_command, created_at, updated_at FROM lifecycle_stage ORDER BY sort_order ASC, id ASC',
+      `SELECT ${LIFECYCLE_COLUMNS} FROM lifecycle_stage ORDER BY sort_order ASC, id ASC`,
     )
     .all() as LifecycleStageRow[]
   return rows.map(lifecycleRowToDTO)

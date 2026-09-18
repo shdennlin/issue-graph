@@ -198,7 +198,17 @@ function CanvasInner() {
         const h = (el as HTMLElement).offsetHeight
         if (h > 0) map.set(id, h)
       }
-      if (map.size === 0) return
+      // Nothing measured. Two very different cases, and telling them apart
+      // matters because the fitView pipeline waits on this settling:
+      //   - cards exist but have not painted yet — give up, the next layout
+      //     change re-runs this;
+      //   - the view HAS no issue cards at all (Workstreams draws stage bars
+      //     and nothing else), in which case measurement is DONE, not pending.
+      // Without the second case a card-less view is never fitted: the first
+      // stage sits under the floating panels and the last is off-screen, with
+      // nothing to tell the user the canvas even moved.
+      const hasIssueNodes = built.nodes.some((n) => n.type === 'issue')
+      if (map.size === 0 && hasIssueNodes) return
       // Skip update if every height matches existing within 1px — avoids
       // unnecessary rerenders that would just produce identical output.
       let differs = true

@@ -18,6 +18,21 @@
 
 import type { LifecycleStageDTO, StageVerdict } from '../shared/types.js'
 
+/**
+ * Every column `LifecycleStageRow` needs, in one place.
+ *
+ * It lives here rather than beside either query because there were two
+ * hand-written SELECTs for this table — one in routes/lifecycle.ts and one in
+ * cache.ts — and the second silently stopped listing `shows` and
+ * `stale_after_days` when those columns were added. The rows are cast
+ * `as LifecycleStageRow`, so the compiler typed the missing columns as
+ * present; the stages reached the graph payload with an empty `shows` and no
+ * staleness threshold, and every test still passed. Nothing that touches
+ * `bun:sqlite` can be tested here, so one string is the only defence.
+ */
+export const LIFECYCLE_COLUMNS =
+  'id, key, name, sort_order, states, next_command, shows, stale_after_days, created_at, updated_at'
+
 export interface LifecycleStageRow {
   id: number
   key: string
