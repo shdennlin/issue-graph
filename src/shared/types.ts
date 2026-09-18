@@ -77,6 +77,32 @@ export interface NormalizedRelation {
   createdAt?: string
 }
 
+/**
+ * A pull request Linear has attached to an issue.
+ *
+ * Sourced entirely from Linear's GitHub integration, which means it spans every
+ * repository and needs no GitHub credential of ours. `linkKind` is what makes a
+ * count meaningful: a stack's middle PRs say "contributes" and must not be
+ * counted towards finishing the issue, while "closes" ones must.
+ *
+ * CI check status is NOT here and cannot be — Linear has a PullRequestCheck
+ * type but no query path reaches PullRequest from an issue.
+ */
+export interface NormalizedPullRequest {
+  url: string
+  number: number | null
+  repo: string | null
+  /** Linear's own words: draft | open | merged | closed, and possibly others.
+   *  Kept as reported rather than mapped onto an enum of ours — a value we did
+   *  not anticipate should show through to the card, not vanish. */
+  status: string | null
+  targetBranch: string | null
+  hasConflicts: boolean | null
+  /** 'closes' counts towards finishing the issue; 'contributes' does not. */
+  linkKind: string | null
+  mergedAt: string | null
+}
+
 export interface NormalizedIssue {
   id: string
   identifier: string
@@ -130,6 +156,10 @@ export interface NormalizedIssue {
    * somebody was talking on 45 seconds earlier drops out of "recent activity".
    */
   lastCommentAt?: string
+  /** Pull requests Linear has linked to this issue, across repositories. Absent
+   *  rather than empty when the field was not fetched, so "no PRs" and "not
+   *  asked for" stay distinguishable. */
+  pullRequests?: NormalizedPullRequest[]
 }
 
 export interface ViewerOrganization {

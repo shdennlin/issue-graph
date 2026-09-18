@@ -9,7 +9,7 @@
 // edits a relation in Linear. Storing the order would be a second copy of that
 // fact, and it would go stale silently.
 
-import type { NormalizedIssue } from '../shared/types.js'
+import type { NormalizedIssue, NormalizedPullRequest } from '../shared/types.js'
 
 export interface BatchRow {
   id: number
@@ -380,4 +380,65 @@ export function stageAdvanceEvidence(
     seen++
   }
   return seen > 0
+}
+
+export interface PullRequestTally {
+  /** PRs whose linkKind says they finish the issue. */
+  closesTotal: number
+  closesMerged: number
+  /** Every linked PR, including the ones that only contribute. */
+  total: number
+  merged: number
+  open: number
+  draft: number
+  conflicts: number
+}
+
+/** Words Linear uses for a landed PR. Kept as a set rather than an enum
+ *  because `status` is passed through as Linear reports it. */
+const MERGED = new Set(['merged'])
+const DRAFT = new Set(['draft'])
+
+/**
+ * Count the pull requests across a workstream's members.
+ *
+ * `closes` and `contributes` are counted SEPARATELY, and the separation is the
+ * point. A stack's middle PRs are linked as "contributes"; folding them into
+ * one total makes "2 of 5 merged" say nothing about whether the feature is
+ * finished. The closes figure is the one that answers that.
+ *
+ * A PR appearing on two members is counted once — one PR can close several
+ * issues, and counting it twice would overstate both the total and the work.
+ */
+export function tallyPullRequests(issues: { pullRequests?: NormalizedPullRequest[] }[]): PullRequestTally {
+  const seen = new Set<string>()
+  const t: PullRequestTally = {
+    closesTotal: 0,
+    closesMerged: 0,
+    total: 0,
+    merged: 0,
+    open: 0,
+    draft: 0,
+    conflicts: 0,
+  }
+  for (const issue of issues) {
+    for (const pr of issue.pullRequests ?? []) {
+      if (seen.has(pr.url)) continue
+      seen.add(pr.url)
+      const status = (pr.status ?? '').toLowerCase()
+      const isMerged = MERGED.has(status)
+      t.total++
+      if (isMerged) t.merged++
+      else if (DRAFT.has(status)) t.draft++
+      else t.open++
+      if (pr.hasConflicts === true) t.conflicts++
+      // Absent linkKind counts as closing: Linear's default magic words close,
+      // and treating an unknown as "contributes" would understate completion.
+      if ((pr.linkKind ?? 'closes') !== 'contributes') {
+        t.closesTotal++
+        if (isMerged) t.closesMerged++
+      }
+    }
+  }
+  return t
 }

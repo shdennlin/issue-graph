@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { NormalizedIssue } from '../shared/types.js'
+import type { NormalizedIssue, NormalizedPullRequest } from '../shared/types.js'
 import {
   ASSIGNEES_MAX,
   BATCH_MEMBERS_MAX,
@@ -16,6 +16,7 @@ import {
   normalizeStatus,
   parseStringArray,
   stageAdvanceEvidence,
+  tallyPullRequests,
   batchProgress,
   nextCandidate,
   normalizeBatchName,
@@ -358,5 +359,70 @@ describe('stageAdvanceEvidence', () => {
     // Absent proves nothing either way — it may be outside the scope window
     // rather than finished.
     expect(stageAdvanceEvidence([member('ONE-1'), member('ONE-9')], [done('ONE-1')], false)).toBe(false)
+  })
+})
+
+describe('tallyPullRequests', () => {
+  const pr = (url: string, over: Partial<NormalizedPullRequest> = {}): NormalizedPullRequest => ({
+    url,
+    number: null,
+    repo: null,
+    status: 'open',
+    targetBranch: null,
+    hasConflicts: null,
+    linkKind: 'closes',
+    mergedAt: null,
+    ...over,
+  })
+
+  it('counts closes and contributes separately', () => {
+    // A stack's middle PRs are linked as "contributes". Folding them into one
+    // total makes "2 of 5 merged" say nothing about whether the feature is
+    // finished — the closes figure is the one that answers that.
+    const t = tallyPullRequests([
+      { pullRequests: [pr('a', { status: 'merged' }), pr('b', { linkKind: 'contributes', status: 'merged' })] },
+      { pullRequests: [pr('c')] },
+    ])
+    expect(t.total).toBe(3)
+    expect(t.merged).toBe(2)
+    expect(t.closesTotal).toBe(2)
+    expect(t.closesMerged).toBe(1)
+  })
+
+  it('counts one PR once even when it is linked to two members', () => {
+    // A single PR can close several issues; counting it twice would overstate
+    // both the total and the work done.
+    const t = tallyPullRequests([{ pullRequests: [pr('a')] }, { pullRequests: [pr('a')] }])
+    expect(t.total).toBe(1)
+  })
+
+  it('splits open, draft and merged, and counts conflicts', () => {
+    const t = tallyPullRequests([
+      {
+        pullRequests: [
+          pr('a', { status: 'merged' }),
+          pr('b', { status: 'draft' }),
+          pr('c', { status: 'open', hasConflicts: true }),
+        ],
+      },
+    ])
+    expect(t).toMatchObject({ merged: 1, draft: 1, open: 1, conflicts: 1 })
+  })
+
+  it('treats an absent linkKind as closing', () => {
+    // Linear's default magic words close. Reading an unknown as "contributes"
+    // would understate how complete the feature is.
+    const t = tallyPullRequests([{ pullRequests: [pr('a', { linkKind: null, status: 'merged' })] }])
+    expect(t.closesMerged).toBe(1)
+  })
+
+  it('counts an unrecognised status as open rather than dropping it', () => {
+    const t = tallyPullRequests([{ pullRequests: [pr('a', { status: 'queued' })] }])
+    expect(t.open).toBe(1)
+    expect(t.total).toBe(1)
+  })
+
+  it('handles members with no PRs at all', () => {
+    expect(tallyPullRequests([{}, { pullRequests: [] }])).toMatchObject({ total: 0, closesTotal: 0 })
   })
 })
