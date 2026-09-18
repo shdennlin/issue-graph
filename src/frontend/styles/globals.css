@@ -3894,6 +3894,9 @@ label + .settings-help {
 .stage-stream {
   display: flex;
   align-items: center;
+  /* Same reason as .stage-item-text below — the row must be allowed to shrink
+     or it propagates its content width up to the node. */
+  min-width: 0;
   gap: 6px;
   height: 22px;
   flex: 0 0 22px;
@@ -3914,6 +3917,10 @@ button.stage-item:hover,
   cursor: pointer;
 }
 .stage-item-text {
+  /* `min-width: 0` is what makes the ellipsis work at all: a flex item defaults
+     to `min-width: auto`, so it refuses to shrink below its content and widens
+     the whole stage instead of truncating. */
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

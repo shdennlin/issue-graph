@@ -106,6 +106,7 @@ export const workstreamView: ViewDefinition = {
             position: { x: 0, y: 0 },
             width: STAGE_W,
             height: stageNodeHeight(0),
+            style: { width: STAGE_W, height: stageNodeHeight(0) },
           },
         ],
         edges: [],
@@ -175,6 +176,10 @@ export function buildOverview(streams: WorkstreamSummaryDTO[], stages: Lifecycle
       position: place(i),
       width: STAGE_W,
       height: stageNodeHeight(on.length),
+      // React Flow v11 takes the rendered size from `style`; the width/height
+      // props above are only its own bookkeeping. Without this a long note or
+      // a long workstream name widens the node and it overlaps its neighbour.
+      style: { width: STAGE_W, height: stageNodeHeight(on.length) },
     }
   })
 }
@@ -219,6 +224,7 @@ export function buildFocused(
       position: place(i),
       width: STAGE_W,
       height: stageNodeHeight(renderStage(render, IDENT).length),
+      style: { width: STAGE_W, height: stageNodeHeight(renderStage(render, IDENT).length) },
     }
   })
 }
