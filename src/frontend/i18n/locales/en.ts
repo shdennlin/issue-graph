@@ -528,6 +528,7 @@ export const en = {
   session: {
     active: 'A Claude session is working on this',
     idle: 'A Claude session is waiting for you',
+    blocked: 'A Claude session is stopped, waiting for your answer',
     count: '{n} sessions',
   },
   lifecycle: {

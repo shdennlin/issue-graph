@@ -40,12 +40,18 @@ export interface AgentSessionRow {
   status: string
   last_seen: number
   payload_version: number
+  label: string | null
 }
 
 export const SESSION_ID_MAX = 200
 const FIELD_MAX = 500
 
-export type SessionStatus = 'active' | 'idle'
+/**
+ * `waiting` is the turn ending; `blocked` is a permission prompt with nothing
+ * running behind it. Only the second should pull a person over, which is why
+ * they are not one value.
+ */
+export type SessionStatus = 'active' | 'waiting' | 'blocked'
 
 export interface SessionReport {
   sessionId: string
@@ -54,6 +60,9 @@ export interface SessionReport {
   host: string | null
   phase: string | null
   status: SessionStatus
+  /** Overrides the derived label. Optional — the derivation is usually better
+   *  than anything a script would invent. */
+  label: string | null
   payloadVersion: number
 }
 
@@ -78,7 +87,16 @@ export function parseSessionReport(raw: unknown): SessionReport | null {
   const sessionId = str(o.sessionId, SESSION_ID_MAX)
   if (sessionId === null) return null
 
-  const status: SessionStatus = o.status === 'idle' ? 'idle' : 'active'
+  // 'idle' is still accepted: a plugin installed before the rename keeps
+  // reporting it, and the wire format cannot be renegotiated once installs
+  // exist. It means the same thing as 'waiting'.
+  const reported = o.status
+  const status: SessionStatus =
+    reported === 'blocked'
+      ? 'blocked'
+      : reported === 'waiting' || reported === 'idle'
+        ? 'waiting'
+        : 'active'
   const version =
     typeof o.payloadVersion === 'number' && Number.isInteger(o.payloadVersion)
       ? o.payloadVersion
@@ -94,6 +112,7 @@ export function parseSessionReport(raw: unknown): SessionReport | null {
     host: str(o.host),
     phase: str(o.phase, 100),
     status,
+    label: str(o.label, 120),
     payloadVersion: version,
   }
 }
@@ -106,9 +125,25 @@ export function sessionRowToDTO(row: AgentSessionRow): AgentSessionDTO {
     cwd: row.cwd,
     host: row.host,
     phase: row.phase,
-    status: row.status === 'idle' ? 'idle' : 'active',
+    status:
+      row.status === 'blocked' ? 'blocked' : row.status === 'waiting' || row.status === 'idle' ? 'waiting' : 'active',
     lastSeen: row.last_seen,
+    label: row.label ?? deriveLabel(row.cwd, row.branch),
   }
+}
+
+/**
+ * A name a person can recognise a terminal by.
+ *
+ * The repo directory and the branch, because that is how someone actually
+ * holds "which window is this" in their head — not by a session UUID, and not
+ * by a name they would have had to invent and would forget to set. The UUID
+ * stays as the key and as the batch claimant; it is never shown.
+ */
+export function deriveLabel(cwd: string | null, branch: string | null): string {
+  const dir = cwd ? (cwd.replace(/\/+$/, '').split('/').pop() ?? '') : ''
+  if (dir && branch) return `${dir} · ${branch}`
+  return dir || branch || 'session'
 }
 
 /** Is this row still within the TTL? */

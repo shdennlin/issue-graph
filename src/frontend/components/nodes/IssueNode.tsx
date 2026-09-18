@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react'
-import { AlertTriangle, ArrowLeft, ArrowRight, Bot, ListTree, MessageSquare, Minus, Pause, Star } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, ArrowRight, Bot, Hand, ListTree, MessageSquare, Minus, Pause, Star } from 'lucide-react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import type { AnnotationDTO, NormalizedIssue } from '@shared/types.js'
 import { useSchemaStore } from '../../store/schemaStore'
@@ -387,7 +387,11 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
             <span
               className={`session-badge is-${presence.kind}`}
               title={[
-                presence.kind === 'active' ? t('session.active') : t('session.idle'),
+                presence.kind === 'active'
+                  ? t('session.active')
+                  : presence.kind === 'blocked'
+                    ? t('session.blocked')
+                    : t('session.idle'),
                 presence.phase,
                 presence.count > 1 ? t('session.count').replace('{n}', String(presence.count)) : null,
               ]
@@ -396,6 +400,8 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
             >
               {presence.kind === 'active' ? (
                 <Bot size={11} strokeWidth={1.8} aria-hidden />
+              ) : presence.kind === 'blocked' ? (
+                <Hand size={11} strokeWidth={1.8} aria-hidden />
               ) : (
                 <Pause size={11} strokeWidth={1.8} aria-hidden />
               )}

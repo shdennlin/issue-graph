@@ -354,9 +354,18 @@ export interface AgentSessionDTO {
   host: string | null
   /** Last slash command seen, for display only. */
   phase: string | null
-  /** `active` = moving. `idle` = the turn ended; it is waiting on a human. */
-  status: 'active' | 'idle'
+  /**
+   * `active` — moving.
+   * `waiting` — the turn ended; it is your move, but nothing is stuck.
+   * `blocked` — stopped on a permission prompt and doing nothing until someone
+   *   answers. The only one that should pull a person over, which is why it is
+   *   not folded into `waiting`.
+   */
+  status: 'active' | 'waiting' | 'blocked'
   lastSeen: number
+  /** A name a person can recognise the terminal by — the repo directory and the
+   *  branch. Derived server-side; a UUID identifies nothing to a reader. */
+  label: string
 }
 
 /**

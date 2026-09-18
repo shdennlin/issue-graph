@@ -265,6 +265,18 @@ const MIGRATIONS: string[] = [
      created_at INTEGER NOT NULL,
      PRIMARY KEY (batch_id, stage_key, kind, value)
    );`,
+
+  // 11. A readable name for a session, and room for a third status.
+  //
+  // `label` exists because a UUID identifies nothing to a reader. It is derived
+  // server-side from the repo directory and branch — which is how a person
+  // actually recognises a terminal — and the hook may override it.
+  //
+  // The third status is `blocked`, from the Notification hook: Claude is
+  // stopped on a permission prompt and will not resume until someone acts.
+  // Folding that into `waiting` (the turn merely ended) loses the only state
+  // that should pull a person over.
+  `ALTER TABLE agent_session ADD COLUMN label TEXT;`,
 ]
 
 // One Database instance per workspace id. Each profile has its own SQLITE_PATH

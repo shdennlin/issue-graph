@@ -55,6 +55,7 @@ tunnel, not the whole app.
 | `SessionStart` | session id, branch, cwd, host — the session is alive |
 | `UserPromptSubmit` | heartbeat; a leading `/slash-command` is recorded as the phase |
 | `PostToolUse` (file edits) | heartbeat |
+| `Notification` | Claude is stopped on a permission prompt — **blocked** |
 | `Stop` | the turn ended — it is waiting on you |
 | `SessionEnd` | remove the row |
 
@@ -80,6 +81,14 @@ Two things the server deliberately will not do:
 - **Split a multi-issue branch.** `fix/one-371-372-374-…` resolves to ONE-371
   only — `372` has no prefix and nothing distinguishes it from a version number.
   Linear's own matcher behaves the same way.
+
+## Three states, not two
+
+`waiting` and `blocked` look similar and are not. `Stop` fires when a turn ends
+and it is your move — you can look whenever. `Notification` fires when Claude has
+stopped on a permission prompt: nothing is running, and nothing will until you
+answer. Only the second is worth walking over for, so the card shows them
+differently and only `blocked` is loud.
 
 ## Liveness
 

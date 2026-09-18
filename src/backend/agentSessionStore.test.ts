@@ -20,6 +20,7 @@ const row = (over: Partial<AgentSessionRow> = {}): AgentSessionRow => ({
   status: 'active',
   last_seen: 1_000_000,
   payload_version: HOOK_PAYLOAD_VERSION,
+  label: null,
   ...over,
 })
 
@@ -41,7 +42,9 @@ describe('parseSessionReport', () => {
       cwd: '/repo',
       host: 'laptop',
       phase: '/spectra-apply',
-      status: 'idle',
+      // An old plugin still reports 'idle'; it means the same as 'waiting'.
+      status: 'waiting',
+      label: null,
       payloadVersion: 1,
     })
   })
@@ -58,7 +61,19 @@ describe('parseSessionReport', () => {
 
   it('defaults an unrecognised status to active rather than rejecting', () => {
     expect(parseSessionReport({ sessionId: 'a', status: 'weird' })?.status).toBe('active')
-    expect(parseSessionReport({ sessionId: 'a', status: 'idle' })?.status).toBe('idle')
+  })
+
+  it('keeps blocked distinct from waiting', () => {
+    // `blocked` means a permission prompt with nothing running behind it, and
+    // it is the only status that should pull a person over. Folding it into
+    // `waiting` — the turn merely ended — would lose exactly that.
+    expect(parseSessionReport({ sessionId: 'a', status: 'blocked' })?.status).toBe('blocked')
+    expect(parseSessionReport({ sessionId: 'a', status: 'waiting' })?.status).toBe('waiting')
+  })
+
+  it("still accepts an old plugin's 'idle'", () => {
+    // The wire format cannot be renegotiated once installs exist in the wild.
+    expect(parseSessionReport({ sessionId: 'a', status: 'idle' })?.status).toBe('waiting')
   })
 
   it('records an unversioned report as version 0, not as the current version', () => {
@@ -126,11 +141,25 @@ describe('sessionRowToDTO', () => {
       phase: '/spectra-apply',
       status: 'active',
       lastSeen: 1_000_000,
+      label: 'repo · fix/one-393-x',
     })
   })
 
   it('normalises an unexpected stored status to active', () => {
     expect(sessionRowToDTO(row({ status: 'garbage' })).status).toBe('active')
+  })
+
+  it('derives a label a person can recognise, and lets the hook override it', () => {
+    // A UUID identifies nothing to a reader; the repo and branch are how
+    // someone actually holds "which window is this" in their head.
+    expect(sessionRowToDTO(row()).label).toBe('repo · fix/one-393-x')
+    expect(sessionRowToDTO(row({ label: 'my terminal' })).label).toBe('my terminal')
+  })
+
+  it('falls back sensibly when there is no branch or no directory', () => {
+    expect(sessionRowToDTO(row({ branch: null })).label).toBe('repo')
+    expect(sessionRowToDTO(row({ cwd: null })).label).toBe('fix/one-393-x')
+    expect(sessionRowToDTO(row({ cwd: null, branch: null })).label).toBe('session')
   })
 })
 

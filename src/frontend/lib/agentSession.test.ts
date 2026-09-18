@@ -13,6 +13,7 @@ const s = (over: Partial<AgentSessionDTO> = {}): AgentSessionDTO => ({
   phase: null,
   status: 'active',
   lastSeen: NOW - 1000,
+  label: 'repo · fix/one-1-x',
   ...over,
 })
 
@@ -46,15 +47,28 @@ describe('sessionPresence', () => {
     expect(p).toEqual({ kind: 'active', lastSeen: NOW - 5000, count: 1, phase: '/spectra-apply' })
   })
 
-  it('reports idle when every session has ended its turn', () => {
-    expect(sessionPresence([s({ status: 'idle' })]).kind).toBe('idle')
+  it('reports waiting when every session has ended its turn', () => {
+    expect(sessionPresence([s({ status: 'waiting' })]).kind).toBe('waiting')
+  })
+
+  it('lets blocked outrank everything', () => {
+    // Something has stopped and will not restart until a person acts. That
+    // outranks progress elsewhere on the same issue — it is the only state
+    // worth interrupting someone for.
+    const p = sessionPresence([
+      s({ sessionId: 'a', status: 'active' }),
+      s({ sessionId: 'b', status: 'waiting' }),
+      s({ sessionId: 'c', status: 'blocked', phase: '/needs-you' }),
+    ])
+    expect(p.kind).toBe('blocked')
+    expect(p.kind !== 'none' && p.phase).toBe('/needs-you')
   })
 
   it('lets active win over idle', () => {
     // If anything is still moving the issue is being worked on. Saying
     // "waiting for you" while a sibling session edits files would send the
     // reader to the wrong terminal.
-    const p = sessionPresence([s({ sessionId: 'a', status: 'idle' }), s({ sessionId: 'b' })])
+    const p = sessionPresence([s({ sessionId: 'a', status: 'waiting' }), s({ sessionId: 'b' })])
     expect(p.kind).toBe('active')
     expect(p.kind !== 'none' && p.count).toBe(1)
   })
@@ -70,10 +84,10 @@ describe('sessionPresence', () => {
     expect(p.kind !== 'none' && p.phase).toBe('/new')
   })
 
-  it('ignores an idle session’s newer heartbeat when an active one decides', () => {
+  it('ignores a waiting session’s newer heartbeat when an active one decides', () => {
     const p = sessionPresence(
       [
-        s({ sessionId: 'idle', status: 'idle', lastSeen: NOW - 500, phase: '/idle' }),
+        s({ sessionId: 'waiting', status: 'waiting', lastSeen: NOW - 500, phase: '/waiting' }),
         s({ sessionId: 'act', lastSeen: NOW - 9_000, phase: '/act' }),
       ],
     )

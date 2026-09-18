@@ -23,6 +23,7 @@ import {
   HOOK_PAYLOAD_VERSION,
   SESSION_ID_MAX,
   parseSessionReport,
+  sessionRowToDTO,
   type AgentSessionRow,
 } from '../agentSessionStore.js'
 
@@ -54,8 +55,8 @@ agentSessionRoutes.post('/api/agent-sessions', async (c) => {
   const now = Date.now()
   getDb()
     .prepare(
-      `INSERT INTO agent_session(session_id, identifier, branch, cwd, host, phase, status, last_seen, payload_version)
-       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO agent_session(session_id, identifier, branch, cwd, host, phase, status, last_seen, payload_version, label)
+       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(session_id) DO UPDATE SET
          identifier = excluded.identifier,
          branch = excluded.branch,
@@ -66,7 +67,8 @@ agentSessionRoutes.post('/api/agent-sessions', async (c) => {
          phase = COALESCE(excluded.phase, agent_session.phase),
          status = excluded.status,
          last_seen = excluded.last_seen,
-         payload_version = excluded.payload_version`,
+         payload_version = excluded.payload_version,
+         label = COALESCE(excluded.label, agent_session.label)`,
     )
     .run(
       report.sessionId,
@@ -78,6 +80,7 @@ agentSessionRoutes.post('/api/agent-sessions', async (c) => {
       report.status,
       now,
       report.payloadVersion,
+      report.label,
     )
 
   return c.json({ ok: true, identifier, serverPayloadVersion: HOOK_PAYLOAD_VERSION })
@@ -97,12 +100,13 @@ agentSessionRoutes.delete('/api/agent-sessions/:sessionId', (c) => {
 })
 
 /** Read side is unguarded, like every other GET here — it is the same data the
- *  graph response already carries. */
+ *  graph response already carries, and returned in the same DTO shape so the
+ *  derived label is present on both paths rather than only one. */
 agentSessionRoutes.get('/api/agent-sessions', (c) => {
   const rows = getDb()
     .prepare(
-      `SELECT session_id, identifier, branch, cwd, host, phase, status, last_seen, payload_version FROM agent_session`,
+      `SELECT session_id, identifier, branch, cwd, host, phase, status, last_seen, payload_version, label FROM agent_session`,
     )
     .all() as AgentSessionRow[]
-  return c.json({ entries: rows })
+  return c.json({ entries: rows.map(sessionRowToDTO) })
 })

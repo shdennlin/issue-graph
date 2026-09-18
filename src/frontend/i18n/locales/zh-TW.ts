@@ -517,6 +517,7 @@ export const zhTW: Dict = {
   session: {
     active: '有 Claude session 正在處理這張',
     idle: 'Claude session 正在等你回應',
+    blocked: 'Claude session 卡住了，在等你回答',
     count: '{n} 個 session',
   },
   lifecycle: {

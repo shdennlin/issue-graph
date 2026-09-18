@@ -1072,7 +1072,11 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   color: var(--fg-muted);
   font-variant-numeric: tabular-nums;
 }
-.issue-node .session-badge.is-idle { color: var(--accent); }
+.issue-node .session-badge.is-waiting { color: var(--accent); }
+/* The only session state worth interrupting someone for: stopped on a prompt,
+   nothing running behind it. Loud on purpose, unlike `waiting`, which can be
+   looked at whenever. */
+.issue-node .session-badge.is-blocked { color: var(--danger); font-weight: 600; }
 
 .priority-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .priority-0 { background: var(--priority-none); }

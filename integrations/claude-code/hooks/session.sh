@@ -2,7 +2,7 @@
 #
 # Report this Claude Code session's presence to an issue-graph server.
 #
-#   session.sh start | beat | idle | end
+#   session.sh start | beat | idle | blocked | end
 #
 # Configuration, both required — with either missing the hook does nothing at
 # all, silently. That is deliberate: this ships enabled to anyone who installs
@@ -76,12 +76,23 @@ fi
 
 HOST=$(hostname 2>/dev/null || true)
 
+# `blocked` is NOT the same as `idle`. Stop means the turn ended and it is the
+# human's move; Notification means Claude is stopped on a permission prompt and
+# nothing is running until someone answers. Only the second is worth
+# interrupting anyone for, so the two are reported separately.
 STATUS="active"
-[ "$ACTION" = "idle" ] && STATUS="idle"
+[ "$ACTION" = "idle" ] && STATUS="waiting"
+[ "$ACTION" = "blocked" ] && STATUS="blocked"
 
 # Only SessionStart and an explicit slash command carry a phase. A heartbeat
 # sends none, and the server keeps the last one rather than blanking it.
 PHASE=""
+# A Notification carries the reason in `message` — "Claude needs your
+# permission to use Bash", and so on. Verified against a hook already running
+# on this machine; it is the field that handler reads too.
+if [ "$ACTION" = "blocked" ] && command -v jq >/dev/null 2>&1; then
+  PHASE=$(printf '%s' "$HOOK_INPUT" | jq -r '.message // empty' 2>/dev/null | cut -c1-100 || true)
+fi
 if [ "$ACTION" = "beat" ] && command -v jq >/dev/null 2>&1; then
   PROMPT=$(printf '%s' "$HOOK_INPUT" | jq -r '.prompt // empty' 2>/dev/null || true)
   case "$PROMPT" in

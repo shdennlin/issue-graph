@@ -23,6 +23,13 @@
         ]
       }
     ],
+    "Notification": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/session.sh blocked", "timeout": 10 }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

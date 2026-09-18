@@ -333,7 +333,7 @@ export function readWorkstreamSummaries(): WorkstreamSummaryDTO[] {
 export function readLiveAgentSessions(now = Date.now()): AgentSessionDTO[] {
   const rows = getDb()
     .prepare(
-      'SELECT session_id, identifier, branch, cwd, host, phase, status, last_seen, payload_version FROM agent_session',
+      'SELECT session_id, identifier, branch, cwd, host, phase, status, last_seen, payload_version, label FROM agent_session',
     )
     .all() as AgentSessionRow[]
   return liveSessions(rows, now)
