@@ -3947,3 +3947,37 @@ button.stage-item:hover,
   color: var(--fg-muted);
   font-style: italic;
 }
+
+/* The lifecycle editor, floating over the Workstreams board.
+   Top-RIGHT, because the Views/filter panel already owns the top-left and the
+   pipeline itself starts there — an editor covering stage 1 would hide the
+   thing being edited. Scrolls internally so a long pipeline cannot push its
+   own close button off-screen. */
+.lifecycle-panel {
+  position: absolute;
+  top: 12px;
+  /* Clears the canvas search control, which floats in the same corner. */
+  right: 46px;
+  z-index: 6;
+  width: min(460px, calc(100vw - 58px));
+  max-height: calc(100vh - 160px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elev);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--node-shadow);
+}
+.lifecycle-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--node-border);
+}
+.lifecycle-panel-header h4 { margin: 0; font-size: 13px; }
+.lifecycle-panel-body {
+  overflow-y: auto;
+  padding: 12px;
+}

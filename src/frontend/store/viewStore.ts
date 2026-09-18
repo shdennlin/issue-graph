@@ -141,6 +141,10 @@ export interface ViewState {
    * not "no workstream" — it is the other mode.
    */
   focusedWorkstreamId: number | null
+  /** The lifecycle editor, open over the Workstreams view. A preference, not a
+   *  step: it configures the view rather than changing what the view is about,
+   *  so it stays out of the URL and out of significantSignature. */
+  lifecycleEditorOpen: boolean
   search: string                 // toolbar filter search (narrows visible set)
   inlineSearch: { open: boolean; query: string; activeIdx: number }
   settingsOpen: boolean
@@ -272,6 +276,7 @@ export interface ViewState {
   setMaxColsPerRow: (n: number) => void
   setMixGroupBy: (key: string | null) => void
   setFocusedWorkstreamId: (id: number | null) => void
+  setLifecycleEditorOpen: (b: boolean) => void
   setSearch: (q: string) => void
   openInlineSearch: () => void
   closeInlineSearch: () => void
@@ -362,6 +367,7 @@ export const useViewStore = create<ViewState>((set) => ({
   density: 'default',
   mixGroupBy: null,
   focusedWorkstreamId: null,
+  lifecycleEditorOpen: false,
   fontSize: (() => {
     if (typeof window === 'undefined') return 'md' as FontSize
     const raw = window.localStorage?.getItem('ig-font-size')
@@ -473,6 +479,7 @@ export const useViewStore = create<ViewState>((set) => ({
   setDensity: (d) => set({ density: d }),
   setMixGroupBy: (key) => set({ mixGroupBy: key }),
   setFocusedWorkstreamId: (id) => set({ focusedWorkstreamId: id }),
+  setLifecycleEditorOpen: (b) => set({ lifecycleEditorOpen: b }),
   setFontSize: (f) => {
     if (typeof window !== 'undefined') {
       window.localStorage?.setItem('ig-font-size', String(f))

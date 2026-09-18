@@ -57,6 +57,8 @@ export function Toolbar() {
   const mixGroupBy = useViewStore((s) => s.mixGroupBy)
   const focusedWorkstreamId = useViewStore((s) => s.focusedWorkstreamId)
   const setFocusedWorkstreamId = useViewStore((s) => s.setFocusedWorkstreamId)
+  const lifecycleEditorOpen = useViewStore((s) => s.lifecycleEditorOpen)
+  const setLifecycleEditorOpen = useViewStore((s) => s.setLifecycleEditorOpen)
   const setMixGroupBy = useViewStore((s) => s.setMixGroupBy)
   const t = useT()
 
@@ -185,6 +187,18 @@ export function Toolbar() {
                 </option>
               ))}
             </select>
+          </div>
+        </>
+      )}
+      {activeView === 'workstream' && (
+        <>
+          <div className="sep" />
+          <div className="group">
+            {/* The editor opens over the board rather than in Settings: you
+                notice a stage is missing while looking at the pipeline. */}
+            <button onClick={() => setLifecycleEditorOpen(!lifecycleEditorOpen)}>
+              {t('lifecycle.edit')}
+            </button>
           </div>
         </>
       )}

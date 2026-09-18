@@ -522,6 +522,7 @@ export const zhTW: Dict = {
   },
   lifecycle: {
     title: '生命週期',
+    edit: '編輯 pipeline',
     hint: '你的流程，依序排列。每一格指定它預期的 Linear 狀態，以及一句「這裡通常做什麼」—— 那是給接手的人的提示，不是規則。這裡的設定不會自己改動任何 issue。',
     empty: '還沒有任何階段。在下方新增流程的第一步。',
     stageName: '階段名稱',
@@ -534,7 +535,7 @@ export const zhTW: Dict = {
     moveDown: '往後移',
     delete: '刪除階段',
     constrainsNothing: '接受任何 Linear 狀態 —— 永遠不會回報衝突。',
-    usage: '{n} 張 issue 在這一格',
+    usage: '在這一格：{n} 條工作線',
     loadFailed: '無法載入生命週期設定。',
   },
   stage: {

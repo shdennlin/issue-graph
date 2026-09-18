@@ -533,6 +533,7 @@ export const en = {
   },
   lifecycle: {
     title: 'Lifecycle',
+    edit: 'Edit pipeline',
     // The config describes and suggests; it never moves an issue by itself.
     // Saying so here stops anyone expecting the states below to be automation.
     hint: 'Your pipeline, in order. Each stage names the Linear states it expects, and a note about what usually happens there — a hint for whoever picks the issue up, not a rule. Nothing here changes an issue on its own.',
@@ -547,7 +548,12 @@ export const en = {
     moveDown: 'Move later',
     delete: 'Delete stage',
     constrainsNothing: 'Expects any Linear state — never reports a conflict.',
-    usage: '{n} issues on this stage',
+    // Counts WORKSTREAMS. It said "issues" while counting workstreams, left
+    // over from when a stage was a property of an issue; the pipeline belongs
+    // to the workstream now and an issue has no stage of its own.
+    // Phrased so it reads for 0, 1 and many: this codebase has no plural
+    // forms, and "1 workstreams" sits in a panel people stare at while tuning.
+    usage: 'on this stage: {n}',
     loadFailed: 'Could not load the lifecycle.',
   },
   stage: {

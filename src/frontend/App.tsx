@@ -44,6 +44,7 @@ const CoverageModal = lazy(() => import('./components/CoverageModal').then((m) =
 const SettingsPage = lazy(() => import('./components/SettingsPage').then((m) => ({ default: m.SettingsPage })))
 const ShortcutsModal = lazy(() => import('./components/ShortcutsModal').then((m) => ({ default: m.ShortcutsModal })))
 const WorkstreamsPanel = lazy(() => import('./components/WorkstreamsPanel').then((m) => ({ default: m.WorkstreamsPanel })))
+const LifecyclePanel = lazy(() => import('./components/LifecyclePanel').then((m) => ({ default: m.LifecyclePanel })))
 const NotesModal = lazy(() => import('./components/notes/NotesModal').then((m) => ({ default: m.NotesModal })))
 
 export function App() {
@@ -65,6 +66,8 @@ export function App() {
   const shortcutsOpen = useViewStore((s) => s.shortcutsOpen)
   const notesOpen = useViewStore((s) => s.notesOpen)
   const workstreamsOpen = useViewStore((s) => s.workstreamsOpen)
+  const lifecycleEditorOpen = useViewStore((s) => s.lifecycleEditorOpen)
+  const activeViewId = useViewStore((s) => s.activeView)
 
   // Bootstrap step 1 — resolve this tab's workspace + tab list BEFORE any
   // graph/schema calls. The fetch helpers in lib/api.ts inject `?w=` from
@@ -732,6 +735,15 @@ export function App() {
             above it — a horizontal bar cost vertical space across the whole
             window even when only two filters were active. */}
         <FacetBar />
+        {/* Beside FacetBar so its `position: absolute` resolves against the
+            canvas, not the page — at the app root it sat under the toolbar.
+            Only over the view it configures: a pipeline editor floating over
+            the dependency graph would be editing something off-screen. */}
+        {lifecycleEditorOpen && activeViewId === 'workstream' && (
+          <Suspense fallback={null}>
+            <LifecyclePanel />
+          </Suspense>
+        )}
         <GraphCanvas />
         {focusedId && detailPanelOpen && (
           <Suspense fallback={null}>

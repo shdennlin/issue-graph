@@ -61,11 +61,22 @@ src/
                                           vs. preference changes — push vs. replace history)
                             tabStateStore Per-tab persistence in localStorage
     views/                Pure graph builders: (data, filters, ctx) → React Flow nodes/edges.
-                          Each view (dependency / mix / project / milestone / designdoc)
-                          implements ViewDefinition from views/types.ts.
+                          Each view (dependency / mix / project / milestone / designdoc /
+                          workstream) implements ViewDefinition from views/types.ts, and
+                          `ViewDefinition.id` is `ViewId` so the registry and that union
+                          cannot drift — they had, and the cast that hid it in Toolbar
+                          would equally have accepted a typo.
                           Chain mode (chainRootId !== null) is layered on top: container
                           views delegate to dependencyView.build via chainLayout.ts so
                           chains render consistently regardless of the outer view.
+                          `workstream` is the odd one out twice over: it draws STAGES
+                          rather than issues (see its header), and it deliberately does
+                          NOT apply the filter bar, because its subject is the workstream
+                          and its members are a fact about it rather than a subset of the
+                          graph. What each stage draws is decided in lib/stageRender.ts —
+                          one pure function per `shows` token, since `.tsx` is outside
+                          vitest's glob and a decision made in the component could not be
+                          tested at all.
     components/           Presentational + interaction. nodes/ is the per-card UI;
                           notes/, quickSwitcher/, facets/ are feature folders.
       facets/             The filter panel. facetModel.ts is pure derivation (which
