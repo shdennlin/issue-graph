@@ -251,16 +251,53 @@ export const api = {
    *  this with the current stage is a no-op rather than a fake advance. */
   setBatchStage: (id: number, stage: string | null) =>
     http<unknown>(`/api/batches/${id}`, { method: 'PATCH', body: JSON.stringify({ stage }) }),
+  /** Archiving is how you take a workstream off the board without claiming it
+   *  finished — the graph payload drops archived ones entirely. */
+  setBatchStatus: (id: number, status: 'active' | 'archived') =>
+    http<unknown>(`/api/batches/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   renameBatch: (id: number, name: string) =>
     http<unknown>(`/api/batches/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
   addBatchMembers: (id: number, members: string[]) =>
     http<unknown>(`/api/batches/${id}/members`, { method: 'POST', body: JSON.stringify({ members }) }),
   removeBatchMember: (id: number, identifier: string) =>
     http<unknown>(`/api/batches/${id}/members/${identifier}`, { method: 'DELETE' }),
+  /** A stage note. Writable on ANY stage, not only the current one — the spec
+   *  folder is known before Spec review is reached, and a decision is recorded
+   *  after Result review has passed. */
+  setStageNote: (id: number, stageKey: string, body: string) =>
+    http<unknown>(`/api/batches/${id}/notes/${encodeURIComponent(stageKey)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ body }),
+    }),
+  clearStageNote: (id: number, stageKey: string) =>
+    http<unknown>(`/api/batches/${id}/notes/${encodeURIComponent(stageKey)}`, { method: 'DELETE' }),
+  /** Attach something by hand when the automatic link is missing. `kind` picks
+   *  where it renders — see STAGE_LINK_KINDS. */
+  attachToStage: (id: number, stageKey: string, kind: string, value: string, label?: string) =>
+    http<unknown>(`/api/batches/${id}/links/${encodeURIComponent(stageKey)}`, {
+      method: 'POST',
+      body: JSON.stringify({ kind, value, label }),
+    }),
+  detachFromStage: (id: number, stageKey: string, value: string) =>
+    http<unknown>(`/api/batches/${id}/links/${encodeURIComponent(stageKey)}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ value }),
+    }),
   deleteBatch: (id: number) => http<unknown>(`/api/batches/${id}`, { method: 'DELETE' }),
-  fetchBatches: () =>
-    http<{ entries: { id: number; name: string; progress: { total: number; done: number } }[] }>(
-      '/api/batches',
+  /** `includeArchived` opts back in to what archiving took off the board. The
+   *  panel is the one place they have to be reachable, or archiving would be
+   *  indistinguishable from deleting. */
+  fetchBatches: (includeArchived = false) =>
+    http<{
+      entries: {
+        id: number
+        name: string
+        stage: string | null
+        status: 'active' | 'archived'
+        progress: { total: number; done: number }
+      }[]
+    }>(
+      includeArchived ? '/api/batches?status=all' : '/api/batches',
     ),
   fetchLifecycle: () => http<{ entries: LifecycleStageDTO[] }>('/api/lifecycle'),
   createStage: (s: { name: string; key?: string; states?: string[]; nextCommand?: string | null }) =>

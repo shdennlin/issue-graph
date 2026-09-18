@@ -5,6 +5,7 @@ import type { Dict } from '../dict'
 
 export const zhTW: Dict = {
   common: {
+    confirm: '確定?',
     cancel: '取消',
     save: '儲存',
     close: '關閉',
@@ -515,6 +516,9 @@ export const zhTW: Dict = {
     create: '新增工作線',
     delete: '刪除工作線（issue 本身不動）',
     removeMember: '從這條工作線移除',
+    showArchived: '顯示已封存',
+    archive: '封存（從版面移除，資料都留著）',
+    unarchive: '放回版面',
   },
   session: {
     active: '有 Claude session 正在處理這張',
@@ -572,6 +576,25 @@ export const zhTW: Dict = {
     manualHint: '因為沒有東西能自動關聯，所以是手動掛上的。把 Linear 議題編號加到上游，它就會自己出現。',
     notStarted: '尚未開始',
     moveHere: '把這條工作線移到這一格',
+    attach: '加註記，或手動掛上東西',
+    attachNote: '註記',
+    attachKind_spec: 'Spec',
+    attachKind_pr: 'Pull request',
+    attachKind_url: '連結',
+    attachKind_ci: 'CI 執行',
+    attachKind_issue: '議題',
+    attachPlaceholder_ci: 'https://\u2026/actions/runs/1',
+    attachPlaceholder_issue: 'ONE-123',
+    attachNotePlaceholder: '這一格實際在等什麼',
+    attachPlaceholder_spec: 'openspec/changes/\u2026/proposal.md',
+    attachPlaceholder_pr: 'https://github.com/\u2026/pull/1',
+    attachPlaceholder_url: 'https://\u2026',
+    attachLabel: '標籤（可省略）',
+    attachSave: '儲存',
+    attachClear: '清除註記',
+    notesTitle: '註記',
+    notesEmpty: '這條工作線還沒有註記。',
+    detach: '移除這個手動掛件',
     noStages: '還沒有 stage \u2014 先定義你的 pipeline 才能用這個 view。',
   },
   states: {

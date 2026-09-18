@@ -1,11 +1,13 @@
-import { memo, useMemo } from 'react'
+import { memo, useMemo, useState } from 'react'
 import type { MouseEvent, PointerEvent } from 'react'
 import type { NodeProps } from 'reactflow'
 import { Handle, Position } from 'reactflow'
+import { MoveRight } from 'lucide-react'
 import { useT } from '../../i18n'
 import { useViewStore } from '../../store/viewStore'
 import { renderStage, type StageContext, type StageItem } from '../../lib/stageRender'
 import { api } from '../../lib/api'
+import { StageAttach } from './StageAttach'
 import { useGraphStore } from '../../store/graphStore'
 
 // One step of the pipeline, drawn as a wide numbered BAR.
@@ -58,7 +60,7 @@ export interface StageNodeData {
   stale: boolean
 }
 
-function ItemRow({ item }: { item: StageItem }) {
+function ItemRow({ item, onDetach }: { item: StageItem; onDetach?: (value: string) => void }) {
   const t = useT()
   const setFocusedId = useViewStore((s) => s.setFocusedId)
   const setDetailPanelOpen = useViewStore((s) => s.setDetailPanelOpen)
@@ -85,6 +87,21 @@ function ItemRow({ item }: { item: StageItem }) {
           {h}
         </span>
       ))}
+      {item.manual && onDetach && (
+        <button
+          type="button"
+          className="stage-item-detach"
+          title={t('stage.detach')}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation()
+            e.preventDefault()
+            onDetach(item.url ?? item.text)
+          }}
+        >
+          {'\u00d7'}
+        </button>
+      )}
       {item.manual && (
         // The mark exists so a hand attachment never looks as good as a
         // projected one — if it did it would quietly become the default and
@@ -117,6 +134,7 @@ function ItemRow({ item }: { item: StageItem }) {
 function StageImpl({ data }: NodeProps<StageNodeData>) {
   const t = useT()
   const refetchSilent = useGraphStore((s) => s.refetchSilent)
+  const [attaching, setAttaching] = useState(false)
   const setFocusedWorkstreamId = useViewStore((s) => s.setFocusedWorkstreamId)
   // Wording never changes how many items there are, so the view's height
   // estimate and this stay in step — which matters more here than elsewhere,
@@ -135,8 +153,23 @@ function StageImpl({ data }: NodeProps<StageNodeData>) {
     void api.setBatchStage(moveTarget.id, moveTarget.key).then(() => refetchSilent())
   }
 
+  const detach = data.render
+    ? (value: string) => {
+        const ws = data.render!.workstream.id
+        void api.detachFromStage(ws, data.render!.stage.key, value).then(() => refetchSilent())
+      }
+    : undefined
+
   return (
     <div className={`stage-node${data.current ? ' stage-current' : ''}${data.stale ? ' stage-stale' : ''}`}>
+      {attaching && data.render && (
+        <StageAttach
+          batchId={data.render.workstream.id}
+          stageKey={data.render.stage.key}
+          existingNote={data.render.workstream.notes[data.render.stage.key] ?? ''}
+          onClose={() => setAttaching(false)}
+        />
+      )}
       {/* Four positions, each as both source and target, because the pipeline
           runs in boustrophedon: a row reads left-to-right, drops, and the next
           reads right-to-left, so an edge can leave any side. They are hidden in
@@ -155,22 +188,41 @@ function StageImpl({ data }: NodeProps<StageNodeData>) {
             previously only reachable through the MCP or a hand-written PATCH.
             Only a stage it is NOT on is clickable — moving somewhere you
             already are should not restamp anything. */}
-        {moveTarget !== null ? (
+        <span className="stage-name">
+          {data.placeholder ? t(`stage.${data.placeholder}`) : data.name}
+        </span>
+        {/* Moving is its OWN control, not the title. Making the title the
+            button meant every stray click on a stage moved the workstream —
+            the history filled with moves nobody meant, and `stage_entered_at`
+            was restamped each time, so "how long has it been here" kept
+            resetting to zero. */}
+        {moveTarget !== null && (
           <button
             type="button"
-            className="stage-name stage-name-btn"
+            className="stage-move-btn"
             onClick={move}
             onPointerDown={(e) => e.stopPropagation()}
             title={t('stage.moveHere')}
+            aria-label={t('stage.moveHere')}
           >
-            {data.name}
+            <MoveRight size={13} />
           </button>
-        ) : (
-          <span className="stage-name">
-            {data.placeholder ? t(`stage.${data.placeholder}`) : data.name}
-          </span>
         )}
         {data.current && <span className="stage-badge">{t('stage.current')}</span>}
+        {data.render && (
+          <button
+            type="button"
+            className="stage-attach-btn"
+            title={t('stage.attach')}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation()
+              setAttaching((v) => !v)
+            }}
+          >
+            +
+          </button>
+        )}
         {data.visits > 1 && (
           <span className="stage-visits" title={t('stage.visitsHint')}>
             {t('stage.visits', { n: data.visits })}
@@ -190,7 +242,13 @@ function StageImpl({ data }: NodeProps<StageNodeData>) {
           {items.length === 0 ? (
             <span className="stage-empty">{t('stage.nothingHere')}</span>
           ) : (
-            items.map((item, i) => <ItemRow key={`${item.token}:${item.text}:${i}`} item={item} />)
+            items.map((item, i) => (
+              <ItemRow
+                key={`${item.token}:${item.text}:${i}`}
+                item={item}
+                onDetach={detach}
+              />
+            ))
           )}
         </div>
       )}

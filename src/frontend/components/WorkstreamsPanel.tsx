@@ -18,7 +18,7 @@
 // a shell, because vitest cannot test JSX in this repo.
 
 import { useCallback, useEffect, useState } from 'react'
-import { Bot, ChevronDown, ChevronRight, Pause, Trash2, X } from 'lucide-react'
+import { Archive, ArchiveRestore, Bot, ChevronDown, ChevronRight, Pause, Trash2, X } from 'lucide-react'
 import { api } from '../lib/api'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
@@ -41,6 +41,8 @@ interface Detail {
 interface Summary {
   id: number
   name: string
+  stage: string | null
+  status: 'active' | 'archived'
   progress: { total: number; done: number }
 }
 
@@ -55,17 +57,28 @@ export function WorkstreamsPanel() {
   const [details, setDetails] = useState<Record<number, Detail>>({})
   const [open, setOpen] = useState<Set<number>>(new Set())
   const [error, setError] = useState<string | null>(null)
+  // Archived ones are off the board by design, but this panel is the one place
+  // they have to remain reachable — otherwise archiving is indistinguishable
+  // from deleting, and nobody would risk it.
+  const [showArchived, setShowArchived] = useState(false)
+  // Two-step confirm, inline rather than window.confirm(): a browser that has
+  // had "prevent this page creating more dialogs" ticked silently returns
+  // false, and the dialog blocks the whole page besides. Keyed by
+  // `<id>:<action>` so arming one row's delete does not arm another's.
+  // Motivated by a real loss — a workstream went in one stray click.
+  const [armed, setArmed] = useState<string | null>(null)
 
+  const stages = graph?.data.lifecycle ?? []
   const sessionsByIssue = indexSessionsByIssue(graph?.data.agentSessions)
   const issuesById = new Map((graph?.data.issues ?? []).map((i) => [i.identifier, i]))
 
   const loadList = useCallback(async () => {
     try {
-      setList((await api.fetchBatches()).entries)
+      setList((await api.fetchBatches(showArchived)).entries)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [])
+  }, [showArchived])
 
   const loadDetail = useCallback(async (id: number) => {
     try {
@@ -82,8 +95,11 @@ export function WorkstreamsPanel() {
   // this repo already passes lint with.
   useEffect(() => {
     let live = true
+    // `showArchived` has to be in BOTH places: this is the fetch that actually
+    // populates the list, and with an empty dep array the checkbox changed a
+    // flag that nothing ever read again.
     api
-      .fetchBatches()
+      .fetchBatches(showArchived)
       .then((r) => {
         if (live) setList(r.entries)
       })
@@ -93,7 +109,7 @@ export function WorkstreamsPanel() {
     return () => {
       live = false
     }
-  }, [])
+  }, [showArchived])
 
   const toggle = (id: number) => {
     // The fetch sits OUTSIDE the updater: React may call an updater more than
@@ -140,8 +156,30 @@ export function WorkstreamsPanel() {
           </button>
         </div>
 
-        <div className="modal-body">
+        {/* Disarms on a click that is NOT one of the arming buttons. Those
+            stopPropagation, or the button's own click would bubble here and
+            cancel the arm it had just set — which is what happened first. */}
+        <div className="modal-body" onClick={() => setArmed(null)}>
           <p className="settings-hint">{t('workstreams.hint')}</p>
+
+          <div className="workstream-actions">
+            <button
+              onClick={() => {
+                const name = window.prompt(t('workstreams.namePrompt'))
+                if (name?.trim()) void run(() => api.createBatch(name.trim(), []))
+              }}
+            >
+              {t('workstreams.create')}
+            </button>
+            <label className="workstream-archived-toggle">
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={(e) => setShowArchived(e.target.checked)}
+              />
+              {t('workstreams.showArchived')}
+            </label>
+          </div>
 
           {list.length === 0 && <p className="settings-hint">{t('workstreams.empty')}</p>}
 
@@ -149,7 +187,7 @@ export function WorkstreamsPanel() {
             const d = details[ws.id]
             const isOpen = open.has(ws.id)
             return (
-              <div key={ws.id} className="workstream">
+              <div key={ws.id} className={`workstream${ws.status === 'archived' ? ' is-archived' : ''}`}>
                 <div className="workstream-head">
                   <button className="workstream-toggle" onClick={() => toggle(ws.id)}>
                     {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -163,6 +201,22 @@ export function WorkstreamsPanel() {
                       if (name && name !== ws.name) void run(() => api.renameBatch(ws.id, name))
                     }}
                   />
+                  {/* The pipeline is per workspace, so every workstream picks
+                      from the same list. "—" takes it off the pipeline without
+                      archiving it: not started and shelved are different. */}
+                  <select
+                    className="workstream-stage"
+                    aria-label={t('lifecycle.title')}
+                    value={ws.stage ?? ''}
+                    onChange={(e) => void run(() => api.setBatchStage(ws.id, e.target.value || null))}
+                  >
+                    <option value="">{'\u2014'}</option>
+                    {stages.map((st) => (
+                      <option key={st.key} value={st.key}>
+                        {st.name}
+                      </option>
+                    ))}
+                  </select>
                   <span className="workstream-progress">
                     {ws.progress.done}/{ws.progress.total}
                   </span>
@@ -171,11 +225,45 @@ export function WorkstreamsPanel() {
                       {t('workstreams.isolateShort')}
                     </button>
                   )}
+                  {/* Archiving before deleting, and in that order: one is
+                      reversible and the other takes the members' history with
+                      it. */}
+                  {/* Archiving before deleting, and in that order: one is
+                      reversible and the other takes the members' history with
+                      it. Both ask twice all the same. */}
                   <button
-                    onClick={() => void run(() => api.deleteBatch(ws.id))}
+                    className={armed === `${ws.id}:archive` ? 'confirm-armed' : ''}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      const key = `${ws.id}:archive`
+                      if (armed !== key) return setArmed(key)
+                      setArmed(null)
+                      void run(() =>
+                        api.setBatchStatus(ws.id, ws.status === 'archived' ? 'active' : 'archived'),
+                      )
+                    }}
+                    title={ws.status === 'archived' ? t('workstreams.unarchive') : t('workstreams.archive')}
+                  >
+                    {armed === `${ws.id}:archive` ? (
+                      t('common.confirm')
+                    ) : ws.status === 'archived' ? (
+                      <ArchiveRestore size={14} />
+                    ) : (
+                      <Archive size={14} />
+                    )}
+                  </button>
+                  <button
+                    className={armed === `${ws.id}:delete` ? 'confirm-armed danger' : ''}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      const key = `${ws.id}:delete`
+                      if (armed !== key) return setArmed(key)
+                      setArmed(null)
+                      void run(() => api.deleteBatch(ws.id))
+                    }}
                     title={t('workstreams.delete')}
                   >
-                    <Trash2 size={14} />
+                    {armed === `${ws.id}:delete` ? t('common.confirm') : <Trash2 size={14} />}
                   </button>
                 </div>
 

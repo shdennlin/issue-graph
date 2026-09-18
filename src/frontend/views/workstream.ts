@@ -36,6 +36,7 @@ import { buildChainLayout } from './chainLayout'
 import { indexBlockedBy, renderStage, type StageContext } from '../lib/stageRender'
 import { indexSessionsByIssue } from '../lib/agentSession'
 import type { StageNodeData } from '../components/nodes/StageNode'
+import type { StageNotesData } from '../components/nodes/StageNotesNode'
 
 const STAGE_W = 340
 const GAP_X = 28
@@ -121,8 +122,11 @@ export const workstreamView: ViewDefinition = {
       //   1 → 2 → 3 → 4
       //               ↓
       //   8 ← 7 ← 6 ← 5
-      const cols = Math.max(1, Math.min(stages.length, maxColsPerRow))
-      const rows = Math.ceil(stages.length / cols)
+      // The notes card is simply the cell AFTER the last stage, so it costs no
+      // layout arithmetic — it is the next step in the same walk.
+      const cellCount = stages.length + 1
+      const cols = Math.max(1, Math.min(cellCount, maxColsPerRow))
+      const rows = Math.ceil(cellCount / cols)
       // One height for every stage in the workstream rather than per row: a
       // serpentine row above a taller one would otherwise leave the vertical
       // drop landing in the middle of a box.
@@ -182,6 +186,29 @@ export const workstreamView: ViewDefinition = {
           style: { width: STAGE_W, height: h },
         })
       }
+
+      const notesCell = serpentine(stages.length, cols)
+      nodes.push({
+        id: `${containerId}/notes`,
+        type: 'stageNotes',
+        parentNode: containerId,
+        data: {
+          notes: stages
+            .filter((st) => (workstream.notes[st.key] ?? '').trim().length > 0)
+            .map((st) => ({
+              stageKey: st.key,
+              stageName: st.name,
+              body: (workstream.notes[st.key] ?? '').trim(),
+            })),
+        } satisfies StageNotesData,
+        position: {
+          x: PADDING + notesCell.col * (STAGE_W + GAP_X),
+          y: HEADER + PADDING + notesCell.row * (cellH + ROW_GAP_INNER),
+        },
+        width: STAGE_W,
+        height: cellH,
+        style: { width: STAGE_W, height: cellH },
+      })
 
       // The pipeline arrow, within this workstream only. Handles are chosen
       // per edge because the direction changes: within a row it leaves the

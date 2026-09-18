@@ -116,7 +116,10 @@ describe('renderStage — dispatch', () => {
     const c = ctx({
       members: [mk('A-1')],
       stage: stage({ shows: ['note', 'issues'] }),
-      workstream: ws({ members: ['A-1'], notes: { impl: 'a line' } }),
+      workstream: ws({
+        members: ['A-1'],
+        links: [{ stageKey: 'impl', kind: 'url', value: 'https://x', label: null }],
+      }),
     })
     expect(renderStage(c, t).map((i) => i.token)).toEqual(['note', 'issues'])
   })
@@ -326,27 +329,14 @@ describe('designdocs', () => {
 describe('note', () => {
   const shows = stage({ shows: ['note'] })
 
-  it('shows only the first line, because a stage box is not where a note is read', () => {
+  it('leaves the note BODY to its own card rather than truncating it here', () => {
+    // A note is prose. The first line alone never carried the reason, which is
+    // the only thing anybody writes one for — StageNotesNode shows it in full.
     const c = ctx({
       stage: shows,
       workstream: ws({ notes: { impl: '  first line\nsecond line\nthird  ' } }),
     })
-    expect(texts(renderStage(c, t))).toEqual(['first line'])
-  })
-
-  it('does not mark an authored note as manual', () => {
-    // `manual` means "attached to work around a missing upstream link". A note
-    // has no upstream to be missing — it is written here on purpose.
-    const c = ctx({ stage: shows, workstream: ws({ notes: { impl: 'hi' } }) })
-    expect(renderStage(c, t)[0]?.manual).toBe(false)
-  })
-
-  it('ignores a blank note', () => {
-    expect(renderStage(ctx({ stage: shows, workstream: ws({ notes: { impl: '   ' } }) }), t)).toEqual([])
-  })
-
-  it("reads another stage's note as absent", () => {
-    expect(renderStage(ctx({ stage: shows, workstream: ws({ notes: { ci: 'hi' } }) }), t)).toEqual([])
+    expect(renderStage(c, t)).toEqual([])
   })
 
   it('marks a hand-attached url and carries it as a url, not an issue', () => {
@@ -416,5 +406,57 @@ describe('indexBlockedBy', () => {
     const a = mk('A-1')
     a.relations = [{ type: 'related', targetIdentifier: 'A-2' }]
     expect(indexBlockedBy([a]).size).toBe(0)
+  })
+})
+
+describe('ci and hand-attached issues', () => {
+  it('renders a hand-attached CI run, and nothing else, because nothing projects one', () => {
+    // Linear's schema has PullRequestCheck but no query path reaches a
+    // PullRequest from an issue, and there is no GitHub source. An empty box
+    // would look broken; a marked manual row is honest.
+    const c = ctx({
+      stage: stage({ shows: ['ci'] }),
+      workstream: ws({
+        links: [{ stageKey: 'impl', kind: 'ci', value: 'https://ci/run/9', label: 'build #9' }],
+      }),
+    })
+    expect(renderStage(c, t)[0]).toMatchObject({
+      token: 'ci',
+      text: 'build #9',
+      manual: true,
+      url: 'https://ci/run/9',
+    })
+  })
+
+  it('shows an attached issue that is not a member of the workstream', () => {
+    // The one manual kind that is NOT a broken projection: nothing upstream
+    // could ever have said "this issue belongs to THIS stage".
+    const c = ctx({
+      members: [mk('A-1')],
+      stage: stage({ shows: ['issues'] }),
+      workstream: ws({
+        members: ['A-1'],
+        links: [{ stageKey: 'impl', kind: 'issue', value: 'OTHER-9', label: null }],
+      }),
+    })
+    // Projected members first, hand attachments after: the members are what
+    // the stage is about, and an attachment is the exception appended to them.
+    const items = renderStage(c, t)
+    expect(items[0]).toMatchObject({ text: 'A-1 · In Progress', manual: false })
+    expect(items[1]).toMatchObject({ text: 'OTHER-9', manual: true, issue: 'OTHER-9' })
+  })
+
+  it('uses the cached state when an attached issue happens to be a member', () => {
+    const c = ctx({
+      members: [mk('A-1', { state: 'Done', type: 'completed' })],
+      stage: stage({ shows: ['issues'] }),
+      workstream: ws({
+        members: ['A-1'],
+        links: [{ stageKey: 'impl', kind: 'issue', value: 'A-1', label: null }],
+      }),
+    })
+    // The attachment repeats a member, so it renders with the cached state
+    // rather than as a bare identifier.
+    expect(renderStage(c, t)[1]?.text).toBe('A-1 · Done')
   })
 })

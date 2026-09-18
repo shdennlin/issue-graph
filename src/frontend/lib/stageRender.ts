@@ -117,6 +117,23 @@ function renderIssues(ctx: StageContext, t: Translate): StageItem[] {
 
   // A member outside the sync window has no card and no state, and silently
   // showing two of three would make the stage lie about its own size.
+  // A ticket that matters here without being a member — somebody else's
+  // dependency, an incident that blocked the merge. Unlike the rest of the
+  // manual kinds this is not a broken projection: there is nothing upstream
+  // that could ever have said "this issue belongs to THIS stage".
+  for (const l of ctx.workstream.links) {
+    if (l.stageKey !== ctx.stage.key || l.kind !== 'issue') continue
+    const known = ctx.members.find((m) => m.identifier === l.value)
+    out.push(
+      item({
+        token: 'issues',
+        text: known ? `${known.identifier} \u00b7 ${known.state.name}` : (l.label ?? l.value),
+        manual: true,
+        issue: l.value,
+      }),
+    )
+  }
+
   const resolved = new Set(ctx.members.map((m) => m.identifier))
   for (const id of ctx.workstream.members) {
     if (resolved.has(id)) continue
@@ -232,14 +249,13 @@ function renderDesignDocs(ctx: StageContext, _t: Translate): StageItem[] {
 
 function renderNote(ctx: StageContext, _t: Translate): StageItem[] {
   const out: StageItem[] = []
-  const body = ctx.workstream.notes[ctx.stage.key]
-  if (body && body.trim().length > 0) {
-    // First line only. A note may run to paragraphs and a stage box is not
-    // where anyone reads those; the panel shows the whole thing.
-    const first = body.trim().split('\n')[0] ?? ''
-    // Not `manual` — a note is authored, not a workaround for a broken link.
-    out.push(item({ token: 'note', text: first }))
-  }
+  // The note BODY is not here any more — it renders in full on its own card at
+  // the end of the pipeline (StageNotesNode). A truncated first line inside a
+  // stage box was almost useless: a note is prose, and the one line you could
+  // see never carried the reason, which is why anyone writes one.
+  //
+  // What stays is the hand-attached links, which are one line by nature.
+
   for (const l of ctx.workstream.links) {
     if (l.stageKey !== ctx.stage.key || l.kind !== 'url') continue
     out.push(item({ token: 'note', text: l.label ?? l.value, manual: true, url: l.value }))
@@ -273,6 +289,25 @@ function renderBlockers(ctx: StageContext, t: Translate): StageItem[] {
   return out
 }
 
+/**
+ * Check runs, which are hand-attached and ONLY hand-attached.
+ *
+ * Linear's schema has a `PullRequestCheck` type but no query path reaches a
+ * PullRequest from an issue — existence is not reachability — and this app has
+ * no GitHub source. So there is nothing to project, and saying so with a
+ * visible manual mark beats a stage that renders an empty box. The day a
+ * source exists, the projected runs join these and no stage needs
+ * reconfiguring.
+ */
+function renderCi(ctx: StageContext, _t: Translate): StageItem[] {
+  const out: StageItem[] = []
+  for (const l of ctx.workstream.links) {
+    if (l.stageKey !== ctx.stage.key || l.kind !== 'ci') continue
+    out.push(item({ token: 'ci', text: l.label ?? l.value, manual: true, url: l.value }))
+  }
+  return out
+}
+
 const RENDERERS: Record<ShowToken, (ctx: StageContext, t: Translate) => StageItem[]> = {
   issues: renderIssues,
   sessions: renderSessions,
@@ -280,6 +315,7 @@ const RENDERERS: Record<ShowToken, (ctx: StageContext, t: Translate) => StageIte
   designdocs: renderDesignDocs,
   note: renderNote,
   blockers: renderBlockers,
+  ci: renderCi,
 }
 
 /**

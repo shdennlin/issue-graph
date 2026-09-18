@@ -5,6 +5,7 @@
 
 export const en = {
   common: {
+    confirm: 'Sure?',
     cancel: 'Cancel',
     save: 'Save',
     close: 'Close',
@@ -526,6 +527,9 @@ export const en = {
     create: 'New workstream',
     delete: 'Delete workstream (the issues are untouched)',
     removeMember: 'Remove from this workstream',
+    showArchived: 'Show archived',
+    archive: 'Archive (takes it off the board, keeps everything)',
+    unarchive: 'Put back on the board',
   },
   session: {
     active: 'A Claude session is working on this',
@@ -596,6 +600,25 @@ export const en = {
     manualHint: 'Attached by hand because nothing links it automatically. Adding the Linear id upstream makes it appear on its own.',
     notStarted: 'Not started',
     moveHere: 'Move this workstream to this stage',
+    attach: 'Add a note, or attach something by hand',
+    attachNote: 'Note',
+    attachKind_spec: 'Spec',
+    attachKind_pr: 'Pull request',
+    attachKind_url: 'Link',
+    attachKind_ci: 'CI run',
+    attachKind_issue: 'Issue',
+    attachPlaceholder_ci: 'https://\u2026/actions/runs/1',
+    attachPlaceholder_issue: 'ONE-123',
+    attachNotePlaceholder: 'What is actually happening here',
+    attachPlaceholder_spec: 'openspec/changes/\u2026/proposal.md',
+    attachPlaceholder_pr: 'https://github.com/\u2026/pull/1',
+    attachPlaceholder_url: 'https://\u2026',
+    attachLabel: 'Label (optional)',
+    attachSave: 'Save',
+    attachClear: 'Clear note',
+    notesTitle: 'Notes',
+    notesEmpty: 'No notes on this workstream yet.',
+    detach: 'Remove this hand attachment',
     noStages: 'No stages yet \u2014 define your pipeline to use this view.',
   },
   states: {

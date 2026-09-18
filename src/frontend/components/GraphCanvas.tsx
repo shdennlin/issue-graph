@@ -28,6 +28,7 @@ import { IssueNode } from './nodes/IssueNode'
 import { MixedContainerNode } from './nodes/MixedContainerNode'
 import { ProjectBackdropNode } from './nodes/ProjectBackdropNode'
 import { StageNode } from './nodes/StageNode'
+import { StageNotesNode } from './nodes/StageNotesNode'
 import { InlineSearch } from './InlineSearch'
 
 const nodeTypes = {
@@ -35,6 +36,7 @@ const nodeTypes = {
   mixedContainer: MixedContainerNode,
   projectBackdrop: ProjectBackdropNode,
   stage: StageNode,
+  stageNotes: StageNotesNode,
 }
 
 function CanvasInner() {
