@@ -156,7 +156,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {
           workstreamId: { type: 'number' },
           stageKey: { type: 'string' },
-          kind: { type: 'string', enum: ['spec', 'pr', 'url'] },
+          // NOT an enum. A kind is a free lowercase slug, and an enum here
+          // would have a schema-validating client reject the very names the
+          // description tells the agent to invent — `runbook`, `incident` —
+          // and even `ci` and `issue`, which this app draws richly.
+          kind: {
+            type: 'string',
+            description:
+              "Any short lowercase slug. 'spec' | 'pr' | 'ci' | 'issue' | 'url' render richly; anything else renders as a labelled row carrying its kind.",
+          },
           value: { type: 'string' },
           label: { type: 'string' },
         },
