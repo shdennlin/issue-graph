@@ -16,10 +16,10 @@
 // All decisions live in lib/lifecycle.ts and the backend's lifecycleStore.ts;
 // this file is a shell, because vitest cannot test JSX in this repo.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react'
 import type { LifecycleStageDTO } from '@shared/types'
-import { SHOW_TOKENS } from '@shared/showTokens.js'
+import { normalizeLinkKind, SHOW_TOKENS } from '@shared/showTokens.js'
 import { api } from '../lib/api'
 import { useGraphStore } from '../store/graphStore'
 import { useSchemaStore } from '../store/schemaStore'
@@ -31,6 +31,12 @@ export function LifecycleSettings() {
   const refetchSilent = useGraphStore((s) => s.refetchSilent)
   const [stages, setStages] = useState<LifecycleStageDTO[]>([])
   const [newName, setNewName] = useState('')
+  /** Which stage's "add a field" input is open, if any. One at a time — two
+   *  open inputs would each need their own draft and neither would be the one
+   *  you meant. */
+  const [addingFor, setAddingFor] = useState<number | null>(null)
+  const [draftField, setDraftField] = useState('')
+  const abandoned = useRef(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -130,22 +136,36 @@ export function LifecycleSettings() {
     void run(() => api.patchStage(stage.id, { states }))
   }
 
-  // What the stage DRAWS, as opposed to which Linear states it expects. These
-  // are projections — `pullRequests` means "read the members' PRs", never
-  // "this stage stores PRs" — so turning one on changes only what is rendered.
-  // There was no way to set this outside the MCP, which made a whole half of a
-  // stage's configuration invisible to anyone using the app.
-  // What somebody is expected to HANG on this stage, as opposed to what it
-  // draws. Advisory: an attachment of any other kind is still accepted, because
-  // a list that gated writes would leave an agent with something genuinely new
-  // nowhere to put it.
-  const setFields = (stage: LifecycleStageDTO, raw: string) => {
-    const fields = raw
-      .split(',')
-      .map((f) => f.trim().toLowerCase().replace(/[\s_]+/g, '-'))
-      .filter(Boolean)
-    if (fields.join(',') === stage.fields.join(',')) return
-    void run(() => api.patchStage(stage.id, { fields }))
+  // `shows` and `fields` answer ONE question between them — what belongs on
+  // this stage — and used to be drawn as two headings with two different
+  // widgets: seven toggle buttons, then a comma-separated text box. That
+  // second difference was pure implementation leak (`shows` validates against
+  // a closed list so it became buttons; `fields` is free text so it became an
+  // input), and it is why they read as two unrelated settings.
+  //
+  // Both are chips now. The one difference left is real and stated in the
+  // hint: an automatic row can be switched off, a hand-attached name cannot,
+  // because an attachment carries its own stage key and always renders.
+  const addField = (stage: LifecycleStageDTO, raw: string) => {
+    setAddingFor(null)
+    setDraftField('')
+    // Escape sets this. Without it, the blur that follows tearing the input
+    // down would commit the very text Escape was pressed to throw away — and
+    // the DOM value is still the old one at that moment, so reading the event
+    // cannot tell the two cases apart.
+    if (abandoned.current) {
+      abandoned.current = false
+      return
+    }
+    const kind = normalizeLinkKind(raw)
+    // Silent on a bad name rather than an error: the commonest way to leave
+    // this input is to click away from an empty one.
+    if (kind === null || stage.fields.includes(kind)) return
+    void run(() => api.patchStage(stage.id, { fields: [...stage.fields, kind] }))
+  }
+
+  const removeField = (stage: LifecycleStageDTO, field: string) => {
+    void run(() => api.patchStage(stage.id, { fields: stage.fields.filter((f) => f !== field) }))
   }
 
   const toggleShow = (stage: LifecycleStageDTO, token: string) => {
@@ -157,6 +177,10 @@ export function LifecycleSettings() {
   return (
     <div className="lifecycle-settings">
       <p className="settings-hint">{t('lifecycle.hint')}</p>
+      {/* Said once, here, rather than under each stage. It explains a rule of
+          the editor, not a property of any one stage, and seven copies of it
+          was three lines of identical prose between every pair of rows. */}
+      <p className="settings-hint">{t('lifecycle.belongsHint')}</p>
 
       {stages.length === 0 && <p className="settings-hint">{t('lifecycle.empty')}</p>}
 
@@ -228,30 +252,90 @@ export function LifecycleSettings() {
                 : t('lifecycle.usage').replace('{n}', String(usage.get(stage.key) ?? 0))}
             </p>
 
-            <div className="lifecycle-field-label">{t('lifecycle.showsLabel')}</div>
-            <div className="lifecycle-states">
-              {SHOW_TOKENS.map((token) => (
-                <button
-                  key={token}
-                  className={`lifecycle-state-toggle${stage.shows.includes(token) ? ' is-on' : ''}`}
-                  disabled={busy}
-                  onClick={() => toggleShow(stage, token)}
-                >
-                  {t(`lifecycle.show_${token}` as 'lifecycle.show_issues')}
-                </button>
-              ))}
+            {/* One heading, two rows. The heading is the question a person
+                actually has ("what belongs on this stage"); the rows are the
+                two ways an answer gets here. */}
+            <div className="lifecycle-field-label">{t('lifecycle.belongsLabel')}</div>
+
+            <div className="lifecycle-belongs-row">
+              <span className="lifecycle-row-tag">{t('lifecycle.belongsAuto')}</span>
+              <div className="lifecycle-states">
+                {SHOW_TOKENS.map((token) => (
+                  <button
+                    key={token}
+                    className={`lifecycle-state-toggle${stage.shows.includes(token) ? ' is-on' : ''}`}
+                    disabled={busy}
+                    onClick={() => toggleShow(stage, token)}
+                  >
+                    {t(`lifecycle.show_${token}` as 'lifecycle.show_issues')}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div className="lifecycle-field-label">{t('lifecycle.fieldsLabel')}</div>
-            <input
-              className="lifecycle-fields"
-              defaultValue={stage.fields.join(', ')}
-              placeholder={t('lifecycle.fieldsPlaceholder')}
-              aria-label={t('lifecycle.fieldsLabel')}
-              disabled={busy}
-              onBlur={(e) => setFields(stage, e.target.value)}
-            />
-            <p className="settings-hint">{t('lifecycle.fieldsHint')}</p>
+            <div className="lifecycle-belongs-row">
+              <span className="lifecycle-row-tag">{t('lifecycle.belongsHand')}</span>
+              <div className="lifecycle-states">
+                {stage.fields.map((f) => (
+                  <span key={f} className="lifecycle-field-chip">
+                    {f}
+                    <button
+                      type="button"
+                      className="lifecycle-field-x"
+                      title={t('lifecycle.fieldRemove')}
+                      aria-label={t('lifecycle.fieldRemove')}
+                      disabled={busy}
+                      onClick={() => removeField(stage, f)}
+                    >
+                      {'×'}
+                    </button>
+                  </span>
+                ))}
+                {addingFor === stage.id ? (
+                  <input
+                    className="lifecycle-field-new"
+                    // Focused on mount: this input exists only because the user
+                    // just clicked + to type in it, so landing anywhere else
+                    // would be the surprise.
+                    autoFocus
+                    value={draftField}
+                    aria-label={t('lifecycle.fieldAdd')}
+                    placeholder={t('lifecycle.fieldsPlaceholder')}
+                    onChange={(e) => setDraftField(e.target.value)}
+                    onBlur={(e) => addField(stage, e.target.value)}
+                    onKeyDown={(e) => {
+                      // Enter commits, Escape abandons. Both through blur-free
+                      // paths, because the blur handler would otherwise commit
+                      // the very text Escape was meant to throw away.
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        addField(stage, draftField)
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault()
+                        abandoned.current = true
+                        setDraftField('')
+                        setAddingFor(null)
+                      }
+                    }}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className="lifecycle-state-toggle"
+                    title={t('lifecycle.fieldAdd')}
+                    aria-label={t('lifecycle.fieldAdd')}
+                    disabled={busy}
+                    onClick={() => {
+                      setDraftField('')
+                      setAddingFor(stage.id)
+                    }}
+                  >
+                    +
+                  </button>
+                )}
+              </div>
+            </div>
+
 
             <div className="lifecycle-stale">
               <label htmlFor={`stale-${stage.id}`}>{t('lifecycle.staleLabel')}</label>

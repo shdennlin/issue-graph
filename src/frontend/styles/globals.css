@@ -4583,10 +4583,54 @@ button.stage-pill:hover .stage-item-text { text-decoration: underline; }
 .stage-note-md code { font-size: var(--fs-meta); }
 .stage-note-md pre { padding: 6px 8px; overflow-x: auto; }
 
-.lifecycle-fields {
-  width: 100%;
-  box-sizing: border-box;
-  margin-top: 4px;
+/* One question, two rows. The tag is what tells them apart, so it is the only
+   thing that differs — both rows are chips, because the widget difference
+   (buttons vs a comma-separated text box) was implementation leaking through
+   and it made two halves of one setting read as two settings. */
+.lifecycle-belongs-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 6px;
+}
+.lifecycle-row-tag {
+  flex: 0 0 auto;
+  width: 4.5em;
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+}
+.lifecycle-belongs-row .lifecycle-states { margin-top: 0; flex: 1 1 auto; }
+/* No `is-on` state: a declared name is always "on". It is a name, not a
+   switch — what it governs is the attach menu's order, never whether
+   something renders. */
+.lifecycle-field-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--fs-meta);
+  padding: 1px 3px 1px 6px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--chip-bg);
+  color: var(--fg);
+}
+.lifecycle-field-x {
+  border: 0;
+  background: none;
+  padding: 0 2px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-size: var(--fs-meta);
+  line-height: 1;
+}
+.lifecycle-field-x:hover { color: var(--danger); }
+.lifecycle-field-new {
   font: inherit;
   font-size: var(--fs-meta);
+  padding: 1px 6px;
+  width: 12em;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--input-bg, transparent);
+  color: var(--fg);
 }

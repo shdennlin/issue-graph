@@ -14,6 +14,9 @@ interface Row {
   sort_order: number
   states: string
   next_command: string | null
+  shows: string
+  fields: string
+  stale_after_days: number | null
   created_at: number
   updated_at: number
 }
@@ -33,16 +36,47 @@ vi.mock('../db.js', () => ({
       run: (...args: unknown[]) => {
         const s = sql.trimStart()
         if (s.startsWith('INSERT')) {
-          const [key, name, sort_order, states, next_command, created_at, updated_at] = args as [
+          // Positional, so this list must stay in the route's column order.
+          // It had fallen three columns behind — shows, fields and
+          // stale_after_days were added to the INSERT and never here — which
+          // silently shifted created_at and updated_at into the wrong fields.
+          // Nothing asserted on them, so it stayed green while being wrong.
+          const [
+            key,
+            name,
+            sort_order,
+            states,
+            next_command,
+            shows,
+            fields,
+            stale_after_days,
+            created_at,
+            updated_at,
+          ] = args as [
             string,
             string,
             number,
             string,
             string | null,
+            string,
+            string,
+            number | null,
             number,
             number,
           ]
-          rows.push({ id: nextId, key, name, sort_order, states, next_command, created_at, updated_at })
+          rows.push({
+            id: nextId,
+            key,
+            name,
+            sort_order,
+            states,
+            next_command,
+            shows,
+            fields,
+            stale_after_days,
+            created_at,
+            updated_at,
+          })
           return { lastInsertRowid: nextId++, changes: 1 }
         }
         if (s.startsWith('UPDATE')) {
@@ -98,6 +132,19 @@ describe('POST /api/lifecycle', () => {
     expect(dto.key).toBe('review-spec')
     expect(dto.states).toEqual(['Review Spec'])
     expect(dto.nextCommand).toBeNull()
+  })
+
+  it('gives a stage created with no `shows` the default, not an empty box', async () => {
+    // An empty list is what the data model would hand you and the wrong thing
+    // to hand a person: the stage renders blank and nothing on screen says
+    // that seven toggles elsewhere are why.
+    await post({ name: 'Discuss' })
+    expect(JSON.parse(rows[0]!.shows)).toEqual(['issues', 'note'])
+  })
+
+  it('still honours an explicit empty `shows` — "draw nothing" is a real request', async () => {
+    await post({ name: 'Quiet', shows: [] })
+    expect(JSON.parse(rows[0]!.shows)).toEqual([])
   })
 
   it('appends each new stage after the last', async () => {

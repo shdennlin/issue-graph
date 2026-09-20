@@ -34,6 +34,26 @@ export const SHOW_TOKENS = [
 export type ShowToken = (typeof SHOW_TOKENS)[number]
 
 /**
+ * What a brand-new stage draws before anybody configures it.
+ *
+ * An empty `shows` was the honest default for the data model and the wrong one
+ * for a person: you added a stage, it rendered a blank box, and nothing on
+ * screen said that seven checkboxes elsewhere were the reason. The cost of
+ * configuring was paid up front, before you had any idea what the stage would
+ * hold.
+ *
+ * These two are the ones almost every stage wants. `issues` is the only
+ * projection that places itself per stage (via each member's Linear state), so
+ * turning it on everywhere cannot duplicate anything; `note` reads this
+ * stage's own note. The four member-keyed projections — PRs, sessions,
+ * blockers, design docs — are deliberately NOT here: each of them draws the
+ * same list on every stage that has it on, so switching them on by default
+ * would make a seven-stage pipeline seven copies of one card.
+ */
+export const DEFAULT_SHOWS: readonly ShowToken[] = ['issues', 'note']
+
+
+/**
  * Attachment kinds the app RENDERS RICHLY — it knows where each belongs, so a
  * `pr` sits beside the pull requests Linear linked itself and a `spec` beside
  * the scanned ones.
@@ -64,3 +84,21 @@ export type RichLinkKind = (typeof RICH_LINK_KINDS)[number]
  *  kinds that read the same. */
 export const LINK_KIND_MAX = 24
 export const LINK_KIND_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+
+/**
+ * A kind or field name, normalised: lowercase, spaces and underscores folded
+ * to hyphens. Null when the result is empty, too long, or not a slug.
+ *
+ * Lives here rather than in the backend because BOTH sides need it and they
+ * have to agree exactly: the editor normalises what you type into a field
+ * chip, the server normalises what an agent sends, and a stage declaring
+ * "Pull Request" must end up meaning the same field as `pull-request`. Two
+ * implementations is how those two stop matching. `batchStore.ts` re-exports
+ * it so the server's callers are unchanged.
+ */
+export function normalizeLinkKind(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const v = raw.trim().toLowerCase().replace(/[\s_]+/g, '-')
+  if (v.length === 0 || v.length > LINK_KIND_MAX) return null
+  return LINK_KIND_RE.test(v) ? v : null
+}

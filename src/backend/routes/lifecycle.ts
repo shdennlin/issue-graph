@@ -31,6 +31,7 @@ import {
   type LifecycleStageRow,
 } from '../lifecycleStore.js'
 import { normalizeFields, normalizeShows, normalizeStaleAfterDays } from '../batchStore.js'
+import { DEFAULT_SHOWS } from '../../shared/showTokens.js'
 
 const CreateSchema = z.object({
   key: z.string().optional(),
@@ -92,7 +93,14 @@ lifecycleRoutes.post('/api/lifecycle', async (c) => {
   if (states === null) return c.json(invalid('bad states'), 400)
   const nextCommand = normalizeNextCommand(parsed.data.nextCommand)
   if (nextCommand === undefined) return c.json(invalid('bad nextCommand'), 400)
-  const shows = normalizeShows(parsed.data.shows)
+  // A stage created with no `shows` gets the default rather than an empty
+  // list. An empty one renders a blank box, and nothing on screen tells you
+  // that seven toggles elsewhere are the reason — the whole cost of
+  // configuring landed before you knew what the stage would hold. PATCH is
+  // untouched: there, an explicit empty list means "draw nothing", which is a
+  // real thing to ask for.
+  const shows =
+    parsed.data.shows === undefined ? [...DEFAULT_SHOWS] : normalizeShows(parsed.data.shows)
   if (shows === null) return c.json(invalid('unknown shows token'), 400)
   const fields = normalizeFields(parsed.data.fields ?? [])
   if (fields === null) return c.json(invalid('bad fields'), 400)

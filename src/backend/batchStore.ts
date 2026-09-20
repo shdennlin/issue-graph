@@ -10,7 +10,7 @@
 // fact, and it would go stale silently.
 
 import type { NormalizedIssue, NormalizedPullRequest } from '../shared/types.js'
-import { LINK_KIND_MAX, LINK_KIND_RE, RICH_LINK_KINDS, SHOW_TOKENS } from '../shared/showTokens.js'
+import { normalizeLinkKind, RICH_LINK_KINDS, SHOW_TOKENS } from '../shared/showTokens.js'
 import { daysOnStage, isStale } from '../shared/staleness.js'
 import type { ShowToken } from '../shared/showTokens.js'
 
@@ -316,15 +316,13 @@ export function normalizeNote(raw: unknown): string | null {
  * the point — a workstream's fields are the workstream's business, and an
  * agent filling one should be able to call a runbook a runbook.
  *
- * Normalised rather than merely checked, so "Pull Request" and "pull request"
- * both become `pull-request` instead of becoming two kinds that read the same.
+ * The implementation moved to `shared/showTokens.ts` when the lifecycle editor
+ * grew field chips and needed the same normalisation in the browser. Re-exported
+ * here because this module is where the server's callers already look for it,
+ * and because one implementation is the entire point: a stage declaring
+ * "Pull Request" has to mean the same field an agent attaches as `pull-request`.
  */
-export function normalizeLinkKind(raw: unknown): string | null {
-  if (typeof raw !== 'string') return null
-  const v = raw.trim().toLowerCase().replace(/[\s_]+/g, '-')
-  if (v.length === 0 || v.length > LINK_KIND_MAX) return null
-  return LINK_KIND_RE.test(v) ? v : null
-}
+export { normalizeLinkKind }
 
 /**
  * A stage's declared field list: kinds, deduped, in the order given.
