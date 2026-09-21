@@ -72,9 +72,6 @@ export function App() {
   const lifecycleEditorOpen = useViewStore((s) => s.lifecycleEditorOpen)
   const stagePanel = useViewStore((s) => s.stagePanel)
   const workstreamPanelId = useViewStore((s) => s.workstreamPanelId)
-  // Any panel docked on the right edge. The jump list lives in that corner too,
-  // and would otherwise sit on top of the panel's own header.
-  const rightPanelOpen = (focusedId !== null && detailPanelOpen) || (focusedProjectId !== null && projectPanelOpen)
   const activeViewId = useViewStore((s) => s.activeView)
 
   // Bootstrap step 1 — resolve this tab's workspace + tab list BEFORE any
@@ -759,19 +756,25 @@ export function App() {
       <div className="app-main">
         {/* Floats over the canvas rather than occupying a full-width strip
             above it — a horizontal bar cost vertical space across the whole
-            window even when only two filters were active. */}
-        <FacetBar />
+            window even when only two filters were active.
+            
+            Not in the workstream view: that view deliberately does NOT apply
+            the filter bar (its subject is the workstream, and its members are
+            a fact about it rather than a subset of the graph), so the panel
+            sat there showing "0/217" and a State chip that changed nothing.
+            A control that does nothing is worse than an absent one — it
+            invites you to reach for it. The jump list takes the corner
+            instead, which is the thing you actually pick from here. */}
+        {activeViewId !== 'workstream' && <FacetBar />}
         {/* Beside FacetBar so its `position: absolute` resolves against the
             canvas, not the page — at the app root it sat under the toolbar.
             Only over the view it configures: a pipeline editor floating over
             the dependency graph would be editing something off-screen. */}
-        {/* Hidden while any right-hand panel is open: they share that edge, and
-            the list would sit on top of the panel's own header. You are reading
-            one thing at that point, not choosing between several. */}
-        {activeViewId === 'workstream' &&
-          !stagePanel &&
-          workstreamPanelId === null &&
-          !rightPanelOpen && (
+        {/* On the LEFT now, in the corner the filter panel vacated — so it no
+            longer has to hide whenever a stage or workstream panel opens on
+            the right edge. Those are exactly the moments you most want to
+            switch between workstreams. */}
+        {activeViewId === 'workstream' && (
           <Suspense fallback={null}>
             <WorkstreamJumpList />
           </Suspense>
