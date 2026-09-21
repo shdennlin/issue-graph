@@ -4593,11 +4593,25 @@ button.stage-pill:hover .stage-item-text { text-decoration: underline; }
   gap: 8px;
   margin-top: 6px;
 }
+/* Wide enough for a label that explains itself. The previous 4.5em fitted
+   "Automatic" and "By hand", which is exactly the problem: both were terms of
+   art, and the glossary that defined them sat at the top of a modal you had
+   scrolled past by stage five. */
 .lifecycle-row-tag {
   flex: 0 0 auto;
-  width: 4.5em;
+  /* Fixed, and wide enough for the longest label in any locale, so the two
+     rows' chips start on the same x. `nowrap` because a label that wraps to
+     two lines pushes its row out of step with the other one. */
+  width: 11em;
+  white-space: nowrap;
   font-size: var(--fs-meta);
   color: var(--fg-muted);
+  /* Dotted underline, the convention for "there is more on hover" — the tag
+     carries the fuller explanation, including that the hand list is what the
+     MCP hands an agent. */
+  border-bottom: 1px dotted var(--node-border);
+  cursor: help;
+  align-self: flex-start;
 }
 .lifecycle-belongs-row .lifecycle-states { margin-top: 0; flex: 1 1 auto; }
 /* No `is-on` state: a declared name is always "on". It is a name, not a

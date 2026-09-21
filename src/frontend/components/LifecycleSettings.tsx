@@ -265,7 +265,14 @@ export function LifecycleSettings() {
             <div className="lifecycle-field-label">{t('lifecycle.belongsLabel')}</div>
 
             <div className="lifecycle-belongs-row">
-              <span className="lifecycle-row-tag">{t('lifecycle.belongsAuto')}</span>
+              {/* The label IS the explanation. "Automatic" and "By hand" were
+                  terms of art that needed a glossary, and the glossary sat at
+                  the top of a modal you had already scrolled past by stage
+                  five — so the cost was paid on every read. A label naming
+                  what HAPPENS needs nothing behind it. */}
+              <span className="lifecycle-row-tag" title={t('lifecycle.belongsAutoHint')}>
+                {t('lifecycle.belongsAuto')}
+              </span>
               <div className="lifecycle-states">
                 {/* Only what is ON, so a stage using two of seven shows two
                     chips rather than seven. All seven at once meant 49 chips
@@ -335,7 +342,12 @@ export function LifecycleSettings() {
             </div>
 
             <div className="lifecycle-belongs-row">
-              <span className="lifecycle-row-tag">{t('lifecycle.belongsHand')}</span>
+              {/* "Someone", not "you": in this app an agent is usually the one
+                  attaching, and the names listed here are the vocabulary the
+                  MCP hands it so one field keeps one name across workstreams. */}
+              <span className="lifecycle-row-tag" title={t('lifecycle.belongsHandHint')}>
+                {t('lifecycle.belongsHand')}
+              </span>
               <div className="lifecycle-states">
                 {stage.fields.map((f) => (
                   <span key={f} className="lifecycle-field-chip">
