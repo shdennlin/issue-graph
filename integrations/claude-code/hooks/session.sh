@@ -22,10 +22,17 @@
 # rule in the server can be fixed by restarting it, while one baked into an
 # installed plugin needs every install updated.
 #
-# Output protocol note: `beat`, `idle` and `end` print nothing. `idle` runs on
-# the Stop event, which has NO member in Claude Code's hookSpecificOutput union
-# — emitting one there fails validation and leaks raw JSON to the model — so it
-# stays silent too rather than reaching for a shape that does not apply.
+# Output protocol note: `beat`, `idle` and `end` print nothing.
+#
+# `idle` runs on Stop, and an earlier version of this comment said Stop has no
+# member in Claude Code's hookSpecificOutput union. That is wrong: Stop and
+# SubagentStop both accept hookSpecificOutput.additionalContext. It stays
+# silent for a different and stronger reason — that field does not annotate
+# the turn, it CONTINUES it, under the 8-consecutive-continuation cap. Stop
+# firing means the human's move; a presence reporter that decides on its own
+# that you do not get your turn back has badly overstepped. Anything that
+# should nudge at the end of a turn belongs in a skill the model chooses to
+# reach for, not in the hook that reports the session is alive.
 #
 # `start` is the exception, and the only place this script blocks. SessionStart
 # stdout goes into the session's context, so it asks the server for a briefing
