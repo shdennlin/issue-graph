@@ -8,7 +8,7 @@ import type {
   NormalizedPullRequest,
   WorkstreamSummaryDTO,
 } from '@shared/types.js'
-import { indexBlockedBy, renderStage, stageForIssue, type StageContext } from './stageRender'
+import { indexBlockedBy, noteRows, renderStage, stageForIssue, type StageContext } from './stageRender'
 
 // Echoes the key back, so an assertion names the key rather than a translation
 // that could change without the behaviour changing. Same trick, and the same
@@ -601,5 +601,38 @@ describe('hand attachments always render', () => {
       workstream: ws({ links: [link('issue', 'OTHER-9')] }),
     })
     expect(renderStage(c, t)[0]).toMatchObject({ text: 'OTHER-9', issue: 'OTHER-9', url: null })
+  })
+})
+
+describe('noteRows', () => {
+  // This number is not cosmetic. views/workstream.ts sizes a stage from the
+  // SUM of its items' rows, and .stage-item-wrap clamps the text to the same
+  // count. The three have to agree: when the clamp was missing, a note longer
+  // than the cap rendered past the height that had been reserved for it and
+  // .stage-node's `overflow: hidden` cut the last line through the glyphs,
+  // with no scrollbar and nothing saying there was more.
+  it('never exceeds the cap, however long the note', () => {
+    expect(noteRows('x'.repeat(4000))).toBe(4)
+    expect(noteRows('line\n'.repeat(200))).toBe(4)
+  })
+
+  it('honours a caller that asks for a different cap', () => {
+    // The workstream's own note CARD passes a much larger one: holding the
+    // note is that card's entire job.
+    expect(noteRows('x'.repeat(4000), 14)).toBe(14)
+  })
+
+  it('reserves at least one row for an empty note', () => {
+    // Zero would reserve no height and draw a row into the next item.
+    expect(noteRows('')).toBe(1)
+  })
+
+  it('counts a wrapped line as the rows it wraps to', () => {
+    expect(noteRows('x'.repeat(38))).toBe(1)
+    expect(noteRows('x'.repeat(39))).toBe(2)
+  })
+
+  it('counts a hard newline as its own row even when the line is short', () => {
+    expect(noteRows('a\nb\nc')).toBe(3)
   })
 })

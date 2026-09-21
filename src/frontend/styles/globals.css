@@ -4359,6 +4359,18 @@ button.stage-item:hover,
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   line-height: 22px;
+  /* Clamp to exactly the rows the LAYOUT reserved (`--stage-item-rows`, set
+     from StageItem.rows). Without this the two disagreed: noteRows() caps a
+     note at four rows and the stage was sized for four, while the DOM drew
+     however many the note actually needed — so .stage-node's `overflow:
+     hidden` sliced the fifth line through the middle of the glyphs, with no
+     scrollbar and no ellipsis to say there was more. The cap is a deliberate
+     decision (a note must not crowd out the issues; the rest is read in the
+     stage panel); it was just never implemented on this side. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--stage-item-rows, 4);
+  line-clamp: var(--stage-item-rows, 4);
 }
 
 /* Stage panel — same dock and resize behaviour as ProjectPanel. */

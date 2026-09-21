@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react'
-import type { MouseEvent, PointerEvent } from 'react'
+import type { CSSProperties, MouseEvent, PointerEvent } from 'react'
 import type { NodeProps } from 'reactflow'
 import { Handle, Position } from 'reactflow'
 import {
@@ -118,7 +118,17 @@ function ItemRow({ item, onDetach }: { item: StageItem; onDetach?: (value: strin
       {/* The kind, when the app has no special box for it. For a custom field
           the NAME is the point — `runbook` says what a bare link cannot. */}
       {item.kind && <span className="stage-item-kind">{item.kind}</span>}
-      <span className="stage-item-text">{item.text}</span>
+      {/* The row count travels to CSS so the clamp matches what the layout
+          reserved exactly, rather than both sides hard-coding 4 and drifting.
+          `title` is what makes clamping honest: the text that does not fit is
+          still reachable without opening the panel. */}
+      <span
+        className="stage-item-text"
+        style={item.rows > 1 ? ({ '--stage-item-rows': item.rows } as CSSProperties) : undefined}
+        title={item.rows > 1 ? item.text : undefined}
+      >
+        {item.text}
+      </span>
       {item.hints.map((h) => (
         <span key={h} className="stage-item-hint">
           {h}
