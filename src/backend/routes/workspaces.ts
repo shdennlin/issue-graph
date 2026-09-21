@@ -7,6 +7,13 @@
 // These routes accept credentials, so they must never be published. The
 // Tailscale funnel mount is path-scoped to /api/webhooks/linear precisely so
 // that the rest of the API, this file included, stays unreachable from outside.
+//
+// Not published is not the same as not reachable. Every mutating route here
+// carries `originAllowed` for the reason every other mutating route in this
+// app does: any page in the user's browser can POST to localhost, and these
+// four take a Linear API key, a webhook secret, and a workspace deletion. The
+// guard was missing on all four — the one place in the app that accepts real
+// credentials was the one place not checking where the request came from.
 
 import { existsSync } from 'node:fs'
 import { Hono } from 'hono'
@@ -20,6 +27,7 @@ import {
   loadConfig,
 } from '../lib/env.js'
 import { BUS_EVENT, publish } from '../lib/eventBus.js'
+import { originAllowed } from '../lib/http.js'
 import { getLogger } from '../lib/log.js'
 import { runWithWorkspace } from '../lib/workspaceContext.js'
 import { startDesignDocWatcher, stopDesignDocWatcher } from '../designdoc/watcher.js'
@@ -87,6 +95,10 @@ function applyWorkspaceEdit(id: string): void {
   resetBackendCache(id)
 }
 
+/** The same refusal every other mutating route in this app returns. Shaped
+ *  like lifecycle.ts's so the two read identically. */
+const denyOrigin = () => ({ error: { code: 'origin', message: 'cross-origin denied' } }) as const
+
 workspaceRoutes.get('/api/workspaces', (c) => {
   // Reflects the **server-default** workspace (what new tabs land on, what the
   // file watcher follows) regardless of the requesting tab's `?w=`.
@@ -100,6 +112,7 @@ workspaceRoutes.get('/api/workspaces', (c) => {
 })
 
 workspaceRoutes.post('/api/workspaces', async (c) => {
+  if (!originAllowed(c)) return c.json(denyOrigin(), 403)
   const body = await c.req.json().catch(() => null)
   const parsed = CreateSchema.safeParse(body)
   if (!parsed.success) {
@@ -165,6 +178,7 @@ workspaceRoutes.post('/api/workspaces', async (c) => {
 })
 
 workspaceRoutes.patch('/api/workspaces/:id', async (c) => {
+  if (!originAllowed(c)) return c.json(denyOrigin(), 403)
   const id = normalizeWorkspaceId(c.req.param('id'))
   const body = await c.req.json().catch(() => null)
   const parsed = UpdateSchema.safeParse(body)
@@ -203,6 +217,7 @@ workspaceRoutes.patch('/api/workspaces/:id', async (c) => {
 })
 
 workspaceRoutes.delete('/api/workspaces/:id', (c) => {
+  if (!originAllowed(c)) return c.json(denyOrigin(), 403)
   const id = normalizeWorkspaceId(c.req.param('id'))
   const rows = readWorkspaceRows()
   if (!rows.some((r) => r.id === id)) {
@@ -219,6 +234,7 @@ workspaceRoutes.delete('/api/workspaces/:id', (c) => {
 })
 
 workspaceRoutes.post('/api/workspaces/active', async (c) => {
+  if (!originAllowed(c)) return c.json(denyOrigin(), 403)
   const body = await c.req.json().catch(() => null)
   const parsed = SwitchSchema.safeParse(body)
   if (!parsed.success) return c.json({ error: { code: 'invalid', message: parsed.error.message } }, 400)
