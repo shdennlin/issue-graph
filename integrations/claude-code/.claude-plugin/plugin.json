@@ -1,6 +1,6 @@
 {
   "name": "issue-graph",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Session presence hooks, an MCP server and a progress skill for issue-graph: show which issue Claude Code is working on, tell a session which workstream and stage it is in, and let it record what it finished",
   "author": {
     "name": "shdennlin"
