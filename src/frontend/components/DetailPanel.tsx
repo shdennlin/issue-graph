@@ -14,6 +14,7 @@ import { milestoneFilterKey } from '../views/filters'
 import { resolveHierarchy } from '../views/hierarchy'
 import { renderMarkdownHtml } from '../lib/markdown'
 import { MarkdownBody } from './MarkdownBody'
+import { useDetailTextSize } from '../lib/detailTextSize'
 import { translate, useLocale, useT } from '../i18n'
 import { isTypingTarget } from '../lib/isTypingTarget'
 import {
@@ -40,8 +41,6 @@ function timeAgo(iso: string, locale: ReturnType<typeof useLocale>): string {
 // so users who want a roomier read of a single issue without inflating the rest
 // of the UI can opt in here.
 const WIDE_MODE_KEY = 'ig-detail-wide-v1'
-const TEXT_SIZE_KEY = 'ig-detail-text-size-v1'
-type TextSize = 'sm' | 'md' | 'lg' | 'xl'
 
 /**
  * The quiet half of an editable row: "show only issues like this one".
@@ -88,13 +87,7 @@ export function DetailPanel() {
     if (typeof localStorage === 'undefined') return false
     try { return localStorage.getItem(WIDE_MODE_KEY) === '1' } catch { return false }
   })
-  const [textSize, setTextSize] = useState<TextSize>(() => {
-    if (typeof localStorage === 'undefined') return 'md'
-    try {
-      const v = localStorage.getItem(TEXT_SIZE_KEY)
-      return v === 'sm' || v === 'lg' || v === 'xl' ? v : 'md'
-    } catch { return 'md' }
-  })
+  const [textSize, cycleTextSize] = useDetailTextSize()
 
   const toggleWide = useCallback(() => {
     setWideMode((prev) => {
@@ -185,15 +178,6 @@ export function DetailPanel() {
     }
     return () => { delete body.dataset.detailWide }
   }, [wideMode, focusedId])
-
-  const cycleTextSize = useCallback(() => {
-    setTextSize((prev) => {
-      const next: TextSize =
-        prev === 'sm' ? 'md' : prev === 'md' ? 'lg' : prev === 'lg' ? 'xl' : 'sm'
-      try { localStorage.setItem(TEXT_SIZE_KEY, next) } catch { /* silent */ }
-      return next
-    })
-  }, [])
 
   const issue = focusedId ? graph?.data.issues.find((i) => i.identifier === focusedId) : null
 

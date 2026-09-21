@@ -178,6 +178,46 @@ function item(over: Partial<StageItem> & Pick<StageItem, 'token' | 'text'>): Sta
  * own CARD holding the note is the entire job, so it may run much longer
  * before the card starts scrolling.
  */
+/**
+ * A note's prose, with its markdown marks taken off.
+ *
+ * The stage bar draws plain text at a fixed 22px per row — that is what the
+ * layout reserves — so it cannot RENDER markdown without the height maths
+ * losing its meaning. Leaving the source in was the other extreme: a note
+ * written as markdown (which the stage PANEL and the Notes card both render)
+ * showed up on the board as `## Waiting on the nightly run` and `` `ONE-387` ``,
+ * so the marks intended to make it readable were the loudest thing on it.
+ *
+ * Marks only. Link text survives and its URL does not, list items keep their
+ * bullet because the shape is the information, and nothing is reordered or
+ * summarised: this is the same words, undecorated.
+ */
+export function notePreview(body: string): string {
+  return body
+    .split('\n')
+    .map((line) =>
+      line
+        // Heading and quote marks lead the line, so they go with the line.
+        .replace(/^\s{0,3}#{1,6}\s+/, '')
+        .replace(/^\s{0,3}>\s?/, '')
+        // A list keeps its bullet: "- x" is a list whether or not it is drawn
+        // as one, and turning it into "x" loses that.
+        .replace(/^(\s*)[*+]\s+/, '$1- ')
+        // [text](url) → text. The URL is on the attachment rows, if anywhere.
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+        // **bold**, *em*, `code`, ~~struck~~ — the delimiters, not the words.
+        .replace(/(\*\*|__)(.+?)\1/g, '$2')
+        .replace(/(?<![\w*])[*_](?!\s)([^*_]+?)(?<!\s)[*_](?![\w*])/g, '$1')
+        .replace(/~~(.+?)~~/g, '$1')
+        .replace(/`([^`]+)`/g, '$1')
+        .trimEnd(),
+    )
+    .join('\n')
+    // A blank line between paragraphs is one row of nothing on a 4-row budget.
+    .replace(/\n{2,}/g, '\n')
+    .trim()
+}
+
 const NOTE_COLS = 38
 export function noteRows(body: string, maxRows = 4): number {
   const lines = body.split('\n')
@@ -374,8 +414,11 @@ function renderNote(ctx: StageContext, _t: Translate): StageItem[] {
   // Hand-attached URLs used to render here too, which was wrong twice over: a
   // link is not a note, and a stage that did not show `note` swallowed them
   // without trace. They come through `renderAttachments` now.
-  const body = (ctx.workstream.notes[ctx.stage.key] ?? '').trim()
-  if (body.length > 0) {
+  const raw = (ctx.workstream.notes[ctx.stage.key] ?? '').trim()
+  if (raw.length > 0) {
+    // Rows are counted on what is DRAWN, not on the source: markdown marks
+    // that were stripped must not still be reserving height.
+    const body = notePreview(raw)
     // Not `manual` — a note is authored, not a workaround for a broken link.
     out.push(item({ token: 'note', text: body, rows: noteRows(body) }))
   }

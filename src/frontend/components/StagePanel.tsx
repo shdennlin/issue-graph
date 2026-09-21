@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { X } from 'lucide-react'
+import { Eye, Pencil, Type, X } from 'lucide-react'
 import { ATTACHABLE_AUTO, isAutoField, RICH_LINK_KINDS } from '@shared/fields.js'
 import { stageVisits } from '@shared/stageHistory.js'
 import { api } from '../lib/api'
@@ -8,6 +8,8 @@ import { useViewStore } from '../store/viewStore'
 import { useResizable } from '../hooks/useResizable'
 import { compactAge } from '../lib/relativeTime'
 import { useT, type DictKey } from '../i18n'
+import { useDetailTextSize } from '../lib/detailTextSize'
+import { MarkdownBody } from './MarkdownBody'
 
 // Editing one workstream's occupancy of one stage, in a side panel.
 //
@@ -78,6 +80,13 @@ export function StagePanel() {
   // get wrong, and losing a paragraph because you clicked elsewhere is a
   // worse outcome than a redundant write.
   const [noteState, setNoteState] = useState<'clean' | 'dirty' | 'saving'>('clean')
+  const [textSize, cycleTextSize] = useDetailTextSize()
+  // A stage note is read far more often than it is written, and it is prose:
+  // headings, a list, a link. Showing it raw forever was the panel disagreeing
+  // with the Notes card on the canvas, which has rendered markdown all along.
+  // Reading is the default WHEN THERE IS SOMETHING TO READ; an empty note
+  // opens ready to type, because a preview of nothing helps nobody.
+  const [writing, setWriting] = useState(false)
   // Read once and refreshed on a timer, above the early return so the hook
   // order is stable. Reading the clock in the render body is the impurity
   // `react-hooks` flags, and it is right to — the same render would otherwise
@@ -98,6 +107,7 @@ export function StagePanel() {
 
   if (target && draft.key !== target.stageKey) {
     setDraft({ key: target.stageKey, note: noteFromServer })
+    setWriting(noteFromServer.trim() === '')
   }
   // Default to the first thing the stage says it expects, once per stage — a
   // CI stage should not open on "Pull request" when it declared `ci`.
@@ -168,7 +178,7 @@ export function StagePanel() {
 
   return (
     <aside
-      className={`stage-panel${resizing ? ' is-resizing' : ''}`}
+      className={`stage-panel detail-text-${textSize}${resizing ? ' is-resizing' : ''}`}
       style={{ width: Math.min(width, sideMax), flexShrink: 0 }}
     >
       <div className="resize-handle resize-handle-left" onMouseDown={startResize} />
@@ -177,6 +187,15 @@ export function StagePanel() {
           <div className="stage-panel-ws">{workstream.name}</div>
           <h2 className="stage-panel-title">{stage.name}</h2>
         </div>
+        <button
+          className="icon-only detail-text-size-btn"
+          onClick={cycleTextSize}
+          title={t('detailPanel.cycleTextSize', { size: textSize })}
+          aria-label={t('detailPanel.cycleTextSizeAria')}
+        >
+          <Type size={12} />
+          <span className="detail-text-size-label">{textSize}</span>
+        </button>
         <button className="icon-only" onClick={close} aria-label={t('common.close')}>
           <X size={16} />
         </button>
@@ -209,7 +228,33 @@ export function StagePanel() {
           </button>
         )}
 
-        <h4>{t('stage.notesTitle')}</h4>
+        <div className="stage-panel-note-head">
+          <h4>{t('stage.notesTitle')}</h4>
+          {note.trim() !== '' && (
+            <button
+              type="button"
+              className="icon-only stage-panel-note-mode"
+              onClick={() => {
+                // Leaving the box is a save either way; switching to the
+                // rendered view must not be the one path that drops the last
+                // few characters typed.
+                if (writing) {
+                  if (saveTimer.current !== null) window.clearTimeout(saveTimer.current)
+                  void saveNote(note)
+                }
+                setWriting((w) => !w)
+              }}
+              title={writing ? t('stage.notePreview') : t('stage.noteEdit')}
+              aria-label={writing ? t('stage.notePreview') : t('stage.noteEdit')}
+            >
+              {writing ? <Eye size={12} /> : <Pencil size={12} />}
+              <span>{writing ? t('stage.notePreview') : t('stage.noteEdit')}</span>
+            </button>
+          )}
+        </div>
+        {!writing && note.trim() !== '' ? (
+          <MarkdownBody body={note} className="stage-panel-note-rendered" />
+        ) : (
         <textarea
           className="stage-panel-note"
           rows={5}
@@ -229,6 +274,7 @@ export function StagePanel() {
             void saveNote(note)
           }}
         />
+        )}
         <div className="stage-panel-row">
           <span className="stage-panel-savestate">{t(`stage.note_${noteState}` as 'stage.note_clean')}</span>
           {noteFromServer.length > 0 && (

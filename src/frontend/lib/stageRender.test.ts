@@ -8,7 +8,14 @@ import type {
   NormalizedPullRequest,
   WorkstreamSummaryDTO,
 } from '@shared/types.js'
-import { indexBlockedBy, noteRows, renderStage, stageForIssue, type StageContext } from './stageRender'
+import {
+  indexBlockedBy,
+  notePreview,
+  noteRows,
+  renderStage,
+  stageForIssue,
+  type StageContext,
+} from './stageRender'
 
 // Echoes the key back, so an assertion names the key rather than a translation
 // that could change without the behaviour changing. Same trick, and the same
@@ -634,5 +641,51 @@ describe('noteRows', () => {
 
   it('counts a hard newline as its own row even when the line is short', () => {
     expect(noteRows('a\nb\nc')).toBe(3)
+  })
+})
+
+describe('notePreview', () => {
+  it('takes the marks off a heading and a quote', () => {
+    expect(notePreview('## Waiting on the nightly run')).toBe('Waiting on the nightly run')
+    expect(notePreview('> back to Implementing')).toBe('back to Implementing')
+  })
+
+  it('keeps a list item a list item', () => {
+    // The bullet is information — "- a" is a list whether or not it is drawn
+    // as one, and dropping it makes three items read as one sentence.
+    expect(notePreview('* a\n+ b\n- c')).toBe('- a\n- b\n- c')
+  })
+
+  it('keeps link text and drops the URL', () => {
+    expect(notePreview('Blocked on [nightly #1180](https://ci.example/runs/1180)')).toBe(
+      'Blocked on nightly #1180',
+    )
+  })
+
+  it('strips emphasis, code and strikethrough without eating the words', () => {
+    expect(notePreview('`ONE-387` is **In Review**, not ~~Done~~ and _not_ merged')).toBe(
+      'ONE-387 is In Review, not Done and not merged',
+    )
+  })
+
+  it('leaves an identifier with underscores alone', () => {
+    // The emphasis rule is the one most likely to damage real text: a test
+    // name is not italics.
+    expect(notePreview('the drain path in test_drain_pool')).toBe('the drain path in test_drain_pool')
+  })
+
+  it('leaves prose with no markdown in it untouched', () => {
+    const plain = 'ONE-387 is the only member still in flight (Linear: In Review).'
+    expect(notePreview(plain)).toBe(plain)
+  })
+
+  it('collapses blank lines, which cost a row each out of four', () => {
+    expect(notePreview('a\n\n\nb')).toBe('a\nb')
+  })
+
+  it('never reorders or summarises — same words, undecorated', () => {
+    const words = (s: string) => s.replace(/[^a-z0-9 ]/gi, ' ').split(/\s+/).filter(Boolean)
+    const src = '## Title\n\n- `x` and **y**\n- [z](http://e.com)'
+    expect(words(notePreview(src))).toEqual(['Title', 'x', 'and', 'y', 'z'])
   })
 })

@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { X } from 'lucide-react'
+import { Eye, Pencil, Type, X } from 'lucide-react'
 import { api } from '../lib/api'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { useResizable } from '../hooks/useResizable'
 import { formatAbsolute } from '../lib/relativeTime'
 import { useT } from '../i18n'
+import { useDetailTextSize } from '../lib/detailTextSize'
+import { MarkdownBody } from './MarkdownBody'
 
 // The workstream itself: the things that belong to the FEATURE rather than to
 // any one step of it. Sibling of StagePanel, same shell, and the two close
@@ -44,6 +46,11 @@ export function WorkstreamPanel() {
 
   const [draft, setDraft] = useState(() => ({ id: id ?? -1, note: noteFromServer }))
   const [noteState, setNoteState] = useState<'clean' | 'dirty' | 'saving'>('clean')
+  const [textSize, cycleTextSize] = useDetailTextSize()
+  // Same rule as StagePanel: a workstream note is read far more than written,
+  // and holding prose IS this box's job — it is the one the Notes card on the
+  // canvas renders as markdown. Empty opens ready to type.
+  const [writing, setWriting] = useState(false)
   const saveTimer = useRef<number | null>(null)
   useEffect(() => () => {
     if (saveTimer.current !== null) window.clearTimeout(saveTimer.current)
@@ -51,7 +58,12 @@ export function WorkstreamPanel() {
 
   // Adjusted during render rather than synced in an effect, so switching
   // workstreams cannot carry a half-written note across.
-  if (id !== null && draft.id !== id) setDraft({ id, note: noteFromServer })
+  if (id !== null && draft.id !== id) {
+    setDraft({ id, note: noteFromServer })
+    // A workstream you open to READ must not open in the editor just because
+    // the last one you opened was empty.
+    setWriting(noteFromServer.trim() === '')
+  }
   if (id === null || !workstream) return null
   const note = draft.id === id ? draft.note : noteFromServer
 
@@ -70,7 +82,7 @@ export function WorkstreamPanel() {
 
   return (
     <aside
-      className={`stage-panel${resizing ? ' is-resizing' : ''}`}
+      className={`stage-panel detail-text-${textSize}${resizing ? ' is-resizing' : ''}`}
       style={{ width: Math.min(width, sideMax), flexShrink: 0 }}
     >
       <div className="resize-handle resize-handle-left" onMouseDown={startResize} />
@@ -79,14 +91,46 @@ export function WorkstreamPanel() {
           <div className="stage-panel-ws">{t('workstreams.title')}</div>
           <h2 className="stage-panel-title">{workstream.name}</h2>
         </div>
+        <button
+          className="icon-only detail-text-size-btn"
+          onClick={cycleTextSize}
+          title={t('detailPanel.cycleTextSize', { size: textSize })}
+          aria-label={t('detailPanel.cycleTextSizeAria')}
+        >
+          <Type size={12} />
+          <span className="detail-text-size-label">{textSize}</span>
+        </button>
         <button className="icon-only" onClick={close} aria-label={t('common.close')}>
           <X size={16} />
         </button>
       </div>
 
       <div className="stage-panel-body">
-        <h4>{t('stage.notesTitle')}</h4>
+        <div className="stage-panel-note-head">
+          <h4>{t('stage.notesTitle')}</h4>
+          {note.trim() !== '' && (
+            <button
+              type="button"
+              className="icon-only stage-panel-note-mode"
+              onClick={() => {
+                if (writing) {
+                  if (saveTimer.current !== null) window.clearTimeout(saveTimer.current)
+                  void saveNote(note)
+                }
+                setWriting((w) => !w)
+              }}
+              title={writing ? t('stage.notePreview') : t('stage.noteEdit')}
+              aria-label={writing ? t('stage.notePreview') : t('stage.noteEdit')}
+            >
+              {writing ? <Eye size={12} /> : <Pencil size={12} />}
+              <span>{writing ? t('stage.notePreview') : t('stage.noteEdit')}</span>
+            </button>
+          )}
+        </div>
         <p className="settings-hint">{t('workstreams.noteHint')}</p>
+        {!writing && note.trim() !== '' ? (
+          <MarkdownBody body={note} className="stage-panel-note-rendered" />
+        ) : (
         <textarea
           className="stage-panel-note"
           rows={8}
@@ -104,6 +148,7 @@ export function WorkstreamPanel() {
             void saveNote(note)
           }}
         />
+        )}
         <div className="stage-panel-row">
           <span className="stage-panel-savestate">{t(`stage.note_${noteState}` as 'stage.note_clean')}</span>
         </div>

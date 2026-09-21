@@ -655,6 +655,8 @@ export const en = {
     note_dirty: 'Unsaved\u2026',
     note_saving: 'Saving\u2026',
     notesTitle: 'Notes',
+    noteEdit: 'Edit',
+    notePreview: 'Preview',
     expectsStates: 'Expects: {states}',
     attachedTitle: 'Attached by hand',
     attachedEmpty: 'Nothing attached here.',

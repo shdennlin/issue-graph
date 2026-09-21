@@ -631,6 +631,8 @@ export const zhTW: Dict = {
     note_dirty: '尚未儲存\u2026',
     note_saving: '儲存中\u2026',
     notesTitle: '註記',
+    noteEdit: '編輯',
+    notePreview: '預覽',
     expectsStates: '預期狀態：{states}',
     attachedTitle: '手動掛件',
     attachedEmpty: '這一格沒有手動掛件。',

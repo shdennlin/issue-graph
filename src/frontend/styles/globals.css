@@ -817,21 +817,24 @@ a:hover { text-decoration: underline; }
    while the labels beside them grew — invisible at 'md', where the two sizes
    are one pixel apart, and obvious at 'lg' and 'xl'. */
 .detail-panel.detail-text-sm,
-.project-panel.detail-text-sm {
+.project-panel.detail-text-sm,
+.stage-panel.detail-text-sm {
   --fs-base: calc(var(--fs-base-root) - 2px);
   --fs-meta: calc(var(--fs-meta-root) - 2px);
   --fs-chip: calc(var(--fs-chip-root) - 2px);
   --fs-title: calc(var(--fs-title-root) - 2px);
 }
 .detail-panel.detail-text-lg,
-.project-panel.detail-text-lg {
+.project-panel.detail-text-lg,
+.stage-panel.detail-text-lg {
   --fs-base: calc(var(--fs-base-root) + 2px);
   --fs-meta: calc(var(--fs-meta-root) + 2px);
   --fs-chip: calc(var(--fs-chip-root) + 2px);
   --fs-title: calc(var(--fs-title-root) + 3px);
 }
 .detail-panel.detail-text-xl,
-.project-panel.detail-text-xl {
+.project-panel.detail-text-xl,
+.stage-panel.detail-text-xl {
   --fs-base: calc(var(--fs-base-root) + 4px);
   --fs-meta: calc(var(--fs-meta-root) + 4px);
   --fs-chip: calc(var(--fs-chip-root) + 4px);
@@ -4418,6 +4421,30 @@ button.stage-item:hover,
 }
 .stage-panel-states { margin: 0; color: var(--fg-muted); }
 .stage-panel-note { width: 100%; box-sizing: border-box; font: inherit; resize: vertical; }
+/* The note's heading and its Edit/Preview switch on one line. The switch only
+   exists when there is something to preview, so the row has to survive being
+   the <h4> alone. */
+.stage-panel-note-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.stage-panel-note-head h4 { margin-bottom: 0; }
+.stage-panel-note-mode {
+  gap: 4px;
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+}
+.stage-panel-note-mode:hover { color: var(--fg); }
+/* Sized like the box it replaces, so switching modes does not move the
+   controls under it. `min-height` rather than `height`: a long note is read by
+   scrolling the panel, which is what the panel is for. */
+.stage-panel-note-rendered {
+  min-height: 7em;
+  padding: 2px 0;
+  font-size: var(--fs-base);
+}
 .stage-panel-row { display: flex; gap: 6px; justify-content: flex-end; }
 .stage-panel-primary { color: var(--accent); }
 .stage-panel-links { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
