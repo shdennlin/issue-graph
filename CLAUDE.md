@@ -61,11 +61,36 @@ src/
                                           vs. preference changes — push vs. replace history)
                             tabStateStore Per-tab persistence in localStorage
     views/                Pure graph builders: (data, filters, ctx) → React Flow nodes/edges.
-                          Each view (dependency / mix / project / milestone / designdoc)
-                          implements ViewDefinition from views/types.ts.
+                          Each view (dependency / mix / project / milestone / designdoc /
+                          workstream) implements ViewDefinition from views/types.ts, and
+                          `ViewDefinition.id` is `ViewId` so the registry and that union
+                          cannot drift — they had, and the cast that hid it in Toolbar
+                          would equally have accepted a typo.
                           Chain mode (chainRootId !== null) is layered on top: container
                           views delegate to dependencyView.build via chainLayout.ts so
                           chains render consistently regardless of the outer view.
+                          `workstream` is the odd one out twice over: it draws STAGES
+                          rather than issues (see its header), and it does not apply the
+                          filter bar at all — its subject is the workstream and its
+                          members are a fact about it rather than a subset of the graph,
+                          so App.tsx hides the panel in that view rather than leaving a
+                          control that changes nothing. What each stage draws is decided
+                          in lib/stageRender.ts — one pure function per automatic field
+                          name, since `.tsx` is outside vitest's glob and a decision made
+                          in the component could not be tested at all.
+
+                          A stage has ONE list of fields (`shared/fields.ts`). Whether
+                          the app can fill a name by itself is a property of the NAME —
+                          `AUTO_FIELDS` — looked up when drawing, never a second category
+                          the stage sorts it into. It WAS two lists, `shows` and
+                          `fields`, and migration 17 merged them: the same concept had
+                          two spellings depending on which list it was in (`pr` vs
+                          `pullRequests`), stageRender carried a translation table
+                          between them, and `ci` and `note` were legal in BOTH — so a
+                          misplaced one was accepted in silence and produced a stage that
+                          expected an attachment it never drew. `field` (migration 16)
+                          holds what a name MEANS, keyed by name for the whole workspace,
+                          because `runbook` means the same thing on every stage.
     components/           Presentational + interaction. nodes/ is the per-card UI;
                           notes/, quickSwitcher/, facets/ are feature folders.
       facets/             The filter panel. facetModel.ts is pure derivation (which
@@ -123,7 +148,7 @@ and its `exhaustive-deps` warnings are real in both directions, including a
 
 - `bun:sqlite` is required — `better-sqlite3` was removed (Bun refuses to load its N-API binding; see `src/backend/db.ts` header). The previous `Dockerfile.node` no longer works against this code path. Backend code only runs on Bun now; the surface of the API stays Node-compatible via `@hono/node-server`.
 - TypeScript is strict with `noUncheckedIndexedAccess`. Destructuring `parts[0]` from a `string[]` is `string | undefined`. Plan for that.
-- Vitest runs in Node (not Bun). `vitest.config.ts` sets `environment: 'node'` as the **default**, and a suite opts out with a `// @vitest-environment happy-dom` docblock on its first line — six do, which is how `viewStore.test.ts` and `quickSwitcherStore.test.ts` get a real `localStorage` (there is no `setupFiles` and no shim; the DOM comes entirely from that pragma). An earlier version of this file said there was no per-suite override and that `happy-dom` was unconfigured; that was wrong, and believing it means hand-rolling a mock for something the pragma gives you. No `bun:test`. Consequence: `src/backend/db.ts` imports `bun:sqlite`, a specifier Node cannot resolve, so **no test can transitively import `db.ts`**. That is why `routes/webhooks.test.ts` mocks `../cache.js` — the mock exists to sever that import edge, not to simplify the test. Any new module that touches SQLite needs the same treatment: keep the `bun:sqlite` layer thin and put the logic in a pure module that takes rows.
+- Vitest runs in Node (not Bun). `vitest.config.ts` sets `environment: 'node'` as the **default**, and a suite opts out with a `// @vitest-environment happy-dom` docblock on its first line — nine do (the number has been wrong here twice; count with `grep -rl` rather than trusting it), which is how `viewStore.test.ts` and `quickSwitcherStore.test.ts` get a real `localStorage` (there is no `setupFiles` and no shim; the DOM comes entirely from that pragma). An earlier version of this file said there was no per-suite override and that `happy-dom` was unconfigured; that was wrong, and believing it means hand-rolling a mock for something the pragma gives you. No `bun:test`. Consequence: `src/backend/db.ts` imports `bun:sqlite`, a specifier Node cannot resolve, so **no test can transitively import `db.ts`**. That is why `routes/webhooks.test.ts` mocks `../cache.js` — the mock exists to sever that import edge, not to simplify the test. Any new module that touches SQLite needs the same treatment: keep the `bun:sqlite` layer thin and put the logic in a pure module that takes rows.
 - `eslint-plugin-react-hooks` v7's full preset is enabled (not just `rules-of-hooks` + `exhaustive-deps`) — it will flag set-state-in-effect, ref purity, etc. Treat its warnings as real.
 
 ## Conventions
@@ -131,6 +156,28 @@ and its `exhaustive-deps` warnings are real in both directions, including a
 - Tests are co-located beside source as `*.test.ts` / `*.test.tsx`. Grep for the existing nearest test before adding a new one.
 - **Two filter defaults are not neutral, and they break the unwritten "empty means unfiltered" assumption everywhere.** `Filters.stateTypes` starts as four of the six types, and `Filters.recencyIgnoreLinked` starts `true` (dropping issues whose `updatedAt` moved only because a relation was pointed at them — see `frontend/lib/linkTouch.ts`; it is inert unless a recency window is set, which is why it writes `recentlinks` to the URL only when switched OFF). Six separate defects came from code that reasoned "at default ⇒ not filtering": a State chip pinned to the bar forever, `state=` being the one URL param written at its default, an Active-only checkbox that ticked when switched off, a panel claiming nothing was filtered while a third of the state space was hidden, and a clear button that "restored the default" and so cleared nothing. When touching filter state, ask whether the field *constrains*, not whether it *differs from its default* — they are opposite for both.
 - **There was a third: `Filters.activeOnly`, and it was removed rather than fixed.** It was a second filter over the state dimension that `stateTypes` already owns. At the default it did nothing, because the four default types exclude completed and canceled already; the only way to make it act was to put it at odds with the type list, and then it won and the graph came back empty under a State panel showing Completed ticked. Half the defects above were its. The lesson generalizes: **one dimension, one filter** — a shortcut that duplicates a dimension can only ever contradict it. Its URL param `active` is still ignored in `savedViewMatch.ts`'s `IGNORED` so views saved before the removal keep matching, and that is the only place it survives.
+- **The workstream is the unit the pipeline moves, not the issue.** An issue's
+  position is DERIVED — `stageForIssue` finds the first stage whose `states`
+  names its Linear state, so an issue moves when somebody moves it in Linear.
+  A workstream's position is STORED, because nothing else records where a
+  FEATURE has got to. The two disagreeing is the evidence signal, not a bug,
+  and neither side is auto-corrected. Migration 9 dropped an `issue_stage`
+  table that tried to store the first one; do not reintroduce it.
+- **Archived workstreams reach the frontend.** `cache.ts` ships every row and
+  the two places that DISPLAY them filter (`views/workstream.ts`, the jump
+  list) — the view lets one through when it is the explicitly focused id. The
+  filter used to be in the backend as well, which made "show me this one
+  archived workstream" unanswerable: the view's own rule allowed it and the
+  data never arrived. A filter must not overrule an explicit act of selection.
+  The same rule is why a hand attachment renders whether or not its field is
+  listed on the stage.
+- **The agent-session endpoint is the second route reachable from outside** (the
+  first is the Linear webhook) and is gated by a bearer token, where an UNSET
+  `AGENT_SESSION_TOKEN` closes it rather than opening it. It is the only write
+  gate of its kind, so it must never become settable through `/api/settings` or
+  `/api/workspaces`, which are unauthenticated: a gate whose key is handed out
+  by an ungated endpoint is not a gate. Rotation that requires presenting the
+  current token is the shape that would work.
 - Migrations are append-only entries in the `MIGRATIONS` array in `src/backend/db.ts` (per-workspace schema) or `CONTROL_MIGRATIONS` in `src/backend/controlDb.ts` (the roster). Never edit a past entry — write a new ALTER.
 - User-overridable settings go in `SETTING_SPECS` (`src/backend/lib/settingSpecs.ts`), which owns the bounds *and* the `stored > env > default` precedence; read them via `settingInt()`. Do not hand-wire a reader against the `setting` table — that pattern is how eight of nine settings ended up accepted, validated, stored, and then ignored. A setting with no consumer should not be in the registry at all.
 - The shared type module is the contract: changing `src/shared/types.ts` will propagate type errors to both sides; that's the intended signal.

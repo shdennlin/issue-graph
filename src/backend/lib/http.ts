@@ -1,6 +1,7 @@
 // Shared HTTP helpers for route modules.
 
 import type { Context } from 'hono'
+import { loadConfig } from './env.js'
 
 /**
  * Same-origin check used as lightweight CSRF protection for mutating
@@ -38,4 +39,36 @@ export function bearerToken(authorizationHeader: string | undefined | null): str
   // the scheme at all and is returned as though it were the credential, which
   // is how an empty header reaches Linear looking like a real one.
   return authorizationHeader.replace(/^Bearer\b\s*/i, '').trim()
+}
+
+/**
+ * Constant-time-ish comparison. Not a defence against a remote timing attack —
+ * network jitter swamps the signal at this scale — but it costs nothing and
+ * avoids the reflex of writing `a === b` for a secret, which is the habit worth
+ * not having.
+ */
+function tokenMatches(presented: string, expected: string): boolean {
+  if (presented.length !== expected.length) return false
+  let diff = 0
+  for (let i = 0; i < presented.length; i++) diff |= presented.charCodeAt(i) ^ expected.charCodeAt(i)
+  return diff === 0
+}
+
+/**
+ * Does this request carry the agent shared secret?
+ *
+ * Used by the routes the Claude Code plugin calls, which are not browsers and
+ * send no Origin, so `originAllowed` cannot speak for them.
+ *
+ * AN UNSET AGENT_SESSION_TOKEN RETURNS FALSE — unset means closed, not open.
+ * These routes are meant to be reachable from outside an app that has no auth
+ * by design, so a deployment without the variable must not quietly accept
+ * writes from anywhere.
+ */
+export function agentTokenValid(header: string | undefined): boolean {
+  const expected = loadConfig().AGENT_SESSION_TOKEN
+  if (!expected) return false
+  const presented = header?.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : ''
+  if (presented.length === 0) return false
+  return tokenMatches(presented, expected)
 }

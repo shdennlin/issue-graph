@@ -70,6 +70,7 @@ function ctx(issues: NormalizedIssue[], overrides: Partial<ViewContext> = {}): V
     focusedId: null,
     chainRootIds: [],
     mixGroupBy: null,
+    focusedWorkstreamId: null,
     chainDepthUp: null,
     chainDepthDown: null,
     showRelated: false,

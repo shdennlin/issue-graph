@@ -1,5 +1,17 @@
-import type { GraphData, NormalizedIssue, NormalizedLabel, AnnotationDTO, WorkflowState } from '@shared/types.js'
+import type {
+  GraphData,
+  NormalizedIssue,
+  NormalizedLabel,
+  AnnotationDTO,
+  AgentSessionDTO,
+  WorkstreamSummaryDTO,
+  LifecycleStageDTO,
+  WorkflowState,
+} from '@shared/types.js'
 import { getDb } from './db.js'
+import { liveSessions, type AgentSessionRow } from './agentSessionStore.js'
+import { LIFECYCLE_COLUMNS, lifecycleRowToDTO, type LifecycleStageRow } from './lifecycleStore.js'
+import { parseStringArray } from './batchStore.js'
 import { loadConfig } from './lib/env.js'
 import { settingInt } from './lib/settings.js'
 
@@ -257,6 +269,116 @@ export function resetCache(): { issues: number; labels: number } {
     writeMeta(META_LAST_RECONCILE_MS, '0')
   })()
   return { issues, labels }
+}
+
+/**
+ * The workspace's lifecycle, ordered as the pipeline runs.
+ *
+ * Read through lifecycleRowToDTO so a malformed `states` column degrades to
+ * "constrains nothing" instead of throwing inside the graph response — one bad
+ * row must not be able to blank the whole graph.
+ */
+export function readLifecycleStages(): LifecycleStageDTO[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT ${LIFECYCLE_COLUMNS} FROM lifecycle_stage ORDER BY sort_order ASC, id ASC`,
+    )
+    .all() as LifecycleStageRow[]
+  return rows.map(lifecycleRowToDTO)
+}
+
+/**
+ * Workstreams with everything the stage view draws from.
+ *
+ * Archived ones are left out: archiving a workstream means taking it off the
+ * board, and a container for it would contradict that. `?status=all` on the
+ * batches route is where they come back.
+ */
+export function readWorkstreamSummaries(): WorkstreamSummaryDTO[] {
+  const db = getDb()
+  const rows = db
+    .prepare(
+      'SELECT id, name, created_at, updated_at, archived_at, stage_key, status, stage_entered_at, assignees, note FROM batch ORDER BY created_at DESC, id DESC',
+    )
+    .all() as {
+    id: number
+    name: string
+    stage_key: string | null
+    status: string
+    stage_entered_at: number | null
+    assignees: string
+    note: string | null
+    created_at: number
+    updated_at: number | null
+    archived_at: number | null
+  }[]
+  const members = db
+    .prepare('SELECT batch_id, identifier FROM batch_member')
+    .all() as { batch_id: number; identifier: string }[]
+  const noteRows = db
+    .prepare('SELECT batch_id, stage_key, body FROM workstream_stage_note')
+    .all() as { batch_id: number; stage_key: string; body: string }[]
+  // Ordered by `at` then `id`: two moves inside the same millisecond tie on
+  // `at`, and the autoincrement id is the only thing that can break that tie
+  // in the order they actually happened.
+  const eventRows = db
+    .prepare('SELECT batch_id, stage_key, at FROM workstream_stage_event ORDER BY at ASC, id ASC')
+    .all() as { batch_id: number; stage_key: string; at: number }[]
+  const linkRows = db
+    .prepare('SELECT batch_id, stage_key, kind, value, label FROM workstream_stage_link')
+    .all() as { batch_id: number; stage_key: string; kind: string; value: string; label: string | null }[]
+  const byBatch = new Map<number, string[]>()
+  for (const m of members) {
+    const list = byBatch.get(m.batch_id)
+    if (list) list.push(m.identifier)
+    else byBatch.set(m.batch_id, [m.identifier])
+  }
+  // Archived rows are INCLUDED. Hiding them is a display decision and it is
+  // already made in the two places that display: views/workstream.ts and the
+  // jump list. Making it here as well put it somewhere the frontend could not
+  // overrule, so "show me this one archived workstream" was unanswerable — the
+  // view's own rule let it through and the data never arrived. stageNudges
+  // skips them on its own, and there are a handful of rows either way.
+  return rows
+    .map((r) => ({
+    id: r.id,
+    name: r.name,
+    members: byBatch.get(r.id) ?? [],
+    stage: r.stage_key,
+    note: r.note,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at ?? r.created_at,
+    archivedAt: r.archived_at,
+    stageEnteredAt: r.stage_entered_at,
+    stageEvents: eventRows
+      .filter((e) => e.batch_id === r.id)
+      .map((e) => ({ stageKey: e.stage_key, at: e.at })),
+    status: r.status === 'archived' ? ('archived' as const) : ('active' as const),
+    assignees: parseStringArray(r.assignees),
+    notes: Object.fromEntries(
+      noteRows.filter((n) => n.batch_id === r.id).map((n) => [n.stage_key, n.body]),
+    ),
+    links: linkRows
+      .filter((l) => l.batch_id === r.id)
+      .map((l) => ({ stageKey: l.stage_key, kind: l.kind, value: l.value, label: l.label })),
+  }))
+}
+
+/**
+ * Live agent sessions, TTL already applied.
+ *
+ * The filter lives here rather than in each consumer so that no caller can
+ * forget it: a row that has gone quiet is not "a session with an old
+ * timestamp", it is a session that has probably died, and showing it would
+ * have the card claim work is in progress when nothing is running.
+ */
+export function readLiveAgentSessions(now = Date.now()): AgentSessionDTO[] {
+  const rows = getDb()
+    .prepare(
+      'SELECT session_id, identifier, branch, cwd, host, phase, status, last_seen, payload_version, label FROM agent_session',
+    )
+    .all() as AgentSessionRow[]
+  return liveSessions(rows, now)
 }
 
 export function readAnnotations(): AnnotationDTO[] {

@@ -1,22 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  BarChart3,
-  Camera,
-  Eye,
-  EyeOff,
-  FileDown,
-  FileText,
-  Keyboard,
-  ListTree,
-  Loader2,
-  Monitor,
-  Moon,
-  MoreHorizontal,
-  PanelRightClose,
-  PanelRightOpen,
-  Settings,
-  Sun,
-} from 'lucide-react'
+import { BarChart3, Camera, Eye, EyeOff, FileDown, FileText, Keyboard, Layers, ListTree, Loader2, Monitor, Moon, MoreHorizontal, PanelRightClose, PanelRightOpen, Settings, Sun } from 'lucide-react'
 import { useClickOutside } from '../hooks/useClickOutside'
 import { useGraphStore } from '../store/graphStore'
 import { useSchemaStore } from '../store/schemaStore'
@@ -72,6 +55,10 @@ export function Toolbar() {
   const primaryGroup = useSchemaStore((s) => s.schema.primaryGroup)
   const schema = useSchemaStore((s) => s.schema)
   const mixGroupBy = useViewStore((s) => s.mixGroupBy)
+  const focusedWorkstreamId = useViewStore((s) => s.focusedWorkstreamId)
+  const setFocusedWorkstreamId = useViewStore((s) => s.setFocusedWorkstreamId)
+  const lifecycleEditorOpen = useViewStore((s) => s.lifecycleEditorOpen)
+  const setLifecycleEditorOpen = useViewStore((s) => s.setLifecycleEditorOpen)
   const setMixGroupBy = useViewStore((s) => s.setMixGroupBy)
   const t = useT()
 
@@ -168,7 +155,7 @@ export function Toolbar() {
           <button
             key={v.id}
             className={activeView === v.id ? 'active' : ''}
-            onClick={() => setActiveView(v.id as any)}
+            onClick={() => setActiveView(v.id)}
             title={viewTooltip(v.id)}
           >
             {t(viewLabelKey(v.id))}
@@ -200,6 +187,31 @@ export function Toolbar() {
                 </option>
               ))}
             </select>
+          </div>
+        </>
+      )}
+      {activeView === 'workstream' && (
+        <>
+          <div className="sep" />
+          <div className="group">
+            {/* The editor opens over the board rather than in Settings: you
+                notice a stage is missing while looking at the pipeline. */}
+            <button onClick={() => setLifecycleEditorOpen(!lifecycleEditorOpen)}>
+              {t('lifecycle.edit')}
+            </button>
+          </div>
+        </>
+      )}
+      {activeView === 'workstream' && focusedWorkstreamId !== null && (
+        <>
+          <div className="sep" />
+          <div className="group">
+            {/* The way back out of a focused workstream. Back/Forward also work,
+                since expanding one is a significant change — but a mode you can
+                only leave through browser history is a mode people get stuck in. */}
+            <button onClick={() => setFocusedWorkstreamId(null)}>
+              {t('stage.backToOverview')}
+            </button>
           </div>
         </>
       )}
@@ -400,6 +412,14 @@ export function Toolbar() {
           aria-label={t('toolbar.notesAria')}
         >
           <FileText size={ICON_SIZE} />
+        </button>
+        <button
+          className="icon-only"
+          onClick={() => useViewStore.getState().setWorkstreamsOpen(true)}
+          title={t('toolbar.workstreamsTitle')}
+          aria-label={t('toolbar.workstreamsTitle')}
+        >
+          <Layers size={ICON_SIZE} />
         </button>
         <button
           className={`icon-text${detailPanelAutoOpen ? ' active' : ''}`}

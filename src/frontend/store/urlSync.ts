@@ -102,6 +102,10 @@ function buildUrl(): string {
   if (s.theme !== 'auto') params.set('theme', s.theme)
   if (s.density !== 'default') params.set('density', s.density)
   if (s.mixGroupBy) params.set('mixby', s.mixGroupBy)
+  // 'stream', not 'ws': `w` is the WORKSPACE id and picks which database the
+  // whole app reads. Two params one letter apart, one of them load-bearing, is
+  // a misreading waiting to happen in a shared link.
+  if (s.focusedWorkstreamId !== null) params.set('stream', String(s.focusedWorkstreamId))
 
   // Filters + search are owned by filterCodec so that all three registration
   // points (write / read / signature) live in one testable module.
@@ -143,6 +147,9 @@ function significantSignature(): string {
     s.showRelated ? '1' : '0',
     s.showHierarchy ? '1' : '0',
     s.mixGroupBy ?? '',
+    // Expanding a workstream is a step, not a preference: it replaces what the
+    // whole canvas is about, so Back has to come out of it.
+    s.focusedWorkstreamId === null ? '' : String(s.focusedWorkstreamId),
     // search + every filter dimension — see filterCodec.filterSignatureParts.
     ...filterSignatureParts({ filters: s.filters, search: s.search }),
     s.notesOpen ? '1' : '0',
@@ -486,6 +493,13 @@ function parseUrl({
   // ?mixby= resets to auto instead of inheriting the previous view's grouping.
   // An unresolvable key is tolerated downstream by mixGrouping.resolveMixKey.
   set({ mixGroupBy: params.get('mixby') || null })
+
+  // Same reason as ?mixby= above: assigned unconditionally so a URL without
+  // ?ws= returns to the overview rather than inheriting the previous
+  // expansion. A non-numeric or missing id reads as the overview, and an id
+  // whose workstream has since been deleted is tolerated by the view.
+  const streamParam = Number(params.get('stream'))
+  set({ focusedWorkstreamId: Number.isInteger(streamParam) && streamParam > 0 ? streamParam : null })
 
   // Filters + search: rebuilt wholesale from the URL, so a field whose param is
   // absent resets to its default instead of sticking. `search` is assigned

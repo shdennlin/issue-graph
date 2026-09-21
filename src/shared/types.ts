@@ -77,6 +77,32 @@ export interface NormalizedRelation {
   createdAt?: string
 }
 
+/**
+ * A pull request Linear has attached to an issue.
+ *
+ * Sourced entirely from Linear's GitHub integration, which means it spans every
+ * repository and needs no GitHub credential of ours. `linkKind` is what makes a
+ * count meaningful: a stack's middle PRs say "contributes" and must not be
+ * counted towards finishing the issue, while "closes" ones must.
+ *
+ * CI check status is NOT here and cannot be — Linear has a PullRequestCheck
+ * type but no query path reaches PullRequest from an issue.
+ */
+export interface NormalizedPullRequest {
+  url: string
+  number: number | null
+  repo: string | null
+  /** Linear's own words: draft | open | merged | closed, and possibly others.
+   *  Kept as reported rather than mapped onto an enum of ours — a value we did
+   *  not anticipate should show through to the card, not vanish. */
+  status: string | null
+  targetBranch: string | null
+  hasConflicts: boolean | null
+  /** 'closes' counts towards finishing the issue; 'contributes' does not. */
+  linkKind: string | null
+  mergedAt: string | null
+}
+
 export interface NormalizedIssue {
   id: string
   identifier: string
@@ -130,6 +156,10 @@ export interface NormalizedIssue {
    * somebody was talking on 45 seconds earlier drops out of "recent activity".
    */
   lastCommentAt?: string
+  /** Pull requests Linear has linked to this issue, across repositories. Absent
+   *  rather than empty when the field was not fetched, so "no PRs" and "not
+   *  asked for" stay distinguishable. */
+  pullRequests?: NormalizedPullRequest[]
 }
 
 export interface ViewerOrganization {
@@ -280,11 +310,191 @@ export interface SavedViewDTO {
   updatedAt: number
 }
 
+/**
+ * One step in a workspace's own lifecycle.
+ *
+ * This is a PLAYBOOK, not a copy of Linear's workflow states. Linear owns which
+ * states exist, their order, and which one an issue is in; what it has no field
+ * for is "when an issue is here, this is the command that moves it on" — which
+ * is the thing that makes a stage worth storing.
+ *
+ * `states` lists the Linear state NAMES this stage is compatible with. It is
+ * used only to detect disagreement, never to derive the stage (see ADR-0002:
+ * stages are finer than states, so derivation is impossible) and never to
+ * correct either side.
+ */
+/**
+ * What one field NAME means in this workspace.
+ *
+ * A stage's `fields` says which names it expects; this says what they mean. An
+ * agent that knows to call it `runbook` and not what a runbook is here has
+ * half the contract — the name stops spelling drift, the description is what
+ * makes the field fillable.
+ *
+ * Keyed by name across the whole workspace rather than per stage, because that
+ * is where the fact lives: `runbook` means the same thing on every stage that
+ * expects one.
+ */
+export interface FieldDTO {
+  name: string
+  description: string
+  updatedAt: number
+}
+
+export interface LifecycleStageDTO {
+  id: number
+  /** Stable slug a workstream's stage points at. Unique per workspace. */
+  key: string
+  name: string
+  /** Lower values sort first. Appended at max+1, same as SavedViewDTO. */
+  sortOrder: number
+  /** Compatible Linear state names, e.g. ["In Progress"]. Empty = compatible
+   *  with everything, which is how a stage opts out of conflict detection. */
+  states: string[]
+  /** What usually happens here — a hint for whoever picks the work up, not a
+   *  rule. Nothing validates it or triggers it. */
+  nextCommand: string | null
+  /**
+   * Everything that belongs on this stage — ONE list.
+   *
+   * A name in `AUTO_FIELDS` is filled by the app, by reading somewhere else;
+   * any other name is filled by a person or an agent attaching something. That
+   * is a property of the NAME, looked up when drawing, not a category the
+   * stage sorts it into.
+   *
+   * It was two lists (`shows` and `fields`) and that was a mistake with a long
+   * tail: the same concept got two spellings depending on which list it was in
+   * (`pr` vs `pullRequests`), `stageRender` carried a translation table
+   * between them, and `ci` and `note` were legal in BOTH — so a misplaced one
+   * was accepted in silence and produced a stage that expected an attachment
+   * it never drew.
+   *
+   * Advisory for the names the app cannot fill: an attachment of any kind is
+   * still accepted and still renders. The list says what belongs here, not
+   * what is permitted, or an agent with something genuinely new would have
+   * nowhere to put it.
+   */
+  fields: string[]
+  /** How long a workstream may sit here before it is worth a nudge. Per stage,
+   *  because the honest answer differs wildly — Discuss can take a fortnight,
+   *  CI sitting for a day is wrong. Null means this stage never goes stale. */
+  staleAfterDays: number | null
+  createdAt: number
+  updatedAt: number
+}
+
+/**
+ * Whether a stored stage and the current Linear state agree.
+ *
+ * `unknown` is deliberately distinct from `conflict`: an issue whose stage was
+ * never set, or whose stage key no longer exists, is not in disagreement — it
+ * is unclassified, and drawing a warning on it would cry wolf on every issue
+ * the moment a lifecycle is first configured.
+ */
+export type StageVerdict = 'ok' | 'conflict' | 'unknown'
+
+/**
+ * A Claude Code session reported by the hook plugin.
+ *
+ * This is the one fact an issue tracker structurally cannot hold: it is runtime
+ * state, not a work item. Linear has no field for it and should not grow one.
+ *
+ * Reported by hooks rather than claimed by the agent on purpose. A hook fires
+ * whether or not the model cooperates, so a session that crashes or forgets to
+ * announce itself is still visible — and the ABSENCE of heartbeats is what
+ * reveals that it died. An agent-claimed marker could only ever show sessions
+ * that were well-behaved enough not to need watching.
+ */
+export interface AgentSessionDTO {
+  sessionId: string
+  /** The issue resolved from the branch, or null. Null is a normal outcome —
+   *  plenty of real work has no ticket. */
+  identifier: string | null
+  branch: string | null
+  cwd: string | null
+  host: string | null
+  /** Last slash command seen, for display only. */
+  phase: string | null
+  /**
+   * `active` — moving.
+   * `waiting` — the turn ended; it is your move, but nothing is stuck.
+   * `blocked` — stopped on a permission prompt and doing nothing until someone
+   *   answers. The only one that should pull a person over, which is why it is
+   *   not folded into `waiting`.
+   */
+  status: 'active' | 'waiting' | 'blocked'
+  lastSeen: number
+  /** A name a person can recognise the terminal by — the repo directory and the
+   *  branch. Derived server-side; a UUID identifies nothing to a reader. */
+  label: string
+}
+
+/**
+ * A workstream as the graph needs it: who belongs, not how far along.
+ *
+ * Progress and claims are deliberately absent — the Workstreams panel fetches
+ * those per stream, and putting them here would grow every graph response for
+ * data only one view reads. Membership alone is what draws the containers.
+ *
+ * Order is not carried either: the view lays members out with dagre inside a
+ * container, and the `blocks` edges that decide sequence are already on the
+ * issues.
+ */
+export interface WorkstreamSummaryDTO {
+  id: number
+  name: string
+  members: string[]
+  /** Which pipeline stage this feature has reached, or null before one is set.
+   *  Stored and set explicitly — a pipeline describes a feature moving through
+   *  it, and nothing else records where it has got to. */
+  stage: string | null
+  /** When the stage last changed, rewritten on a move backwards too: staleness
+   *  times the CURRENT occupancy, not the first one. */
+  stageEnteredAt: number | null
+  /** Every stage this workstream has ARRIVED at, oldest first.
+   *
+   *  Carried raw rather than as computed durations because the duration of the
+   *  current stage depends on `now`, which only the client knows — a server
+   *  that pre-computed it would ship a number that was already stale. Small by
+   *  nature: a workstream moves a handful of times over its life.
+   *  `shared/stageHistory.ts` turns these into per-stage durations. */
+  stageEvents: { stageKey: string; at: number }[]
+  status: 'active' | 'archived'
+  /** Agents this feature is assigned to. Durable — an agent that is not running
+   *  right now is still whose job the work is, which is what separates this
+   *  from AgentSessionDTO. */
+  assignees: string[]
+  createdAt: number
+  /** Last change to the workstream ITSELF — never its members' Linear
+   *  activity, which moves on every comment. */
+  updatedAt: number
+  /** Null while active; dates the CURRENT shelving. */
+  archivedAt: number | null
+  /** A note about the FEATURE as a whole: why it exists, what was decided,
+   *  what somebody needs to know before reading the pipeline. Distinct from
+   *  `notes`, which is per stage and says what a given STEP is waiting on. */
+  note: string | null
+  /** Per-stage notes, keyed by stage key. Carried in full rather than as a
+   *  flag: they are short, user-typed lines, and a truncated copy here plus a
+   *  full one behind a click would be two versions of one thing. */
+  notes: Record<string, string>
+  /** Items attached by hand because the upstream link is missing. Kept apart
+   *  from anything projected so the UI can mark them — see the migration
+   *  comment on why that mark matters. */
+  links: { stageKey: string; kind: string; value: string; label: string | null }[]
+}
+
 export interface GraphData {
   issues: NormalizedIssue[]
   labels: NormalizedLabel[]
   designdocs?: DesignDocChange[]
   annotations?: AnnotationDTO[]
+  /** The workspace's lifecycle, ordered by sortOrder. Empty until configured. */
+  lifecycle?: LifecycleStageDTO[]
+  /** Live agent sessions. Already filtered by TTL — a row here is alive. */
+  agentSessions?: AgentSessionDTO[]
+  /** Workstreams and their membership, for the workstream view. */
+  workstreams?: WorkstreamSummaryDTO[]
   viewer?: Viewer | null
   fetchedAt: number
 }

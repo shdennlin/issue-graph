@@ -10,6 +10,7 @@ import type {
   ProjectDetail,
   ProjectStateType,
   RelationType,
+  NormalizedPullRequest,
 } from '@shared/types.js'
 
 const STATE_TYPES: ReadonlySet<IssueStateType> = new Set<IssueStateType>([
@@ -144,6 +145,46 @@ export function normalizeProjectDetail(raw: any): ProjectDetail {
   }
 }
 
+/**
+ * Pull requests out of Linear's attachment list.
+ *
+ * `metadata` is an untyped blob that Linear fills from GitHub, so every field is
+ * checked rather than trusted: a shape we did not anticipate must degrade to
+ * null, not throw inside a sync.
+ *
+ * Only `sourceType === 'github'` survives. An attachment can be a Slack thread,
+ * a Figma file or anything else someone linked, and counting those as pull
+ * requests would make "2/5 merged" meaningless.
+ *
+ * `status` is kept as Linear words it rather than mapped onto an enum of ours.
+ * A value we have not seen should show through to the card, not vanish into a
+ * default.
+ */
+export function normalizePullRequests(raw: any): NormalizedPullRequest[] {
+  const nodes = raw?.attachments?.nodes
+  if (!Array.isArray(nodes)) return []
+  const out: NormalizedPullRequest[] = []
+  const seen = new Set<string>()
+  for (const n of nodes) {
+    if (n?.sourceType !== 'github') continue
+    const m = (n?.metadata ?? {}) as Record<string, unknown>
+    const url = typeof n?.url === 'string' ? n.url : typeof m.url === 'string' ? m.url : null
+    if (!url || seen.has(url)) continue
+    seen.add(url)
+    out.push({
+      url,
+      number: typeof m.number === 'number' ? m.number : null,
+      repo: typeof m.repoName === 'string' ? m.repoName : null,
+      status: typeof m.status === 'string' ? m.status : null,
+      targetBranch: typeof m.targetBranch === 'string' ? m.targetBranch : null,
+      hasConflicts: typeof m.hasConflicts === 'boolean' ? m.hasConflicts : null,
+      linkKind: typeof m.linkKind === 'string' ? m.linkKind : null,
+      mergedAt: typeof m.mergedAt === 'string' ? m.mergedAt : null,
+    })
+  }
+  return out
+}
+
 export function normalizeIssue(raw: any): NormalizedIssue {
   const labels: NormalizedLabel[] = (raw.labels?.nodes ?? []).map(normalizeLabel)
   const children: string[] = (raw.children?.nodes ?? [])
@@ -211,6 +252,10 @@ export function normalizeIssue(raw: any): NormalizedIssue {
     updatedAt: String(raw.updatedAt ?? new Date().toISOString()),
     // Absent rather than empty when there are no comments: the field means
     // "the newest comment was at", and '' would read as a 1970 timestamp.
+    // Absent rather than empty when the field was not fetched at all, so "this
+    // issue has no PRs" and "we did not ask" stay distinguishable — the same
+    // reason lastCommentAt below is a conditional spread.
+    ...(raw.attachments ? { pullRequests: normalizePullRequests(raw) } : {}),
     ...(typeof raw.comments?.nodes?.[0]?.createdAt === 'string'
       ? { lastCommentAt: String(raw.comments.nodes[0].createdAt) }
       : {}),

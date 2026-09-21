@@ -1,0 +1,326 @@
+// Workstream view — the pipeline first, everything else in support of it.
+//
+// The other container views draw issues and group them. This one draws STAGES,
+// because the question it answers is "where has this feature got to", and the
+// answer is a position in a pipeline rather than a set of cards. The issues,
+// the sessions, the PRs and the specs appear inside the stage that asked for
+// them, via `shows` — see lib/stageRender.ts, which decides all of it.
+//
+// EVERY workstream is drawn, each as its own container with its own row of
+// stages inside — the same `mixedContainer` + `parentNode` arrangement the mix
+// and project views use, so nothing new had to be invented for the layout.
+//
+// An earlier cut drew ONE shared pipeline with the workstreams as name chips
+// on the stage each had reached. It answered "who is where" and nothing else:
+// you could not see a single workstream's contents without leaving the
+// overview, so the two questions people actually hold at once — "what is in
+// flight" and "how far has each got" — needed two different screens.
+//
+// `focusedWorkstreamId` now ISOLATES rather than switching mode: null draws
+// every container, an id draws that one alone. Same picture either way, which
+// is why coming back from an isolation costs nothing to re-read.
+//
+// A DEPARTURE worth knowing about: this view does not apply the filter bar.
+// Every other container view draws a subset of the graph, so filtering it is
+// filtering the picture. Here the subject is the workstream, and its members
+// are a fact about it — hiding three of five because of a label filter would
+// not narrow the picture, it would make the stage misreport what it contains.
+// Members are resolved straight from `data.issues`, and a member outside the
+// sync window is listed as missing rather than dropped.
+
+import { MarkerType, type Edge, type Node } from 'reactflow'
+import { isStale } from '@shared/staleness.js'
+import { stageVisits } from '@shared/stageHistory.js'
+import { compactAge } from '../lib/relativeTime'
+import type { ViewDefinition } from './types'
+import { buildChainLayout } from './chainLayout'
+import { indexBlockedBy, noteRows, renderStage, type StageContext } from '../lib/stageRender'
+import { indexSessionsByIssue } from '../lib/agentSession'
+import { workstreamColor } from '../lib/colors'
+import type { StageNodeData } from '../components/nodes/StageNode'
+import type { StageNotesData } from '../components/nodes/StageNotesNode'
+
+const STAGE_W = 340
+const GAP_X = 28
+const ROW_GAP = 34
+const PADDING = 20
+const ROW_GAP_INNER = 26
+// How tall the workstream's note card may grow before it scrolls. Generous,
+// because holding the note IS its job — but bounded, since every other cell in
+// the workstream is sized to the tallest one and an essay would make seven
+// empty stages that tall too.
+const NOTE_CARD_MAX_ROWS = 14
+// Matches .mixed-container-header — the container's own title bar, which the
+// stages have to start below.
+const HEADER = 32
+
+// These must track .stage-node in globals.css. GraphCanvas measures only
+// `.react-flow__node-issue`, so a stage node never receives a corrected height
+// and a wrong number here shows up as overlap rather than healing itself.
+const HEAD_H = 34
+const ITEM_H = 22
+const BODY_PAD = 10
+
+/** Wording never changes how many rows there are, so counting with an identity
+ *  translator gives exactly the height the component will render. */
+const IDENT = ((k: string) => k) as Parameters<typeof renderStage>[1]
+
+/** Where stage `index` sits, given `cols` per row and alternating direction.
+ *  An odd row is mirrored, which is the whole trick. */
+export function serpentine(index: number, cols: number): { row: number; col: number } {
+  const row = Math.floor(index / cols)
+  const within = index % cols
+  return { row, col: row % 2 === 0 ? within : cols - 1 - within }
+}
+
+export function stageNodeHeight(itemCount: number): number {
+  return HEAD_H + BODY_PAD * 2 + Math.max(1, itemCount) * ITEM_H
+}
+
+export const workstreamView: ViewDefinition = {
+  id: 'workstream',
+  label: 'Workstreams',
+  description:
+    'Every feature in flight, each with its own pipeline. Shows how far each has got and what is sitting on every step.',
+  build(ctx) {
+    const { data, chainRootIds, focusedWorkstreamId, maxColsPerRow } = ctx
+
+    // Chain mode dissolves this like every other container view — the chain is
+    // the subject then, and a pipeline has nothing to say about it.
+    if (chainRootIds.length > 0) return buildChainLayout(ctx, () => null)
+
+    const stages = [...(data.lifecycle ?? [])].sort((a, b) => a.sortOrder - b.sortOrder)
+    if (stages.length === 0) return { nodes: [emptyPipelineNode()], edges: [] }
+
+    // Archived ones are hidden by default and shown when you ASK for one by
+    // id. A filter must not overrule an explicit act of selection: the
+    // unconditional version meant an archived workstream could not be looked
+    // at at all — you clicked it, nothing happened, and nothing on screen said
+    // why. Same rule as an attachment that renders whether or not its box is
+    // switched on.
+    const all = (data.workstreams ?? []).filter(
+      (w) => w.status !== 'archived' || w.id === focusedWorkstreamId,
+    )
+    // An id that matches nothing falls back to everything rather than blanking
+    // the canvas — a stale `?stream=` in a bookmark must not look like "no
+    // workstreams exist".
+    const streams = focusedWorkstreamId === null ? all : all.filter((w) => w.id === focusedWorkstreamId)
+    const shown = streams.length > 0 ? streams : all
+
+    const now = Date.now()
+    // Built once for the whole canvas and shared by every stage of every
+    // workstream. `blockedBy` scans the entire graph, which is exactly why it
+    // must not happen per stage.
+    const byId = new Map(data.issues.map((i) => [i.identifier, i]))
+    const sessionsByIssue = indexSessionsByIssue(data.agentSessions)
+    const blockedBy = indexBlockedBy(data.issues)
+    const designdocs = data.designdocs ?? []
+
+    const nodes: Node[] = []
+    const edges: Edge[] = []
+    let y = 0
+
+    for (const workstream of shown) {
+      const members = workstream.members
+        .map((id) => byId.get(id))
+        .filter((i): i is NonNullable<typeof i> => i !== undefined)
+      const visits = stageVisits(workstream.stageEvents, now)
+
+      const built = stages.map((stage, i) => {
+        const render: StageContext = {
+          workstream,
+          stage,
+          members,
+          sessionsByIssue,
+          designdocs,
+          blockedBy,
+          pipeline: stages,
+        }
+        // SUM of rows, not a count of items: a note wraps over several. A
+        // stage node is never measured after the fact, so an undercount shows
+        // up as clipped text that nothing corrects.
+        const rows = renderStage(render, IDENT).reduce((n, it) => n + it.rows, 0)
+        return { stage, i, render, items: rows }
+      })
+      // Wraps at the user's "Issues per row" setting, and every other row runs
+      // BACKWARDS, so the pipeline reads as one continuous line instead of
+      // making the eye jump back to the left margin between rows:
+      //   1 → 2 → 3 → 4
+      //               ↓
+      //   8 ← 7 ← 6 ← 5
+      // The notes card is the FIRST cell, before stage 1. It is the context
+      // you want before reading where the thing has got to — and at the end of
+      // a serpentine walk it landed in whichever corner the wrap happened to
+      // leave, which was never the same place twice.
+      const cellCount = stages.length + 1
+      const cols = Math.max(1, Math.min(cellCount, maxColsPerRow))
+      const rows = Math.ceil(cellCount / cols)
+
+      // The card holds the WORKSTREAM's note now, not every stage's — see the
+      // header of StageNotesNode. Measured like any other cell so several
+      // paragraphs do not run past its edge.
+      const wsNote = (workstream.note ?? '').trim()
+      const notesCellRows = wsNote.length > 0 ? noteRows(wsNote, NOTE_CARD_MAX_ROWS) : 1
+
+      // Every stage is the same height as every other stage, so a row reads as
+      // a row — but the notes card is sized to its own note. One height for
+      // EVERYTHING made a long note drag seven empty stages up to its size,
+      // which is a lot of "nothing to show" to scroll past.
+      const stageH = Math.max(...built.map((b) => stageNodeHeight(b.items)))
+      const notesH = stageNodeHeight(notesCellRows)
+      const heightAt = (cellIndex: number) => (cellIndex === 0 ? notesH : stageH)
+
+      // Per ROW, so a tall cell only pushes down what is actually below it. The
+      // serpentine drop still lands cleanly: it runs from the bottom of one row
+      // to the top of the next, and both edges are row boundaries.
+      const rowHeights: number[] = []
+      for (let i = 0; i < cellCount; i++) {
+        const { row } = serpentine(i, cols)
+        rowHeights[row] = Math.max(rowHeights[row] ?? 0, heightAt(i))
+      }
+      const rowTop = (row: number) =>
+        HEADER + PADDING + rowHeights.slice(0, row).reduce((a, b) => a + b + ROW_GAP_INNER, 0)
+
+      const containerH =
+        rowTop(rows - 1) + (rowHeights[rows - 1] ?? stageH) + PADDING
+      const containerW = PADDING * 2 + cols * STAGE_W + (cols - 1) * GAP_X
+      const containerId = `workstream:${workstream.id}`
+
+      nodes.push({
+        id: containerId,
+        type: 'mixedContainer',
+        data: {
+          bucket: {
+            id: String(workstream.id),
+            name: workstream.name,
+            // One colour per workstream, derived from its id — the board
+            // stacks several, and the container tint is what tells you which
+            // one you are reading without going back to the header.
+            color: workstreamColor(workstream.id),
+            count: workstream.members.length,
+            projectId: null,
+          },
+        },
+        position: { x: 0, y },
+        width: containerW,
+        height: containerH,
+        style: { width: containerW, height: containerH },
+      })
+
+      for (const b of built) {
+        const visit = visits.get(b.stage.key)
+        const current = workstream.stage === b.stage.key
+        const h = stageH
+        const cell = serpentine(b.i + 1, cols)
+        nodes.push({
+          id: `${containerId}/stage:${b.stage.key}`,
+          type: 'stage',
+          parentNode: containerId,
+          data: {
+            ordinal: b.i + 1,
+            name: b.stage.name,
+            placeholder: null,
+            current,
+            render: b.render,
+            // Every stage now carries a time, not just the one it is on. That
+            // is the difference between showing a position and showing a
+            // journey — six of seven stages used to be blank.
+            // Reduced here rather than in the component: the view is where the
+            // clock is read, and a component that calls Date.now() in render is
+            // the impurity `react-hooks` flags.
+            age: visit ? compactAge(visit.enteredAt, visit.leftAt ?? now) : null,
+            visited: visit !== undefined,
+            visits: visit?.visits ?? 0,
+            stale: current && isStale(workstream.stageEnteredAt, b.stage.staleAfterDays, now),
+          } satisfies StageNodeData,
+          position: {
+            x: PADDING + cell.col * (STAGE_W + GAP_X),
+            y: rowTop(cell.row),
+          },
+          width: STAGE_W,
+          height: h,
+          style: { width: STAGE_W, height: h },
+          // A stage's position is COMPUTED from its index in the pipeline, so
+          // dragging one can only ever be undone by the next re-layout. Worse,
+          // React Flow reads a pointerdown that misses a button as the start of
+          // a drag — so every near-miss on the small header controls looked
+          // like "I clicked and nothing happened". A near-miss now does
+          // nothing, which is at least honest.
+          draggable: false,
+        })
+      }
+
+      const notesCell = serpentine(0, cols)
+      nodes.push({
+        id: `${containerId}/notes`,
+        type: 'stageNotes',
+        parentNode: containerId,
+        data: {
+          workstreamId: workstream.id,
+          workstreamName: workstream.name,
+          note: workstream.note,
+        } satisfies StageNotesData,
+        position: {
+          x: PADDING + notesCell.col * (STAGE_W + GAP_X),
+          y: rowTop(notesCell.row),
+        },
+        width: STAGE_W,
+        height: notesH,
+        style: { width: STAGE_W, height: notesH },
+        draggable: false,
+      })
+
+      // The pipeline arrow, within this workstream only. Handles are chosen
+      // per edge because the direction changes: within a row it leaves the
+      // trailing edge, and at a row break it drops straight down.
+      for (let i = 0; i + 1 < built.length; i++) {
+        const a = `${containerId}/stage:${built[i]!.stage.key}`
+        const b = `${containerId}/stage:${built[i + 1]!.stage.key}`
+        const from = serpentine(i + 1, cols)
+        const to = serpentine(i + 2, cols)
+        const sides =
+          from.row !== to.row
+            ? { sourceHandle: 's-b', targetHandle: 't-t' }
+            : to.col > from.col
+              ? { sourceHandle: 's-r', targetHandle: 't-l' }
+              : { sourceHandle: 's-l', targetHandle: 't-r' }
+        edges.push({
+          id: `${a}->${b}`,
+          source: a,
+          target: b,
+          ...sides,
+          markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 },
+        })
+      }
+
+      y += containerH + ROW_GAP
+    }
+
+    return { nodes, edges }
+  },
+}
+
+/** A blank canvas reads as "nothing is happening" when the truth is "nothing
+ *  is configured", and those want different actions. */
+function emptyPipelineNode(): Node {
+  const h = stageNodeHeight(0)
+  return {
+    id: 'stage:none',
+    type: 'stage',
+    data: {
+      ordinal: 0,
+      name: '',
+      placeholder: 'noStages',
+      current: false,
+      render: null,
+      age: null,
+      visited: false,
+      visits: 0,
+      stale: false,
+    } satisfies StageNodeData,
+    position: { x: 0, y: 0 },
+    width: STAGE_W,
+    height: h,
+    style: { width: STAGE_W, height: h },
+  }
+}

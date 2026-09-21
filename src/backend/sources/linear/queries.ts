@@ -46,6 +46,24 @@ export const ISSUES_QUERY = /* GraphQL */ `
         comments(first: 1) {
           nodes { createdAt }
         }
+        # Linear's GitHub integration attaches every linked PR to its issue,
+        # across every repository, so this is the whole cross-repo picture with
+        # no GitHub credential of our own. Measured at +4 complexity over a
+        # 100-issue page (86 -> 90) with no latency change detectable above
+        # run-to-run noise — twice the cost of comments(first:1) above, which
+        # was already judged affordable here, against an hourly budget of
+        # 3,000,000.
+        #
+        # first:10 because an issue with more than ten linked PRs is telling you
+        # something about the issue rather than about this limit.
+        #
+        # What Linear does NOT give: CI check status. A PullRequestCheck type
+        # exists in its schema but nothing reaches PullRequest from an issue,
+        # so checks need a GitHub source of our own — existence is not
+        # reachability.
+        attachments(first: 10) {
+          nodes { url sourceType metadata }
+        }
       }
     }
   }

@@ -96,6 +96,342 @@ const MIGRATIONS: string[] = [
      updated_at INTEGER NOT NULL
    );`,
   `CREATE INDEX IF NOT EXISTS idx_saved_view_sort ON saved_view(sort_order ASC);`,
+
+  // 6. Lifecycle stages — the workspace's own pipeline, and which stage each
+  // issue is on. See docs/adr/0002-lifecycle-stage-is-stored-not-derived.md.
+  //
+  // A row per stage rather than one JSON document, so `key` uniqueness and the
+  // ordering are enforced by the schema instead of by whoever writes the blob.
+  // `states` is the one JSON column: a list of compatible Linear state NAMES,
+  // used to spot disagreement and nothing else.
+  //
+  // No workspace_id column, same reason as saved_view: getDb() hands out one
+  // Database per workspace, so the file is the scope.
+  //
+  // NEITHER TABLE MAY EVER BE ADDED TO resetCache(). That function is a
+  // deny-list — it deletes issue_cache, label_cache and some meta keys, and
+  // everything else survives by omission. These rows are not rebuildable:
+  // nobody can recompute what a person typed. cacheReset.test.ts pins this.
+  `CREATE TABLE IF NOT EXISTS lifecycle_stage (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     key TEXT NOT NULL UNIQUE,
+     name TEXT NOT NULL,
+     sort_order INTEGER NOT NULL,
+     states TEXT NOT NULL,
+     next_command TEXT,
+     created_at INTEGER NOT NULL,
+     updated_at INTEGER NOT NULL
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_lifecycle_stage_sort ON lifecycle_stage(sort_order ASC);`,
+  // stage_key is deliberately NOT a foreign key. Deleting a stage must not
+  // silently erase every assignment to it — an unresolvable key reads as
+  // 'unknown' (see StageVerdict), which is recoverable by re-creating the
+  // stage, whereas a cascading delete is not.
+  `CREATE TABLE IF NOT EXISTS issue_stage (
+     identifier TEXT PRIMARY KEY,
+     stage_key TEXT NOT NULL,
+     updated_at INTEGER NOT NULL,
+     updated_by TEXT
+   );`,
+
+  // 7. Agent sessions — which Claude Code session is alive, where, and whether
+  // it is moving or waiting on a human. Written by the hook plugin in
+  // integrations/claude-code/.
+  //
+  // Ephemeral by design, and the ONE table here that a cache reset losing would
+  // be fine — clearing it just drops stale rows. It is still not listed in
+  // resetCache(), because a reset is not a reason to forget a session that is
+  // currently running.
+  //
+  // `payload_version` is recorded from the first release: once installs exist
+  // in the wild the wire format cannot be renegotiated, so the server has to be
+  // able to tell an old reporter from a new one.
+  //
+  // Liveness is a TTL on last_seen, not the SessionEnd hook. A crashed session
+  // never sends SessionEnd; without the TTL the graph fills with sessions that
+  // died days ago.
+  `CREATE TABLE IF NOT EXISTS agent_session (
+     session_id TEXT PRIMARY KEY,
+     identifier TEXT,
+     branch TEXT,
+     cwd TEXT,
+     host TEXT,
+     phase TEXT,
+     status TEXT NOT NULL,
+     last_seen INTEGER NOT NULL,
+     payload_version INTEGER NOT NULL
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_agent_session_issue ON agent_session(identifier);`,
+
+  // 8. Batches — a set of issues handed to agent sessions one at a time, via
+  // the MCP server in integrations/claude-code/mcp/.
+  //
+  // Membership is stored; ORDER IS NOT. The order to work a batch in is a
+  // topological sort over the `blocks` edges, which live on the issues and
+  // change whenever someone edits a relation in Linear. A stored order would be
+  // a second copy of that fact and would silently go stale — the same reason
+  // a stage is not derived but an order is.
+  //
+  // `claimed_by` is what stops two sessions calling next_issue from colliding;
+  // the claim is taken with a conditional UPDATE, not a read-then-write.
+  // Ephemeral, like agent_session.
+  `CREATE TABLE IF NOT EXISTS batch (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     name TEXT NOT NULL,
+     created_at INTEGER NOT NULL
+   );`,
+  `CREATE TABLE IF NOT EXISTS batch_member (
+     batch_id INTEGER NOT NULL,
+     identifier TEXT NOT NULL,
+     claimed_by TEXT,
+     claimed_at INTEGER,
+     done_at INTEGER,
+     PRIMARY KEY (batch_id, identifier)
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_batch_member_batch ON batch_member(batch_id);`,
+
+  // 9. Drop the per-issue stage.
+  //
+  // It was the right idea at the wrong level. A pipeline — discuss, spec review,
+  // implementing, CI, merge, archive — describes a FEATURE moving through it, not
+  // an individual issue; an issue has only its Linear state, and an agent moves
+  // that through the Linear MCP. The stage therefore belongs to the workstream,
+  // where migration 10 puts it.
+  //
+  // ADR-0002's argument survives untouched: stages are finer than states, so a
+  // stage cannot be derived and must be stored. Only its subject changed — which
+  // is why lifecycle_stage needed no schema change at all.
+  `DROP TABLE IF EXISTS issue_stage;`,
+
+  // 10. The workstream's own fields.
+  //
+  // `stage_key` is where the pipeline actually lives now. It is deliberately NOT
+  // a foreign key, for the reason issue_stage.stage_key was not: deleting a
+  // stage must degrade a workstream to "unknown", which is recoverable by
+  // re-creating the stage, rather than erase the assignment.
+  //
+  // `stage_entered_at` is rewritten on EVERY stage change, including a move
+  // backwards. Staleness has to time the current occupancy — a workstream that
+  // failed CI, went back to Implementing for three days and returned should not
+  // be told it has been at CI for five.
+  //
+  // `status` is `active` | `archived`. Two adjectives about the workstream
+  // itself, and `archived` is the word `note` already uses. A third value
+  // (`paused`) waits until someone actually wants to shelve one without calling
+  // it finished — a status nobody sets is a field that lies.
+  //
+  // `assignees` is durable and separate from agent_session: an agent that is not
+  // running right now is still whose job the work is.
+  `ALTER TABLE batch ADD COLUMN stage_key TEXT;`,
+  `ALTER TABLE batch ADD COLUMN status TEXT NOT NULL DEFAULT 'active';`,
+  `ALTER TABLE batch ADD COLUMN stage_entered_at INTEGER;`,
+  `ALTER TABLE batch ADD COLUMN assignees TEXT NOT NULL DEFAULT '[]';`,
+  `CREATE INDEX IF NOT EXISTS idx_batch_status ON batch(status);`,
+
+  // `shows` is a list of PROJECTIONS, not fields: `pullRequests` means "go and
+  // read the members' PRs", never "this stage stores PRs". The vocabulary is
+  // closed because the app can only draw what it holds data for; which tokens a
+  // stage uses is entirely the workspace's choice.
+  //
+  // `stale_after_days` is per stage because the honest answer differs wildly —
+  // a Discuss stage can sit for a fortnight, a CI stage sitting for a day is
+  // wrong. Null means this stage never goes stale.
+  `ALTER TABLE lifecycle_stage ADD COLUMN shows TEXT NOT NULL DEFAULT '[]';`,
+  `ALTER TABLE lifecycle_stage ADD COLUMN stale_after_days INTEGER;`,
+
+  // One free-markdown note per workstream per stage. Not an append-only log:
+  // a log nobody prunes is one more thing that rots, and an agent will fill it.
+  `CREATE TABLE IF NOT EXISTS workstream_stage_note (
+     batch_id INTEGER NOT NULL,
+     stage_key TEXT NOT NULL,
+     body TEXT NOT NULL,
+     updated_at INTEGER NOT NULL,
+     PRIMARY KEY (batch_id, stage_key)
+   );`,
+
+  // Hand-attached items, for when the upstream link is missing: a spec with no
+  // `Linear:` line, a PR whose branch and body name no issue. `kind` is closed —
+  // 'spec' (a path the scanner can still read progress from) or 'url' (rendered
+  // as a link and nothing more). These render with a visible "manual" mark: if a
+  // hand attachment looked as good as a projected one it would become the
+  // default, and the convention that makes projection work would stop being
+  // followed.
+  `CREATE TABLE IF NOT EXISTS workstream_stage_link (
+     batch_id INTEGER NOT NULL,
+     stage_key TEXT NOT NULL,
+     kind TEXT NOT NULL,
+     value TEXT NOT NULL,
+     label TEXT,
+     created_at INTEGER NOT NULL,
+     PRIMARY KEY (batch_id, stage_key, kind, value)
+   );`,
+
+  // 11. A readable name for a session, and room for a third status.
+  //
+  // `label` exists because a UUID identifies nothing to a reader. It is derived
+  // server-side from the repo directory and branch — which is how a person
+  // actually recognises a terminal — and the hook may override it.
+  //
+  // The third status is `blocked`, from the Notification hook: Claude is
+  // stopped on a permission prompt and will not resume until someone acts.
+  // Folding that into `waiting` (the turn merely ended) loses the only state
+  // that should pull a person over.
+  `ALTER TABLE agent_session ADD COLUMN label TEXT;`,
+
+  // 12. Where a workstream has BEEN, not just where it is.
+  //
+  // `batch.stage_entered_at` is one column, overwritten on every move, so it
+  // times the CURRENT occupancy and nothing else. That was enough to say "9
+  // days on Spec review" and not enough to draw a pipeline: six of seven
+  // stages had no time on them at all, so the picture showed a position
+  // without a journey — you could not tell what had already happened.
+  //
+  // Append-only, one row per ENTRY. A stage's duration is the gap to the next
+  // entry, and the current stage's is the gap to now, so nothing needs
+  // updating in place and a crash between writes loses at most the last move.
+  // Moving backwards is recorded like any other move and simply produces a
+  // second row for that stage — the pipeline is a chain, but a workstream
+  // walking it is not obliged to go forwards.
+  //
+  // Not in resetCache's delete list, like every other table here: a
+  // re-sync rebuilds issues from Linear and must not erase a history Linear
+  // never had. See cacheReset.test.ts, which guards that omission.
+  `CREATE TABLE IF NOT EXISTS workstream_stage_event (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     batch_id INTEGER NOT NULL,
+     stage_key TEXT NOT NULL,
+     at INTEGER NOT NULL
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_stage_event_batch ON workstream_stage_event(batch_id, at);`,
+
+  // 13. When a workstream was last touched, and when it was shelved.
+  //
+  // `created_at` was the only date it had, which answers the least interesting
+  // question: a list sorted by it puts a workstream nobody has looked at in
+  // three weeks above one that moved this morning.
+  //
+  // `updated_at` counts a change to the workstream ITSELF — its name, stage,
+  // status, assignees, notes and hand attachments. Deliberately NOT its
+  // members' Linear activity: that is Linear's clock, it moves whenever anyone
+  // comments, and letting it bump this would make "last touched" mean
+  // "somebody typed anywhere near this", which is the same trap `updatedAt`
+  // already falls into on an issue (see `lastCommentAt` in shared/types.ts).
+  //
+  // Backfilled from `created_at` rather than left null, so ordering by it is
+  // total from the first read — a null would sort unpredictably and the row
+  // would look older or newer than everything depending on the collation.
+  `ALTER TABLE batch ADD COLUMN updated_at INTEGER;`,
+  `UPDATE batch SET updated_at = created_at WHERE updated_at IS NULL;`,
+  // Null while active, stamped on archive, CLEARED on unarchive: it dates the
+  // current shelving, not the first one ever, for the same reason
+  // `stage_entered_at` times the current occupancy.
+  `ALTER TABLE batch ADD COLUMN archived_at INTEGER;`,
+  `UPDATE batch SET archived_at = updated_at WHERE status = 'archived' AND archived_at IS NULL;`,
+
+  // 14. A note about the WORKSTREAM, distinct from the notes on its stages.
+  //
+  // They answer different questions and were being conflated. A stage note is
+  // "what is this step waiting on" — "the manifest-hash review has not come
+  // back". A workstream note is "what is this feature, and what do I need to
+  // know before reading the pipeline at all" — the decision from a call, the
+  // reason it exists, who is blocked on legal.
+  //
+  // The symptom was duplication: the card that collected every stage's note
+  // showed each one a second time, beside the stage that already showed it.
+  // One fact in two places, which is the same defect as an issue drawn on
+  // seven stages.
+  //
+  // A column on `batch` rather than a row in `workstream_stage_note` with some
+  // sentinel key: it is a property of the workstream, and a sentinel would put
+  // a thing that is not a stage into a table keyed by stage.
+  `ALTER TABLE batch ADD COLUMN note TEXT;`,
+
+  // 15. What a stage EXPECTS to be attached to it.
+  //
+  // Distinct from `shows`, and the pair is easy to conflate. `shows` is what
+  // the stage DRAWS — projections, "go and read the members' PRs". `fields` is
+  // what somebody is expected to HANG on it: a Waiting-CI stage wants a `ci`
+  // run and a `runbook`, and nothing upstream will ever supply either.
+  //
+  // It exists mostly for the agent. Attachment kinds are free labels now, which
+  // is right — but it left an agent guessing what THIS stage wanted, and
+  // guessing produces five spellings of the same field across five
+  // workstreams. A stage that declares `["ci", "runbook"]` answers it, and
+  // `list_stages` hands that answer over.
+  //
+  // Advisory, never enforced: a kind outside the list is still accepted. The
+  // list says what is expected here, not what is permitted — the moment it
+  // gates writes, an agent with something genuinely new has nowhere to put it.
+  `ALTER TABLE lifecycle_stage ADD COLUMN fields TEXT NOT NULL DEFAULT '[]';`,
+
+  // 16. What a field NAME means in this workspace.
+  //
+  // Migration 15 gave an agent the vocabulary — use `runbook`, not `run-book`
+  // — and stopped there. It could match the name and still had no idea what
+  // to put in it. The declaration was a glossary with no definitions.
+  //
+  // Keyed by name and NOT per stage, because that is the level the fact lives
+  // at: `runbook` means the same thing on every stage that expects one, and a
+  // per-stage copy would be the same sentence written seven times and then
+  // edited in six of them.
+  //
+  // Nothing has to be registered. A name works with or without a row here,
+  // exactly as an attachment kind works whether or not a stage declared it —
+  // same polarity throughout: a known thing is an ENHANCEMENT, never a gate.
+  // That is also why this cannot drift: it is the only record of what a name
+  // means, so there is no second writer to disagree with.
+  `CREATE TABLE IF NOT EXISTS field (
+     name TEXT PRIMARY KEY,
+     description TEXT NOT NULL,
+     updated_at INTEGER NOT NULL
+   );`,
+
+  // 17. `shows` and `fields` were one thing all along. Merge them.
+  //
+  // The split said: `shows` is a closed set of projections the stage DRAWS,
+  // `fields` is free names it EXPECTS attached. That reads as a clean
+  // distinction and is not one — it is the same question ("what belongs on
+  // this stage") answered twice, and keeping the two apart cost three things:
+  //
+  //   1. One concept, two spellings, depending on which list it was in: `pr`
+  //      vs `pullRequests`, `spec` vs `designdocs`, `issue` vs `issues`.
+  //      stageRender.ts carried a KIND_TOKEN table translating between them,
+  //      which is the clearest possible admission that they were one set.
+  //   2. `ci` and `note` were legal in BOTH. Putting one in the wrong list was
+  //      accepted in silence and produced a stage that expected an attachment
+  //      it never drew — the only failure here with no error attached to it.
+  //   3. The editor grew two widgets for two lists, and every reader took them
+  //      for two unrelated settings.
+  //
+  // Whether the app can fill a field by itself is a property of the NAME
+  // (`shared/fields.ts` AUTO_FIELDS), looked up when drawing. It was never a
+  // category a stage had to sort a name into.
+  //
+  // `fields` already holds slugs, so it becomes the merged column and `shows`
+  // folds into it with its names normalised. UNION dedupes; order is not
+  // preserved and does not need to be, since the editor and the renderer both
+  // order by the canonical list.
+  `UPDATE lifecycle_stage SET fields = (
+     SELECT json_group_array(v) FROM (
+       SELECT CASE value
+                WHEN 'issues'       THEN 'issue'
+                WHEN 'sessions'     THEN 'session'
+                WHEN 'pullRequests' THEN 'pr'
+                WHEN 'designdocs'   THEN 'spec'
+                WHEN 'blockers'     THEN 'blocker'
+                ELSE value
+              END AS v
+         FROM json_each(lifecycle_stage.shows)
+       UNION
+       SELECT value AS v FROM json_each(lifecycle_stage.fields)
+     )
+   );`,
+  // Dropped rather than left behind. A dead column that still holds plausible
+  // data is how the distinction gets reinvented by the next person to read the
+  // schema — and this file cannot correct its own past comments, so the column
+  // would keep explaining a model that no longer exists. Migration 9 dropped
+  // `issue_stage` for the same reason.
+  `ALTER TABLE lifecycle_stage DROP COLUMN shows;`,
 ]
 
 // One Database instance per workspace id. Each profile has its own SQLITE_PATH

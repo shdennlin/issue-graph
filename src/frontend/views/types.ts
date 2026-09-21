@@ -1,6 +1,6 @@
 import type { Edge, Node } from 'reactflow'
 import type { GraphData, DetectedSchema } from '@shared/types.js'
-import type { Density, Filters } from '../store/viewStore'
+import type { Density, Filters, ViewId } from '../store/viewStore'
 
 export interface ViewContext {
   data: GraphData
@@ -29,6 +29,10 @@ export interface ViewContext {
   /** Mix view's bucketing dimension; null = auto (detected primary group).
    *  See lib/mixGrouping.ts for the key format. */
   mixGroupBy: string | null
+  /** Workstream view: which workstream is expanded, or null for the overview
+   *  across all of them. Two modes rather than a selection — see the header of
+   *  views/workstream.ts. */
+  focusedWorkstreamId: number | null
   // Measured heights from React Flow after first paint, keyed by node id.
   // When present, views should prefer these over their density-based estimate
   // so dagre lays out around the *real* card height (no overlap from long
@@ -50,7 +54,10 @@ export function issueNodeHeight(density: Density): number {
 }
 
 export interface ViewDefinition {
-  id: string
+  /** Typed rather than `string` so the registry and the ViewId union cannot
+   *  drift apart again — they already had, and the cast in Toolbar that hid it
+   *  would equally have accepted a typo. */
+  id: ViewId
   label: string
   shortcut?: string
   description: string

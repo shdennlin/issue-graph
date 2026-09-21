@@ -1,12 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  coerceProjectStateType,
-  coerceStateType,
-  normalizeIssue,
-  normalizeProjectDetail,
-  normalizeRelations,
-  normalizeLabel,
-} from './normalize.js'
+import { coerceProjectStateType, coerceStateType, normalizeIssue, normalizeLabel, normalizeProjectDetail, normalizePullRequests, normalizeRelations } from './normalize.js'
 
 describe('coerceStateType', () => {
   it("maps 'cancelled' (en-GB) → 'canceled' so workflowStates lookups stay safe", () => {
@@ -291,5 +284,90 @@ describe('normalizeIssue', () => {
       team: { id: 't1', key: 'ENG', name: 'Engineering' },
     })
     expect(i.team).toEqual({ id: 't1', key: 'ENG', name: 'Engineering', color: null })
+  })
+})
+
+describe('normalizePullRequests', () => {
+  const gh = (over: Record<string, unknown> = {}) => ({
+    url: 'https://github.com/o/r/pull/1',
+    sourceType: 'github',
+    metadata: {
+      url: 'https://github.com/o/r/pull/1',
+      number: 1,
+      repoName: 'r',
+      status: 'merged',
+      targetBranch: 'develop',
+      hasConflicts: false,
+      linkKind: 'closes',
+      mergedAt: '2026-09-17T02:38:07.000Z',
+      ...over,
+    },
+  })
+
+  it('maps a GitHub attachment', () => {
+    expect(normalizePullRequests({ attachments: { nodes: [gh()] } })).toEqual([
+      {
+        url: 'https://github.com/o/r/pull/1',
+        number: 1,
+        repo: 'r',
+        status: 'merged',
+        targetBranch: 'develop',
+        hasConflicts: false,
+        linkKind: 'closes',
+        mergedAt: '2026-09-17T02:38:07.000Z',
+      },
+    ])
+  })
+
+  it('ignores an attachment that is not a pull request', () => {
+    // An attachment can be a Slack thread or a Figma file. Counting those as
+    // PRs would make "2/5 merged" meaningless.
+    const slack = { url: 'https://slack/x', sourceType: 'slack', metadata: {} }
+    expect(normalizePullRequests({ attachments: { nodes: [slack, gh()] } })).toHaveLength(1)
+  })
+
+  it('de-duplicates the same PR', () => {
+    expect(normalizePullRequests({ attachments: { nodes: [gh(), gh()] } })).toHaveLength(1)
+  })
+
+  it('degrades unexpected metadata to null instead of throwing', () => {
+    // metadata is an untyped blob Linear fills from GitHub; a shape we did not
+    // anticipate must not take down a sync.
+    const odd = { url: 'https://github.com/o/r/pull/2', sourceType: 'github', metadata: { number: '2', status: 7 } }
+    const [pr] = normalizePullRequests({ attachments: { nodes: [odd] } })
+    expect(pr?.number).toBeNull()
+    expect(pr?.status).toBeNull()
+    expect(pr?.url).toBe('https://github.com/o/r/pull/2')
+  })
+
+  it('returns empty for a missing or malformed attachments field', () => {
+    expect(normalizePullRequests({})).toEqual([])
+    expect(normalizePullRequests({ attachments: { nodes: 'nope' } })).toEqual([])
+  })
+
+  it('keeps a status word we did not anticipate rather than dropping it', () => {
+    expect(normalizePullRequests({ attachments: { nodes: [gh({ status: 'queued' })] } })[0]?.status).toBe('queued')
+  })
+})
+
+describe('normalizeIssue — pull requests', () => {
+  it('omits the field entirely when attachments were not fetched', () => {
+    // Absent and empty mean different things: "this issue has no PRs" versus
+    // "we did not ask". A detail query that skips attachments must not look
+    // like an issue with none.
+    const issue = normalizeIssue({
+      id: 'x', identifier: 'X-1', title: 't', url: 'u', priority: 0,
+      state: { name: 'Todo', type: 'unstarted' },
+    })
+    expect('pullRequests' in issue).toBe(false)
+  })
+
+  it('includes an empty array when attachments were fetched and held none', () => {
+    const issue = normalizeIssue({
+      id: 'x', identifier: 'X-1', title: 't', url: 'u', priority: 0,
+      state: { name: 'Todo', type: 'unstarted' },
+      attachments: { nodes: [] },
+    })
+    expect(issue.pullRequests).toEqual([])
   })
 })

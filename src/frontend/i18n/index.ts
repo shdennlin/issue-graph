@@ -42,6 +42,17 @@ export type NestedKeyOf<T> = {
 
 export type DictKey = NestedKeyOf<Dict>
 
+/**
+ * A translate function, as pure modules take it.
+ *
+ * Logic modules here return decisions, not prose: they take `t` and hand back
+ * a translated string, or hand back a `DictKey` for the caller to resolve.
+ * Either way the wording stays in the locale files, where the compile-time
+ * `Dict` check can see it. Declared once, because it was written out in two
+ * places before this and a third was about to follow.
+ */
+export type Translate = (key: DictKey, params?: Record<string, string | number>) => string
+
 const warnedKeys = new Set<string>()
 
 function warnMissingOnce(key: string): void {

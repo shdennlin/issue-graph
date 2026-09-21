@@ -1,7 +1,9 @@
 import { useEffect } from 'react'
-import { Copy, ExternalLink, Focus, GitBranch, Workflow } from 'lucide-react'
+import { Copy, ExternalLink, Focus, GitBranch, Layers, Workflow } from 'lucide-react'
 import { useViewStore } from '../store/viewStore'
 import { useGraphStore } from '../store/graphStore'
+import { api } from '../lib/api'
+import { useT } from '../i18n'
 
 export function ContextMenu() {
   const menu = useViewStore((s) => s.contextMenu)
@@ -12,6 +14,7 @@ export function ContextMenu() {
   const selection = useViewStore((s) => s.selection)
   const bumpLayout = useViewStore((s) => s.bumpLayout)
   const graph = useGraphStore((s) => s.graph)
+  const t = useT()
 
   useEffect(() => {
     if (!menu) return
@@ -83,6 +86,33 @@ export function ContextMenu() {
           >
             <Workflow size={14} /> Isolate selected chains (auto-layout)
             <span className="context-menu-hint">⇧C</span>
+          </button>
+          <button
+            role="menuitem"
+            onClick={() => {
+              // Ask for a name. An auto-generated "ONE-1 +2" is unusable the
+              // moment three features are in flight, which is exactly when this
+              // panel is worth opening.
+              //
+              // Only membership is sent. The order to work in is a topological
+              // sort over `blocks`, computed server-side on every read, because
+              // those edges live in Linear and change without us.
+              const name = window.prompt(t('workstreams.namePrompt'), selection[0] ?? '')
+              if (name === null || name.trim().length === 0) return
+              void api
+                .createBatch(name.trim(), selection)
+                .then(async () => {
+                  await useGraphStore.getState().refetchSilent()
+                  useViewStore.getState().setWorkstreamsOpen(true)
+                })
+                .catch(() => {
+                  /* Non-fatal: the graph is unchanged and the menu has closed. */
+                })
+              close()
+            }}
+            title="Queue these issues for agent sessions to claim one at a time, in dependency order"
+          >
+            <Layers size={14} /> Queue {selection.length} as a workstream
           </button>
         </>
       )}
