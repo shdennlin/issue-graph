@@ -94,6 +94,17 @@ export const DEFAULT_FIELDS: readonly string[] = ['issue', 'note']
  */
 export const RICH_LINK_KINDS = ['spec', 'pr', 'ci', 'issue', 'url'] as const
 
+/**
+ * Automatic names that can ALSO be attached by hand, when the projection
+ * missed one — a PR whose body names no issue, a spec with no `Linear:` line.
+ *
+ * `note`, `session` and `blocker` are excluded because there is nothing to
+ * paste: a note is the note box on the same panel, and a session or a blocker
+ * is a fact about the world that nobody types in. Offering them was the attach
+ * picker's own version of a control that does nothing.
+ */
+export const ATTACHABLE_AUTO: readonly string[] = ['issue', 'pr', 'spec', 'ci']
+
 export type RichLinkKind = (typeof RICH_LINK_KINDS)[number]
 
 /** How long a name may be, and the shape it must take. Lowercase slug so two

@@ -4050,10 +4050,15 @@ button.stage-item:hover,
 /* Standing index of what is in flight, over the top-right of the canvas.
    Every workstream is drawn now, stacked, so the board runs several screens
    tall and the one you want is usually off screen. */
+/* Left, where the filter panel used to sit. In this view the filter bar is
+   hidden — it configures nothing here — so the corner it occupied is free,
+   and it is the corner the eye already goes to. The right edge belongs to the
+   stage and workstream panels, which is why the list had to be hidden
+   whenever one of them opened. */
 .ws-jump {
   position: absolute;
   top: 8px;
-  right: 46px;
+  left: 8px;
   z-index: 5;
   display: flex;
   flex-direction: column;
@@ -4752,3 +4757,23 @@ button.stage-pill:hover .stage-item-text { text-decoration: underline; }
   cursor: pointer;
 }
 .ws-member-remove:hover { color: var(--danger); }
+
+/* The note's first line, wherever a workstream is named in a list. Muted and
+   clipped to one line: it is a subtitle, and a note that runs long must not
+   push the rows apart. */
+.workstream-summary {
+  margin: 0;
+  padding: 0 8px 6px 28px;
+  color: var(--fg-muted);
+  font-size: var(--fs-base);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-jump-summary {
+  display: block;
+  color: var(--fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

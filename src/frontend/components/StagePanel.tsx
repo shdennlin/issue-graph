@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
-import { RICH_LINK_KINDS } from '@shared/fields.js'
+import { ATTACHABLE_AUTO, isAutoField, RICH_LINK_KINDS } from '@shared/fields.js'
 import { stageVisits } from '@shared/stageHistory.js'
 import { api } from '../lib/api'
 import { useGraphStore } from '../store/graphStore'
@@ -25,6 +25,10 @@ const AGE_UNIT_KEYS: Record<'m' | 'h' | 'd', DictKey> = {
   h: 'issueNode.ageHours',
   d: 'issueNode.ageDays',
 }
+
+/** Every name the attach picker can offer a button for, before this stage's
+ *  own declarations are folded in. */
+const OFFERABLE = [...ATTACHABLE_AUTO, 'url']
 
 export function StagePanel() {
   const t = useT()
@@ -102,7 +106,11 @@ export function StagePanel() {
     const first = stage?.fields[0]
     if (first) {
       setKind(first)
-      setCustomKind(!(RICH_LINK_KINDS as readonly string[]).includes(first))
+      // Custom unless the picker has a button for it. The test used to be
+      // "is it a rich kind", which since the merge is the wrong question: the
+      // picker offers what this stage declared, and `runbook` gets a button
+      // even though nothing draws it richly.
+      setCustomKind(!OFFERABLE.includes(first) && isAutoField(first))
     }
   }
   if (!target || !workstream || !stage) return null
@@ -112,6 +120,25 @@ export function StagePanel() {
   const age = visit ? compactAge(visit.enteredAt, visit.leftAt ?? now) : null
   const isCurrent = workstream.stage === stage.key
   const links = workstream.links.filter((l) => l.stageKey === stage.key)
+
+  /** What the picker offers, in order: the names this stage declared (marked),
+   *  then the remaining attachable known ones, then Link. `Custom…` is
+   *  appended by the JSX and always last.
+   *
+   *  A declared name with no attachable form — `note`, `session`, `blocker` —
+   *  is left out: there is nothing to paste for it, and the note box is
+   *  already on this panel. */
+  const kindLabel = (name: string) =>
+    (ATTACHABLE_AUTO.includes(name) || name === 'url')
+      ? t(`stage.attachKind_${name}` as 'stage.attachKind_pr')
+      : name
+  const declared = stage.fields.filter((f) => OFFERABLE.includes(f) || !isAutoField(f))
+  const kindChoices = [
+    ...declared.map((name) => ({ name, label: kindLabel(name), declared: true })),
+    ...OFFERABLE
+      .filter((name) => !declared.includes(name))
+      .map((name) => ({ name, label: kindLabel(name), declared: false })),
+  ]
 
   const saveNote = async (body: string) => {
     if (body.trim() === noteFromServer.trim()) {
@@ -253,36 +280,28 @@ export function StagePanel() {
         <div className="stage-panel-add">
           {/* Radio-style buttons, not a <select>: in the popover the picker
               read as a label and nobody found the other five kinds. */}
-          {/* The stage's own declared fields come FIRST: this stage said it
-              expects a runbook, so offering it here is the difference between
-              one field and five spellings of it across five workstreams. The
-              rich kinds follow, and Custom is always last. */}
+          {/* The stage's own list comes first and is marked. After the
+              merge, `fields` IS the answer to "what belongs here", so the
+              picker leads with it instead of always laying out the five rich
+              kinds regardless — which is how a stage that never mentioned
+              `spec` still offered Spec, while the editor next door showed a
+              different list entirely.
+
+              The rest follow anyway, because the declaration is advisory: a
+              PR that genuinely belongs on a stage nobody thought to declare it
+              on must not need Custom… and a typed name. */}
           <div className="stage-panel-kinds">
-            {stage.fields
-              .filter((f) => !(RICH_LINK_KINDS as readonly string[]).includes(f))
-              .map((f) => (
-                <button
-                  key={f}
-                  className={!customKind && kind === f ? 'is-on' : ''}
-                  onClick={() => {
-                    setCustomKind(false)
-                    setKind(f)
-                  }}
-                  title={t('stage.expectedField')}
-                >
-                  {f}
-                </button>
-              ))}
-            {RICH_LINK_KINDS.map((k) => (
+            {kindChoices.map((k) => (
               <button
-                key={k}
-                className={!customKind && kind === k ? 'is-on' : ''}
+                key={k.name}
+                className={`${!customKind && kind === k.name ? 'is-on' : ''}${k.declared ? ' is-declared' : ''}`}
                 onClick={() => {
                   setCustomKind(false)
-                  setKind(k)
+                  setKind(k.name)
                 }}
+                title={k.declared ? t('stage.expectedField') : undefined}
               >
-                {t(`stage.attachKind_${k}` as 'stage.attachKind_pr')}
+                {k.label}
               </button>
             ))}
             <button
