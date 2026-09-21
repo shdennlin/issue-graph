@@ -52,7 +52,7 @@ tunnel, not the whole app.
 
 | Event | Reports |
 |---|---|
-| `SessionStart` | session id, branch, cwd, host — the session is alive |
+| `SessionStart` | session id, branch, cwd, host — the session is alive. **Also the only one that reads anything back**: see below |
 | `UserPromptSubmit` | heartbeat; a leading `/slash-command` is recorded as the phase |
 | `PostToolUse` (file edits) | heartbeat |
 | `Notification` | Claude is stopped on a permission prompt — **blocked** |
@@ -60,6 +60,45 @@ tunnel, not the whole app.
 | `SessionEnd` | remove the row |
 
 Nothing else. No prompt text, no file contents, no transcript.
+
+## What SessionStart reads back
+
+A SessionStart hook's stdout goes into the session's context, so this one asks
+for a briefing (`?context=1`) and prints it:
+
+```
+ONE-393, which this branch names, belongs to the workstream "OAuth migration".
+What it is for: Replace the hand-rolled token flow.
+It is at the stage "Waiting CI".
+The command usually run at that stage is gh run watch.
+The stage after it is "Done".
+That stage expects these to be attached by hand:
+- runbook: The on-call doc for this service
+The workstream moves between stages only when someone records the move; nothing advances it on its own.
+```
+
+Without it a session has to ask where it is before it can know, and it has no
+reason to suspect there is anywhere to ask.
+
+**It states facts and gives no orders**, for two separate reasons that land on
+the same sentence. Claude Code surfaces injected text that reads as an
+out-of-band system instruction to the user instead of using it. And the stage a
+workstream is on is stored, not derived — whether it has moved is a judgement
+only the session that did the work can make, so a briefing that said "when you
+finish, call `set_workstream_stage`" would settle that before anything happened.
+
+It is silent whenever there is nothing to say: a branch naming no issue is the
+ordinary case, and spending context to announce an absence every session is how
+a hook gets switched off.
+
+**Compaction is covered.** `SessionStart` fires again with `source: "compact"`,
+and this hook declares no matcher, so the briefing is restored after the summary
+replaces it. `PostCompact` is deliberately not used: it has no decision control
+in Claude Code at all, so it cannot inject anything.
+
+This is the one place the script blocks — once per session, while you are
+already waiting for `CLAUDE.md` and the skill scan. Measured at 59 ms against a
+local server, with a 2-second connect and 5-second total budget.
 
 ## Attributing a session to an issue
 
@@ -100,10 +139,14 @@ removes the row early.
 
 ## It cannot break your session
 
-Every path in `hooks/session.sh` exits 0, output goes nowhere, and the request is
-backgrounded with a 3-second timeout. If the server is down, or `curl`/`jq` are
-missing, the hook does nothing and your turn proceeds. A monitoring hook that can
-block a prompt has its priorities backwards.
+Every path in `hooks/session.sh` exits 0. The five heartbeat events background
+their request with a 3-second timeout and print nothing at all; `SessionStart`
+waits for its briefing but prints nothing when the server is unreachable, the
+token is wrong, or `curl`/`jq` are missing. In every one of those cases the
+session starts normally. A monitoring hook that can block a prompt — or stop a
+session from starting — has its priorities backwards.
+
+Measured: 6 ms per fire with the variables unset, 31 ms configured.
 
 ---
 

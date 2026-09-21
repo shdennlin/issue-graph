@@ -26,6 +26,7 @@ import {
   sessionRowToDTO,
   type AgentSessionRow,
 } from '../agentSessionStore.js'
+import { sessionBriefing, type BriefingStage } from '../../shared/sessionBriefing.js'
 
 const unauthorized = () => ({ error: { code: 'unauthorized', message: 'bad or missing token' } }) as const
 const invalid = (message: string) => ({ error: { code: 'invalid', message } }) as const
@@ -83,8 +84,83 @@ agentSessionRoutes.post('/api/agent-sessions', async (c) => {
       report.label,
     )
 
-  return c.json({ ok: true, identifier, serverPayloadVersion: HOOK_PAYLOAD_VERSION })
+  // Only when asked. `start` asks; the heartbeats from UserPromptSubmit and
+  // PostToolUse fire many times a session and have nothing to do with the
+  // answer, so they must not pay three queries for it.
+  const briefing = c.req.query('context') === '1' ? buildBriefing(identifier) : null
+
+  return c.json({
+    ok: true,
+    identifier,
+    serverPayloadVersion: HOOK_PAYLOAD_VERSION,
+    ...(briefing === null ? {} : { briefing }),
+  })
 })
+
+interface StageRow {
+  key: string
+  name: string
+  next_command: string | null
+  fields: string
+}
+
+/** The rows behind sessionBriefing(). Everything it decides lives in shared/. */
+function buildBriefing(identifier: string | null): string | null {
+  const db = getDb()
+
+  // An issue may sit in more than one workstream. The most recently created
+  // ACTIVE one is the answer: an archived workstream is off the board, which
+  // is what archiving it meant, and of two live ones the newer is the work in
+  // hand. Picking wrong here costs a wrong sentence, not a wrong write.
+  const ws =
+    identifier === null
+      ? undefined
+      : (db
+          .prepare(
+            `SELECT b.name AS name, b.note AS note, b.stage_key AS stage_key
+               FROM batch b JOIN batch_member m ON m.batch_id = b.id
+              WHERE m.identifier = ? AND b.status <> 'archived'
+              ORDER BY b.created_at DESC, b.id DESC LIMIT 1`,
+          )
+          .get(identifier) as { name: string; note: string | null; stage_key: string | null } | undefined)
+
+  if (ws === undefined) {
+    return sessionBriefing({ identifier, workstream: null, stage: null, pipeline: [], meanings: {} })
+  }
+
+  const stageRows = db
+    .prepare(`SELECT key, name, next_command, fields FROM lifecycle_stage ORDER BY sort_order ASC`)
+    .all() as StageRow[]
+
+  let stage: BriefingStage | null = null
+  const row = stageRows.find((r) => r.key === ws.stage_key)
+  if (row !== undefined) {
+    let fields: string[] = []
+    try {
+      const parsed: unknown = JSON.parse(row.fields)
+      if (Array.isArray(parsed)) fields = parsed.filter((v): v is string => typeof v === 'string')
+    } catch {
+      // A malformed list costs the field section, not the briefing.
+    }
+    stage = { key: row.key, name: row.name, nextCommand: row.next_command, fields }
+  }
+
+  const meanings: Record<string, string> = {}
+  for (const f of db.prepare(`SELECT name, description FROM field`).all() as {
+    name: string
+    description: string
+  }[]) {
+    meanings[f.name] = f.description
+  }
+
+  return sessionBriefing({
+    identifier,
+    workstream: { name: ws.name, note: ws.note },
+    stage,
+    pipeline: stageRows.map((r) => ({ key: r.key, name: r.name })),
+    meanings,
+  })
+}
 
 agentSessionRoutes.delete('/api/agent-sessions/:sessionId', (c) => {
   if (!agentTokenValid(c.req.header('Authorization'))) return c.json(unauthorized(), 401)

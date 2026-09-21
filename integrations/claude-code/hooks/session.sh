@@ -22,10 +22,23 @@
 # rule in the server can be fixed by restarting it, while one baked into an
 # installed plugin needs every install updated.
 #
-# Output protocol note: `start`, `beat` and `end` print nothing. `idle` runs on
+# Output protocol note: `beat`, `idle` and `end` print nothing. `idle` runs on
 # the Stop event, which has NO member in Claude Code's hookSpecificOutput union
 # — emitting one there fails validation and leaks raw JSON to the model — so it
 # stays silent too rather than reaching for a shape that does not apply.
+#
+# `start` is the exception, and the only place this script blocks. SessionStart
+# stdout goes into the session's context, so it asks the server for a briefing
+# (?context=1) and prints it. That means waiting for the response instead of
+# backgrounding the call — once per session, at the moment you are already
+# waiting for CLAUDE.md and the skill scan, never mid-turn. A timeout still
+# applies and a failure still prints NOTHING: an issue-graph that is down must
+# not be able to stop a session from starting.
+#
+# PostCompact is deliberately not wired. It has no decision control at all in
+# Claude Code — same category as SessionEnd — so it cannot inject anything.
+# SessionStart covers compaction already: it fires again with source=compact,
+# and with no matcher this hook runs for that as it does for resume and fork.
 
 set -uo pipefail
 
@@ -60,10 +73,17 @@ fi
 
 BASE="${ISSUE_GRAPH_URL%/}"
 
+# The server's middleware reads the workspace from `?w=`; unset means its
+# default. The MCP half has always honoured this variable and this half did
+# not, so on a multi-workspace server the sessions landed in one workspace and
+# the tools read another.
+WS=""
+[ -n "${ISSUE_GRAPH_WORKSPACE:-}" ] && WS="w=${ISSUE_GRAPH_WORKSPACE}"
+
 if [ "$ACTION" = "end" ]; then
   curl -fsS -m 3 -X DELETE \
     -H "Authorization: Bearer ${ISSUE_GRAPH_TOKEN}" \
-    "${BASE}/api/agent-sessions/${SESSION_ID}" >/dev/null 2>&1 &
+    "${BASE}/api/agent-sessions/${SESSION_ID}${WS:+?$WS}" >/dev/null 2>&1 &
   exit 0
 fi
 
@@ -119,10 +139,29 @@ if [ -z "${BODY:-}" ]; then
   BODY="{\"sessionId\":\"${SESSION_ID}\",\"status\":\"${STATUS}\",\"payloadVersion\":${PAYLOAD_VERSION}}"
 fi
 
+if [ "$ACTION" = "start" ]; then
+  # Blocking, with a budget: 2s to connect, 5s in total. Anything slower is a
+  # server worth fixing, and waiting longer than that to say where a workstream
+  # is would cost more than the answer is worth.
+  RESPONSE=$(curl -fsS --connect-timeout 2 -m 5 -X POST \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer ${ISSUE_GRAPH_TOKEN}" \
+    -d "$BODY" \
+    "${BASE}/api/agent-sessions?context=1${WS:+&$WS}" 2>/dev/null || true)
+
+  # Plain stdout IS the context for SessionStart, so there is no JSON envelope
+  # to build. No jq, an unreachable server, a response without a briefing, or
+  # an issue in no workstream all land in the same place: print nothing.
+  if [ -n "$RESPONSE" ] && command -v jq >/dev/null 2>&1; then
+    printf '%s' "$RESPONSE" | jq -r '.briefing // empty' 2>/dev/null || true
+  fi
+  exit 0
+fi
+
 curl -fsS -m 3 -X POST \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ${ISSUE_GRAPH_TOKEN}" \
   -d "$BODY" \
-  "${BASE}/api/agent-sessions" >/dev/null 2>&1 &
+  "${BASE}/api/agent-sessions${WS:+?$WS}" >/dev/null 2>&1 &
 
 exit 0

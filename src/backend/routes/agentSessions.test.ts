@@ -15,9 +15,34 @@ interface Row {
 const rows: Row[] = []
 let token: string | undefined
 
+// The briefing's three lookups. `null` for the workstream means "this issue is
+// in none", which is the ordinary case, not an error.
+let workstream: { name: string; note: string | null; stage_key: string | null } | null = null
+let stages: { key: string; name: string; next_command: string | null; fields: string }[] = []
+let fieldDefs: { name: string; description: string }[] = []
+/** Every SQL statement prepared, so a test can assert what was NOT run. */
+const prepared: string[] = []
+
 vi.mock('../db.js', () => ({
   getDb: () => ({
-    prepare: (sql: string) => ({
+    prepare: (sql: string) => {
+      prepared.push(sql)
+      if (sql.includes('FROM batch b JOIN batch_member')) {
+        return { get: () => workstream ?? undefined, all: () => [], run: () => ({ changes: 0 }) }
+      }
+      if (sql.includes('FROM lifecycle_stage')) {
+        return { all: () => [...stages], get: () => undefined, run: () => ({ changes: 0 }) }
+      }
+      if (sql.includes('FROM field')) {
+        return { all: () => [...fieldDefs], get: () => undefined, run: () => ({ changes: 0 }) }
+      }
+      return sessionStatement(sql)
+    },
+  }),
+}))
+
+function sessionStatement(sql: string) {
+  return {
       all: () => [...rows],
       get: () => undefined,
       run: (...args: unknown[]) => {
@@ -58,9 +83,8 @@ vi.mock('../db.js', () => ({
         }
         return { changes: 0 }
       },
-    }),
-  }),
-}))
+  }
+}
 
 vi.mock('../lib/env.js', () => ({ loadConfig: () => ({ AGENT_SESSION_TOKEN: token }) }))
 
@@ -87,7 +111,11 @@ const post = (body: unknown, auth: string | null = 'Bearer secret') =>
 
 beforeEach(() => {
   rows.length = 0
+  prepared.length = 0
   token = 'secret'
+  workstream = null
+  stages = []
+  fieldDefs = []
 })
 
 describe('auth', () => {
@@ -194,5 +222,72 @@ describe('DELETE /api/agent-sessions/:sessionId', () => {
       headers: { Authorization: 'Bearer secret' },
     })
     expect(res.status).toBe(204)
+  })
+})
+
+describe('the SessionStart briefing', () => {
+  const withContext = (body: unknown) =>
+    agentSessionRoutes.request('/api/agent-sessions?context=1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer secret' },
+      body: JSON.stringify(body),
+    })
+
+  const onOne245 = { sessionId: 's1', branch: 'fix/one-245-token-flow', status: 'active' }
+
+  beforeEach(() => {
+    workstream = { name: 'OAuth migration', note: 'Replace the token flow.', stage_key: 'ci' }
+    stages = [
+      { key: 'impl', name: 'Implementing', next_command: null, fields: '["issue"]' },
+      { key: 'ci', name: 'Waiting CI', next_command: 'gh run watch', fields: '["issue","runbook"]' },
+      { key: 'done', name: 'Done', next_command: null, fields: '["issue"]' },
+    ]
+    fieldDefs = [{ name: 'runbook', description: 'The on-call doc.' }]
+  })
+
+  it('answers with the workstream, the stage and what the stage wants attached', async () => {
+    const dto = (await (await withContext(onOne245)).json()) as { briefing?: string }
+    expect(dto.briefing).toContain('ONE-245')
+    expect(dto.briefing).toContain('"OAuth migration"')
+    expect(dto.briefing).toContain('"Waiting CI"')
+    expect(dto.briefing).toContain('- runbook: The on-call doc.')
+  })
+
+  it('costs a heartbeat NOTHING', async () => {
+    // UserPromptSubmit and PostToolUse fire many times a session and have no
+    // use for the answer. Without the `?context=1` gate they would each run
+    // three extra queries to build a string nobody reads.
+    const dto = (await (await post(onOne245)).json()) as { briefing?: string }
+    expect(dto.briefing).toBeUndefined()
+    expect(prepared.filter((s) => s.includes('FROM batch b JOIN batch_member'))).toHaveLength(0)
+    expect(prepared.filter((s) => s.includes('FROM lifecycle_stage'))).toHaveLength(0)
+  })
+
+  it('omits the key entirely when the branch names no issue', async () => {
+    const dto = (await (
+      await withContext({ sessionId: 's1', branch: 'chore/tidy', status: 'active' })
+    ).json()) as { briefing?: string }
+    expect(dto.briefing).toBeUndefined()
+  })
+
+  it('reports an issue that is in no workstream rather than saying nothing', async () => {
+    workstream = null
+    const dto = (await (await withContext(onOne245)).json()) as { briefing?: string }
+    expect(dto.briefing).toBe('This branch names ONE-245, which is not in any workstream.')
+  })
+
+  it('survives a stage whose field list is not JSON', async () => {
+    // A briefing is a convenience. A malformed column costs the field section,
+    // never the session start.
+    stages = [{ key: 'ci', name: 'Waiting CI', next_command: null, fields: '{oops' }]
+    const dto = (await (await withContext(onOne245)).json()) as { briefing?: string }
+    expect(dto.briefing).toContain('"Waiting CI"')
+    expect(dto.briefing).not.toContain('attached by hand')
+  })
+
+  it('still records the session when the briefing is asked for', async () => {
+    await withContext(onOne245)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.identifier).toBe('ONE-245')
   })
 })

@@ -365,6 +365,8 @@ Give a name a one-line meaning at the bottom of the pipeline editor. That defini
 
 **Hooks** report which session is alive, on which branch, and whether it is working, waiting on you, or blocked on a permission prompt. The branch is resolved to an issue server-side, so the rules can be fixed by restarting rather than by updating every install. A crashed session disappears on its own: liveness is a TTL, not the `SessionEnd` hook, which a crash never sends.
 
+`SessionStart` also reads back: it tells the session which workstream the branch belongs to, what that workstream is for, which stage it is on, and what that stage expects attached. It states facts and gives no orders — whether a stage has been cleared is a judgement only the session that did the work can make. Compaction is covered, because `SessionStart` fires again with `source: "compact"`.
+
 **The MCP server** gives an agent 18 tools over this app's own data — read the pipeline and the workstreams, build or edit a pipeline, define what a field name means, create and move workstreams, attach fields, and claim issues out of a workstream one at a time in dependency order. It never writes a Linear state.
 
 Install, from inside Claude Code:
