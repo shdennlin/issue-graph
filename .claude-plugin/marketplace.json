@@ -1,17 +1,26 @@
 {
   "name": "issue-graph",
-  "owner": { "name": "shdennlin" },
+  "owner": {
+    "name": "shdennlin"
+  },
   "plugins": [
     {
       "name": "issue-graph",
       "source": "./integrations/claude-code",
-      "description": "Report Claude Code session presence to an issue-graph server",
+      "description": "Session presence hooks plus an MCP server for issue-graph: show which issue Claude Code is working on, and give an agent tools over the workstream pipeline",
       "version": "0.1.0",
-      "author": { "name": "shdennlin" },
+      "author": {
+        "name": "shdennlin"
+      },
       "homepage": "https://github.com/shdennlin/issue-graph",
       "repository": "https://github.com/shdennlin/issue-graph",
       "license": "MIT",
-      "keywords": ["issue-graph", "linear", "session", "hooks"],
+      "keywords": [
+        "issue-graph",
+        "linear",
+        "session",
+        "hooks"
+      ],
       "category": "productivity"
     }
   ]

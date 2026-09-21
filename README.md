@@ -350,10 +350,10 @@ So the pipeline belongs to the workstream, and it is the one thing here that is 
 
 Edit the pipeline from the toolbar in the Workstreams view. Each stage names the Linear states whose issues belong to it, and carries one list of **fields** — everything that belongs on that step:
 
-| | |
-|---|---|
-| ⚡ **automatic** | `issue` `session` `pr` `spec` `note` `blocker` `ci` — the app reads these from somewhere else and keeps them current. You add nothing. |
-| **attached** | any other name you invent — `runbook`, `design`, `load-test`. Nothing can fetch these, so a person or an agent attaches them, and they carry a `BY HAND` mark. |
+| Field | Names | Who fills it |
+|---|---|---|
+| ⚡ **automatic** | `issue` `session` `pr` `spec` `note` `blocker` `ci` | The app, by reading somewhere else. It stays current and you add nothing. |
+| **attached** | any name you invent — `runbook`, `design`, `load-test` | A person or an agent. Nothing can fetch these, so they carry a `BY HAND` mark. |
 
 The names are yours. A field called `runbook` tells a reader, and an agent, something a bare link cannot — which is why the list is free rather than fixed, and why an unlisted name is still accepted.
 
@@ -367,13 +367,14 @@ Give a name a one-line meaning at the bottom of the pipeline editor. That defini
 
 **The MCP server** gives an agent 17 tools over this app's own data — read the pipeline and the workstreams, build or edit a pipeline, create and move workstreams, attach fields, and claim issues out of a workstream one at a time in dependency order. It never writes a Linear state.
 
-Install:
+Install, from inside Claude Code:
 
-```bash
-claude   # then, inside Claude Code:
-/plugin marketplace add /path/to/issue-graph
+```
+/plugin marketplace add shdennlin/issue-graph
 /plugin install issue-graph@issue-graph
 ```
+
+The marketplace manifest lives at the repo root, so the GitHub form needs no clone of your own. Working on the plugin itself? Point it at your checkout instead — `/plugin marketplace add /path/to/issue-graph` — and re-run `/reload-plugins` after each edit.
 
 Then point it at your server. Both halves read the same three environment variables, so set them where Claude Code will see them — `.claude/settings.local.json` in the repo you work in is the narrowest place:
 
