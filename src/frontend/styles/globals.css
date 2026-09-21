@@ -3767,7 +3767,7 @@ label + .settings-help {
 /* Off is the default and must read as "not selected", not as "disabled" —
    every state starts off, and a greyed-out row would look broken. */
 .lifecycle-state-toggle {
-  font-size: var(--fs-meta);
+  font-size: var(--fs-base);
   padding: 1px 6px;
   border: 1px solid var(--node-border);
   border-radius: 4px;
@@ -4469,7 +4469,7 @@ button.stage-notes-body:hover .stage-note-body { text-decoration: underline; }
 
 .lifecycle-field-label {
   margin-top: 8px;
-  font-size: var(--fs-chip);
+  font-size: var(--fs-base);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--fg-muted);
@@ -4604,7 +4604,7 @@ button.stage-pill:hover .stage-item-text { text-decoration: underline; }
      two lines pushes its row out of step with the other one. */
   width: 11em;
   white-space: nowrap;
-  font-size: var(--fs-meta);
+  font-size: var(--fs-base);
   color: var(--fg-muted);
   /* Dotted underline, the convention for "there is more on hover" — the tag
      carries the fuller explanation, including that the hand list is what the
@@ -4621,7 +4621,7 @@ button.stage-pill:hover .stage-item-text { text-decoration: underline; }
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: var(--fs-meta);
+  font-size: var(--fs-base);
   padding: 1px 3px 1px 6px;
   border: 1px solid var(--accent);
   border-radius: 4px;
@@ -4647,7 +4647,7 @@ button.stage-pill:hover .stage-item-text { text-decoration: underline; }
   flex: 1 1 auto;
   min-width: 0;
   font: inherit;
-  font-size: var(--fs-meta);
+  font-size: var(--fs-base);
 }
 .lifecycle-pick {
   flex-basis: 100%;
@@ -4664,7 +4664,7 @@ button.stage-pill:hover .stage-item-text { text-decoration: underline; }
   padding: 0 2px;
   color: var(--fg-muted);
   cursor: pointer;
-  font-size: var(--fs-meta);
+  font-size: var(--fs-base);
   line-height: 1;
 }
 .lifecycle-field-x:hover { color: var(--danger); }
@@ -4672,13 +4672,13 @@ button.stage-pill:hover .stage-item-text { text-decoration: underline; }
    Muted, because it is an explanation and not a warning — normalising a name
    is the correct outcome, it was only ever the silence that was wrong. */
 .lifecycle-field-preview {
-  font-size: var(--fs-meta);
+  font-size: var(--fs-base);
   color: var(--fg-muted);
   align-self: center;
 }
 .lifecycle-field-new {
   font: inherit;
-  font-size: var(--fs-meta);
+  font-size: var(--fs-base);
   padding: 1px 6px;
   width: 12em;
   border: 1px solid var(--accent);
