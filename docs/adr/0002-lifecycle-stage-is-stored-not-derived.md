@@ -1,6 +1,16 @@
 # 2. The lifecycle stage is stored, not derived
 
-Status: Accepted — 2026-09-16 (not yet implemented)
+Status: Accepted — 2026-09-16. Implemented 2026-09-21.
+Superseded in part by [ADR-0003](0003-a-stage-has-one-field-list.md), which merges
+what a stage DRAWS and what it EXPECTS ATTACHED into one list.
+
+> Written before any code existed, and the body below is left as written. Two
+> details did not survive implementation, both recorded where the code is: the
+> stage belongs to the WORKSTREAM, not the issue (migration 9 in `db.ts` drops the
+> `issue_stage` table this record implies, and says why), and the draws/expects
+> split became one list (ADR-0003). The decision itself — the thing with no other
+> record of its position stores one, the thing Linear already places is derived —
+> is what made that first move possible, and every invariant below still holds.
 
 ## Context
 

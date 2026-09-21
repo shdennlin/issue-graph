@@ -336,8 +336,23 @@ Direction, not commitment. Issues and PRs welcome on anything below.
 - `Filters.tagIds`, stored and serialized since the first release but never
   read by `applyFilters`. Its intended role shipped as `orphanValues`
 
-## v1.6 — next
+## v1.6 — shipped
+
+**Workstreams and the agent lifecycle.** The three things Linear structurally cannot hold, each measured rather than assumed: a pipeline is finer than a state, one feature spans several PRs in several repos, and nothing records that a session is alive.
+
+- [x] **Lifecycle pipeline** — per-workspace, ordered stages; each names the Linear states that belong to it and how long it may sit before a nudge. Edited in a modal over the board, because you notice a stage is missing while looking at the pipeline.
+- [x] **Workstreams view** — every workstream drawn as its own block of stage cards, laid out boustrophedon so a long pipeline reads without scrolling sideways.
+- [x] **One field list per stage** — everything that belongs on a step, in one list; whether the app can fill a name by itself is a property of the name. It shipped as two lists and was merged (migration 17) — see `docs/adr/0003-a-stage-has-one-field-list.md`.
+- [x] **Field definitions** — what a name MEANS, written once per workspace and handed to agents, so they learn what belongs in a field and not just what to call it.
+- [x] **Hand attachments** — any field, any value, marked `BY HAND` so a manual item never looks as good as a projected one.
+- [x] **Stage history** — every arrival, so "how did this get here and where did it stall" has an answer.
+- [x] **Claude Code plugin** — session hooks (alive / waiting / blocked, with a TTL so a crash cleans itself up) and an MCP server with 17 tools over this app's own data. Never writes a Linear state.
+- [x] **Linear PR attachments** — pull requests Linear linked to an issue, across repositories, with `closes` vs `contributes` distinguished.
+
+## v1.7 — next
+
 - [ ] Optional auth (basic-auth or token gate) for non-localhost deployments
+- [ ] **Rotate `AGENT_SESSION_TOKEN` without a restart** — `PUT` guarded by the *current* token, so the first value still arrives out of band and changing it needs somebody who already holds it. It must not become settable through `/api/settings` or `/api/workspaces`: those are unauthenticated, and a gate whose key is handed out by an ungated endpoint is not a gate.
 - [ ] Migrate the remaining v7 hook-rule violations (`set-state-in-effect`, `purity`) — currently suppressed per-call-site
 - [ ] Document the JSON shape of `/api/export` so users can build their own tools on top
 
