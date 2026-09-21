@@ -261,6 +261,40 @@ describe('session', () => {
   it('points a session at the issue it is on, not at a URL', () => {
     expect(build('active')[0]).toMatchObject({ issue: 'A-1', url: null })
   })
+
+  it('draws a session only on the stage its ISSUE is drawn on', () => {
+    // It used to iterate every member regardless of stage, so every live
+    // session appeared on every stage declaring `session`. Invisible while
+    // one stage declared it; three identical rows per stage the moment a
+    // second one did.
+    const impl = stage({ key: 'impl', name: 'Impl', states: ['In Progress'], fields: ['session'] })
+    const ci = stage({ key: 'ci', name: 'CI', states: ['In Review'], fields: ['session'] })
+    const shared = {
+      members: [mk('A-1', { state: 'In Progress' }), mk('A-2', { state: 'In Review' })],
+      pipeline: [impl, ci],
+      sessionsByIssue: new Map([
+        ['A-1', [sess({ identifier: 'A-1', label: 'on impl' })]],
+        ['A-2', [sess({ identifier: 'A-2', label: 'on ci' })]],
+      ]),
+    }
+    expect(renderStage(ctx({ ...shared, stage: impl }), t).map((i) => i.text)).toEqual(['on impl'])
+    expect(renderStage(ctx({ ...shared, stage: ci }), t).map((i) => i.text)).toEqual(['on ci'])
+  })
+
+  it('keeps a session whose issue no stage claims on the current stage', () => {
+    // Same fallback renderIssues uses: an unmapped state is a gap in the
+    // pipeline config, and a running session must not vanish because of it.
+    const impl = stage({ key: 'impl', states: ['In Progress'], fields: ['session'] })
+    const other = stage({ key: 'other', states: ['Done'], fields: ['session'] })
+    const shared = {
+      members: [mk('A-1', { state: 'Triage' })],
+      pipeline: [impl, other],
+      workstream: ws({ members: ['A-1'], stage: 'impl' }),
+      sessionsByIssue: new Map([['A-1', [sess({ label: 'orphan' })]]]),
+    }
+    expect(renderStage(ctx({ ...shared, stage: impl }), t).map((i) => i.text)).toEqual(['orphan'])
+    expect(renderStage(ctx({ ...shared, stage: other }), t)).toHaveLength(0)
+  })
 })
 
 describe('pr', () => {

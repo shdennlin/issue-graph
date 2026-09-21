@@ -4420,6 +4420,28 @@ button.stage-item:hover,
   color: var(--fg-muted);
 }
 .stage-panel-states { margin: 0; color: var(--fg-muted); }
+/* Shaped like the CURRENT badge it stands in for, not like a form button: the
+   two are alternatives in one row, and a default button beside a pill reads as
+   the panel's submit. `margin-left: auto` puts it at the far end so the row is
+   [ state … ][ the one action ], which is also where the eye leaves the row. */
+.stage-panel-move {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border: 1px solid var(--node-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: var(--fs-meta);
+  cursor: pointer;
+}
+.stage-panel-move:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.stage-panel-move:disabled { opacity: 0.5; cursor: default; }
 .stage-panel-note { width: 100%; box-sizing: border-box; font: inherit; resize: vertical; }
 /* The note's heading and its Edit/Preview switch on one line. The switch only
    exists when there is something to preview, so the row has to survive being

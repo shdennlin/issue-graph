@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Eye, Pencil, Type, X } from 'lucide-react'
+import { Eye, MoveRight, Pencil, Type, X } from 'lucide-react'
 import { ATTACHABLE_AUTO, isAutoField, RICH_LINK_KINDS } from '@shared/fields.js'
 import { stageVisits } from '@shared/stageHistory.js'
 import { api } from '../lib/api'
@@ -202,6 +202,11 @@ export function StagePanel() {
       </div>
 
       <div className="stage-panel-body">
+        {/* The move sits in the SAME row as the CURRENT badge, because the two
+            answer one question between them: this stage either is where the
+            workstream is, or it is one click from being. It used to be a bare
+            button of its own below the states line, which read as a form
+            submit for the panel rather than as the opposite of the badge. */}
         <div className="stage-panel-meta">
           {isCurrent && <span className="stage-badge">{t('stage.current')}</span>}
           {age && (
@@ -212,6 +217,18 @@ export function StagePanel() {
             </span>
           )}
           {visit && visit.visits > 1 && <span>{t('stage.visitsHint', { n: visit.visits })}</span>}
+          {!isCurrent && (
+            <button
+              type="button"
+              className="stage-panel-move"
+              disabled={busy}
+              onClick={() => void run(() => api.setBatchStage(workstream.id, stage.key))}
+              title={t('stage.moveHere')}
+            >
+              <MoveRight size={12} aria-hidden />
+              {t('stage.moveHereShort')}
+            </button>
+          )}
         </div>
 
         {/* The states this stage expects — the thing that decides which issues
@@ -221,12 +238,6 @@ export function StagePanel() {
             ? t('stage.expectsStates', { states: stage.states.join(', ') })
             : t('lifecycle.constrainsNothing')}
         </p>
-
-        {!isCurrent && (
-          <button disabled={busy} onClick={() => void run(() => api.setBatchStage(workstream.id, stage.key))}>
-            {t('stage.moveHere')}
-          </button>
-        )}
 
         <div className="stage-panel-note-head">
           <h4>{t('stage.notesTitle')}</h4>

@@ -288,7 +288,17 @@ function renderIssues(ctx: StageContext, t: Translate): StageItem[] {
 
 function renderSessions(ctx: StageContext, t: Translate): StageItem[] {
   const out: StageItem[] = []
+  // A session is drawn where ITS ISSUE is drawn — the same rule renderIssues
+  // applies, and for the same reason. Iterating every member drew every live
+  // session on every stage that declared `session`, which was invisible while
+  // exactly one stage declared it and became three identical rows per stage
+  // the moment a second one did. A row saying a session is here is a claim
+  // about where the work is; repeating it on five stages makes it a claim
+  // about nothing.
+  const currentIsFallback = ctx.workstream.stage === ctx.stage.key
   for (const m of ctx.members) {
+    const home = stageForIssue(m, ctx.pipeline)
+    if (!(home ? home.key === ctx.stage.key : currentIsFallback)) continue
     for (const s of ctx.sessionsByIssue.get(m.identifier) ?? []) {
       // Only `blocked` warns. `waiting` means the turn ended and it is your
       // move whenever you like; `blocked` means nothing is running at all until
