@@ -19,7 +19,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, Plus, Trash2, Zap } from 'lucide-react'
 import type { LifecycleStageDTO } from '@shared/types'
-import { AUTO_FIELDS, isAutoField, normalizeLinkKind } from '@shared/fields.js'
+import { AUTO_FIELD_DOC, AUTO_FIELDS, isAutoField, normalizeLinkKind } from '@shared/fields.js'
 import { api } from '../lib/api'
 import { useGraphStore } from '../store/graphStore'
 import { useSchemaStore } from '../store/schemaStore'
@@ -480,7 +480,12 @@ export function LifecycleSettings() {
               <span className="lifecycle-field-chip">{name}</span>
               <input
                 defaultValue={fields.get(name) ?? ''}
-                placeholder={t('lifecycle.glossaryPlaceholder')}
+                // The app's own sentence for a built-in name, shown as
+                // placeholder: you see what it means without typing anything,
+                // and what you type overrides it.
+                placeholder={
+                  (isAutoField(name) ? AUTO_FIELD_DOC[name] : '') || t('lifecycle.glossaryPlaceholder')
+                }
                 aria-label={name}
                 disabled={busy}
                 onBlur={(e) => {

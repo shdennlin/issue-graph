@@ -40,6 +40,29 @@ export const isAutoField = (name: string): name is AutoField =>
   (AUTO_FIELDS as readonly string[]).includes(name)
 
 /**
+ * What each automatic name means, supplied by the app.
+ *
+ * These are facts about THIS APP, not about anybody's project: what `spec`
+ * means here is decided by the design-doc scanner, not by a team convention.
+ * So the app owns them, and the workspace's own `field` row overrides one only
+ * if somebody writes it.
+ *
+ * English, like every other string an agent reads. The UI shows them as
+ * placeholder text rather than translating them: a sentence defining `pr` sits
+ * next to the literal name `pr`, and one translated half of that pair reads
+ * worse than neither.
+ */
+export const AUTO_FIELD_DOC: Record<AutoField, string> = {
+  issue: 'A member issue, drawn on the stage its Linear state maps to.',
+  session: 'A Claude Code session running on a member issue, reported by the hook plugin.',
+  pr: 'A pull request Linear has linked to a member issue, across repositories.',
+  spec: 'A design doc the scanner linked to a member issue.',
+  note: "This stage's own note — what this step is waiting on.",
+  ci: 'A check run. Nothing fetches these yet, so today only attached ones appear.',
+  blocker: 'An unfinished issue blocking a member, including ones outside the workstream.',
+}
+
+/**
  * What a brand-new stage has before anybody configures it.
  *
  * An empty list was the honest default for the data model and the wrong one

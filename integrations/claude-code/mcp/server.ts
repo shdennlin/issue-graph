@@ -52,7 +52,15 @@ interface LifecycleStage {
 /** Names the app fills by itself, by reading somewhere else. Mirrors
  *  `shared/fields.ts` AUTO_FIELDS — re-declared because integrations are
  *  standalone packages outside the root build (the raycast precedent). */
-const AUTO = new Set(['issue', 'session', 'pr', 'spec', 'note', 'blocker', 'ci'])
+const AUTO: Record<string, string> = {
+  issue: 'A member issue, drawn on the stage its Linear state maps to.',
+  session: 'A Claude Code session running on a member issue, reported by the hook plugin.',
+  pr: 'A pull request Linear has linked to a member issue, across repositories.',
+  spec: 'A design doc the scanner linked to a member issue.',
+  note: "This stage's own note — what this step is waiting on.",
+  ci: 'A check run. Nothing fetches these yet, so today only attached ones appear.',
+  blocker: 'An unfinished issue blocking a member, including ones outside the workstream.',
+}
 
 /** What a field NAME means in this workspace. Written by a person once, and
  *  resolved into `list_stages` below so an agent learns the name and its
@@ -272,14 +280,20 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         return text(
           r.entries.map((s) => ({
             ...s,
-            fields: s.fields.map((name) => ({
-              name,
-              // `auto: true` means the app already fills it and there is
-              // nothing for you to attach. `false` means nothing will appear
-              // under this name unless somebody attaches it.
-              auto: AUTO.has(name),
-              ...(meaning.has(name) ? { description: meaning.get(name) } : {}),
-            })),
+            fields: s.fields.map((name) => {
+              // The workspace's own sentence wins over the app's built-in one:
+              // a team that has written down what `spec` means here knows
+              // something the app does not.
+              const description = meaning.get(name) ?? AUTO[name]
+              return {
+                name,
+                // `auto: true` means the app already fills it and there is
+                // nothing for you to attach. `false` means nothing will appear
+                // under this name unless somebody attaches it.
+                auto: name in AUTO,
+                ...(description === undefined ? {} : { description }),
+              }
+            }),
           })),
         )
       }
