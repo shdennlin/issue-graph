@@ -36,6 +36,9 @@ export function LifecycleSettings() {
    *  you meant. */
   const [addingFor, setAddingFor] = useState<number | null>(null)
   const [draftField, setDraftField] = useState('')
+  /** Which stage's automatic-source picker is open. Same one-at-a-time rule as
+   *  the field input, and for the same reason. */
+  const [pickingFor, setPickingFor] = useState<number | null>(null)
   const abandoned = useRef(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -168,6 +171,10 @@ export function LifecycleSettings() {
     void run(() => api.patchStage(stage.id, { fields: stage.fields.filter((f) => f !== field) }))
   }
 
+  /** The automatic sources this stage is NOT drawing — what the + offers. */
+  const offTokens = (stage: LifecycleStageDTO) =>
+    SHOW_TOKENS.filter((token) => !stage.shows.includes(token))
+
   const toggleShow = (stage: LifecycleStageDTO, token: string) => {
     const on = stage.shows.includes(token)
     const shows = on ? stage.shows.filter((s) => s !== token) : [...stage.shows, token]
@@ -260,16 +267,70 @@ export function LifecycleSettings() {
             <div className="lifecycle-belongs-row">
               <span className="lifecycle-row-tag">{t('lifecycle.belongsAuto')}</span>
               <div className="lifecycle-states">
-                {SHOW_TOKENS.map((token) => (
-                  <button
-                    key={token}
-                    className={`lifecycle-state-toggle${stage.shows.includes(token) ? ' is-on' : ''}`}
-                    disabled={busy}
-                    onClick={() => toggleShow(stage, token)}
-                  >
+                {/* Only what is ON, so a stage using two of seven shows two
+                    chips rather than seven. All seven at once meant 49 chips
+                    across a seven-stage pipeline, most of them off — and the
+                    ones that were off carried no information at all, since an
+                    absent projection is exactly as absent when unlisted.
+                    Canonical order, not `stage.shows` order, so a chip does
+                    not move when you switch another one off and on again. */}
+                {SHOW_TOKENS.filter((token) => stage.shows.includes(token)).map((token) => (
+                  <span key={token} className="lifecycle-field-chip">
                     {t(`lifecycle.show_${token}` as 'lifecycle.show_issues')}
-                  </button>
+                    <button
+                      type="button"
+                      className="lifecycle-field-x"
+                      title={t('lifecycle.showRemove')}
+                      aria-label={t('lifecycle.showRemove')}
+                      disabled={busy}
+                      onClick={() => toggleShow(stage, token)}
+                    >
+                      {'×'}
+                    </button>
+                  </span>
                 ))}
+                {offTokens(stage).length > 0 && (
+                  <button
+                    type="button"
+                    className="lifecycle-state-toggle"
+                    title={t('lifecycle.showAdd')}
+                    aria-label={t('lifecycle.showAdd')}
+                    disabled={busy}
+                    onClick={() => setPickingFor(pickingFor === stage.id ? null : stage.id)}
+                  >
+                    +
+                  </button>
+                )}
+                {pickingFor === stage.id && (
+                  // In flow rather than a popover: the editor is already inside
+                  // a modal, and an absolutely positioned layer there is one
+                  // `overflow: hidden` away from being invisible — which is how
+                  // the attach form got clipped before the side panel replaced
+                  // it.
+                  <div
+                    className="lifecycle-pick"
+                    role="group"
+                    aria-label={t('lifecycle.showAdd')}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') setPickingFor(null)
+                    }}
+                  >
+                    {offTokens(stage).map((token) => (
+                      <button
+                        key={token}
+                        type="button"
+                        className="lifecycle-state-toggle"
+                        disabled={busy}
+                        onClick={() => {
+                          setPickingFor(null)
+                          toggleShow(stage, token)
+                        }}
+                      >
+                        {t(`lifecycle.show_${token}` as 'lifecycle.show_issues')}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 

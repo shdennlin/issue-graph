@@ -555,6 +555,8 @@ export const zhTW: Dict = {
     belongsAuto: '自動抓',
     belongsHand: '手動掛',
     belongsHint: '自動的是從別的地方讀來的,會自己更新;關掉就不在這一格畫。手動的只是提示 —— 掛東西時優先列出、也會告訴 agent,但掛上來的東西不管有沒有列在這裡都會畫。',
+    showAdd: '加一個自動來源',
+    showRemove: '這一格不畫它',
     fieldAdd: '新增欄位',
     fieldRemove: '移除欄位',
     fieldsPlaceholder: 'runbook、incident\u2026',

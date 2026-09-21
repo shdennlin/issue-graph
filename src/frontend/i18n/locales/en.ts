@@ -568,6 +568,8 @@ export const en = {
     belongsAuto: 'Automatic',
     belongsHand: 'By hand',
     belongsHint: 'Automatic rows are read from somewhere else and stay current; switch one off to keep it off this stage. A hand name is only a hint \u2014 it is offered first when attaching and told to agents, and anything attached here shows whether or not it is listed.',
+    showAdd: 'Add an automatic source',
+    showRemove: 'Stop drawing this here',
     fieldAdd: 'Add a field',
     fieldRemove: 'Remove field',
     fieldsPlaceholder: 'runbook, incident\u2026',

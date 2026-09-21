@@ -4614,6 +4614,19 @@ button.stage-pill:hover .stage-item-text { text-decoration: underline; }
   background: var(--chip-bg);
   color: var(--fg);
 }
+/* The + on the automatic row opens this. A full-width line under the row
+   rather than a floating layer: the editor is inside a modal, and an
+   absolutely positioned popover there is one `overflow: hidden` away from
+   being invisible. */
+.lifecycle-pick {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px dashed var(--node-border);
+}
 .lifecycle-field-x {
   border: 0;
   background: none;
