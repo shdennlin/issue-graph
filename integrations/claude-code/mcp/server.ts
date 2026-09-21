@@ -11,9 +11,11 @@
 // second writer on that field is the failure this whole design is shaped to
 // avoid. See docs/adr/0002-lifecycle-stage-is-stored-not-derived.md.
 //
-// Most reads an agent needs are already injected by the SessionStart hook, so
-// what is genuinely irreducible here is the INTERACTIVE part: asking for the
-// next issue out of a batch, which cannot be answered once at session start.
+// The SessionStart hook injects nothing today \u2014 it reports presence and
+// prints no context \u2014 so every read an agent needs comes through here. An
+// earlier version of this comment claimed otherwise, describing the plan
+// rather than the code; believing it means leaving out a read on the grounds
+// that something else already supplied it.
 //
 // Types are re-declared rather than imported from @shared. That is the
 // convention for this repo's integrations (see integrations/raycast/src/lib/
@@ -113,6 +115,23 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: { type: 'object', properties: {} },
     },
     {
+      name: 'describe_field',
+      description:
+        "Write down what a field NAME means in this workspace \u2014 one sentence, stored once and resolved onto every stage that lists the name. Without it a stage says `ledger` and nothing anywhere says what a ledger entry is, so each caller invents its own answer.\n\nThe description is the field's acceptance criterion, so write what makes it SATISFIED (\"the pasted output of make check\"), not what it is about (\"tests\"). Say what a legitimate absence looks like if there is one. A description already written by a person is a decision, not a draft: read list_stages first and leave it alone unless asked.\n\nAn empty description deletes the definition.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description:
+              'The field name, exactly as a stage lists it. Normalised the same way everywhere, so `Pull Request` and `pull-request` are one field.',
+          },
+          description: { type: 'string', description: 'One sentence. Empty removes the definition.' },
+        },
+        required: ['name', 'description'],
+      },
+    },
+    {
       name: 'create_stage',
       description:
         "Add a stage to the end of the workspace's pipeline. Use this to build a lifecycle from a description of how the team actually works \u2014 call list_linear_states first, because `states` must name states this workspace has.\n\nThe pipeline is a shared convention a person reads, so build it when asked and leave it alone otherwise: it is not somewhere to record what you happened to attach.",
@@ -181,8 +200,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'list_workstreams',
       description:
-        'Every workstream (a feature in flight: its issues, their progress, and who holds what).',
-      inputSchema: { type: 'object', properties: {} },
+        'Every workstream (a feature in flight: its issues, their progress, and who holds what). Each carries `summary`, the first line of its note \u2014 what it is for.\n\nArchived ones are off the board by default, which is what archiving meant. Pass includeArchived when you are looking FOR one: a filter must not make a workstream you were asked about unreachable.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          includeArchived: { type: 'boolean', description: 'Include archived workstreams too.' },
+        },
+      },
     },
     {
       name: 'get_workstream',
@@ -278,12 +302,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'update_workstream',
       description:
-        'Rename a workstream, and/or add and remove issues. Removing an issue drops its claim and progress with it.',
+        'Rename a workstream, describe it, archive it, and/or add and remove issues. Removing an issue drops its claim and progress with it.\n\nArchiving is the way to retire a workstream: it leaves the record and its stage history intact, which delete_workstream does not. Prefer it unless asked to delete.',
       inputSchema: {
         type: 'object',
         properties: {
           workstreamId: { type: 'number' },
           name: { type: 'string' },
+          note: {
+            type: 'string',
+            description:
+              'What this workstream is for, in the words whoever picks it up needs \u2014 this is the one place a person or an agent can say why it exists. Empty clears it.',
+          },
+          status: {
+            type: 'string',
+            enum: ['active', 'archived'],
+            description: 'Archived workstreams drop out of the board but keep their history.',
+          },
           add: { type: 'array', items: { type: 'string' } },
           remove: { type: 'array', items: { type: 'string' } },
         },
@@ -364,6 +398,19 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         )
       }
 
+      case 'describe_field': {
+        // PUT, not PATCH: one field has one sentence, and the server treats an
+        // empty one as a delete so a cleared definition leaves no row claiming
+        // the field means nothing.
+        const name = String(a.name ?? '')
+        const description = String(a.description ?? '')
+        const r = await call<{ name: string; description: string } | undefined>(
+          `/api/fields/${encodeURIComponent(name)}`,
+          { method: 'PUT', body: JSON.stringify({ description }) },
+        )
+        return text(r === undefined ? `${name}: definition removed` : r)
+      }
+
       case 'create_stage': {
         const body: Record<string, unknown> = { name: String(a.name ?? '') }
         // Only what was passed: an omitted `fields` has to stay omitted so the
@@ -417,7 +464,9 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       }
 
       case 'list_workstreams': {
-        const r = await call<{ entries: unknown[] }>('/api/batches')
+        const r = await call<{ entries: unknown[] }>(
+          a.includeArchived === true ? '/api/batches?status=all' : '/api/batches',
+        )
         return text(r.entries)
       }
 
@@ -438,9 +487,24 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       case 'update_workstream': {
         const id = Number(a.workstreamId)
         const done: string[] = []
+        // One PATCH for everything the row itself holds. The server treats an
+        // absent key as "leave alone" and an explicit null as "clear", so an
+        // empty note has to travel as null rather than as ''.
+        const patch: Record<string, unknown> = {}
         if (typeof a.name === 'string' && a.name.trim()) {
-          await call(`/api/batches/${id}`, { method: 'PATCH', body: JSON.stringify({ name: a.name }) })
+          patch.name = a.name
           done.push(`renamed to "${a.name}"`)
+        }
+        if (typeof a.note === 'string') {
+          patch.note = a.note.trim() === '' ? null : a.note
+          done.push(a.note.trim() === '' ? 'note cleared' : 'note set')
+        }
+        if (typeof a.status === 'string') {
+          patch.status = a.status
+          done.push(a.status === 'archived' ? 'archived' : 'reactivated')
+        }
+        if (Object.keys(patch).length > 0) {
+          await call(`/api/batches/${id}`, { method: 'PATCH', body: JSON.stringify(patch) })
         }
         if (Array.isArray(a.add) && a.add.length > 0) {
           await call(`/api/batches/${id}/members`, {

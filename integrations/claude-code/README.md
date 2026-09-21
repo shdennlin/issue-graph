@@ -118,14 +118,43 @@ It needs the same two variables as the hooks, plus an optional workspace:
 export ISSUE_GRAPH_WORKSPACE=onelegion   # omit to use the default workspace
 ```
 
+18 tools, in four groups.
+
+**Read the shape of the work**
+
 | Tool | Does |
 |---|---|
-| `list_stages` | The workspace's lifecycle, in pipeline order |
-| `get_stage` | An issue's stage, its Linear state, whether they agree, and the next command |
-| `set_stage` | Record which stage an issue is on |
-| `list_batches` | Queued batches and their progress |
-| `next_issue` | Claim the next issue from a batch |
-| `report_done` | Mark a claimed issue finished |
+| `list_stages` | The lifecycle in pipeline order, each stage with its fields and what each field means |
+| `list_workstreams` | Every workstream and the stage it is on |
+| `get_workstream` | One in detail: its issues in dependency order, who is on them, what blocks them |
+| `list_linear_states` | The state names a stage may declare |
+| `find_related` | Issues near a given one in the graph |
+
+**Design the pipeline** — a shared convention a person reads. Build it when asked; leave it alone otherwise.
+
+| Tool | Does |
+|---|---|
+| `create_stage` / `update_stage` / `delete_stage` | One stage |
+| `reorder_stages` | The order of all of them |
+| `describe_field` | What a field NAME means here — one sentence, resolved onto every stage that lists it |
+
+**Move the work**
+
+| Tool | Does |
+|---|---|
+| `create_workstream` | Start one from a set of issues |
+| `update_workstream` | Rename it, write its note (what it is for), archive it, add or remove issues |
+| `delete_workstream` | Remove the record. Archiving via `update_workstream` keeps the history; this does not |
+| `set_workstream_stage` | Advance it — or move it back when CI goes red |
+| `set_stage_note` | A note on one stage of one workstream |
+| `attach_to_stage` | Put a link or a file under one of a stage's fields |
+
+**Work through it**
+
+| Tool | Does |
+|---|---|
+| `next_issue` | Claim the next issue, in dependency order, that nobody else holds |
+| `report_done` | Release the claim and unblock what depended on it |
 
 ## What it will not do
 
