@@ -177,6 +177,18 @@ export function LifecycleSettings() {
     void run(() => api.patchStage(stage.id, { fields: stage.fields.filter((f) => f !== field) }))
   }
 
+  /** What typing `raw` into this stage's field box will actually do, or '' when
+   *  there is nothing worth saying (empty box, or the name is already exactly
+   *  what will be stored). */
+  const fieldPreview = (stage: LifecycleStageDTO, raw: string): string => {
+    const typed = raw.trim()
+    if (typed.length === 0) return ''
+    const kind = normalizeLinkKind(typed)
+    if (kind === null) return t('lifecycle.fieldBadName')
+    if (stage.fields.includes(kind)) return t('lifecycle.fieldAlready', { name: kind })
+    return kind === typed ? '' : `\u2192 ${kind}`
+  }
+
   /** Every field name any stage expects, deduped, in pipeline order so the
    *  glossary reads in the order you meet the fields. A description with no
    *  stage asking for it is not listed — it stays stored, and reappears the
@@ -377,6 +389,7 @@ export function LifecycleSettings() {
                   </span>
                 ))}
                 {addingFor === stage.id ? (
+                  <>
                   <input
                     className="lifecycle-field-new"
                     // Focused on mount: this input exists only because the user
@@ -403,6 +416,21 @@ export function LifecycleSettings() {
                       }
                     }}
                   />
+                  {/* What will actually be stored, while you type.
+                      A name is lowercased and hyphenated so that what you
+                      declare and what an agent attaches are one field — but it
+                      used to happen in silence: you typed "Release Notes",
+                      pressed Enter, and a chip reading `release-notes`
+                      appeared with nothing saying why. Worse silently: a name
+                      that normalises onto one already listed did nothing at
+                      all, and a name that is not a slug did nothing at all,
+                      and the two were indistinguishable from a broken input. */}
+                  {fieldPreview(stage, draftField) && (
+                    <span className="lifecycle-field-preview">
+                      {fieldPreview(stage, draftField)}
+                    </span>
+                  )}
+                  </>
                 ) : (
                   <button
                     type="button"

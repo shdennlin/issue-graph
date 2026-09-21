@@ -563,6 +563,8 @@ export const zhTW: Dict = {
     showAdd: '加一個自動來源',
     showRemove: '這一格不畫它',
     fieldAdd: '新增欄位',
+    fieldBadName: '只能用英數字和連字號',
+    fieldAlready: '{name} 已經在這裡了',
     fieldRemove: '移除欄位',
     fieldsPlaceholder: 'runbook、incident\u2026',
     staleLabel: '幾天後提醒',

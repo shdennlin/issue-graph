@@ -576,6 +576,8 @@ export const en = {
     showAdd: 'Add an automatic source',
     showRemove: 'Stop drawing this here',
     fieldAdd: 'Add a field',
+    fieldBadName: 'letters, digits and hyphens',
+    fieldAlready: '{name} is already here',
     fieldRemove: 'Remove field',
     fieldsPlaceholder: 'runbook, incident\u2026',
     staleLabel: 'Nudge after (days)',
