@@ -127,6 +127,20 @@ if [ "$ACTION" = "beat" ] && command -v jq >/dev/null 2>&1; then
   esac
 fi
 
+# The session's name, if the person gave it one with --name or /rename. Only
+# SessionStart carries it, and the server COALESCEs, so sending it once is
+# enough and a later heartbeat cannot blank it.
+#
+# The server's own comment says the derived label — directory + branch — is
+# usually better than anything a SCRIPT would invent, and that is still true.
+# This is not invented: it is the name the person chose, which beats a
+# derivation precisely because they chose it. Unnamed sessions send nothing and
+# keep the derivation.
+LABEL=""
+if [ "$ACTION" = "start" ] && command -v jq >/dev/null 2>&1; then
+  LABEL=$(printf '%s' "$HOOK_INPUT" | jq -r '.session_title // empty' 2>/dev/null | cut -c1-120 || true)
+fi
+
 # Build the body with jq when available so quoting is correct for any path or
 # branch name; fall back to a hand-rolled object with the two fields that
 # cannot contain a quote.
@@ -138,8 +152,9 @@ if command -v jq >/dev/null 2>&1; then
     --arg host "$HOST" \
     --arg phase "$PHASE" \
     --arg status "$STATUS" \
+    --arg label "$LABEL" \
     --argjson payloadVersion "$PAYLOAD_VERSION" \
-    '{sessionId: $sessionId, branch: $branch, cwd: $cwd, host: $host, phase: $phase, status: $status, payloadVersion: $payloadVersion}
+    '{sessionId: $sessionId, branch: $branch, cwd: $cwd, host: $host, phase: $phase, status: $status, label: $label, payloadVersion: $payloadVersion}
      | with_entries(select(.value != ""))' 2>/dev/null || true)
 fi
 if [ -z "${BODY:-}" ]; then

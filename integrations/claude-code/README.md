@@ -199,6 +199,31 @@ export ISSUE_GRAPH_WORKSPACE=onelegion   # omit to use the default workspace
 | `next_issue` | Claim the next issue, in dependency order, that nobody else holds |
 | `report_done` | Release the claim and unblock what depended on it |
 
+## The skill and the two commands
+
+MCP tools are passive. A session with seventeen of them available still has to
+decide that now is the moment to reach for one, and nothing in a tool list
+supplies that moment. Three things do.
+
+**`workstream-progress`** (skill) — the model reaches for this itself when work
+it has been doing reaches a point worth recording: a PR is open, a check has
+run, a spec is written, a stage's work is finished. It costs one line of
+description in context until it fires.
+
+**`/issue-graph:where`** — read-only. Which workstream, which stage, what that
+stage still expects, and who holds what. Useful mid-session, when the
+SessionStart briefing has scrolled away or a stage has moved since.
+
+**`/issue-graph:progress`** — record what just happened: attach the evidence,
+note the decisions, and move the stage **only if it has genuinely moved**.
+
+All three draw the same line in the same place. Attaching evidence and writing
+notes are cheap and additive, so they happen freely. Moving a stage is a claim
+about the world, so it happens only when every field the stage expects is
+satisfied as its own description defines it. Leaving a workstream one stage
+behind is small, visible and self-correcting; marking a stage done that is not
+done is invisible and misleads everyone reading the board.
+
 ## What it will not do
 
 **It never changes a Linear state.** It writes issue-graph's own data only —

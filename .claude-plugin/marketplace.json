@@ -7,7 +7,7 @@
     {
       "name": "issue-graph",
       "source": "./integrations/claude-code",
-      "description": "Session presence hooks plus an MCP server for issue-graph: show which issue Claude Code is working on, and give an agent tools over the workstream pipeline",
+      "description": "Session presence hooks, an MCP server and a progress skill for issue-graph: show which issue Claude Code is working on, tell a session which workstream and stage it is in, and give an agent tools over the workstream pipeline",
       "version": "0.1.0",
       "author": {
         "name": "shdennlin"

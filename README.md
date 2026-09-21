@@ -367,6 +367,8 @@ Give a name a one-line meaning at the bottom of the pipeline editor. That defini
 
 `SessionStart` also reads back: it tells the session which workstream the branch belongs to, what that workstream is for, which stage it is on, and what that stage expects attached. It states facts and gives no orders — whether a stage has been cleared is a judgement only the session that did the work can make. Compaction is covered, because `SessionStart` fires again with `source: "compact"`.
 
+**A skill and two commands** close the loop. MCP tools are passive — a session has to decide that now is the moment to reach for one. `workstream-progress` is the skill the model reaches for when work reaches a point worth recording; `/issue-graph:where` reports position without changing anything; `/issue-graph:progress` records it. All three attach evidence freely and move a stage only when every field that stage expects is satisfied.
+
 **The MCP server** gives an agent 18 tools over this app's own data — read the pipeline and the workstreams, build or edit a pipeline, define what a field name means, create and move workstreams, attach fields, and claim issues out of a workstream one at a time in dependency order. It never writes a Linear state.
 
 Install, from inside Claude Code:

@@ -1,10 +1,19 @@
 {
   "name": "issue-graph",
   "version": "0.1.0",
-  "description": "Report Claude Code session presence to an issue-graph server, so the graph shows which issue is being worked on right now",
-  "author": { "name": "shdennlin" },
+  "description": "Session presence hooks, an MCP server and a progress skill for issue-graph: show which issue Claude Code is working on, tell a session which workstream and stage it is in, and let it record what it finished",
+  "author": {
+    "name": "shdennlin"
+  },
   "homepage": "https://github.com/shdennlin/issue-graph",
   "repository": "https://github.com/shdennlin/issue-graph",
   "license": "MIT",
-  "keywords": ["issue-graph", "linear", "session", "hooks"]
+  "keywords": [
+    "issue-graph",
+    "linear",
+    "session",
+    "hooks",
+    "mcp",
+    "workstream"
+  ]
 }
