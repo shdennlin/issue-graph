@@ -49,6 +49,15 @@ interface LifecycleStage {
   fields: string[]
 }
 
+/** What a field NAME means in this workspace. Written by a person once, and
+ *  resolved into `list_stages` below so an agent learns the name and its
+ *  meaning in one call rather than knowing what to call a field and not what
+ *  to put in it. */
+interface FieldDescription {
+  name: string
+  description: string
+}
+
 /** Append the workspace selector the server's middleware reads from `?w=`. */
 function url(path: string): string {
   if (!WORKSPACE) return `${BASE}${path}`
@@ -87,7 +96,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'list_stages',
       description:
-        "The workspace's lifecycle, in pipeline order. Each stage carries `states` (the Linear states whose issues belong to it), `shows` (what it draws from projections) and `fields` — the attachment kinds it EXPECTS. Read `fields` before attaching: a stage declaring ['ci','runbook'] is telling you the names to use, and using them is what keeps one field from becoming five spellings of itself across five workstreams.",
+        "The workspace's lifecycle, in pipeline order. Each stage carries `states` (the Linear states whose issues belong to it), `shows` (what it draws from projections) and `fields` — the attachment kinds it EXPECTS.\n\nRead `fields` before attaching. An entry is either a bare name or `{name, description}`: the name is what to call the field, and using it is what keeps one field from becoming five spellings of itself across five workstreams; the description, when somebody has written one, is what this workspace means by that name and therefore what belongs in it. A bare name means nobody has defined it yet, not that it matters less.",
       inputSchema: { type: 'object', properties: {} },
     },
     {
@@ -246,8 +255,26 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   try {
     switch (req.params.name) {
       case 'list_stages': {
-        const r = await call<{ entries: LifecycleStage[] }>('/api/lifecycle')
-        return text(r.entries)
+        // Two requests, one tool call. Splitting them into two tools would
+        // make the descriptions optional in practice: an agent that can match
+        // a field name has no reason to suspect a second lookup exists, so the
+        // definitions would go unread by exactly the caller they are for.
+        const [r, f] = await Promise.all([
+          call<{ entries: LifecycleStage[] }>('/api/lifecycle'),
+          call<{ entries: FieldDescription[] }>('/api/fields'),
+        ])
+        const meaning = new Map(f.entries.map((e) => [e.name, e.description]))
+        return text(
+          r.entries.map((s) => ({
+            ...s,
+            // A bare string where nobody has written a definition, so the
+            // shape says which fields are explained and which are only named.
+            fields: s.fields.map((name) => {
+              const description = meaning.get(name)
+              return description === undefined ? name : { name, description }
+            }),
+          })),
+        )
       }
 
       case 'list_workstreams': {

@@ -39,6 +39,8 @@ export function LifecycleSettings() {
   /** Which stage's automatic-source picker is open. Same one-at-a-time rule as
    *  the field input, and for the same reason. */
   const [pickingFor, setPickingFor] = useState<number | null>(null)
+  /** name -> description, for every field this workspace has defined. */
+  const [fields, setFields] = useState<Map<string, string>>(new Map())
   const abandoned = useRef(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -73,9 +75,12 @@ export function LifecycleSettings() {
 
   useEffect(() => {
     let live = true
-    api
-      .fetchLifecycle()
-      .then((r) => live && setStages(r.entries))
+    Promise.all([api.fetchLifecycle(), api.fetchFields()])
+      .then(([r, f]) => {
+        if (!live) return
+        setStages(r.entries)
+        setFields(new Map(f.entries.map((e) => [e.name, e.description])))
+      })
       .catch(() => live && setError(t('lifecycle.loadFailed')))
     return () => {
       live = false
@@ -85,8 +90,9 @@ export function LifecycleSettings() {
   /** Re-read both the editor's own list and the graph, so cards update without
    *  a reload. A failure surfaces rather than leaving a half-applied view. */
   const refresh = async () => {
-    const r = await api.fetchLifecycle()
+    const [r, f] = await Promise.all([api.fetchLifecycle(), api.fetchFields()])
     setStages(r.entries)
+    setFields(new Map(f.entries.map((e) => [e.name, e.description])))
     await refetchSilent()
   }
 
@@ -170,6 +176,12 @@ export function LifecycleSettings() {
   const removeField = (stage: LifecycleStageDTO, field: string) => {
     void run(() => api.patchStage(stage.id, { fields: stage.fields.filter((f) => f !== field) }))
   }
+
+  /** Every field name any stage expects, deduped, in pipeline order so the
+   *  glossary reads in the order you meet the fields. A description with no
+   *  stage asking for it is not listed — it stays stored, and reappears the
+   *  moment some stage declares that name again. */
+  const usedFields = Array.from(new Set(stages.flatMap((s) => s.fields)))
 
   /** The automatic sources this stage is NOT drawing — what the + offers. */
   const offTokens = (stage: LifecycleStageDTO) =>
@@ -449,6 +461,36 @@ export function LifecycleSettings() {
           <Plus size={14} /> {t('lifecycle.addStage')}
         </button>
       </div>
+
+      {/* What the names MEAN, once for the workspace.
+          The list is derived from what the stages already declare rather than
+          typed again — a registry you had to populate by hand would be a
+          second place to add a field, and the two would disagree the first
+          time somebody added one in only one of them. Here there is nothing
+          to keep in step: a name appears because a stage asked for it, and
+          all you supply is the sentence. */}
+      {usedFields.length > 0 && (
+        <div className="lifecycle-glossary">
+          <div className="lifecycle-field-label">{t('lifecycle.glossaryLabel')}</div>
+          <p className="settings-hint">{t('lifecycle.glossaryHint')}</p>
+          {usedFields.map((name) => (
+            <div key={name} className="lifecycle-glossary-row">
+              <span className="lifecycle-field-chip">{name}</span>
+              <input
+                defaultValue={fields.get(name) ?? ''}
+                placeholder={t('lifecycle.glossaryPlaceholder')}
+                aria-label={name}
+                disabled={busy}
+                onBlur={(e) => {
+                  const next = e.target.value.trim().replace(/\s+/g, ' ')
+                  if (next === (fields.get(name) ?? '')) return
+                  void run(() => api.setFieldDescription(name, next))
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      )}
 
       {error && <p className="settings-error">{error}</p>}
     </div>

@@ -351,6 +351,27 @@ export function normalizeLinkValue(raw: unknown): string | null {
 }
 
 
+export const FIELD_DESCRIPTION_MAX = 280
+
+/**
+ * What a field name means here, normalised.
+ *
+ * Empty is not an error — it is the DELETE. "This field has no description"
+ * and "remove the description I wrote" are the same request from the caller's
+ * side, and making the empty string mean the second one saves a second route
+ * that would only ever be reached by a client that thought to look for it.
+ *
+ * Capped short on purpose. This is a gloss an agent reads before filling a
+ * field, alongside everything else in `list_stages`; a paragraph here would be
+ * a paragraph in every agent's context on every call. Where something needs
+ * more room than a sentence, the stage note is the place for it.
+ */
+export function normalizeFieldDescription(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const v = raw.trim().replace(/\s+/g, ' ')
+  return v.length > FIELD_DESCRIPTION_MAX ? null : v
+}
+
 export interface PullRequestTally {
   /** PRs whose linkKind says they finish the issue. */
   closesTotal: number

@@ -363,6 +363,28 @@ const MIGRATIONS: string[] = [
   // list says what is expected here, not what is permitted — the moment it
   // gates writes, an agent with something genuinely new has nowhere to put it.
   `ALTER TABLE lifecycle_stage ADD COLUMN fields TEXT NOT NULL DEFAULT '[]';`,
+
+  // 16. What a field NAME means in this workspace.
+  //
+  // Migration 15 gave an agent the vocabulary — use `runbook`, not `run-book`
+  // — and stopped there. It could match the name and still had no idea what
+  // to put in it. The declaration was a glossary with no definitions.
+  //
+  // Keyed by name and NOT per stage, because that is the level the fact lives
+  // at: `runbook` means the same thing on every stage that expects one, and a
+  // per-stage copy would be the same sentence written seven times and then
+  // edited in six of them.
+  //
+  // Nothing has to be registered. A name works with or without a row here,
+  // exactly as an attachment kind works whether or not a stage declared it —
+  // same polarity throughout: a known thing is an ENHANCEMENT, never a gate.
+  // That is also why this cannot drift: it is the only record of what a name
+  // means, so there is no second writer to disagree with.
+  `CREATE TABLE IF NOT EXISTS field (
+     name TEXT PRIMARY KEY,
+     description TEXT NOT NULL,
+     updated_at INTEGER NOT NULL
+   );`,
 ]
 
 // One Database instance per workspace id. Each profile has its own SQLITE_PATH

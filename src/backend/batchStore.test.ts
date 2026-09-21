@@ -10,6 +10,8 @@ import {
   isStale,
   normalizeAssignees,
   normalizeFields,
+  normalizeFieldDescription,
+  FIELD_DESCRIPTION_MAX,
   normalizeLinkKind,
   RICH_LINK_KINDS,
   normalizeLinkValue,
@@ -436,5 +438,34 @@ describe('normalizeFields', () => {
 
   it('caps the list, since a stage with thirty expected fields expects nothing', () => {
     expect(normalizeFields(Array.from({ length: 21 }, (_, i) => `f${i}`))).toBeNull()
+  })
+})
+
+describe('normalizeFieldDescription', () => {
+  it('collapses whitespace, so a pasted sentence reads as one line', () => {
+    expect(normalizeFieldDescription('  the on-call doc\n  read it first ')).toBe(
+      'the on-call doc read it first',
+    )
+  })
+
+  it('treats empty as a DELETE rather than an error', () => {
+    // "there is no description" and "remove the one I wrote" are the same
+    // request from the caller's side; the route deletes the row on ''.
+    expect(normalizeFieldDescription('')).toBe('')
+    expect(normalizeFieldDescription('   ')).toBe('')
+  })
+
+  it('refuses a description longer than the cap', () => {
+    // It rides in every list_stages call, so a paragraph here is a paragraph
+    // in every agent's context.
+    expect(normalizeFieldDescription('x'.repeat(FIELD_DESCRIPTION_MAX))).toHaveLength(
+      FIELD_DESCRIPTION_MAX,
+    )
+    expect(normalizeFieldDescription('x'.repeat(FIELD_DESCRIPTION_MAX + 1))).toBeNull()
+  })
+
+  it('refuses anything that is not a string', () => {
+    expect(normalizeFieldDescription(7)).toBeNull()
+    expect(normalizeFieldDescription(null)).toBeNull()
   })
 })

@@ -323,6 +323,24 @@ export interface SavedViewDTO {
  * stages are finer than states, so derivation is impossible) and never to
  * correct either side.
  */
+/**
+ * What one field NAME means in this workspace.
+ *
+ * A stage's `fields` says which names it expects; this says what they mean. An
+ * agent that knows to call it `runbook` and not what a runbook is here has
+ * half the contract — the name stops spelling drift, the description is what
+ * makes the field fillable.
+ *
+ * Keyed by name across the whole workspace rather than per stage, because that
+ * is where the fact lives: `runbook` means the same thing on every stage that
+ * expects one.
+ */
+export interface FieldDTO {
+  name: string
+  description: string
+  updatedAt: number
+}
+
 export interface LifecycleStageDTO {
   id: number
   /** Stable slug a workstream's stage points at. Unique per workspace. */

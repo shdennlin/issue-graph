@@ -4632,6 +4632,23 @@ button.stage-pill:hover .stage-item-text { text-decoration: underline; }
    rather than a floating layer: the editor is inside a modal, and an
    absolutely positioned popover there is one `overflow: hidden` away from
    being invisible. */
+/* The glossary: one row per name any stage expects, with room for a sentence.
+   Below the stage list because it is about the pipeline as a whole. */
+.lifecycle-glossary { margin-top: 18px; }
+.lifecycle-glossary-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+}
+/* Fixed so the sentences line up into a column that can be read down. */
+.lifecycle-glossary-row .lifecycle-field-chip { flex: 0 0 9em; justify-content: center; }
+.lifecycle-glossary-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: var(--fs-meta);
+}
 .lifecycle-pick {
   flex-basis: 100%;
   display: flex;

@@ -5,6 +5,7 @@ import type {
   GraphResponse,
   ProjectDetail,
   SavedViewDTO,
+  FieldDTO,
   LifecycleStageDTO,
   SyncLogEntry,
   Viewer,
@@ -307,6 +308,14 @@ export const api = {
       includeArchived ? '/api/batches?status=all' : '/api/batches',
     ),
   fetchLifecycle: () => http<{ entries: LifecycleStageDTO[] }>('/api/lifecycle'),
+  fetchFields: () => http<{ entries: FieldDTO[] }>('/api/fields'),
+  /** An empty description removes the definition — see the route's note on why
+   *  that is one call rather than a separate DELETE. */
+  setFieldDescription: (name: string, description: string) =>
+    http<FieldDTO | null>(`/api/fields/${encodeURIComponent(name)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ description }),
+    }),
   createStage: (s: { name: string; key?: string; states?: string[]; nextCommand?: string | null }) =>
     http<LifecycleStageDTO>('/api/lifecycle', { method: 'POST', body: JSON.stringify(s) }),
   patchStage: (

@@ -58,6 +58,9 @@ const MUST_SURVIVE = [
   'workstream_stage_link',
   // A reset is not a reason to forget a session that is running right now.
   'agent_session',
+  // What a field name means here is typed by a person and is the only record
+  // of it — nothing can recompute a definition.
+  'field',
   'annotation',
   'note',
   'saved_view',
