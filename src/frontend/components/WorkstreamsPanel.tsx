@@ -35,6 +35,10 @@ const AGE_UNIT_KEYS: Record<'m' | 'h' | 'd', DictKey> = {
 interface Summary {
   id: number
   name: string
+  /** The note's first line. There is no separate description column — a
+   *  second free-text field beside the note would be two places to write one
+   *  thing, and one of them always stale. */
+  summary: string | null
   stage: string | null
   status: 'active' | 'archived'
   createdAt: number
@@ -289,6 +293,11 @@ export function WorkstreamsPanel() {
                     {armed === `${ws.id}:delete` ? t('common.confirm') : <Trash2 size={14} />}
                   </button>
                 </div>
+                {/* The note's first line, under the name. A workstream called
+                    "featA" says nothing next to two others; the sentence
+                    somebody already wrote in the note says what it is, and
+                    costs no second field to keep in step. */}
+                {ws.summary && <p className="workstream-summary">{ws.summary}</p>}
                   {isOpen && (
                   // The HISTORY, not the issue list. Where each workstream's
                   // issues are is already the board's whole subject, and

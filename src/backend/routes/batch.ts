@@ -14,6 +14,7 @@
 // working on it; it does not move the issue.
 
 import { Hono } from 'hono'
+import { noteSummary } from '../../shared/noteSummary.js'
 import { z } from 'zod'
 import { getDb } from '../db.js'
 import { agentTokenValid, originAllowed } from '../lib/http.js'
@@ -133,6 +134,10 @@ batchRoutes.get('/api/batches', (c) => {
         updatedAt: b.updated_at ?? b.created_at,
         archivedAt: b.archived_at,
         note: b.note,
+        // The note's first line, so a caller listing twenty workstreams gets
+        // twenty sentences rather than twenty essays. There is no separate
+        // `description` column on purpose — see shared/noteSummary.ts.
+        summary: noteSummary(b.note),
         stage: b.stage_key,
         stageEnteredAt: b.stage_entered_at,
         status: b.status,

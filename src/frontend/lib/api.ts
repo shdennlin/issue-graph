@@ -297,6 +297,9 @@ export const api = {
       entries: {
         id: number
         name: string
+        /** The note's first line — see shared/noteSummary.ts for why there is
+         *  no separate description column. */
+        summary: string | null
         stage: string | null
         status: 'active' | 'archived'
         createdAt: number
