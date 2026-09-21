@@ -517,7 +517,8 @@ export const en = {
   },
   workstreams: {
     title: 'Workstreams',
-    hint: 'Features in flight. Each groups the issues that make one thing, in dependency order — a blocker always sits above what it blocks. The order is recomputed from Linear on every read, so editing a relation there reorders this.',
+    hint: 'Every workstream, including the ones off the board. Rename, archive or delete one here; the board is where you move them through the pipeline.',
+    orderHint: 'In dependency order \u2014 a blocker always sits above what it blocks. Recomputed from Linear on every read, so editing a relation there reorders this.',
     empty: 'No workstreams yet. Select issues on the graph, right-click, and queue them.',
     name: 'Workstream name',
     namePrompt: 'Name this workstream',

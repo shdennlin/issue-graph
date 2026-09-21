@@ -506,7 +506,8 @@ export const zhTW: Dict = {
   },
   workstreams: {
     title: '工作線',
-    hint: '進行中的 feature。每一條把構成同一件事的 issue groupe 在一起，依相依順序排列 —— 擋人的一定在被擋的上面。順序每次讀取都從 Linear 重算，所以在那邊改關聯，這裡就會跟著重排。',
+    hint: '所有 workstream,包括不在看板上的。在這裡改名、封存或刪除;把它們往下一格推是在看板上做。',
+    orderHint: '依相依性排序 —— 擋住別人的永遠在上面。每次讀取都從 Linear 重算,所以去 Linear 改 relation 就會改這裡的順序。',
     empty: '還沒有工作線。在圖上選幾張 issue，右鍵加入。',
     name: '工作線名稱',
     namePrompt: '為這條工作線命名',

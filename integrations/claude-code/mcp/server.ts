@@ -113,6 +113,72 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: { type: 'object', properties: {} },
     },
     {
+      name: 'create_stage',
+      description:
+        "Add a stage to the end of the workspace's pipeline. Use this to build a lifecycle from a description of how the team actually works \u2014 call list_linear_states first, because `states` must name states this workspace has.\n\nThe pipeline is a shared convention a person reads, so build it when asked and leave it alone otherwise: it is not somewhere to record what you happened to attach.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'What happens at this step, in a word or two.' },
+          states: {
+            type: 'array',
+            items: { type: 'string' },
+            description:
+              'Linear state names whose issues belong here, from list_linear_states. Empty means this stage never conflicts with a state.',
+          },
+          fields: {
+            type: 'array',
+            items: { type: 'string' },
+            description:
+              "What belongs on this stage. Automatic names (issue, session, pr, spec, note, blocker, ci) are filled by the app; any other name is one somebody attaches. Omit it and the stage gets ['issue','note'].",
+          },
+          nextCommand: { type: 'string', description: 'What is usually run here. A hint, never executed.' },
+          staleAfterDays: {
+            type: 'number',
+            description: 'Days here before it is worth a nudge. Omit for never \u2014 the honest setting for a step that legitimately runs for weeks.',
+          },
+        },
+        required: ['name'],
+      },
+    },
+    {
+      name: 'update_stage',
+      description:
+        'Change one stage. Only the properties you pass are touched. Renaming `key` orphans any workstream pointing at the old one (they read as unknown until it is renamed back), so prefer changing `name`.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          key: { type: 'string', description: 'The stage to change, from list_stages.' },
+          name: { type: 'string' },
+          states: { type: 'array', items: { type: 'string' } },
+          fields: { type: 'array', items: { type: 'string' } },
+          nextCommand: { type: 'string' },
+          staleAfterDays: { type: 'number' },
+        },
+        required: ['key'],
+      },
+    },
+    {
+      name: 'delete_stage',
+      description:
+        'Remove a stage. Workstreams sitting on it are left alone and read as an unknown stage until it is re-created \u2014 recoverable, but they disappear from the pipeline meanwhile, so the reply says how many were standing there.',
+      inputSchema: {
+        type: 'object',
+        properties: { key: { type: 'string' } },
+        required: ['key'],
+      },
+    },
+    {
+      name: 'reorder_stages',
+      description:
+        'Set the pipeline order. Pass EVERY existing key exactly once \u2014 a partial list is refused rather than interleaved with the current order, because a caller working from a stale read would otherwise silently reshuffle stages it never saw.',
+      inputSchema: {
+        type: 'object',
+        properties: { keys: { type: 'array', items: { type: 'string' } } },
+        required: ['keys'],
+      },
+    },
+    {
       name: 'list_workstreams',
       description:
         'Every workstream (a feature in flight: its issues, their progress, and who holds what).',
@@ -296,6 +362,58 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
             }),
           })),
         )
+      }
+
+      case 'create_stage': {
+        const body: Record<string, unknown> = { name: String(a.name ?? '') }
+        // Only what was passed: an omitted `fields` has to stay omitted so the
+        // server applies its default, which an empty array would suppress.
+        for (const k of ['states', 'fields', 'nextCommand', 'staleAfterDays']) {
+          if (a[k] !== undefined) body[k] = a[k]
+        }
+        return text(await call<unknown>('/api/lifecycle', { method: 'POST', body: JSON.stringify(body) }))
+      }
+
+      case 'update_stage': {
+        const key = String(a.key ?? '')
+        const stages = await call<{ entries: (LifecycleStage & { id: number })[] }>('/api/lifecycle')
+        const stage = stages.entries.find((s) => s.key === key)
+        if (!stage) return text(`no stage with key ${key}`)
+        const patch: Record<string, unknown> = {}
+        for (const k of ['name', 'states', 'fields', 'nextCommand', 'staleAfterDays']) {
+          if (a[k] !== undefined) patch[k] = a[k]
+        }
+        if (Object.keys(patch).length === 0) return text('nothing to change')
+        await call(`/api/lifecycle/${stage.id}`, { method: 'PATCH', body: JSON.stringify(patch) })
+        return text(`${key}: ${Object.keys(patch).join(', ')} updated`)
+      }
+
+      case 'delete_stage': {
+        const key = String(a.key ?? '')
+        const [stages, batches] = await Promise.all([
+          call<{ entries: (LifecycleStage & { id: number })[] }>('/api/lifecycle'),
+          call<{ entries: { stage: string | null }[] }>('/api/batches'),
+        ])
+        const stage = stages.entries.find((s) => s.key === key)
+        if (!stage) return text(`no stage with key ${key}`)
+        // Counted and reported rather than refused. Deleting is recoverable —
+        // re-creating the key brings them back — but a caller that did not know
+        // it was moving four workstreams off the board should hear about it.
+        const standing = batches.entries.filter((b) => b.stage === key).length
+        await call(`/api/lifecycle/${stage.id}`, { method: 'DELETE' })
+        return text(
+          standing === 0
+            ? `${key} deleted`
+            : `${key} deleted. ${standing} workstream(s) were on it and now read as an unknown stage; re-creating the key restores them.`,
+        )
+      }
+
+      case 'reorder_stages': {
+        await call('/api/lifecycle/reorder', {
+          method: 'POST',
+          body: JSON.stringify({ keys: a.keys }),
+        })
+        return text('reordered')
       }
 
       case 'list_workstreams': {

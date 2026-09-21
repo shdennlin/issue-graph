@@ -299,6 +299,17 @@ export function WorkstreamsPanel() {
                 </div>
 
                 {isOpen && d && (
+                  <>
+                  {/* The ordering rule, said HERE rather than at the top of the
+                      modal. It explains the member list, and the member list is
+                      behind this expander — so at the top it spent three lines
+                      describing something you could not yet see, above a screen
+                      whose actual subject is a flat list of workstreams. */}
+                  {d.members.length > 0 && (
+                    <p className="settings-hint workstream-order-hint">
+                      {t('workstreams.orderHint')}
+                    </p>
+                  )}
                   <ul className="workstream-members">
                     {d.members.map((m) => {
                       const presence = sessionPresence(sessionsByIssue.get(m.identifier))
@@ -346,6 +357,7 @@ export function WorkstreamsPanel() {
                       )
                     })}
                   </ul>
+                  </>
                 )}
               </div>
             )
