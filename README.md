@@ -370,11 +370,11 @@ Give a name a one-line meaning at the bottom of the pipeline editor. That defini
 Install, from inside Claude Code:
 
 ```
-/plugin marketplace add shdennlin/issue-graph
+/plugin marketplace add shdennlin/issue-graph@develop
 /plugin install issue-graph@issue-graph
 ```
 
-The marketplace manifest lives at the repo root, so the GitHub form needs no clone of your own. Working on the plugin itself? Point it at your checkout instead — `/plugin marketplace add /path/to/issue-graph` — and re-run `/reload-plugins` after each edit.
+The marketplace manifest lives at the repo root, so the GitHub form needs no clone of your own. `@develop` pins the branch: this work has not reached `main`, and without the suffix the add resolves to the default branch and finds no manifest there. `/plugin marketplace update issue-graph` then follows that branch's head rather than the default one. Working on the plugin itself? Point it at your checkout instead — `/plugin marketplace add /path/to/issue-graph` — and re-run `/reload-plugins` after each edit.
 
 Then point it at your server. Both halves read the same three environment variables, so set them where Claude Code will see them — `.claude/settings.local.json` in the repo you work in is the narrowest place:
 
