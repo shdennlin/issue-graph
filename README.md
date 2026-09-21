@@ -393,6 +393,8 @@ The MCP server needs only `ISSUE_GRAPH_URL` (and `ISSUE_GRAPH_WORKSPACE` if you 
 
 Run `/reload-plugins` after changing any of it.
 
+**On Docker**, `AGENT_SESSION_TOKEN` rides in from `.env` through `env_file` — nothing to pin in `docker-compose.yml`. The container publishes on `127.0.0.1` only, so `http://localhost:31415` works from the Docker host and nowhere else: Claude Code running on a different machine needs the same path-scoped tunnel the Linear webhook uses, not the whole app.
+
 ## Raycast extension
 
 A [Raycast](https://raycast.com) extension lives in [`integrations/raycast/`](integrations/raycast/) — fuzzy-search every cached issue **across all workspaces** and jump straight to one, without opening the app first.
