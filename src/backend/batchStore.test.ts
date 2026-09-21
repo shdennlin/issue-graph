@@ -5,17 +5,17 @@ import {
   BATCH_MEMBERS_MAX,
   BATCH_NAME_MAX,
   LINK_VALUE_MAX,
-  SHOW_TOKENS,
+  AUTO_FIELDS,
   daysOnStage,
   isStale,
   normalizeAssignees,
   normalizeFields,
   normalizeFieldDescription,
   FIELD_DESCRIPTION_MAX,
+  FIELDS_MAX,
   normalizeLinkKind,
   RICH_LINK_KINDS,
   normalizeLinkValue,
-  normalizeShows,
   normalizeStaleAfterDays,
   normalizeStatus,
   parseStringArray,
@@ -237,29 +237,27 @@ describe('normalizeAssignees', () => {
   })
 })
 
-describe('normalizeShows', () => {
-  it('accepts tokens from the vocabulary, de-duplicated and in order', () => {
-    expect(normalizeShows(['pullRequests', 'note', 'pullRequests'])).toEqual([
-      'pullRequests',
-      'note',
-    ])
+describe('one list, not two', () => {
+  it('accepts an automatic name and a hand-attached one side by side', () => {
+    // The whole point of the merge: `pr` and `runbook` differ only in whether
+    // the app can fill them, which is a property of the name looked up when
+    // drawing — never a category this validator sorts them into.
+    expect(normalizeFields(['pr', 'runbook'])).toEqual(['pr', 'runbook'])
   })
 
-  it('accepts an empty list — a stage may draw its name and nothing else', () => {
-    expect(normalizeShows([])).toEqual([])
-    expect(normalizeShows(null)).toEqual([])
+  it('no longer rejects a name outside the automatic vocabulary', () => {
+    // It used to: `shows` refused anything it did not know, which is why `ci`
+    // being legal in both lists could never be caught — both answers passed.
+    expect(normalizeFields(['checks'])).toEqual(['checks'])
   })
 
-  it('REJECTS an unknown token rather than dropping it', () => {
-    // Dropping would leave the stage rendering nothing with no explanation, and
-    // a typo would look exactly like a deliberately empty stage — which is
-    // itself a valid configuration.
-    expect(normalizeShows(['pullRequests', 'pulRequests'])).toBeNull()
-    expect(normalizeShows(['checks'])).toBeNull()
+  it('accepts every automatic name', () => {
+    expect(normalizeFields([...AUTO_FIELDS])).toEqual([...AUTO_FIELDS])
   })
 
-  it('covers every token the vocabulary declares', () => {
-    expect(normalizeShows([...SHOW_TOKENS])).toEqual([...SHOW_TOKENS])
+  it('still refuses something that is not a name at all', () => {
+    expect(normalizeFields(['has/slash'])).toBeNull()
+    expect(normalizeFields([7])).toBeNull()
   })
 })
 
@@ -436,8 +434,13 @@ describe('normalizeFields', () => {
     expect(normalizeFields('ci')).toBeNull()
   })
 
-  it('caps the list, since a stage with thirty expected fields expects nothing', () => {
-    expect(normalizeFields(Array.from({ length: 21 }, (_, i) => `f${i}`))).toBeNull()
+  it('caps the list, since a stage with thirty fields has no shape at all', () => {
+    // Above the seven automatic names, so a stage can carry all of them plus a
+    // realistic set of its own.
+    expect(normalizeFields(Array.from({ length: FIELDS_MAX }, (_, i) => `f${i}`))).toHaveLength(
+      FIELDS_MAX,
+    )
+    expect(normalizeFields(Array.from({ length: FIELDS_MAX + 1 }, (_, i) => `f${i}`))).toBeNull()
   })
 })
 

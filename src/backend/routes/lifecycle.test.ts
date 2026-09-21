@@ -14,7 +14,6 @@ interface Row {
   sort_order: number
   states: string
   next_command: string | null
-  shows: string
   fields: string
   stale_after_days: number | null
   created_at: number
@@ -37,17 +36,16 @@ vi.mock('../db.js', () => ({
         const s = sql.trimStart()
         if (s.startsWith('INSERT')) {
           // Positional, so this list must stay in the route's column order.
-          // It had fallen three columns behind — shows, fields and
+          // It once fell three columns behind — shows, fields and
           // stale_after_days were added to the INSERT and never here — which
-          // silently shifted created_at and updated_at into the wrong fields.
-          // Nothing asserted on them, so it stayed green while being wrong.
+          // silently shifted the timestamps into the wrong properties, and
+          // nothing asserted on them, so it stayed green while being wrong.
           const [
             key,
             name,
             sort_order,
             states,
             next_command,
-            shows,
             fields,
             stale_after_days,
             created_at,
@@ -58,7 +56,6 @@ vi.mock('../db.js', () => ({
             number,
             string,
             string | null,
-            string,
             string,
             number | null,
             number,
@@ -71,7 +68,6 @@ vi.mock('../db.js', () => ({
             sort_order,
             states,
             next_command,
-            shows,
             fields,
             stale_after_days,
             created_at,
@@ -134,17 +130,17 @@ describe('POST /api/lifecycle', () => {
     expect(dto.nextCommand).toBeNull()
   })
 
-  it('gives a stage created with no `shows` the default, not an empty box', async () => {
+  it('gives a stage created with no `fields` the default, not an empty box', async () => {
     // An empty list is what the data model would hand you and the wrong thing
     // to hand a person: the stage renders blank and nothing on screen says
-    // that seven toggles elsewhere are why.
+    // that a picker elsewhere is why.
     await post({ name: 'Discuss' })
-    expect(JSON.parse(rows[0]!.shows)).toEqual(['issues', 'note'])
+    expect(JSON.parse(rows[0]!.fields)).toEqual(['issue', 'note'])
   })
 
-  it('still honours an explicit empty `shows` — "draw nothing" is a real request', async () => {
-    await post({ name: 'Quiet', shows: [] })
-    expect(JSON.parse(rows[0]!.shows)).toEqual([])
+  it('still honours an explicit empty `fields` — "draw nothing" is a real request', async () => {
+    await post({ name: 'Quiet', fields: [] })
+    expect(JSON.parse(rows[0]!.fields)).toEqual([])
   })
 
   it('appends each new stage after the last', async () => {

@@ -17,9 +17,9 @@
 // this file is a shell, because vitest cannot test JSX in this repo.
 
 import { useEffect, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Plus, Trash2, Zap } from 'lucide-react'
 import type { LifecycleStageDTO } from '@shared/types'
-import { normalizeLinkKind, SHOW_TOKENS } from '@shared/showTokens.js'
+import { AUTO_FIELDS, isAutoField, normalizeLinkKind } from '@shared/fields.js'
 import { api } from '../lib/api'
 import { useGraphStore } from '../store/graphStore'
 import { useSchemaStore } from '../store/schemaStore'
@@ -195,15 +195,17 @@ export function LifecycleSettings() {
    *  moment some stage declares that name again. */
   const usedFields = Array.from(new Set(stages.flatMap((s) => s.fields)))
 
-  /** The automatic sources this stage is NOT drawing — what the + offers. */
-  const offTokens = (stage: LifecycleStageDTO) =>
-    SHOW_TOKENS.filter((token) => !stage.shows.includes(token))
+  /** Automatic names this stage does not have yet — the ones the + offers,
+   *  because they are exactly the names you cannot invent. */
+  const unusedAuto = (stage: LifecycleStageDTO) =>
+    AUTO_FIELDS.filter((name) => !stage.fields.includes(name))
 
-  const toggleShow = (stage: LifecycleStageDTO, token: string) => {
-    const on = stage.shows.includes(token)
-    const shows = on ? stage.shows.filter((s) => s !== token) : [...stage.shows, token]
-    void run(() => api.patchStage(stage.id, { shows }))
-  }
+  /** Automatic names first, in canonical order, then the rest as declared. A
+   *  stable order means a chip does not move when you remove another one. */
+  const orderFields = (fields: string[]) => [
+    ...AUTO_FIELDS.filter((n) => fields.includes(n)),
+    ...fields.filter((n) => !isAutoField(n)),
+  ]
 
   return (
     <div className="lifecycle-settings">
@@ -288,94 +290,21 @@ export function LifecycleSettings() {
                 two ways an answer gets here. */}
             <div className="lifecycle-field-label">{t('lifecycle.belongsLabel')}</div>
 
+            {/* ONE row. It was two — an "Automatic" row of projections and a
+                "By hand" row of expected names — and they were the same
+                question asked twice. A name carries its own answer to "can the
+                app fill this by itself?", so the chip wears a bolt and nothing
+                has to be sorted into a list to say so. */}
             <div className="lifecycle-belongs-row">
-              {/* The label IS the explanation. "Automatic" and "By hand" were
-                  terms of art that needed a glossary, and the glossary sat at
-                  the top of a modal you had already scrolled past by stage
-                  five — so the cost was paid on every read. A label naming
-                  what HAPPENS needs nothing behind it. */}
-              <span className="lifecycle-row-tag" title={t('lifecycle.belongsAutoHint')}>
-                {t('lifecycle.belongsAuto')}
-              </span>
               <div className="lifecycle-states">
-                {/* Only what is ON, so a stage using two of seven shows two
-                    chips rather than seven. All seven at once meant 49 chips
-                    across a seven-stage pipeline, most of them off — and the
-                    ones that were off carried no information at all, since an
-                    absent projection is exactly as absent when unlisted.
-                    Canonical order, not `stage.shows` order, so a chip does
-                    not move when you switch another one off and on again. */}
-                {SHOW_TOKENS.filter((token) => stage.shows.includes(token)).map((token) => (
-                  <span key={token} className="lifecycle-field-chip">
-                    {t(`lifecycle.show_${token}` as 'lifecycle.show_issues')}
-                    <button
-                      type="button"
-                      className="lifecycle-field-x"
-                      title={t('lifecycle.showRemove')}
-                      aria-label={t('lifecycle.showRemove')}
-                      disabled={busy}
-                      onClick={() => toggleShow(stage, token)}
-                    >
-                      {'×'}
-                    </button>
-                  </span>
-                ))}
-                {offTokens(stage).length > 0 && (
-                  <button
-                    type="button"
-                    className="lifecycle-state-toggle"
-                    title={t('lifecycle.showAdd')}
-                    aria-label={t('lifecycle.showAdd')}
-                    disabled={busy}
-                    onClick={() => setPickingFor(pickingFor === stage.id ? null : stage.id)}
+                {orderFields(stage.fields).map((f) => (
+                  <span
+                    key={f}
+                    className={`lifecycle-field-chip${isAutoField(f) ? ' is-auto' : ''}`}
+                    title={isAutoField(f) ? t('lifecycle.autoHint') : t('lifecycle.handHint')}
                   >
-                    +
-                  </button>
-                )}
-                {pickingFor === stage.id && (
-                  // In flow rather than a popover: the editor is already inside
-                  // a modal, and an absolutely positioned layer there is one
-                  // `overflow: hidden` away from being invisible — which is how
-                  // the attach form got clipped before the side panel replaced
-                  // it.
-                  <div
-                    className="lifecycle-pick"
-                    role="group"
-                    aria-label={t('lifecycle.showAdd')}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Escape') setPickingFor(null)
-                    }}
-                  >
-                    {offTokens(stage).map((token) => (
-                      <button
-                        key={token}
-                        type="button"
-                        className="lifecycle-state-toggle"
-                        disabled={busy}
-                        onClick={() => {
-                          setPickingFor(null)
-                          toggleShow(stage, token)
-                        }}
-                      >
-                        {t(`lifecycle.show_${token}` as 'lifecycle.show_issues')}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="lifecycle-belongs-row">
-              {/* "Someone", not "you": in this app an agent is usually the one
-                  attaching, and the names listed here are the vocabulary the
-                  MCP hands it so one field keeps one name across workstreams. */}
-              <span className="lifecycle-row-tag" title={t('lifecycle.belongsHandHint')}>
-                {t('lifecycle.belongsHand')}
-              </span>
-              <div className="lifecycle-states">
-                {stage.fields.map((f) => (
-                  <span key={f} className="lifecycle-field-chip">
-                    {f}
+                    {isAutoField(f) && <Zap size={11} aria-hidden />}
+                    {isAutoField(f) ? t(`lifecycle.field_${f}` as 'lifecycle.field_issue') : f}
                     <button
                       type="button"
                       className="lifecycle-field-x"
@@ -384,7 +313,7 @@ export function LifecycleSettings() {
                       disabled={busy}
                       onClick={() => removeField(stage, f)}
                     >
-                      {'×'}
+                      {'\u00d7'}
                     </button>
                   </span>
                 ))}
@@ -438,13 +367,58 @@ export function LifecycleSettings() {
                     title={t('lifecycle.fieldAdd')}
                     aria-label={t('lifecycle.fieldAdd')}
                     disabled={busy}
-                    onClick={() => {
-                      setDraftField('')
-                      setAddingFor(stage.id)
-                    }}
+                    onClick={() => setPickingFor(pickingFor === stage.id ? null : stage.id)}
                   >
                     +
                   </button>
+                )}
+                {pickingFor === stage.id && addingFor !== stage.id && (
+                  // In flow rather than a popover: this editor lives in a
+                  // modal, where an absolutely positioned layer is one
+                  // `overflow: hidden` away from being invisible — which is
+                  // how the attach form got clipped before the side panel
+                  // replaced it.
+                  //
+                  // One picker for both kinds. The automatic names are offered
+                  // because they are the ones you cannot invent; the text box
+                  // is the same control, for the ones only you know about.
+                  <div
+                    className="lifecycle-pick"
+                    role="group"
+                    aria-label={t('lifecycle.fieldAdd')}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') setPickingFor(null)
+                    }}
+                  >
+                    {unusedAuto(stage).map((name) => (
+                      <button
+                        key={name}
+                        type="button"
+                        className="lifecycle-state-toggle"
+                        title={t('lifecycle.autoHint')}
+                        disabled={busy}
+                        onClick={() => {
+                          setPickingFor(null)
+                          addField(stage, name)
+                        }}
+                      >
+                        <Zap size={11} aria-hidden />
+                        {t(`lifecycle.field_${name}` as 'lifecycle.field_issue')}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      className="lifecycle-state-toggle"
+                      disabled={busy}
+                      onClick={() => {
+                        setPickingFor(null)
+                        setDraftField('')
+                        setAddingFor(stage.id)
+                      }}
+                    >
+                      {t('lifecycle.fieldCustom')}
+                    </button>
+                  </div>
                 )}
               </div>
             </div>

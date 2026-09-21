@@ -30,15 +30,14 @@ import {
   slugifyStageName,
   type LifecycleStageRow,
 } from '../lifecycleStore.js'
-import { normalizeFields, normalizeShows, normalizeStaleAfterDays } from '../batchStore.js'
-import { DEFAULT_SHOWS } from '../../shared/showTokens.js'
+import { normalizeFields, normalizeStaleAfterDays } from '../batchStore.js'
+import { DEFAULT_FIELDS } from '../../shared/fields.js'
 
 const CreateSchema = z.object({
   key: z.string().optional(),
   name: z.string(),
   states: z.unknown().optional(),
   nextCommand: z.unknown().optional(),
-  shows: z.unknown().optional(),
   fields: z.unknown().optional(),
   staleAfterDays: z.unknown().optional(),
 })
@@ -49,7 +48,6 @@ const PatchSchema = z
     name: z.string().optional(),
     states: z.unknown().optional(),
     nextCommand: z.unknown().optional(),
-    shows: z.unknown().optional(),
     fields: z.unknown().optional(),
     staleAfterDays: z.unknown().optional(),
   })
@@ -59,7 +57,6 @@ const PatchSchema = z
       v.name !== undefined ||
       v.states !== undefined ||
       v.nextCommand !== undefined ||
-      v.shows !== undefined ||
       v.fields !== undefined ||
       v.staleAfterDays !== undefined,
     { message: 'nothing to update' },
@@ -93,16 +90,13 @@ lifecycleRoutes.post('/api/lifecycle', async (c) => {
   if (states === null) return c.json(invalid('bad states'), 400)
   const nextCommand = normalizeNextCommand(parsed.data.nextCommand)
   if (nextCommand === undefined) return c.json(invalid('bad nextCommand'), 400)
-  // A stage created with no `shows` gets the default rather than an empty
+  // A stage created with no `fields` gets the default rather than an empty
   // list. An empty one renders a blank box, and nothing on screen tells you
-  // that seven toggles elsewhere are the reason — the whole cost of
-  // configuring landed before you knew what the stage would hold. PATCH is
-  // untouched: there, an explicit empty list means "draw nothing", which is a
-  // real thing to ask for.
-  const shows =
-    parsed.data.shows === undefined ? [...DEFAULT_SHOWS] : normalizeShows(parsed.data.shows)
-  if (shows === null) return c.json(invalid('unknown shows token'), 400)
-  const fields = normalizeFields(parsed.data.fields ?? [])
+  // that a picker elsewhere is the reason — the whole cost of configuring
+  // landed before you knew what the stage would hold. PATCH is untouched:
+  // there, an explicit empty list means "draw nothing", a real thing to ask.
+  const fields =
+    parsed.data.fields === undefined ? [...DEFAULT_FIELDS] : normalizeFields(parsed.data.fields)
   if (fields === null) return c.json(invalid('bad fields'), 400)
   const staleAfterDays = normalizeStaleAfterDays(parsed.data.staleAfterDays)
   if (staleAfterDays === undefined) return c.json(invalid('bad staleAfterDays'), 400)
@@ -133,8 +127,8 @@ lifecycleRoutes.post('/api/lifecycle', async (c) => {
   const sortOrder = nextSortOrder(rows)
   const r = db
     .prepare(
-      `INSERT INTO lifecycle_stage(key, name, sort_order, states, next_command, shows, fields, stale_after_days, created_at, updated_at)
-       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO lifecycle_stage(key, name, sort_order, states, next_command, fields, stale_after_days, created_at, updated_at)
+       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       key,
@@ -142,7 +136,6 @@ lifecycleRoutes.post('/api/lifecycle', async (c) => {
       sortOrder,
       JSON.stringify(states),
       nextCommand,
-      JSON.stringify(shows),
       JSON.stringify(fields),
       staleAfterDays,
       now,
@@ -156,7 +149,6 @@ lifecycleRoutes.post('/api/lifecycle', async (c) => {
       sort_order: sortOrder,
       states: JSON.stringify(states),
       next_command: nextCommand,
-      shows: JSON.stringify(shows),
       fields: JSON.stringify(fields),
       stale_after_days: staleAfterDays,
       created_at: now,
@@ -218,12 +210,6 @@ lifecycleRoutes.patch('/api/lifecycle/:id', async (c) => {
     args.push(nextCommand)
   }
 
-  if (parsed.data.shows !== undefined) {
-    const shows = normalizeShows(parsed.data.shows)
-    if (shows === null) return c.json(invalid('unknown shows token'), 400)
-    sets.push('shows = ?')
-    args.push(JSON.stringify(shows))
-  }
   if (parsed.data.fields !== undefined) {
     const fields = normalizeFields(parsed.data.fields)
     if (fields === null) return c.json(invalid('bad fields'), 400)

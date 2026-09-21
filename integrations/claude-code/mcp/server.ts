@@ -43,11 +43,16 @@ interface LifecycleStage {
   sortOrder: number
   states: string[]
   nextCommand: string | null
-  /** Projections this stage draws — what it READS, not what you write to it. */
-  shows: string[]
-  /** Attachment kinds this stage EXPECTS — what to hang on it. Advisory. */
+  /** Everything that belongs on this stage — ONE list. Whether the app fills a
+   *  name by itself is a property of the name (see AUTO below), not a second
+   *  category. It used to be two lists and `ci` was legal in both. */
   fields: string[]
 }
+
+/** Names the app fills by itself, by reading somewhere else. Mirrors
+ *  `shared/fields.ts` AUTO_FIELDS — re-declared because integrations are
+ *  standalone packages outside the root build (the raycast precedent). */
+const AUTO = new Set(['issue', 'session', 'pr', 'spec', 'note', 'blocker', 'ci'])
 
 /** What a field NAME means in this workspace. Written by a person once, and
  *  resolved into `list_stages` below so an agent learns the name and its
@@ -96,7 +101,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'list_stages',
       description:
-        "The workspace's lifecycle, in pipeline order. Each stage carries `states` (the Linear states whose issues belong to it), `shows` (what it draws from projections) and `fields` — the attachment kinds it EXPECTS.\n\nRead `fields` before attaching. An entry is either a bare name or `{name, description}`: the name is what to call the field, and using it is what keeps one field from becoming five spellings of itself across five workstreams; the description, when somebody has written one, is what this workspace means by that name and therefore what belongs in it. A bare name means nobody has defined it yet, not that it matters less.",
+        "The workspace's lifecycle, in pipeline order. Each stage carries `states` (the Linear states whose issues belong to it) and `fields` — ONE list of everything that belongs on that stage.\n\nEach field is `{name, auto, description?}`. `auto: true` means the app fills it by itself, by reading somewhere else, and there is nothing for you to attach under that name. `auto: false` means nothing will appear under it unless somebody attaches something — those are the ones to read before calling attach_to_stage. `description` is what this workspace means by the name and therefore what belongs in it; absent means nobody has defined it yet, not that it matters less.\n\nUse the name exactly as given: that is what keeps one field from becoming five spellings of itself across five workstreams.",
       inputSchema: { type: 'object', properties: {} },
     },
     {
@@ -267,12 +272,14 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         return text(
           r.entries.map((s) => ({
             ...s,
-            // A bare string where nobody has written a definition, so the
-            // shape says which fields are explained and which are only named.
-            fields: s.fields.map((name) => {
-              const description = meaning.get(name)
-              return description === undefined ? name : { name, description }
-            }),
+            fields: s.fields.map((name) => ({
+              name,
+              // `auto: true` means the app already fills it and there is
+              // nothing for you to attach. `false` means nothing will appear
+              // under this name unless somebody attaches it.
+              auto: AUTO.has(name),
+              ...(meaning.has(name) ? { description: meaning.get(name) } : {}),
+            })),
           })),
         )
       }

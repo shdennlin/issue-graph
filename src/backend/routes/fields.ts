@@ -16,7 +16,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { getDb } from '../db.js'
 import { originAllowed } from '../lib/http.js'
-import { normalizeLinkKind } from '../../shared/showTokens.js'
+import { normalizeLinkKind } from '../../shared/fields.js'
 import { normalizeFieldDescription } from '../batchStore.js'
 import type { FieldDTO } from '../../shared/types.js'
 

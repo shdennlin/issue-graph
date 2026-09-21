@@ -24,13 +24,14 @@ import type {
   NormalizedIssue,
   WorkstreamSummaryDTO,
 } from '@shared/types.js'
-import type { ShowToken } from '@shared/showTokens.js'
 import type { Translate } from '../i18n'
 
 /** One row drawn inside a stage. */
 export interface StageItem {
   /** Which token produced it, so the node can pick an icon. */
-  token: ShowToken
+  /** The field this item belongs to. An auto name when a renderer produced
+   *  it, `'note'` when it is a hand attachment with no box of its own. */
+  token: string
   /** The fact itself — an identifier, `repo#12`, a spec name, a note line.
    *  Never translated, because none of it is prose. */
   text: string
@@ -203,7 +204,7 @@ function renderIssues(ctx: StageContext, t: Translate): StageItem[] {
     if (!belongsHere) continue
     out.push(
       item({
-        token: 'issues',
+        token: 'issue',
         text: `${m.identifier} \u00b7 ${m.state.name}`,
         // Only said on the fallback path, where it is true and useful: this
         // issue's state is in nobody's `states`, so the pipeline cannot place
@@ -224,7 +225,7 @@ function renderIssues(ctx: StageContext, t: Translate): StageItem[] {
     const known = ctx.members.find((m) => m.identifier === l.value)
     out.push(
       item({
-        token: 'issues',
+        token: 'issue',
         text: known ? `${known.identifier} \u00b7 ${known.state.name}` : (l.label ?? l.value),
         manual: true,
         issue: l.value,
@@ -239,7 +240,7 @@ function renderIssues(ctx: StageContext, t: Translate): StageItem[] {
     const resolved = new Set(ctx.members.map((m) => m.identifier))
     for (const id of ctx.workstream.members) {
       if (resolved.has(id)) continue
-      out.push(item({ token: 'issues', text: id, hints: [t('stage.notCached')] }))
+      out.push(item({ token: 'issue', text: id, hints: [t('stage.notCached')] }))
     }
   }
   return out
@@ -261,7 +262,7 @@ function renderSessions(ctx: StageContext, t: Translate): StageItem[] {
             : []
       out.push(
         item({
-          token: 'sessions',
+          token: 'session',
           text: s.label,
           hints,
           tone: s.status === 'blocked' ? 'warn' : s.status === 'active' ? 'ok' : 'muted',
@@ -296,7 +297,7 @@ function renderPullRequests(ctx: StageContext, t: Translate): StageItem[] {
           // `core-api#91`, and nothing else. The status word used to sit here
           // and spend a third of the pill saying what the glyph says at a
           // glance; it moved to the tooltip with the target branch.
-          token: 'pullRequests',
+          token: 'pr',
           text: ref,
           hints,
           icon: pr.hasConflicts
@@ -329,7 +330,7 @@ function renderPullRequests(ctx: StageContext, t: Translate): StageItem[] {
     // A hand-attached PR has no state either — nothing fetched it — so it
     // gets the neutral open glyph rather than a claim.
     out.push(
-      item({ token: 'pullRequests', text: l.label ?? l.value, icon: 'pr-open', manual: true, url: l.value }),
+      item({ token: 'pr', text: l.label ?? l.value, icon: 'pr-open', manual: true, url: l.value }),
     )
   }
   return out
@@ -350,7 +351,7 @@ function renderDesignDocs(ctx: StageContext, _t: Translate): StageItem[] {
     projected.add(d.filePath)
     out.push(
       item({
-        token: 'designdocs',
+        token: 'spec',
         text: `${d.name} ${d.doneTasks}/${d.totalTasks}`,
         tone: d.totalTasks > 0 && d.doneTasks >= d.totalTasks ? 'ok' : 'muted',
       }),
@@ -359,7 +360,7 @@ function renderDesignDocs(ctx: StageContext, _t: Translate): StageItem[] {
   for (const l of ctx.workstream.links) {
     if (l.stageKey !== ctx.stage.key || l.kind !== 'spec') continue
     if (projected.has(l.value)) continue
-    out.push(item({ token: 'designdocs', text: l.label ?? l.value, manual: true }))
+    out.push(item({ token: 'spec', text: l.label ?? l.value, manual: true }))
   }
   return out
 }
@@ -396,7 +397,7 @@ function renderBlockers(ctx: StageContext, t: Translate): StageItem[] {
       seen.add(key)
       out.push(
         item({
-          token: 'blockers',
+          token: 'blocker',
           text: b.identifier,
           hints: [t('stage.blocking', { target: m.identifier })],
           tone: 'warn',
@@ -427,21 +428,10 @@ function renderCi(ctx: StageContext, _t: Translate): StageItem[] {
   return out
 }
 
-/**
- * Which `shows` token renders a hand attachment of each kind, when that token
- * is switched on.
- *
- * A kind with no entry is never claimed by a token, so it always falls to
- * `renderAttachments`. That covers `url` and every custom name a workstream
- * invents — which is the mechanism by which an unknown kind degrades to a
- * labelled row instead of being rejected.
- */
-const KIND_TOKEN: Record<string, ShowToken | undefined> = {
-  spec: 'designdocs',
-  pr: 'pullRequests',
-  ci: 'ci',
-  issue: 'issues',
-}
+// KIND_TOKEN used to live here: a table translating an attachment's kind into
+// the `shows` token whose box it belonged in — `pr` to `pullRequests`, `spec`
+// to `designdocs`. It is gone because the two vocabularies are now one, and a
+// name no longer needs translating into itself.
 
 /**
  * Hand attachments that no active token has already drawn.
@@ -457,12 +447,16 @@ const KIND_TOKEN: Record<string, ShowToken | undefined> = {
  * here when it is not.
  */
 function renderAttachments(ctx: StageContext, _t: Translate): StageItem[] {
-  const shown = new Set(ctx.stage.shows)
+  const listed = new Set(ctx.stage.fields)
   const out: StageItem[] = []
   for (const l of ctx.workstream.links) {
     if (l.stageKey !== ctx.stage.key) continue
-    const token = KIND_TOKEN[l.kind]
-    if (token && shown.has(token)) continue
+    // Skipped only when a renderer ALREADY DREW it — not merely because the
+    // name is listed. `runbook` is a legitimate field with no renderer, so
+    // testing the list alone would drop every runbook attachment on a stage
+    // that expects one: the silent-swallow bug, reintroduced from the other
+    // side.
+    if (RENDERERS[l.kind] && listed.has(l.kind)) continue
     out.push(
       item({
         token: 'note',
@@ -480,28 +474,31 @@ function renderAttachments(ctx: StageContext, _t: Translate): StageItem[] {
   return out
 }
 
-const RENDERERS: Record<ShowToken, (ctx: StageContext, t: Translate) => StageItem[]> = {
-  issues: renderIssues,
-  sessions: renderSessions,
-  pullRequests: renderPullRequests,
-  designdocs: renderDesignDocs,
+/** One renderer per name the app can fill by itself. A name with no entry is
+ *  a field somebody attaches, and its items arrive through
+ *  `renderAttachments` instead. */
+const RENDERERS: Record<string, ((ctx: StageContext, t: Translate) => StageItem[]) | undefined> = {
+  issue: renderIssues,
+  session: renderSessions,
+  pr: renderPullRequests,
+  spec: renderDesignDocs,
   note: renderNote,
-  blockers: renderBlockers,
+  blocker: renderBlockers,
   ci: renderCi,
 }
 
 /**
- * Everything one stage of one workstream draws, in the order the stage asked
- * for its tokens.
+ * Everything one stage of one workstream draws, in the order the stage listed
+ * its fields.
  *
- * An unknown token yields nothing rather than throwing. The write path rejects
- * them, so one arriving here means a row was hand-edited or a token was
- * retired — neither of which should blank the whole graph.
+ * A name with no renderer contributes nothing HERE and is not an error — it is
+ * the ordinary case for a field somebody attaches, and whatever was attached
+ * under it arrives through `renderAttachments` below.
  */
 export function renderStage(ctx: StageContext, t: Translate): StageItem[] {
   const out: StageItem[] = []
-  for (const token of ctx.stage.shows) {
-    const fn = RENDERERS[token as ShowToken]
+  for (const name of ctx.stage.fields) {
+    const fn = RENDERERS[name]
     if (fn) out.push(...fn(ctx, t))
   }
   // Last, and outside the token loop on purpose: an attachment the stage's

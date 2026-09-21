@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
-import { RICH_LINK_KINDS } from '@shared/showTokens.js'
+import { RICH_LINK_KINDS } from '@shared/fields.js'
 import { stageVisits } from '@shared/stageHistory.js'
 import { api } from '../lib/api'
 import { useGraphStore } from '../store/graphStore'

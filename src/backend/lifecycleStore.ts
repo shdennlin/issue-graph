@@ -31,7 +31,7 @@ import type { LifecycleStageDTO, StageVerdict } from '../shared/types.js'
  * `bun:sqlite` can be tested here, so one string is the only defence.
  */
 export const LIFECYCLE_COLUMNS =
-  'id, key, name, sort_order, states, next_command, shows, fields, stale_after_days, created_at, updated_at'
+  'id, key, name, sort_order, states, next_command, fields, stale_after_days, created_at, updated_at'
 
 export interface LifecycleStageRow {
   id: number
@@ -43,7 +43,6 @@ export interface LifecycleStageRow {
   states: string
   next_command: string | null
   /** JSON array of show tokens, read tolerantly like `states`. */
-  shows: string
   /** JSON array of attachment kinds this stage expects. Advisory — see
    *  migration 15. */
   fields: string
@@ -179,7 +178,6 @@ export function lifecycleRowToDTO(row: LifecycleStageRow): LifecycleStageDTO {
     sortOrder: row.sort_order,
     states: parseStates(row.states),
     nextCommand: row.next_command,
-    shows: parseStates(row.shows),
     fields: parseStates(row.fields),
     staleAfterDays: row.stale_after_days,
     createdAt: row.created_at,

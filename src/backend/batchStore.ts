@@ -10,9 +10,8 @@
 // fact, and it would go stale silently.
 
 import type { NormalizedIssue, NormalizedPullRequest } from '../shared/types.js'
-import { normalizeLinkKind, RICH_LINK_KINDS, SHOW_TOKENS } from '../shared/showTokens.js'
+import { AUTO_FIELDS, isAutoField, normalizeLinkKind, RICH_LINK_KINDS } from '../shared/fields.js'
 import { daysOnStage, isStale } from '../shared/staleness.js'
-import type { ShowToken } from '../shared/showTokens.js'
 
 export interface BatchRow {
   id: number
@@ -39,8 +38,7 @@ export type WorkstreamStatus = 'active' | 'archived'
 // imports stage vocabulary from, while the list itself lives in `shared/` —
 // the lifecycle editor and the stage renderer need the same one, and the web
 // build cannot see `src/backend`.
-export { SHOW_TOKENS, RICH_LINK_KINDS, daysOnStage, isStale }
-export type { ShowToken }
+export { AUTO_FIELDS, isAutoField, RICH_LINK_KINDS, daysOnStage, isStale }
 
 export interface StageNoteRow {
   batch_id: number
@@ -262,29 +260,6 @@ export function normalizeAssignees(raw: unknown): string[] | null {
   return out
 }
 
-/**
- * Validate a stage's `shows` list.
- *
- * An unknown token is REJECTED rather than dropped. Dropping it would leave the
- * stage rendering nothing with no explanation — a typo would look exactly like
- * a deliberately empty stage, which is itself a valid configuration.
- */
-export function normalizeShows(raw: unknown): ShowToken[] | null {
-  if (raw == null) return []
-  if (!Array.isArray(raw)) return null
-  if (raw.length > SHOW_TOKENS.length) return null
-  const seen = new Set<string>()
-  const out: ShowToken[] = []
-  for (const item of raw) {
-    if (typeof item !== 'string') return null
-    if (!(SHOW_TOKENS as readonly string[]).includes(item)) return null
-    if (seen.has(item)) continue
-    seen.add(item)
-    out.push(item as ShowToken)
-  }
-  return out
-}
-
 /** Tolerant read of a JSON text column, matching parseStates' contract: a
  *  hand-edited bad row degrades to empty rather than throwing inside a response. */
 export function parseStringArray(raw: string): string[] {
@@ -324,16 +299,28 @@ export function normalizeNote(raw: unknown): string | null {
  */
 export { normalizeLinkKind }
 
+export const FIELDS_MAX = 24
+
 /**
- * A stage's declared field list: kinds, deduped, in the order given.
+ * A stage's field list: names, deduped, in the order given.
  *
- * Validated by the same shape rule as an attachment's kind and normalised the
- * same way, so a stage declaring "Pull Request" and an agent attaching
- * `pull-request` are talking about one field rather than two.
+ * The ONE list a stage is configured with. Every entry goes through the same
+ * shape rule as an attachment's kind and is normalised the same way, so a
+ * stage declaring "Pull Request" and an agent attaching `pull-request` are
+ * talking about one field rather than two.
+ *
+ * A name is NOT checked against `AUTO_FIELDS`. Whether the app can fill a
+ * field by itself is a property of the name that is looked up when drawing,
+ * never a second category to sort it into — which is what this list used to
+ * be, alongside `shows`, and why `ci` was legal in both of them with no way to
+ * tell a misplaced one from a deliberate one.
+ *
+ * Capped a little above the seven automatic names, so a stage can carry all of
+ * them plus a realistic set of its own.
  */
 export function normalizeFields(raw: unknown): string[] | null {
   if (!Array.isArray(raw)) return null
-  if (raw.length > 20) return null
+  if (raw.length > FIELDS_MAX) return null
   const out: string[] = []
   for (const item of raw) {
     const kind = normalizeLinkKind(item)

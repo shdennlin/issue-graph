@@ -385,6 +385,53 @@ const MIGRATIONS: string[] = [
      description TEXT NOT NULL,
      updated_at INTEGER NOT NULL
    );`,
+
+  // 17. `shows` and `fields` were one thing all along. Merge them.
+  //
+  // The split said: `shows` is a closed set of projections the stage DRAWS,
+  // `fields` is free names it EXPECTS attached. That reads as a clean
+  // distinction and is not one — it is the same question ("what belongs on
+  // this stage") answered twice, and keeping the two apart cost three things:
+  //
+  //   1. One concept, two spellings, depending on which list it was in: `pr`
+  //      vs `pullRequests`, `spec` vs `designdocs`, `issue` vs `issues`.
+  //      stageRender.ts carried a KIND_TOKEN table translating between them,
+  //      which is the clearest possible admission that they were one set.
+  //   2. `ci` and `note` were legal in BOTH. Putting one in the wrong list was
+  //      accepted in silence and produced a stage that expected an attachment
+  //      it never drew — the only failure here with no error attached to it.
+  //   3. The editor grew two widgets for two lists, and every reader took them
+  //      for two unrelated settings.
+  //
+  // Whether the app can fill a field by itself is a property of the NAME
+  // (`shared/fields.ts` AUTO_FIELDS), looked up when drawing. It was never a
+  // category a stage had to sort a name into.
+  //
+  // `fields` already holds slugs, so it becomes the merged column and `shows`
+  // folds into it with its names normalised. UNION dedupes; order is not
+  // preserved and does not need to be, since the editor and the renderer both
+  // order by the canonical list.
+  `UPDATE lifecycle_stage SET fields = (
+     SELECT json_group_array(v) FROM (
+       SELECT CASE value
+                WHEN 'issues'       THEN 'issue'
+                WHEN 'sessions'     THEN 'session'
+                WHEN 'pullRequests' THEN 'pr'
+                WHEN 'designdocs'   THEN 'spec'
+                WHEN 'blockers'     THEN 'blocker'
+                ELSE value
+              END AS v
+         FROM json_each(lifecycle_stage.shows)
+       UNION
+       SELECT value AS v FROM json_each(lifecycle_stage.fields)
+     )
+   );`,
+  // Dropped rather than left behind. A dead column that still holds plausible
+  // data is how the distinction gets reinvented by the next person to read the
+  // schema — and this file cannot correct its own past comments, so the column
+  // would keep explaining a model that no longer exists. Migration 9 dropped
+  // `issue_stage` for the same reason.
+  `ALTER TABLE lifecycle_stage DROP COLUMN shows;`,
 ]
 
 // One Database instance per workspace id. Each profile has its own SQLITE_PATH

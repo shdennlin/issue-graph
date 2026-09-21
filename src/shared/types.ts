@@ -355,20 +355,22 @@ export interface LifecycleStageDTO {
    *  rule. Nothing validates it or triggers it. */
   nextCommand: string | null
   /**
-   * Which facts this stage renders, from a closed vocabulary.
+   * Everything that belongs on this stage — ONE list.
    *
-   * These are PROJECTIONS, not fields: `pullRequests` means "read the members'
-   * PRs", never "this stage stores PRs". So for most of what a stage shows
-   * there is nothing to update on the stage — you update upstream.
-   */
-  shows: string[]
-  /**
-   * Attachment kinds this stage EXPECTS — a Waiting-CI stage wants a `ci` run
-   * and a `runbook`, and nothing upstream will ever supply either.
+   * A name in `AUTO_FIELDS` is filled by the app, by reading somewhere else;
+   * any other name is filled by a person or an agent attaching something. That
+   * is a property of the NAME, looked up when drawing, not a category the
+   * stage sorts it into.
    *
-   * Distinct from `shows`, and the pair is easy to conflate: `shows` is what
-   * the stage DRAWS from projections, this is what somebody is expected to
-   * HANG on it. Advisory, never enforced — it says what is expected here, not
+   * It was two lists (`shows` and `fields`) and that was a mistake with a long
+   * tail: the same concept got two spellings depending on which list it was in
+   * (`pr` vs `pullRequests`), `stageRender` carried a translation table
+   * between them, and `ci` and `note` were legal in BOTH — so a misplaced one
+   * was accepted in silence and produced a stage that expected an attachment
+   * it never drew.
+   *
+   * Advisory for the names the app cannot fill: an attachment of any kind is
+   * still accepted and still renders. The list says what belongs here, not
    * what is permitted, or an agent with something genuinely new would have
    * nowhere to put it.
    */

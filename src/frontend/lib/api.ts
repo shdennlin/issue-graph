@@ -325,9 +325,9 @@ export const api = {
       name?: string
       states?: string[]
       nextCommand?: string | null
-      /** Which projections this stage draws. See SHOW_TOKENS. */
-      shows?: string[]
-      /** Attachment kinds this stage EXPECTS. Advisory — see migration 15. */
+      /** Everything that belongs on this stage — one list. A name in
+       *  AUTO_FIELDS is filled by the app; any other is attached by hand.
+       *  See migration 17 for why this is not two lists. */
       fields?: string[]
       /** Null means this stage never goes stale — the honest setting for a
        *  Discuss stage that legitimately runs for a fortnight. */

@@ -14,7 +14,6 @@ const stage = (
   sortOrder,
   states,
   nextCommand,
-  shows: [],
   fields: [],
   staleAfterDays: null,
   createdAt: 0,

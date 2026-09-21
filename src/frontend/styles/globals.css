@@ -4614,9 +4614,10 @@ button.stage-pill:hover .stage-item-text { text-decoration: underline; }
   align-self: flex-start;
 }
 .lifecycle-belongs-row .lifecycle-states { margin-top: 0; flex: 1 1 auto; }
-/* No `is-on` state: a declared name is always "on". It is a name, not a
-   switch — what it governs is the attach menu's order, never whether
-   something renders. */
+/* One chip shape for every field. The bolt, not a separate row, is what says
+   the app fills this one by itself — because that is a property of the NAME,
+   and sorting names into two lists to express it is what produced two
+   spellings of one concept and a value (`ci`) that was legal in both. */
 .lifecycle-field-chip {
   display: inline-flex;
   align-items: center;
@@ -4658,6 +4659,12 @@ button.stage-pill:hover .stage-item-text { text-decoration: underline; }
   padding-top: 5px;
   border-top: 1px dashed var(--node-border);
 }
+.lifecycle-field-chip.is-auto { border-style: solid; }
+.lifecycle-field-chip svg { color: var(--accent); flex: 0 0 auto; }
+.lifecycle-state-toggle svg { vertical-align: -1px; margin-right: 3px; color: var(--accent); }
+/* A hand-attached name is dashed, matching the BY HAND mark on the board: it
+   says "nothing keeps this current" in both places, with one visual idea. */
+.lifecycle-field-chip:not(.is-auto) { border-style: dashed; }
 .lifecycle-field-x {
   border: 0;
   background: none;

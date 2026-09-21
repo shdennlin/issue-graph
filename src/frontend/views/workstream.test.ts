@@ -21,7 +21,6 @@ function stage(key: string, over: Partial<LifecycleStageDTO> = {}): LifecycleSta
     sortOrder: 0,
     states: [],
     nextCommand: null,
-    shows: [],
     fields: [],
     staleAfterDays: null,
     createdAt: 0,
@@ -99,7 +98,7 @@ describe('the view as a whole', () => {
 describe('one container per workstream', () => {
   const lifecycle = [
     stage('discuss', { sortOrder: 0 }),
-    stage('impl', { sortOrder: 1, shows: ['issues'] }),
+    stage('impl', { sortOrder: 1, fields: ['issue'] }),
   ]
 
   const build = (over: Partial<GraphData> = {}, focused: number | null = null) =>

@@ -46,7 +46,6 @@ function stage(key: string, over: Partial<LifecycleStageDTO> = {}): LifecycleSta
     sortOrder: 0,
     states: ['In Progress'],
     nextCommand: null,
-    shows: [],
     fields: [],
     staleAfterDays: null,
     createdAt: 0,

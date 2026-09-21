@@ -68,7 +68,6 @@ function stage(over: Partial<LifecycleStageDTO> = {}): LifecycleStageDTO {
     sortOrder: 0,
     states: [],
     nextCommand: null,
-    shows: [],
     fields: [],
     staleAfterDays: null,
     createdAt: 0,
@@ -121,23 +120,23 @@ describe('renderStage — dispatch', () => {
   it('draws tokens in the order the stage listed them', () => {
     const c = ctx({
       members: [mk('A-1')],
-      stage: stage({ shows: ['note', 'issues'] }),
+      stage: stage({ fields: ['note', 'issue'] }),
       workstream: ws({ members: ['A-1'], notes: { impl: 'a line' } }),
     })
-    expect(renderStage(c, t).map((i) => i.token)).toEqual(['note', 'issues'])
+    expect(renderStage(c, t).map((i) => i.token)).toEqual(['note', 'issue'])
   })
 
   it('ignores an unknown token instead of blanking the stage', () => {
     // The write path rejects these, so one arriving here means a hand-edited
     // row or a retired token — neither should take the whole graph down.
-    const c = ctx({ members: [mk('A-1')], stage: stage({ shows: ['nonsense', 'issues'] }) })
+    const c = ctx({ members: [mk('A-1')], stage: stage({ fields: ['nonsense', 'issue'] }) })
     expect(renderStage(c, t)).toHaveLength(1)
   })
 })
 
 describe('issues — each member drawn once, where its state puts it', () => {
-  const discuss = stage({ key: 'discuss', shows: ['issues'], states: ['Todo'], sortOrder: 0 })
-  const impl = stage({ key: 'impl', shows: ['issues'], states: ['In Progress'], sortOrder: 1 })
+  const discuss = stage({ key: 'discuss', fields: ['issue'], states: ['Todo'], sortOrder: 0 })
+  const impl = stage({ key: 'impl', fields: ['issue'], states: ['In Progress'], sortOrder: 1 })
   const pipeline = [discuss, impl]
 
   const on = (st: LifecycleStageDTO, members: NormalizedIssue[]) =>
@@ -222,7 +221,7 @@ describe('stageForIssue', () => {
   })
 })
 
-describe('sessions', () => {
+describe('session', () => {
   const sess = (over: Partial<AgentSessionDTO>): AgentSessionDTO => ({
     sessionId: 's',
     identifier: 'A-1',
@@ -240,7 +239,7 @@ describe('sessions', () => {
     renderStage(
       ctx({
         members: [mk('A-1')],
-        stage: stage({ shows: ['sessions'] }),
+        stage: stage({ fields: ['session'] }),
         sessionsByIssue: new Map([['A-1', [sess({ status })]]]),
       }),
       t,
@@ -257,8 +256,8 @@ describe('sessions', () => {
   })
 })
 
-describe('pullRequests', () => {
-  const shows = stage({ shows: ['pullRequests'] })
+describe('pr', () => {
+  const shows = stage({ fields: ['pr'] })
 
   it('counts one PR once even when it closes two members', () => {
     const pr = { url: 'https://github.com/o/r/pull/7', number: 7 }
@@ -323,7 +322,7 @@ describe('pullRequests', () => {
       }),
     })
     expect(renderStage(c, t)[0]).toMatchObject({
-      token: 'pullRequests',
+      token: 'pr',
       text: 'r#3',
       manual: true,
       url: 'https://x/pull/3',
@@ -343,8 +342,8 @@ describe('pullRequests', () => {
   })
 })
 
-describe('designdocs', () => {
-  const shows = stage({ shows: ['designdocs'] })
+describe('spec', () => {
+  const shows = stage({ fields: ['spec'] })
   const doc = (over: Partial<DesignDocChange> = {}): DesignDocChange => ({
     name: 'add-thing',
     issueIdentifiers: ['A-1'],
@@ -398,7 +397,7 @@ describe('designdocs', () => {
 })
 
 describe('note', () => {
-  const shows = stage({ shows: ['note'] })
+  const shows = stage({ fields: ['note'] })
 
   it('renders the note whole, over as many rows as it needs', () => {
     // An earlier cut showed only the first line, truncated — almost useless,
@@ -436,8 +435,8 @@ describe('note', () => {
   })
 })
 
-describe('blockers', () => {
-  const shows = stage({ shows: ['blockers'] })
+describe('blocker', () => {
+  const shows = stage({ fields: ['blocker'] })
 
   it('finds a blocker that is NOT in the workstream', () => {
     // The whole point. `blocked_by` is dropped in normalize, so a member cannot
@@ -503,7 +502,7 @@ describe('ci and hand-attached issues', () => {
     // PullRequest from an issue, and there is no GitHub source. An empty box
     // would look broken; a marked manual row is honest.
     const c = ctx({
-      stage: stage({ shows: ['ci'] }),
+      stage: stage({ fields: ['ci'] }),
       workstream: ws({
         links: [{ stageKey: 'impl', kind: 'ci', value: 'https://ci/run/9', label: 'build #9' }],
       }),
@@ -521,7 +520,7 @@ describe('ci and hand-attached issues', () => {
     // could ever have said "this issue belongs to THIS stage".
     const c = ctx({
       members: [mk('A-1')],
-      stage: stage({ shows: ['issues'] }),
+      stage: stage({ fields: ['issue'] }),
       workstream: ws({
         members: ['A-1'],
         links: [{ stageKey: 'impl', kind: 'issue', value: 'OTHER-9', label: null }],
@@ -537,7 +536,7 @@ describe('ci and hand-attached issues', () => {
   it('uses the cached state when an attached issue happens to be a member', () => {
     const c = ctx({
       members: [mk('A-1', { state: 'Done', type: 'completed' })],
-      stage: stage({ shows: ['issues'] }),
+      stage: stage({ fields: ['issue'] }),
       workstream: ws({
         members: ['A-1'],
         links: [{ stageKey: 'impl', kind: 'issue', value: 'A-1', label: null }],
@@ -563,7 +562,7 @@ describe('hand attachments always render', () => {
     // PROJECTIONS; an attachment is already here, put on THIS stage on
     // purpose, usually because no projection could find it.
     const c = ctx({
-      stage: stage({ shows: [] }),
+      stage: stage({ fields: [] }),
       workstream: ws({ links: [link('url', 'https://figma/abc', 'Figma')] }),
     })
     expect(renderStage(c, t)[0]).toMatchObject({ text: 'Figma', manual: true, url: 'https://figma/abc' })
@@ -571,18 +570,18 @@ describe('hand attachments always render', () => {
 
   it('renders an attachment inside its own box when that box is on', () => {
     const c = ctx({
-      stage: stage({ shows: ['pullRequests'] }),
+      stage: stage({ fields: ['pr'] }),
       workstream: ws({ links: [link('pr', 'https://gh/pull/3', 'r#3')] }),
     })
     const items = renderStage(c, t)
     expect(items).toHaveLength(1)
-    expect(items[0]).toMatchObject({ token: 'pullRequests', text: 'r#3' })
+    expect(items[0]).toMatchObject({ token: 'pr', text: 'r#3' })
   })
 
   it('renders it once, not twice, when its box is on', () => {
     // The fallback must not duplicate what a token already drew.
     const c = ctx({
-      stage: stage({ shows: ['designdocs'] }),
+      stage: stage({ fields: ['spec'] }),
       workstream: ws({ links: [link('spec', 'openspec/x/proposal.md', 'x')] }),
     })
     expect(renderStage(c, t)).toHaveLength(1)
@@ -590,7 +589,7 @@ describe('hand attachments always render', () => {
 
   it('falls back when the box for that kind is off', () => {
     const c = ctx({
-      stage: stage({ shows: ['issues'] }),
+      stage: stage({ fields: ['issue'] }),
       workstream: ws({ links: [link('pr', 'https://gh/pull/3', 'r#3')] }),
     })
     expect(renderStage(c, t)[0]).toMatchObject({ text: 'r#3', manual: true })
@@ -598,7 +597,7 @@ describe('hand attachments always render', () => {
 
   it('keeps an attached issue clickable as an issue, not as a link', () => {
     const c = ctx({
-      stage: stage({ shows: [] }),
+      stage: stage({ fields: [] }),
       workstream: ws({ links: [link('issue', 'OTHER-9')] }),
     })
     expect(renderStage(c, t)[0]).toMatchObject({ text: 'OTHER-9', issue: 'OTHER-9', url: null })
