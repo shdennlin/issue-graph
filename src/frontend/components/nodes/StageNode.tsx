@@ -114,7 +114,9 @@ function ItemRow({ item, onDetach }: { item: StageItem; onDetach?: (value: strin
       {/* State as a glyph, the way GitHub and Linear both show a PR — a purple
           merge arrow is read faster than the word "merged", and costs a third
           less of the pill. */}
-      {Icon && <Icon className="stage-item-icon" size={11} aria-hidden />}
+      {Icon && (
+        <Icon className={`stage-item-icon stage-item-icon-${item.icon}`} size={11} aria-hidden />
+      )}
       {/* The kind, when the app has no special box for it. For a custom field
           the NAME is the point — `runbook` says what a bare link cannot. */}
       {item.kind && <span className="stage-item-kind">{item.kind}</span>}

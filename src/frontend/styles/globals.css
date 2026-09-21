@@ -4584,14 +4584,23 @@ button.stage-notes-body:hover .stage-note-body { text-decoration: underline; }
 .stage-pill .stage-item-text { color: var(--fg); }
 .stage-pill .stage-item-hint { color: color-mix(in srgb, var(--pill) 72%, var(--fg-muted)); }
 
-/* One variable per token; everything above reads from it. */
-.stage-tok-issues        { --pill: var(--state-started); }
-.stage-tok-sessions      { --pill: var(--ok); }
-.stage-tok-pullRequests  { --pill: var(--edge-hierarchy); }
-.stage-tok-designdocs    { --pill: var(--accent); }
-.stage-tok-ci            { --pill: var(--priority-high); }
-.stage-tok-blockers      { --pill: var(--danger); }
-.stage-tok-note          { --pill: var(--fg-muted); }
+/* One variable per token; everything above reads from it.
+
+   These names are the FIELD names — the class is `stage-tok-${item.token}`
+   and a token is a field. Five of them said `issues`, `sessions`,
+   `pullRequests`, `designdocs` and `blockers` until this was fixed: the
+   plural spellings from before migration 17 merged `shows` into `fields`.
+   They had matched nothing since, so five of seven pills fell back to
+   `var(--fg-muted)` — which is why nobody saw it. A dead selector here does
+   not leave a gap, it leaves a plausible grey. */
+.stage-tok-issue    { --pill: var(--state-started); }
+.stage-tok-session  { --pill: var(--ok); }
+.stage-tok-pr       { --pill: var(--edge-hierarchy); }
+.stage-tok-spec     { --pill: var(--accent); }
+.stage-tok-ci       { --pill: var(--priority-high); }
+.stage-tok-blocker  { --pill: var(--danger); }
+.stage-tok-note     { --pill: var(--fg-muted); }
+
 
 /* Tone still wins on the two that mean something is wrong. */
 .stage-pill.stage-item-warn {
@@ -4625,6 +4634,22 @@ button.stage-pill:hover .stage-item-text { text-decoration: underline; }
   flex: 0 0 auto;
   color: var(--pill, var(--fg-muted));
 }
+/* A PR's STATE is carried by its glyph and nothing else — the status word used
+   to sit in the pill and spent a third of it saying what the shape says at a
+   glance. That only works if the shapes are told apart, and at 11px a merge
+   arrow and an open PR are nearly the same drawing, so the colour does the
+   work: merged purple, open green, closed red, draft grey, the way GitHub and
+   Linear both show them.
+
+   AFTER the rule above, not before: these have the same specificity, so the
+   base `--pill` colour wins on source order alone. Placed earlier they
+   resolved to the token's colour for every state and the glyph still said
+   nothing — which is the same defect in a new place. */
+.stage-item-icon-pr-merged { color: var(--edge-hierarchy); }
+.stage-item-icon-pr-open { color: var(--ok); }
+.stage-item-icon-pr-closed,
+.stage-item-icon-pr-conflict { color: var(--danger); }
+.stage-item-icon-pr-draft { color: var(--fg-muted); }
 /* A note is prose the user wrote — it should read like the primary content of
    the stage, not like the muted metadata around it. */
 .stage-tok-note .stage-item-text { color: var(--fg); }
