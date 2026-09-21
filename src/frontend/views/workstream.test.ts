@@ -145,8 +145,24 @@ describe('one container per workstream', () => {
     expect(containers(nodes)).toHaveLength(2)
   })
 
-  it('leaves archived workstreams off the board entirely', () => {
+  it('leaves archived workstreams off the board by default', () => {
     const { nodes } = build({ workstreams: [ws(1), ws(2, { status: 'archived' })] })
+    expect(containers(nodes)).toHaveLength(1)
+  })
+
+  it('shows an archived one when it is the one you asked for', () => {
+    // A filter must not overrule an explicit selection. Unconditional hiding
+    // meant an archived workstream could not be looked at at all — you picked
+    // it, nothing happened, and nothing said why.
+    const { nodes } = build({ workstreams: [ws(1), ws(2, { status: 'archived' })] }, 2)
+    expect(containers(nodes)).toHaveLength(1)
+  })
+
+  it('still hides the other archived ones while one is focused', () => {
+    const { nodes } = build(
+      { workstreams: [ws(1), ws(2, { status: 'archived' }), ws(3, { status: 'archived' })] },
+      2,
+    )
     expect(containers(nodes)).toHaveLength(1)
   })
 })

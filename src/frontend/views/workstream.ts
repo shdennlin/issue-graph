@@ -92,7 +92,15 @@ export const workstreamView: ViewDefinition = {
     const stages = [...(data.lifecycle ?? [])].sort((a, b) => a.sortOrder - b.sortOrder)
     if (stages.length === 0) return { nodes: [emptyPipelineNode()], edges: [] }
 
-    const all = (data.workstreams ?? []).filter((w) => w.status !== 'archived')
+    // Archived ones are hidden by default and shown when you ASK for one by
+    // id. A filter must not overrule an explicit act of selection: the
+    // unconditional version meant an archived workstream could not be looked
+    // at at all — you clicked it, nothing happened, and nothing on screen said
+    // why. Same rule as an attachment that renders whether or not its box is
+    // switched on.
+    const all = (data.workstreams ?? []).filter(
+      (w) => w.status !== 'archived' || w.id === focusedWorkstreamId,
+    )
     // An id that matches nothing falls back to everything rather than blanking
     // the canvas — a stale `?stream=` in a bookmark must not look like "no
     // workstreams exist".

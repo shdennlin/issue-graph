@@ -70,3 +70,42 @@ export function stageVisits(events: StageEvent[], now: number): Map<string, Stag
   }
   return out
 }
+
+export interface StageLeg {
+  stageKey: string
+  enteredAt: number
+  /** When it moved on, or null while it is still here. */
+  leftAt: number | null
+  /** How long this leg lasted, in ms. */
+  ms: number
+  /** True for the leg it is on now — the last one, and only when nothing
+   *  followed it. */
+  current: boolean
+}
+
+/**
+ * The whole journey, oldest first — one entry per ARRIVAL, not per stage.
+ *
+ * Distinct from `stageVisits`, which keys by stage and keeps only the most
+ * recent visit because a pipeline asks "how long has it been here", present
+ * tense. A history asks a different question — how did this get here, and
+ * where did it stall — and there the repeats are the point: a workstream that
+ * went spec review, back to discuss, and forward again is telling you a review
+ * failed. Collapsing those into one row per stage erases exactly that.
+ */
+export function stageTimeline(events: StageEvent[], now: number): StageLeg[] {
+  const sorted = [...events].sort((a, b) => a.at - b.at)
+  return sorted.map((e, i) => {
+    const next = sorted[i + 1]
+    const leftAt = next ? next.at : null
+    return {
+      stageKey: e.stageKey,
+      enteredAt: e.at,
+      leftAt,
+      // Clamped, for the same reason stageVisits clamps: a clock that moved
+      // backwards between two writes must not render as a negative duration.
+      ms: Math.max(0, (leftAt ?? now) - e.at),
+      current: leftAt === null,
+    }
+  })
+}

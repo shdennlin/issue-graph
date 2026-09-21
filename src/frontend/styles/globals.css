@@ -4693,3 +4693,62 @@ button.stage-pill:hover .stage-item-text { text-decoration: underline; }
   background: var(--input-bg, transparent);
   color: var(--fg);
 }
+
+/* Workstream history — the modal's expanded row.
+   One line per ARRIVAL, not per stage: a workstream that went back and came
+   forward again is telling you a review failed, and one row per stage would
+   erase exactly that. */
+.workstream-history {
+  list-style: none;
+  margin: 0;
+  padding: 4px 8px 10px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.workstream-history-empty { color: var(--fg-muted); font-size: var(--fs-base); }
+.workstream-leg {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: var(--fs-base);
+  color: var(--fg-muted);
+}
+/* The leg it is on now is the one you are looking for, so it is the only one
+   that reads as foreground. */
+.workstream-leg.is-current { color: var(--fg); }
+.workstream-leg-name { flex: 0 0 11em; }
+.workstream-leg.is-current .workstream-leg-name { font-weight: 500; }
+.workstream-leg-when { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.workstream-leg-age { font-variant-numeric: tabular-nums; }
+
+/* Members, in the panel beside the board rather than in the modal. */
+.ws-member { display: flex; align-items: baseline; gap: 8px; }
+.ws-member-id {
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+}
+.ws-member-title {
+  flex: 1 1 0;
+  /* `min-width: auto` on a flex item defeats text-overflow, which is why it is
+     spelled out rather than left to the default. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-muted);
+}
+.ws-member-remove {
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
+  padding: 0 2px;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+.ws-member-remove:hover { color: var(--danger); }

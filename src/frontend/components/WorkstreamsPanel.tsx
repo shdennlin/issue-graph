@@ -18,12 +18,12 @@
 // a shell, because vitest cannot test JSX in this repo.
 
 import { useCallback, useEffect, useState } from 'react'
-import { Archive, ArchiveRestore, Bot, ChevronDown, ChevronRight, Pause, Trash2, X } from 'lucide-react'
+import { Archive, ArchiveRestore, ChevronDown, ChevronRight, Trash2, X } from 'lucide-react'
 import { api } from '../lib/api'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
-import { indexSessionsByIssue, sessionPresence } from '../lib/agentSession'
 import { compactAge, formatAbsolute } from '../lib/relativeTime'
+import { stageTimeline } from '@shared/stageHistory.js'
 import { useT, type DictKey } from '../i18n'
 
 const AGE_UNIT_KEYS: Record<'m' | 'h' | 'd', DictKey> = {
@@ -32,18 +32,6 @@ const AGE_UNIT_KEYS: Record<'m' | 'h' | 'd', DictKey> = {
   d: 'issueNode.ageDays',
 }
 
-interface Member {
-  identifier: string
-  claimedBy: string | null
-  doneAt: number | null
-  blockedBy: string[]
-}
-interface Detail {
-  id: number
-  name: string
-  progress: { total: number; done: number; claimed: number }
-  members: Member[]
-}
 interface Summary {
   id: number
   name: string
@@ -62,12 +50,11 @@ export function WorkstreamsPanel() {
     return t(AGE_UNIT_KEYS[a.unit], { count: a.value })
   }
   const close = () => useViewStore.getState().setWorkstreamsOpen(false)
-  const setFocusedId = useViewStore((s) => s.setFocusedId)
-  const setChainRootIds = useViewStore((s) => s.setChainRootIds)
+  const setActiveView = useViewStore((s) => s.setActiveView)
+  const setFocusedWorkstreamId = useViewStore((s) => s.setFocusedWorkstreamId)
   const graph = useGraphStore((s) => s.graph)
 
   const [list, setList] = useState<Summary[]>([])
-  const [details, setDetails] = useState<Record<number, Detail>>({})
   const [open, setOpen] = useState<Set<number>>(new Set())
   const [error, setError] = useState<string | null>(null)
   // Archived ones are off the board by design, but this panel is the one place
@@ -82,8 +69,18 @@ export function WorkstreamsPanel() {
   const [armed, setArmed] = useState<string | null>(null)
 
   const stages = graph?.data.lifecycle ?? []
-  const sessionsByIssue = indexSessionsByIssue(graph?.data.agentSessions)
-  const issuesById = new Map((graph?.data.issues ?? []).map((i) => [i.identifier, i]))
+  // Read once per open rather than in the render body: reading the clock while
+  // rendering is the impurity `react-hooks` flags, and it is right to — the
+  // same render would otherwise produce a different duration each time.
+  const [now] = useState(() => Date.now())
+  const stageNames = new Map((graph?.data.lifecycle ?? []).map((st) => [st.key, st.name]))
+  /** The history lives on the graph payload, which carries archived rows too —
+   *  this modal is the one screen that lists them. */
+  const eventsById = new Map((graph?.data.workstreams ?? []).map((w) => [w.id, w.stageEvents]))
+  /** A key with no stage is one that was deleted or renamed. Shown as the raw
+   *  key rather than dropped: the history is what happened, and a leg that
+   *  vanished because somebody edited the pipeline afterwards would be a lie. */
+  const stageName = (key: string) => stageNames.get(key) ?? key
 
   const loadList = useCallback(async () => {
     try {
@@ -92,15 +89,6 @@ export function WorkstreamsPanel() {
       setError(e instanceof Error ? e.message : String(e))
     }
   }, [showArchived])
-
-  const loadDetail = useCallback(async (id: number) => {
-    try {
-      const d = await api.fetchBatch(id)
-      setDetails((prev) => ({ ...prev, [id]: d }))
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }, [])
 
   // Inlined rather than `void loadList()`: calling a function that sets state
   // from inside an effect trips react-hooks/set-state-in-effect. Same shape as
@@ -124,23 +112,21 @@ export function WorkstreamsPanel() {
     }
   }, [showArchived])
 
+  // No fetch here any more. Expanding used to pull the workstream's detail for
+  // its member list; the history it shows instead already rides the graph
+  // payload, so opening a row costs nothing.
   const toggle = (id: number) => {
-    // The fetch sits OUTSIDE the updater: React may call an updater more than
-    // once, so a side effect in there can fire twice. eslint-plugin-react-hooks
-    // flags exactly this, and it is right to.
-    const wasOpen = open.has(id)
     setOpen((prev) => {
       const next = new Set(prev)
-      if (wasOpen) next.delete(id)
+      if (next.has(id)) next.delete(id)
       else next.add(id)
       return next
     })
-    if (!wasOpen) void loadDetail(id)
   }
 
   /** Every mutation refreshes, including a failed one — otherwise the panel
    *  shows what was attempted rather than what the server holds. */
-  const run = async (fn: () => Promise<unknown>, detailId?: number) => {
+  const run = async (fn: () => Promise<unknown>) => {
     setError(null)
     try {
       await fn()
@@ -148,14 +134,20 @@ export function WorkstreamsPanel() {
       setError(e instanceof Error ? e.message : String(e))
     }
     await loadList()
-    if (detailId !== undefined) await loadDetail(detailId)
     await useGraphStore.getState().refetchSilent()
   }
 
   /** Show only this workstream on the graph. Reuses chain isolation rather
    *  than adding a second "show a subset" mechanism. */
-  const isolate = (d: Detail) => {
-    setChainRootIds(d.members.map((m) => m.identifier))
+  // Focus THIS workstream on the board. It used to set `chainRootIds`, which
+  // puts the graph into chain mode — and chain mode dissolves the workstream
+  // view entirely (see views/workstream.ts), so the one control named
+  // "isolate" was the one that could not isolate a workstream. Works for an
+  // archived one too: the view lets an explicitly focused workstream through
+  // its archived filter.
+  const isolate = (id: number) => {
+    setActiveView('workstream')
+    setFocusedWorkstreamId(id)
     close()
   }
 
@@ -197,7 +189,6 @@ export function WorkstreamsPanel() {
           {list.length === 0 && <p className="settings-hint">{t('workstreams.empty')}</p>}
 
           {list.map((ws) => {
-            const d = details[ws.id]
             const isOpen = open.has(ws.id)
             return (
               <div key={ws.id} className={`workstream${ws.status === 'archived' ? ' is-archived' : ''}`}>
@@ -251,29 +242,28 @@ export function WorkstreamsPanel() {
                   >
                     {ageText(ws.archivedAt ?? ws.updatedAt)}
                   </span>
-                  {isOpen && d && (
-                    <button onClick={() => isolate(d)} title={t('workstreams.isolate')}>
-                      {t('workstreams.isolateShort')}
-                    </button>
-                  )}
-                  {/* Archiving before deleting, and in that order: one is
-                      reversible and the other takes the members' history with
-                      it. */}
-                  {/* Archiving before deleting, and in that order: one is
-                      reversible and the other takes the members' history with
-                      it. Both ask twice all the same. */}
+                  {/* Isolate works on an archived workstream too — that is the
+                      only way to look at one at all, now that the board honours
+                      an explicit pick over its archived filter. */}
+                  <button className="workstream-isolate" onClick={() => isolate(ws.id)} title={t('workstreams.isolate')}>
+                    {t('workstreams.isolateShort')}
+                  </button>
+                  {/* Two-step, both of them: archiving and deleting are the two
+                      actions here you cannot undo by clicking again. */}
                   <button
-                    className={armed === `${ws.id}:archive` ? 'confirm-armed' : ''}
+                    className={`workstream-act${armed === `${ws.id}:archive` ? ' is-armed' : ''}`}
+                    title={ws.status === 'archived' ? t('workstreams.unarchive') : t('workstreams.archive')}
                     onClick={(e) => {
                       e.stopPropagation()
-                      const key = `${ws.id}:archive`
-                      if (armed !== key) return setArmed(key)
+                      if (armed !== `${ws.id}:archive`) {
+                        setArmed(`${ws.id}:archive`)
+                        return
+                      }
                       setArmed(null)
                       void run(() =>
                         api.setBatchStatus(ws.id, ws.status === 'archived' ? 'active' : 'archived'),
                       )
                     }}
-                    title={ws.status === 'archived' ? t('workstreams.unarchive') : t('workstreams.archive')}
                   >
                     {armed === `${ws.id}:archive` ? (
                       t('common.confirm')
@@ -284,80 +274,56 @@ export function WorkstreamsPanel() {
                     )}
                   </button>
                   <button
-                    className={armed === `${ws.id}:delete` ? 'confirm-armed danger' : ''}
+                    className={`workstream-act${armed === `${ws.id}:delete` ? ' is-armed' : ''}`}
+                    title={t('workstreams.delete')}
                     onClick={(e) => {
                       e.stopPropagation()
-                      const key = `${ws.id}:delete`
-                      if (armed !== key) return setArmed(key)
+                      if (armed !== `${ws.id}:delete`) {
+                        setArmed(`${ws.id}:delete`)
+                        return
+                      }
                       setArmed(null)
                       void run(() => api.deleteBatch(ws.id))
                     }}
-                    title={t('workstreams.delete')}
                   >
                     {armed === `${ws.id}:delete` ? t('common.confirm') : <Trash2 size={14} />}
                   </button>
                 </div>
-
-                {isOpen && d && (
-                  <>
-                  {/* The ordering rule, said HERE rather than at the top of the
-                      modal. It explains the member list, and the member list is
-                      behind this expander — so at the top it spent three lines
-                      describing something you could not yet see, above a screen
-                      whose actual subject is a flat list of workstreams. */}
-                  {d.members.length > 0 && (
-                    <p className="settings-hint workstream-order-hint">
-                      {t('workstreams.orderHint')}
-                    </p>
-                  )}
-                  <ul className="workstream-members">
-                    {d.members.map((m) => {
-                      const presence = sessionPresence(sessionsByIssue.get(m.identifier))
-                      const issue = issuesById.get(m.identifier)
+                  {isOpen && (
+                  // The HISTORY, not the issue list. Where each workstream's
+                  // issues are is already the board's whole subject, and
+                  // editing membership is detail work that belongs in the
+                  // panel beside the board — this modal's job is the set of
+                  // workstreams, not the inside of one.
+                  //
+                  // How a feature GOT here is the question nothing else
+                  // answered. The data has been there since the first move:
+                  // `stageEvents` records every arrival, and until now it only
+                  // ever surfaced as "5d here" and a small revisit glyph.
+                  <ul className="workstream-history">
+                    {stageTimeline(eventsById.get(ws.id) ?? [], now).length === 0 && (
+                      <li className="workstream-history-empty">{t('workstreams.neverMoved')}</li>
+                    )}
+                    {stageTimeline(eventsById.get(ws.id) ?? [], now).map((leg, i) => {
+                      const age = compactAge(leg.enteredAt, leg.leftAt ?? now)
                       return (
                         <li
-                          key={m.identifier}
-                          className={`workstream-member${m.doneAt ? ' is-done' : ''}`}
+                          key={`${leg.stageKey}:${leg.enteredAt}:${i}`}
+                          className={`workstream-leg${leg.current ? ' is-current' : ''}`}
                         >
-                          <button
-                            className="workstream-id"
-                            onClick={() => {
-                              setFocusedId(m.identifier)
-                              close()
-                            }}
-                          >
-                            {m.identifier}
-                          </button>
-                          <span className="workstream-title">{issue?.title ?? ''}</span>
-                          {presence.kind !== 'none' && (
-                            <span className={`session-badge is-${presence.kind}`}>
-                              {presence.kind === 'active' ? <Bot size={11} /> : <Pause size={11} />}
-                              {compactAge(presence.lastSeen).value}
-                              {compactAge(presence.lastSeen).unit}
-                            </span>
-                          )}
-                          {/* Blocked by a MEMBER of this workstream. An outside
-                              blocker is not shown here — it is a reason the issue
-                              is not ready, not part of this feature's shape. */}
-                          {m.blockedBy.length > 0 && (
-                            <span className="workstream-blocked">
-                              ⛔ {m.blockedBy.join(', ')}
-                            </span>
-                          )}
-                          <button
-                            className="workstream-remove"
-                            title={t('workstreams.removeMember')}
-                            onClick={() =>
-                              void run(() => api.removeBatchMember(ws.id, m.identifier), ws.id)
-                            }
-                          >
-                            <X size={12} />
-                          </button>
+                          <span className="workstream-leg-name">
+                            {stageName(leg.stageKey)}
+                          </span>
+                          <span className="workstream-leg-when">
+                            {formatAbsolute(leg.enteredAt)}
+                          </span>
+                          <span className="workstream-leg-age">
+                            {t(AGE_UNIT_KEYS[age.unit], { count: age.value })}
+                          </span>
                         </li>
                       )
                     })}
                   </ul>
-                  </>
                 )}
               </div>
             )

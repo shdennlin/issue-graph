@@ -16,6 +16,11 @@ export function WorkstreamPanel() {
   const close = useViewStore((s) => s.closeWorkstreamPanel)
   const graph = useGraphStore((s) => s.graph)
   const refetchSilent = useGraphStore((s) => s.refetchSilent)
+  const setFocusedId = useViewStore((s) => s.setFocusedId)
+  const setDetailPanelOpen = useViewStore((s) => s.setDetailPanelOpen)
+  const [busy, setBusy] = useState(false)
+  const titleOf = (identifier: string) =>
+    graph?.data.issues.find((i) => i.identifier === identifier)?.title ?? ''
 
   const [viewportW, setViewportW] = useState(() =>
     typeof window === 'undefined' ? 1440 : window.innerWidth,
@@ -103,14 +108,47 @@ export function WorkstreamPanel() {
           <span className="stage-panel-savestate">{t(`stage.note_${noteState}` as 'stage.note_clean')}</span>
         </div>
 
+        {/* Membership is edited HERE, beside the board, not in the
+            Workstreams modal. That modal is the set of workstreams — rename,
+            archive, delete, and how each one got where it is; who belongs to
+            one is the inside of one, which is this panel's whole subject. */}
         <h4>{t('workstreams.members')}</h4>
         {workstream.members.length === 0 ? (
           <p className="settings-hint">{t('workstreams.noMembers')}</p>
         ) : (
           <ul className="stage-panel-links">
             {workstream.members.map((m) => (
-              <li key={m}>
-                <span>{m}</span>
+              <li key={m} className="ws-member">
+                <button
+                  type="button"
+                  className="ws-member-id"
+                  onClick={() => {
+                    // This view draws no issue cards, so focusing alone would
+                    // highlight nothing — the detail panel reads the focused
+                    // issue out of graph data by identifier instead.
+                    setFocusedId(m)
+                    setDetailPanelOpen(true)
+                  }}
+                >
+                  {m}
+                </button>
+                <span className="ws-member-title">{titleOf(m)}</span>
+                <button
+                  type="button"
+                  className="ws-member-remove"
+                  title={t('workstreams.removeMember')}
+                  aria-label={t('workstreams.removeMember')}
+                  disabled={busy}
+                  onClick={() => {
+                    setBusy(true)
+                    void api
+                      .removeBatchMember(workstream.id, m)
+                      .then(() => refetchSilent())
+                      .finally(() => setBusy(false))
+                  }}
+                >
+                  <X size={12} />
+                </button>
               </li>
             ))}
           </ul>

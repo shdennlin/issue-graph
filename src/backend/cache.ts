@@ -333,8 +333,13 @@ export function readWorkstreamSummaries(): WorkstreamSummaryDTO[] {
     if (list) list.push(m.identifier)
     else byBatch.set(m.batch_id, [m.identifier])
   }
+  // Archived rows are INCLUDED. Hiding them is a display decision and it is
+  // already made in the two places that display: views/workstream.ts and the
+  // jump list. Making it here as well put it somewhere the frontend could not
+  // overrule, so "show me this one archived workstream" was unanswerable — the
+  // view's own rule let it through and the data never arrived. stageNudges
+  // skips them on its own, and there are a handful of rows either way.
   return rows
-    .filter((r) => r.status !== 'archived')
     .map((r) => ({
     id: r.id,
     name: r.name,

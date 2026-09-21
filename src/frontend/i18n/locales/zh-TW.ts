@@ -508,6 +508,7 @@ export const zhTW: Dict = {
     title: '工作線',
     hint: '所有 workstream,包括不在看板上的。在這裡改名、封存或刪除;把它們往下一格推是在看板上做。',
     orderHint: '依相依性排序 —— 擋住別人的永遠在上面。每次讀取都從 Linear 重算,所以去 Linear 改 relation 就會改這裡的順序。',
+    neverMoved: '還沒動過 —— 還沒被放到任何一格。',
     empty: '還沒有工作線。在圖上選幾張 issue，右鍵加入。',
     name: '工作線名稱',
     namePrompt: '為這條工作線命名',

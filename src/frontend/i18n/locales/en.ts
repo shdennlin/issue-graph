@@ -519,6 +519,7 @@ export const en = {
     title: 'Workstreams',
     hint: 'Every workstream, including the ones off the board. Rename, archive or delete one here; the board is where you move them through the pipeline.',
     orderHint: 'In dependency order \u2014 a blocker always sits above what it blocks. Recomputed from Linear on every read, so editing a relation there reorders this.',
+    neverMoved: 'Never moved \u2014 it has not been put on a stage yet.',
     empty: 'No workstreams yet. Select issues on the graph, right-click, and queue them.',
     name: 'Workstream name',
     namePrompt: 'Name this workstream',

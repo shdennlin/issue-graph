@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { stageVisits, type StageEvent } from './stageHistory.js'
+import { stageTimeline, stageVisits, type StageEvent } from './stageHistory.js'
 
 const DAY = 86_400_000
 const T0 = 1_800_000_000_000
@@ -59,5 +59,59 @@ describe('stageVisits', () => {
     // as "-2d here", which reads as a bug rather than as a clock problem.
     const v = stageVisits([ev('a', 0)], T0 - 2 * DAY)
     expect(v.get('a')?.days).toBe(0)
+  })
+})
+
+describe('stageTimeline', () => {
+  const DAY = 86_400_000
+
+  it('keeps every arrival, including a stage entered twice', () => {
+    // The repeats are the point: back to discuss and forward again is a review
+    // that failed, and one row per stage would erase it.
+    const legs = stageTimeline(
+      [
+        { stageKey: 'discuss', at: 0 },
+        { stageKey: 'spec', at: DAY },
+        { stageKey: 'discuss', at: 2 * DAY },
+        { stageKey: 'spec', at: 3 * DAY },
+      ],
+      4 * DAY,
+    )
+    expect(legs.map((l) => l.stageKey)).toEqual(['discuss', 'spec', 'discuss', 'spec'])
+    expect(legs.map((l) => l.ms / DAY)).toEqual([1, 1, 1, 1])
+  })
+
+  it('leaves the last leg running', () => {
+    const legs = stageTimeline([{ stageKey: 'ci', at: 0 }], 2 * DAY)
+    expect(legs[0]).toMatchObject({ leftAt: null, current: true, ms: 2 * DAY })
+  })
+
+  it('marks only the last leg current, even when the stage repeats', () => {
+    const legs = stageTimeline(
+      [
+        { stageKey: 'ci', at: 0 },
+        { stageKey: 'merge', at: DAY },
+        { stageKey: 'ci', at: 2 * DAY },
+      ],
+      3 * DAY,
+    )
+    expect(legs.filter((l) => l.current)).toHaveLength(1)
+    expect(legs[2]!.current).toBe(true)
+  })
+
+  it('is empty for a workstream that has never moved', () => {
+    expect(stageTimeline([], 5)).toEqual([])
+  })
+
+  it('sorts defensively, so an out-of-order row cannot make a negative leg', () => {
+    const legs = stageTimeline(
+      [
+        { stageKey: 'b', at: 2 * DAY },
+        { stageKey: 'a', at: DAY },
+      ],
+      3 * DAY,
+    )
+    expect(legs.map((l) => l.stageKey)).toEqual(['a', 'b'])
+    expect(legs.every((l) => l.ms >= 0)).toBe(true)
   })
 })
