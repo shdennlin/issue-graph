@@ -184,7 +184,9 @@ export function StagePanel() {
       <div className="resize-handle resize-handle-left" onMouseDown={startResize} />
       <div className="stage-panel-header">
         <div>
-          <div className="stage-panel-ws">{workstream.name}</div>
+          {/* Ellipsized now that the header can actually narrow, so the full
+              name has to be reachable somewhere. */}
+          <div className="stage-panel-ws" title={workstream.name}>{workstream.name}</div>
           <h2 className="stage-panel-title">{stage.name}</h2>
         </div>
         <button

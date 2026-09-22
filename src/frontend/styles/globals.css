@@ -4394,6 +4394,14 @@ button.stage-item:hover,
   padding: 10px 12px;
   border-bottom: 1px solid var(--node-border);
 }
+/* The name+title stack, which must be allowed to SHRINK. A flex item's
+   automatic minimum size is its min-content width, and a `nowrap` line's
+   min-content width is the whole line — so without this the wrapper grew to
+   the workstream's full name, pushed both buttons past the panel's edge, and
+   `overflow: hidden` clipped them: the close × was 128px outside a 380px
+   panel and could not be clicked. It also made the ellipsis below dead code,
+   since a box that never gets narrowed never overflows. */
+.stage-panel-header > div { min-width: 0; }
 .stage-panel-ws {
   font-size: var(--fs-meta);
   color: var(--fg-muted);
@@ -4411,6 +4419,14 @@ button.stage-item:hover,
   gap: 8px;
   font-size: var(--fs-base);
 }
+/* Nothing in here shrinks — the panel scrolls instead. A flex item shrinks by
+   default, and a shrunk box still paints its full content, so the overflow
+   lands ON the siblings below it while `scrollHeight === clientHeight` leaves
+   the panel with nothing to scroll: content unreadable AND unreachable. Every
+   child was protected by the automatic minimum size until `min-height` on the
+   rendered note overrode it, at which point a 1161px note rendered at 280px
+   and the 881px remainder covered Save, the attachment list and the add form. */
+.stage-panel-body > * { flex-shrink: 0; }
 .stage-panel-body h4 { margin: 8px 0 0; font-size: var(--fs-base); }
 .stage-panel-meta {
   display: flex;
