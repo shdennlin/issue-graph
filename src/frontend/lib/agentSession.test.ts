@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { AgentSessionDTO } from '@shared/types'
-import { indexSessionsByIssue, indexSessionsByWorkstream, sessionPresence } from './agentSession'
+import { headerSessions, indexSessionsByIssue, indexSessionsByWorkstream, sessionPresence } from './agentSession'
 
 const NOW = 1_000_000
 
@@ -114,5 +114,22 @@ describe('indexSessionsByWorkstream', () => {
     ])
     expect([...idx.keys()]).toEqual([2])
     expect(idx.get(2)?.map((x) => x.sessionId)).toEqual(['a', 'b'])
+  })
+})
+
+describe('headerSessions', () => {
+  it('names each claimed session with its short and full id, newest first', () => {
+    const out = headerSessions([
+      s({ sessionId: '7ec02b41-6d78-4388-9606-b81b18c97650', label: 'older', lastSeen: 1 }),
+      s({ sessionId: '01e8eee3-b1ad-4f45-a2e0-69b07785c23b', label: 'newer', lastSeen: 2, status: 'blocked' }),
+    ])
+    expect(out).toEqual([
+      { id: '01e8eee3-b1ad-4f45-a2e0-69b07785c23b', shortId: '01e8eee3', name: 'newer', status: 'blocked' },
+      { id: '7ec02b41-6d78-4388-9606-b81b18c97650', shortId: '7ec02b41', name: 'older', status: 'active' },
+    ])
+  })
+
+  it('is empty for a workstream nobody has claimed', () => {
+    expect(headerSessions(undefined)).toEqual([])
   })
 })

@@ -47,6 +47,29 @@ export function indexSessionsByWorkstream(
   return map
 }
 
+/** What a workstream's header says about one session working on it. */
+export interface HeaderSession {
+  /** Full id — what `claude --resume` takes, so it is what a click copies. */
+  id: string
+  /** Enough of the id to tell two sessions apart at a glance; a UUID's first
+   *  block is unique in practice across the handful alive at once. */
+  shortId: string
+  name: string
+  status: AgentSessionDTO['status']
+}
+
+/**
+ * The sessions to name in a workstream's header: the ones that CLAIMED it —
+ * wrote to it — newest heartbeat first. Only those: a session placed by its
+ * branch's issue is a guess about the issue, and the header speaks for the
+ * workstream.
+ */
+export function headerSessions(claimed: AgentSessionDTO[] | undefined): HeaderSession[] {
+  return [...(claimed ?? [])]
+    .sort((a, b) => b.lastSeen - a.lastSeen)
+    .map((s) => ({ id: s.sessionId, shortId: s.sessionId.slice(0, 8), name: s.label, status: s.status }))
+}
+
 /**
  * Collapse the sessions on one issue into a single presence.
  *

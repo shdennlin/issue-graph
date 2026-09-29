@@ -35,7 +35,7 @@ import { compactAge } from '../lib/relativeTime'
 import type { ViewDefinition } from './types'
 import { buildChainLayout } from './chainLayout'
 import { indexBlockedBy, noteRows, renderStage, type StageContext } from '../lib/stageRender'
-import { indexSessionsByIssue, indexSessionsByWorkstream } from '../lib/agentSession'
+import { headerSessions, indexSessionsByIssue, indexSessionsByWorkstream } from '../lib/agentSession'
 import { workstreamColor } from '../lib/colors'
 import type { StageNodeData } from '../components/nodes/StageNode'
 import type { StageNotesData } from '../components/nodes/StageNotesNode'
@@ -202,6 +202,7 @@ export const workstreamView: ViewDefinition = {
             count: workstream.members.length,
             projectId: null,
             copyName: true,
+            sessions: headerSessions(sessionsByWorkstream.get(workstream.id)),
           },
         },
         position: { x: 0, y },

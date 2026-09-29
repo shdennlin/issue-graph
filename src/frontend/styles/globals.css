@@ -1187,6 +1187,40 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   font-size: var(--fs-meta);
   color: var(--state-completed, #10b981);
 }
+.mixed-container-session {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 360px;
+  padding: 1px 8px;
+  border: 1px solid var(--node-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg);
+  font-size: var(--fs-meta);
+  cursor: pointer;
+}
+.mixed-container-session:hover { border-color: var(--accent); }
+.mixed-container-session-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--fg-muted);
+}
+.mixed-container-session.is-active .mixed-container-session-dot { background: var(--ok); }
+.mixed-container-session.is-blocked .mixed-container-session-dot { background: var(--danger); }
+.mixed-container-session-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mixed-container-session-id {
+  flex: 0 0 auto;
+  color: var(--fg-muted);
+  font-size: var(--fs-chip);
+}
 .mixed-container-count {
   font-variant-numeric: tabular-nums;
   font-size: var(--fs-meta);

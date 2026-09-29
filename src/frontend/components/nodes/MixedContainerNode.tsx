@@ -4,6 +4,7 @@ import type { NodeProps } from 'reactflow'
 import { useViewStore } from '../../store/viewStore'
 import { useT } from '../../i18n'
 import { UNCLASSIFIED_BUCKET } from '../../views/mix'
+import type { HeaderSession } from '../../lib/agentSession'
 
 interface MixedContainerData {
   bucket: {
@@ -30,6 +31,9 @@ interface MixedContainerData {
      *  (React Flow claims the pointerdown for dragging). Ignored when
      *  `projectId` is set, since that click already opens a panel. */
     copyName?: boolean
+    /** Optional: sessions working on this container, named in its header.
+     *  Workstream view only — see `headerSessions`. */
+    sessions?: HeaderSession[]
   }
 }
 
@@ -57,7 +61,9 @@ function MixedContainerImpl({ data }: NodeProps<MixedContainerData>) {
   const t = useT()
   const canOpen = Boolean(b.projectId)
   const canCopy = !canOpen && b.copyName === true
-  const [copied, setCopied] = useState(false)
+  // Which thing was just copied: the name, or one session's id. One slot, so a
+  // second copy moves the confirmation rather than showing two.
+  const [copied, setCopied] = useState<string | null>(null)
   const copyTimer = useRef<number | null>(null)
   useEffect(() => () => {
     if (copyTimer.current !== null) window.clearTimeout(copyTimer.current)
@@ -74,13 +80,13 @@ function MixedContainerImpl({ data }: NodeProps<MixedContainerData>) {
     if (b.projectId) openProjectPanel(b.projectId, b.milestoneId ?? null)
   }
   const stopPointer = (e: PointerEvent<HTMLButtonElement>) => e.stopPropagation()
-  const onCopyClick = async (e: MouseEvent<HTMLButtonElement>) => {
+  const copy = async (e: MouseEvent<HTMLButtonElement>, text: string, slot: string) => {
     e.stopPropagation()
     try {
-      await navigator.clipboard.writeText(b.name)
-      setCopied(true)
+      await navigator.clipboard.writeText(text)
+      setCopied(slot)
       if (copyTimer.current !== null) window.clearTimeout(copyTimer.current)
-      copyTimer.current = window.setTimeout(() => setCopied(false), 1200)
+      copyTimer.current = window.setTimeout(() => setCopied(null), 1200)
     } catch {
       // Clipboard API can fail on http:// origins other than localhost — silent,
       // as in ProjectPanel.
@@ -109,7 +115,7 @@ function MixedContainerImpl({ data }: NodeProps<MixedContainerData>) {
             type="button"
             className="mixed-container-name mixed-container-name-btn"
             style={{ color: tint }}
-            onClick={(e) => void onCopyClick(e)}
+            onClick={(e) => void copy(e, b.name, 'name')}
             onPointerDown={stopPointer}
             title={t('workstreams.copyName')}
           >
@@ -118,8 +124,26 @@ function MixedContainerImpl({ data }: NodeProps<MixedContainerData>) {
         ) : (
           <span className="mixed-container-name" style={{ color: tint }}>{name}</span>
         )}
-        {copied && <span className="mixed-container-copied">{t('workstreams.copied')}</span>}
+        {copied === 'name' && <span className="mixed-container-copied">{t('workstreams.copied')}</span>}
         <span className="mixed-container-count">{countLabel}</span>
+        {/* The full id is what `claude --resume` takes, so that is what a
+            click copies; the name is how a person knows which terminal. */}
+        {(b.sessions ?? []).map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            className={`mixed-container-session is-${s.status}`}
+            onClick={(e) => void copy(e, s.id, s.id)}
+            onPointerDown={stopPointer}
+            title={t('workstreams.copySessionId', { id: s.id })}
+          >
+            <span className="mixed-container-session-dot" aria-hidden />
+            <span className="mixed-container-session-name">{s.name}</span>
+            <code className="mixed-container-session-id">
+              {copied === s.id ? t('workstreams.copied') : s.shortId}
+            </code>
+          </button>
+        ))}
         {date && (
           <span
             className={`mixed-container-date${date.overdue ? ' overdue' : ''}`}
