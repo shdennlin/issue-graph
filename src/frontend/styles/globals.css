@@ -3946,6 +3946,17 @@ label + .settings-help {
 .stage-days:first-of-type { margin-left: auto; }
 .stage-days-stale { color: var(--warn); font-weight: 600; }
 
+/* Who is on this stage NOW, apart from what was done here — see stageSessions.
+   Heights must track BAND_PAD / BAND_RULE / ITEM_H in views/workstream.ts:
+   a stage is never measured after the fact, so a mismatch clips the body. */
+.stage-sessions {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--node-border);
+  background: color-mix(in srgb, var(--fg-muted) 8%, transparent);
+}
+.stage-sessions-ok { background: color-mix(in srgb, var(--ok) 10%, transparent); }
+.stage-sessions-warn { background: color-mix(in srgb, var(--danger) 16%, transparent); }
 .stage-body {
   flex: 1 1 auto;
   padding: 10px;

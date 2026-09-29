@@ -9,7 +9,7 @@ import type {
 import type { Filters } from '../store/viewStore'
 import type { StageNodeData } from '../components/nodes/StageNode'
 import type { ViewContext } from './types'
-import { serpentine, workstreamView } from './workstream'
+import { serpentine, stageNodeHeight, workstreamView } from './workstream'
 
 const DAY = 86_400_000
 
@@ -301,5 +301,22 @@ describe('wrapping honours the Issues-per-row setting', () => {
     expect(edges[1]).toMatchObject({ sourceHandle: 's-b', targetHandle: 't-t' })
     // Second row runs right-to-left, so it leaves the LEFT side.
     expect(edges[2]).toMatchObject({ sourceHandle: 's-l', targetHandle: 't-r' })
+  })
+})
+
+describe('stageNodeHeight', () => {
+  // 34 head + 20 body padding + 22 per row; the band is 8 padding + 1 rule +
+  // 22 per session. These must track globals.css — a stage is never measured.
+  it('keeps one empty row when there is nothing at all', () => {
+    expect(stageNodeHeight(0)).toBe(34 + 20 + 22)
+  })
+
+  it('adds the band and its rule for sessions, on top of the items', () => {
+    expect(stageNodeHeight(3, 1)).toBe(34 + (8 + 1 + 22) + 20 + 3 * 22)
+    expect(stageNodeHeight(3, 2)).toBe(34 + (8 + 1 + 44) + 20 + 3 * 22)
+  })
+
+  it('reserves no empty body row when the band is the only content', () => {
+    expect(stageNodeHeight(0, 1)).toBe(34 + (8 + 1 + 22) + 20)
   })
 })

@@ -34,7 +34,7 @@ import { stageVisits } from '@shared/stageHistory.js'
 import { compactAge } from '../lib/relativeTime'
 import type { ViewDefinition } from './types'
 import { buildChainLayout } from './chainLayout'
-import { indexBlockedBy, noteRows, renderStage, type StageContext } from '../lib/stageRender'
+import { indexBlockedBy, noteRows, renderStage, stageSessions, type StageContext } from '../lib/stageRender'
 import { headerSessions, indexSessionsByIssue, indexSessionsByWorkstream } from '../lib/agentSession'
 import { workstreamColor } from '../lib/colors'
 import type { StageNodeData } from '../components/nodes/StageNode'
@@ -60,6 +60,9 @@ const HEADER = 32
 const HEAD_H = 34
 const ITEM_H = 22
 const BODY_PAD = 10
+/** The session band: vertical padding each side, and its bottom rule. */
+const BAND_PAD = 4
+const BAND_RULE = 1
 
 /** Wording never changes how many rows there are, so counting with an identity
  *  translator gives exactly the height the component will render. */
@@ -73,8 +76,15 @@ export function serpentine(index: number, cols: number): { row: number; col: num
   return { row, col: row % 2 === 0 ? within : cols - 1 - within }
 }
 
-export function stageNodeHeight(itemCount: number): number {
-  return HEAD_H + BODY_PAD * 2 + Math.max(1, itemCount) * ITEM_H
+/**
+ * A stage's height from what it draws. `sessionCount` is the band under the
+ * header (see `stageSessions`); with none there is no band and no rule, and
+ * the body keeps its one-row minimum. With a band, an otherwise empty body
+ * reserves no row — the band is already content.
+ */
+export function stageNodeHeight(itemCount: number, sessionCount = 0): number {
+  const band = sessionCount > 0 ? BAND_PAD * 2 + BAND_RULE + sessionCount * ITEM_H : 0
+  return HEAD_H + band + BODY_PAD * 2 + Math.max(sessionCount > 0 ? 0 : 1, itemCount) * ITEM_H
 }
 
 export const workstreamView: ViewDefinition = {
@@ -142,7 +152,8 @@ export const workstreamView: ViewDefinition = {
         // stage node is never measured after the fact, so an undercount shows
         // up as clipped text that nothing corrects.
         const rows = renderStage(render, IDENT).reduce((n, it) => n + it.rows, 0)
-        return { stage, i, render, items: rows }
+        const sessions = stageSessions(render, IDENT).length
+        return { stage, i, render, items: rows, sessions }
       })
       // Wraps at the user's "Issues per row" setting, and every other row runs
       // BACKWARDS, so the pipeline reads as one continuous line instead of
@@ -168,7 +179,7 @@ export const workstreamView: ViewDefinition = {
       // a row — but the notes card is sized to its own note. One height for
       // EVERYTHING made a long note drag seven empty stages up to its size,
       // which is a lot of "nothing to show" to scroll past.
-      const stageH = Math.max(...built.map((b) => stageNodeHeight(b.items)))
+      const stageH = Math.max(...built.map((b) => stageNodeHeight(b.items, b.sessions)))
       const notesH = stageNodeHeight(notesCellRows)
       const heightAt = (cellIndex: number) => (cellIndex === 0 ? notesH : stageH)
 

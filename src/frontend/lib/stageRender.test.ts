@@ -13,6 +13,7 @@ import {
   notePreview,
   noteRows,
   renderStage,
+  stageSessions,
   stageForIssue,
   type StageContext,
 } from './stageRender'
@@ -245,7 +246,7 @@ describe('session', () => {
   })
 
   const build = (status: AgentSessionDTO['status']) =>
-    renderStage(
+    stageSessions(
       ctx({
         members: [mk('A-1')],
         stage: stage({ fields: ['session'] }),
@@ -279,8 +280,8 @@ describe('session', () => {
         ['A-2', [sess({ identifier: 'A-2', label: 'on ci' })]],
       ]),
     }
-    expect(renderStage(ctx({ ...shared, stage: impl }), t).map((i) => i.text)).toEqual(['on impl'])
-    expect(renderStage(ctx({ ...shared, stage: ci }), t).map((i) => i.text)).toEqual(['on ci'])
+    expect(stageSessions(ctx({ ...shared, stage: impl }), t).map((i) => i.text)).toEqual(['on impl'])
+    expect(stageSessions(ctx({ ...shared, stage: ci }), t).map((i) => i.text)).toEqual(['on ci'])
   })
 
   it('keeps a session whose issue no stage claims on the current stage', () => {
@@ -294,8 +295,8 @@ describe('session', () => {
       workstream: ws({ members: ['A-1'], stage: 'impl' }),
       sessionsByIssue: new Map([['A-1', [sess({ label: 'orphan' })]]]),
     }
-    expect(renderStage(ctx({ ...shared, stage: impl }), t).map((i) => i.text)).toEqual(['orphan'])
-    expect(renderStage(ctx({ ...shared, stage: other }), t)).toHaveLength(0)
+    expect(stageSessions(ctx({ ...shared, stage: impl }), t).map((i) => i.text)).toEqual(['orphan'])
+    expect(stageSessions(ctx({ ...shared, stage: other }), t)).toHaveLength(0)
   })
 
   describe('claimed by the workstream', () => {
@@ -312,12 +313,16 @@ describe('session', () => {
       sessionsByWorkstream: new Map([[1, [claimed]]]),
     }
     const texts = (st: typeof impl, over = {}) =>
-      renderStage(ctx({ ...shared, ...over, stage: st }), t).map((i) => i.text)
+      stageSessions(ctx({ ...shared, ...over, stage: st }), t).map((i) => i.text)
 
     it("is drawn on the workstream's CURRENT stage, not its issue's", () => {
       // A-1 derives to impl; the workstream is on merge. The claim wins.
       expect(texts(merge)).toEqual(['superproject'])
       expect(texts(impl)).toEqual([])
+    })
+
+    it('is never drawn among the items — only in the band', () => {
+      expect(renderStage(ctx({ ...shared, stage: merge }), t).filter((i) => i.token === 'session')).toEqual([])
     })
 
     it('shows on the current stage even when that stage does not list `session`', () => {

@@ -319,8 +319,8 @@ function claimedSessions(ctx: StageContext, t: Translate): StageItem[] {
   return (ctx.sessionsByWorkstream.get(ctx.workstream.id) ?? []).map((s) => sessionItem(s, t))
 }
 
-function renderSessions(ctx: StageContext, t: Translate): StageItem[] {
-  const out = claimedSessions(ctx, t)
+function issueSessions(ctx: StageContext, t: Translate): StageItem[] {
+  const out: StageItem[] = []
   // An unclaimed session is drawn where ITS ISSUE is drawn — the same rule
   // renderIssues applies, and for the same reason. Iterating every member drew
   // every live session on every stage that declared `session`, which was
@@ -547,12 +547,37 @@ function renderAttachments(ctx: StageContext, _t: Translate): StageItem[] {
   return out
 }
 
+/**
+ * The sessions a stage draws, in their own band under its header — NOT among
+ * its items, which is where they were.
+ *
+ * A session is a different kind of fact from everything else on a stage: who
+ * is here NOW and whether they need you, where the rest is what was DONE here.
+ * In the item list it sat wherever `session` fell in the stage's field order
+ * (last, on a pipeline configured before sessions existed), under a four-row
+ * note it could be clipped by, and every time one appeared or changed status
+ * the evidence below it jumped. A band of its own is fixed, and the only thing
+ * that moves when it changes is itself.
+ *
+ * Claimed sessions (see `claimedSessions`) come first and show on the current
+ * stage whether or not it lists `session` — the same rule as a hand
+ * attachment: by writing to the workstream the session said it is working
+ * here, and a pipeline configured before sessions existed must not make that
+ * invisible. Sessions placed by their branch's issue still need the stage to
+ * list `session`, as before.
+ */
+export function stageSessions(ctx: StageContext, t: Translate): StageItem[] {
+  const out = claimedSessions(ctx, t)
+  if (ctx.stage.fields.includes('session')) out.push(...issueSessions(ctx, t))
+  return out
+}
+
 /** One renderer per name the app can fill by itself. A name with no entry is
  *  a field somebody attaches, and its items arrive through
- *  `renderAttachments` instead. */
+ *  `renderAttachments` instead — except `session`, which is drawn in a band
+ *  of its own by `stageSessions`, never among the items. */
 const RENDERERS: Record<string, ((ctx: StageContext, t: Translate) => StageItem[]) | undefined> = {
   issue: renderIssues,
-  session: renderSessions,
   pr: renderPullRequests,
   spec: renderDesignDocs,
   note: renderNote,
@@ -574,11 +599,6 @@ export function renderStage(ctx: StageContext, t: Translate): StageItem[] {
     const fn = RENDERERS[name]
     if (fn) out.push(...fn(ctx, t))
   }
-  // A session that claimed the workstream shows on its current stage whether
-  // or not that stage lists `session` — the same rule as a hand attachment:
-  // the session said, by writing to it, that it is working here, and a
-  // pipeline configured before sessions existed must not make that invisible.
-  if (!ctx.stage.fields.includes('session')) out.push(...claimedSessions(ctx, t))
   // Last, and outside the token loop on purpose: an attachment the stage's
   // own boxes did not claim still has to appear somewhere.
   out.push(...renderAttachments(ctx, t))

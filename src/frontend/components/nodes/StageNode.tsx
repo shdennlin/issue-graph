@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import { useT, type DictKey } from '../../i18n'
 import { useViewStore } from '../../store/viewStore'
-import { renderStage, type StageContext, type StageItem } from '../../lib/stageRender'
+import { renderStage, stageSessions, type StageContext, type StageItem } from '../../lib/stageRender'
 import { api } from '../../lib/api'
 import { useGraphStore } from '../../store/graphStore'
 
@@ -208,6 +208,14 @@ function StageImpl({ data }: NodeProps<StageNodeData>) {
   // because GraphCanvas only measures `.react-flow__node-issue` and a stage
   // node never gets a corrected height.
   const items = useMemo(() => (data.render ? renderStage(data.render, t) : []), [data.render, t])
+  const sessions = useMemo(() => (data.render ? stageSessions(data.render, t) : []), [data.render, t])
+  // The band takes the colour of its most urgent session: one blocked session
+  // is the thing to notice, whatever the others are doing.
+  const bandTone = sessions.some((s) => s.tone === 'warn')
+    ? 'warn'
+    : sessions.some((s) => s.tone === 'ok')
+      ? 'ok'
+      : 'muted'
 
   // Only when this node belongs to a workstream and is not the one it is on.
   const moveTarget =
@@ -296,6 +304,14 @@ function StageImpl({ data }: NodeProps<StageNodeData>) {
           </span>
         )}
       </div>
+
+      {sessions.length > 0 && (
+        <div className={`stage-sessions stage-sessions-${bandTone}`}>
+          {sessions.map((item, i) => (
+            <ItemRow key={`${item.text}:${i}`} item={item} onDetach={detach} />
+          ))}
+        </div>
+      )}
 
       {data.render && (
         <div className="stage-body">
