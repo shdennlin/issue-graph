@@ -527,7 +527,7 @@ export const en = {
     namePrompt: 'Name this workstream',
     isolate: 'Show only this workstream on the graph',
     isolateShort: 'Isolate',
-    jumpHint: 'Pan to this workstream',
+    unfocusHint: 'Show every workstream again, staying on this one',
     openPanel: 'Open this workstream',
     noteHint: 'About the feature as a whole. What a step is waiting on belongs on that step instead.',
     notePlaceholder: 'Why this exists, what was decided, what someone should know first',

@@ -12,12 +12,15 @@ import { isStale } from '@shared/staleness.js'
 //
 // Every workstream is drawn on this canvas now, stacked, so the board can run
 // several screens tall — and the thing you want is usually not the one on
-// screen. Clicking a row pans to that block rather than isolating it: you
-// nearly always want to see the one you picked NEXT TO the others, and an
-// isolation that has to be undone to regain context is a worse default.
+// screen.
 //
-// Isolation is still there, on the second control, because sometimes one
-// workstream really is the whole job.
+// Clicking a row FOCUSES it — shows it alone — and clicking it again brings
+// the rest back. It used to pan instead, on the theory that you want the one
+// you picked next to the others; in use, the row was clicked expecting focus
+// and the small ⊕ beside it went unfound, so the default was the wrong way
+// round. Unfocusing pans to the one you were on, so returning to the stack does
+// not also lose your place in it. The ⊕/× stays as the visible state of the
+// same toggle.
 const AGE_UNIT_KEYS: Record<'m' | 'h' | 'd', DictKey> = {
   m: 'issueNode.ageMinutes',
   h: 'issueNode.ageHours',
@@ -69,9 +72,17 @@ export function WorkstreamJumpList() {
         const visit = w.stage ? stageVisits(w.stageEvents, now).get(w.stage) : undefined
         const age = visit ? compactAge(visit.enteredAt, visit.leftAt ?? now) : null
         const stale = isStale(w.stageEnteredAt, stage?.staleAfterDays ?? null, now)
+        const toggle = () => {
+          if (focused === w.id) {
+            setFocused(null)
+            setJump(w.id)
+          } else {
+            setFocused(w.id)
+          }
+        }
         return (
           <div key={w.id} className={`ws-jump-row${focused === w.id ? ' ws-jump-on' : ''}`}>
-            <button type="button" className="ws-jump-main" onClick={() => setJump(w.id)} title={t('workstreams.jumpHint')}>
+            <button type="button" className="ws-jump-main" onClick={toggle} title={focused === w.id ? t('workstreams.unfocusHint') : t('workstreams.isolate')}>
               <span className="ws-jump-name">{w.name}</span>
               <span className={`ws-jump-where${stale ? ' ws-jump-stale' : ''}`}>
                 {stage
@@ -86,8 +97,8 @@ export function WorkstreamJumpList() {
             <button
               type="button"
               className="ws-jump-iso"
-              onClick={() => setFocused(focused === w.id ? null : w.id)}
-              title={t('workstreams.isolate')}
+              onClick={toggle}
+              title={focused === w.id ? t('workstreams.unfocusHint') : t('workstreams.isolate')}
             >
               {focused === w.id ? '×' : '⊕'}
             </button>

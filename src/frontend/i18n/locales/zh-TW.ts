@@ -516,7 +516,7 @@ export const zhTW: Dict = {
     namePrompt: '為這條工作線命名',
     isolate: '圖上只顯示這條工作線',
     isolateShort: '隔離',
-    jumpHint: '移動畫面到這條工作線',
+    unfocusHint: '顯示所有工作線,畫面停在這一條',
     openPanel: '開啟這條工作線',
     noteHint: '關於整個 feature。某一步在等什麼,請寫在那一格上。',
     notePlaceholder: '為什麼有這件事、決定了什麼、別人該先知道什麼',
