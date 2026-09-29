@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, MouseEvent, PointerEvent } from 'react'
 import type { NodeProps } from 'reactflow'
 import { useViewStore } from '../../store/viewStore'
@@ -24,6 +24,12 @@ interface MixedContainerData {
      *  the panel also scrolls + expands that milestone's <details>. Used by
      *  milestone view's per-milestone containers. */
     milestoneId?: string | null
+    /** Optional: the name becomes a button that copies it. For containers
+     *  with nothing to open — a workstream's name is typed into branches,
+     *  commits and agent prompts, and a node's text cannot be selected
+     *  (React Flow claims the pointerdown for dragging). Ignored when
+     *  `projectId` is set, since that click already opens a panel. */
+    copyName?: boolean
   }
 }
 
@@ -50,6 +56,12 @@ function MixedContainerImpl({ data }: NodeProps<MixedContainerData>) {
   const openProjectPanel = useViewStore((s) => s.openProjectPanel)
   const t = useT()
   const canOpen = Boolean(b.projectId)
+  const canCopy = !canOpen && b.copyName === true
+  const [copied, setCopied] = useState(false)
+  const copyTimer = useRef<number | null>(null)
+  useEffect(() => () => {
+    if (copyTimer.current !== null) window.clearTimeout(copyTimer.current)
+  }, [])
   // Mix view can't translate its own bucket names (views have no `t`), so the
   // catch-all bucket travels as a sentinel and is localized here.
   const name = b.name === UNCLASSIFIED_BUCKET ? t('views.mix.unclassified') : b.name
@@ -62,6 +74,18 @@ function MixedContainerImpl({ data }: NodeProps<MixedContainerData>) {
     if (b.projectId) openProjectPanel(b.projectId, b.milestoneId ?? null)
   }
   const stopPointer = (e: PointerEvent<HTMLButtonElement>) => e.stopPropagation()
+  const onCopyClick = async (e: MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation()
+    try {
+      await navigator.clipboard.writeText(b.name)
+      setCopied(true)
+      if (copyTimer.current !== null) window.clearTimeout(copyTimer.current)
+      copyTimer.current = window.setTimeout(() => setCopied(false), 1200)
+    } catch {
+      // Clipboard API can fail on http:// origins other than localhost — silent,
+      // as in ProjectPanel.
+    }
+  }
 
   return (
     <div
@@ -80,9 +104,21 @@ function MixedContainerImpl({ data }: NodeProps<MixedContainerData>) {
           >
             {name}
           </button>
+        ) : canCopy ? (
+          <button
+            type="button"
+            className="mixed-container-name mixed-container-name-btn"
+            style={{ color: tint }}
+            onClick={(e) => void onCopyClick(e)}
+            onPointerDown={stopPointer}
+            title={t('workstreams.copyName')}
+          >
+            {name}
+          </button>
         ) : (
           <span className="mixed-container-name" style={{ color: tint }}>{name}</span>
         )}
+        {copied && <span className="mixed-container-copied">{t('workstreams.copied')}</span>}
         <span className="mixed-container-count">{countLabel}</span>
         {date && (
           <span

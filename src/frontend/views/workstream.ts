@@ -199,6 +199,7 @@ export const workstreamView: ViewDefinition = {
             color: workstreamColor(workstream.id),
             count: workstream.members.length,
             projectId: null,
+            copyName: true,
           },
         },
         position: { x: 0, y },

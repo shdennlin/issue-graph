@@ -1183,6 +1183,10 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+.mixed-container-copied {
+  font-size: var(--fs-meta);
+  color: var(--state-completed, #10b981);
+}
 .mixed-container-count {
   font-variant-numeric: tabular-nums;
   font-size: var(--fs-meta);
