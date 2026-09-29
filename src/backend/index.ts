@@ -12,7 +12,9 @@ import {
 } from './controlDb.js'
 import { getLogger } from './lib/log.js'
 import { getDb } from './db.js'
-import { UNCONFIGURED_WORKSPACE_ID, runWithWorkspace } from './lib/workspaceContext.js'
+import { UNCONFIGURED_WORKSPACE_ID, getCurrentWorkspaceId, runWithWorkspace } from './lib/workspaceContext.js'
+import { isWorkstreamWrite } from './lib/workstreamWrites.js'
+import { BUS_EVENT, publish } from './lib/eventBus.js'
 import { graphRoutes } from './routes/graph.js'
 import { syncRoutes } from './routes/sync.js'
 import { issueRoutes } from './routes/issue.js'
@@ -103,6 +105,15 @@ export function createApp(): Hono {
       wid = getDefaultWorkspaceId()
     }
     return runWithWorkspace(wid, () => next())
+  })
+
+  // After the handler, still inside the workspace scope above: tell open tabs
+  // the board changed. Tagged with the workspace so a tab viewing another one
+  // ignores it, the same as `issues-changed`.
+  app.use('/api/*', async (c, next) => {
+    await next()
+    if (!isWorkstreamWrite(c.req.method, c.req.path, c.res.status)) return
+    publish({ type: BUS_EVENT.WORKSTREAMS_CHANGED, data: { workspaceId: getCurrentWorkspaceId() } })
   })
 
   app.route('/', healthRoutes)

@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useRef } from 'react'
+import { coalesce } from './lib/coalesce'
 import { useGraphStore } from './store/graphStore'
 import { useNotesStore } from './store/notesStore'
 import { useSchemaStore } from './store/schemaStore'
@@ -364,6 +365,21 @@ export function App() {
       }
       refetchSilent()
     })
+    // A workstream, stage, field or agent session was written — very often by
+    // an MCP tool or a session hook rather than by this page, which is why the
+    // page has to be told. Coalesced: heartbeats arrive several a second while
+    // an agent works, and each would otherwise be a full graph fetch.
+    const board = coalesce(() => void refetchSilent(), 1000)
+    es.addEventListener('workstreams-changed', (e) => {
+      try {
+        const data = JSON.parse((e as MessageEvent).data) as { workspaceId?: string }
+        const cur = useWorkspaceStore.getState().currentWorkspaceId
+        if (data.workspaceId && cur && data.workspaceId !== cur) return
+      } catch {
+        // Malformed payload — refetch anyway; a spurious fetch beats a miss.
+      }
+      board.call()
+    })
     es.addEventListener('default-workspace-changed', (e) => {
       try {
         const data = JSON.parse((e as MessageEvent).data) as { activeId?: string }
@@ -375,7 +391,10 @@ export function App() {
       }
     })
     // hello/ping events are no-ops; just keep the stream alive.
-    return () => es.close()
+    return () => {
+      board.cancel()
+      es.close()
+    }
   }, [refetchSilent])
 
   const openInlineSearch = useViewStore((s) => s.openInlineSearch)

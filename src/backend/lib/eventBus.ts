@@ -11,6 +11,9 @@ export const BUS_EVENT = {
   DEFAULT_WORKSPACE_CHANGED: 'default-workspace-changed',
   /** A Linear webhook triggered a sync that completed. Clients refetch. */
   ISSUES_CHANGED: 'issues-changed',
+  /** A workstream, stage, field or agent session was written — see
+   *  lib/workstreamWrites.ts. Clients refetch. */
+  WORKSTREAMS_CHANGED: 'workstreams-changed',
 } as const
 export type BusEventType = (typeof BUS_EVENT)[keyof typeof BUS_EVENT]
 
