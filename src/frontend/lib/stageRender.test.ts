@@ -110,6 +110,7 @@ function ctx(over: Partial<StageContext> = {}): StageContext {
     stage: stage(),
     members,
     sessionsByIssue: new Map(),
+    sessionsByWorkstream: new Map(),
     designdocs: [],
     blockedBy: new Map(),
     pipeline: [over.stage ?? stage()],
@@ -239,6 +240,7 @@ describe('session', () => {
     status: 'active',
     lastSeen: 0,
     label: 'repo · branch',
+    workstreamId: null,
     ...over,
   })
 
@@ -294,6 +296,41 @@ describe('session', () => {
     }
     expect(renderStage(ctx({ ...shared, stage: impl }), t).map((i) => i.text)).toEqual(['orphan'])
     expect(renderStage(ctx({ ...shared, stage: other }), t)).toHaveLength(0)
+  })
+
+  describe('claimed by the workstream', () => {
+    // A session run from a superproject: it wrote to workstream 1, and its
+    // branch — whichever repo it last stood in — names ANOTHER issue.
+    const impl = stage({ key: 'impl', states: ['In Progress'], fields: ['session'] })
+    const merge = stage({ key: 'merge', states: ['Done'], fields: ['session'] })
+    const claimed = sess({ identifier: 'A-1', label: 'superproject', workstreamId: 1 })
+    const shared = {
+      members: [mk('A-1', { state: 'In Progress' })],
+      pipeline: [impl, merge],
+      workstream: ws({ id: 1, members: ['A-1'], stage: 'merge' }),
+      sessionsByIssue: new Map([['A-1', [claimed]]]),
+      sessionsByWorkstream: new Map([[1, [claimed]]]),
+    }
+    const texts = (st: typeof impl, over = {}) =>
+      renderStage(ctx({ ...shared, ...over, stage: st }), t).map((i) => i.text)
+
+    it("is drawn on the workstream's CURRENT stage, not its issue's", () => {
+      // A-1 derives to impl; the workstream is on merge. The claim wins.
+      expect(texts(merge)).toEqual(['superproject'])
+      expect(texts(impl)).toEqual([])
+    })
+
+    it('shows on the current stage even when that stage does not list `session`', () => {
+      const bare = stage({ key: 'merge', states: ['Done'], fields: [] })
+      expect(texts(bare, { pipeline: [impl, bare] })).toEqual(['superproject'])
+    })
+
+    it("is not drawn on another workstream's board through its branch's issue", () => {
+      // Workstream 2 also holds A-1. Without the skip, the claimed session
+      // would appear there by issue — the exact misplacement the claim fixes.
+      const other = { workstream: ws({ id: 2, members: ['A-1'], stage: 'impl' }) }
+      expect(texts(impl, other)).toEqual([])
+    })
   })
 })
 

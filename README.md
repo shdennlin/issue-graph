@@ -365,6 +365,8 @@ Give a name a one-line meaning at the bottom of the pipeline editor. That defini
 
 **Hooks** report which session is alive, on which branch, and whether it is working, waiting on you, or blocked on a permission prompt. The branch is resolved to an issue server-side, so the rules can be fixed by restarting rather than by updating every install. A crashed session disappears on its own: liveness is a TTL, not the `SessionEnd` hook, which a crash never sends.
 
+A session belongs to a **workstream** as soon as it writes to one through the MCP tools — attaching evidence, setting a note, moving a stage, creating one. It is then drawn on that workstream's current stage, whatever branch it happens to be on. The branch is only the fallback, and a weak one for a session run from a superproject: it moves between repos, and the branch of whichever one it stood in last names the wrong issue or none.
+
 `SessionStart` also reads back: it tells the session which workstream the branch belongs to, what that workstream is for, which stage it is on, and what that stage expects attached. It states facts and gives no orders — whether a stage has been cleared is a judgement only the session that did the work can make. Compaction is covered, because `SessionStart` fires again with `source: "compact"`.
 
 **A skill and two commands** close the loop. MCP tools are passive — a session has to decide that now is the moment to reach for one. `workstream-progress` is the skill the model reaches for when work reaches a point worth recording; `/issue-graph:where` reports position without changing anything; `/issue-graph:progress` records it. All three attach evidence freely and move a stage only when every field that stage expects is satisfied.
@@ -380,7 +382,7 @@ Install, from inside Claude Code:
 
 The marketplace manifest lives at the repo root, so the GitHub form needs no clone of your own. `@develop` pins the branch: this work has not reached `main`, and without the suffix the add resolves to the default branch and finds no manifest there. `/plugin marketplace update issue-graph` then follows that branch's head rather than the default one. Working on the plugin itself? Point it at your checkout instead — `/plugin marketplace add /path/to/issue-graph` — and re-run `/reload-plugins` after each edit.
 
-Then point it at your server. Both halves read the same three environment variables, so set them where Claude Code will see them — `.claude/settings.local.json` in the repo you work in is the narrowest place:
+Then point it at your server. Both halves read the same three environment variables, so set them where Claude Code will see them — `.claude/settings.local.json` in the repo you work in is the narrowest place, and `~/.claude/settings.json` the one that covers every repo. Use the second if you start sessions from a superproject or across several repos: a repo without the variables reports nothing at all, and says nothing about it.
 
 ```json
 {

@@ -432,6 +432,11 @@ const MIGRATIONS: string[] = [
   // would keep explaining a model that no longer exists. Migration 9 dropped
   // `issue_stage` for the same reason.
   `ALTER TABLE lifecycle_stage DROP COLUMN shows;`,
+  // The workstream a session last wrote to. A session belongs to the FEATURE
+  // it is moving, not to whichever repo's branch it last stood in — see
+  // AgentSessionDTO.workstreamId. No foreign key: a deleted workstream leaves a
+  // claim that matches nothing, which draws nothing, and the row is ephemeral.
+  `ALTER TABLE agent_session ADD COLUMN workstream_id INTEGER;`,
 ]
 
 // One Database instance per workspace id. Each profile has its own SQLITE_PATH

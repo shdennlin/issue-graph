@@ -35,7 +35,7 @@ import { compactAge } from '../lib/relativeTime'
 import type { ViewDefinition } from './types'
 import { buildChainLayout } from './chainLayout'
 import { indexBlockedBy, noteRows, renderStage, type StageContext } from '../lib/stageRender'
-import { indexSessionsByIssue } from '../lib/agentSession'
+import { indexSessionsByIssue, indexSessionsByWorkstream } from '../lib/agentSession'
 import { workstreamColor } from '../lib/colors'
 import type { StageNodeData } from '../components/nodes/StageNode'
 import type { StageNotesData } from '../components/nodes/StageNotesNode'
@@ -113,6 +113,7 @@ export const workstreamView: ViewDefinition = {
     // must not happen per stage.
     const byId = new Map(data.issues.map((i) => [i.identifier, i]))
     const sessionsByIssue = indexSessionsByIssue(data.agentSessions)
+    const sessionsByWorkstream = indexSessionsByWorkstream(data.agentSessions)
     const blockedBy = indexBlockedBy(data.issues)
     const designdocs = data.designdocs ?? []
 
@@ -132,6 +133,7 @@ export const workstreamView: ViewDefinition = {
           stage,
           members,
           sessionsByIssue,
+          sessionsByWorkstream,
           designdocs,
           blockedBy,
           pipeline: stages,

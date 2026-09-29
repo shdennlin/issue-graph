@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { AgentSessionDTO } from '@shared/types'
-import { indexSessionsByIssue, sessionPresence } from './agentSession'
+import { indexSessionsByIssue, indexSessionsByWorkstream, sessionPresence } from './agentSession'
 
 const NOW = 1_000_000
 
@@ -14,6 +14,7 @@ const s = (over: Partial<AgentSessionDTO> = {}): AgentSessionDTO => ({
   status: 'active',
   lastSeen: NOW - 1000,
   label: 'repo · fix/one-1-x',
+  workstreamId: null,
   ...over,
 })
 
@@ -101,5 +102,17 @@ describe('sessionPresence', () => {
     // clamping twice would hide the skew from anything that wants to see it.
     const p = sessionPresence([s({ lastSeen: NOW + 30_000 })])
     expect(p.kind !== 'none' && p.lastSeen).toBe(NOW + 30_000)
+  })
+})
+
+describe('indexSessionsByWorkstream', () => {
+  it('groups claimed sessions and leaves the unclaimed to the issue index', () => {
+    const idx = indexSessionsByWorkstream([
+      s({ sessionId: 'a', workstreamId: 2 }),
+      s({ sessionId: 'b', workstreamId: 2 }),
+      s({ sessionId: 'c' }),
+    ])
+    expect([...idx.keys()]).toEqual([2])
+    expect(idx.get(2)?.map((x) => x.sessionId)).toEqual(['a', 'b'])
   })
 })

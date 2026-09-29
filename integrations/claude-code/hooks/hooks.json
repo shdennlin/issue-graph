@@ -21,6 +21,12 @@
         "hooks": [
           { "type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/session.sh beat", "timeout": 10 }
         ]
+      },
+      {
+        "matcher": "mcp__(plugin_issue-graph_)?issue-graph__.*",
+        "hooks": [
+          { "type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/session.sh touch", "timeout": 10 }
+        ]
       }
     ],
     "Notification": [

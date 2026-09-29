@@ -92,6 +92,8 @@ export interface StageContext {
    *  rather than quietly shortening the list. */
   members: NormalizedIssue[]
   sessionsByIssue: Map<string, AgentSessionDTO[]>
+  /** Sessions by the workstream they last wrote to — see `claimedSessions`. */
+  sessionsByWorkstream: Map<number, AgentSessionDTO[]>
   designdocs: DesignDocChange[]
   /** Who blocks whom, across the WHOLE graph — see `indexBlockedBy`. */
   blockedBy: Map<string, NormalizedIssue[]>
@@ -286,39 +288,57 @@ function renderIssues(ctx: StageContext, t: Translate): StageItem[] {
   return out
 }
 
+function sessionItem(s: AgentSessionDTO, t: Translate): StageItem {
+  // Only `blocked` warns. `waiting` means the turn ended and it is your move
+  // whenever you like; `blocked` means nothing is running at all until someone
+  // answers a prompt. Folding them together loses the only status worth
+  // walking over for.
+  const hints =
+    s.status === 'blocked' ? [t('stage.needsYou')] : s.status === 'waiting' ? [t('stage.yourMove')] : []
+  return item({
+    token: 'session',
+    text: s.label,
+    hints,
+    tone: s.status === 'blocked' ? 'warn' : s.status === 'active' ? 'ok' : 'muted',
+    issue: s.identifier,
+  })
+}
+
+/**
+ * Sessions that CLAIMED this workstream — wrote to it through the issue-graph
+ * tools — drawn on its current stage, and only there.
+ *
+ * The workstream, not the issue, because that is the unit the pipeline moves
+ * and the unit such a session is actually driving. A session run from a
+ * superproject walks one workstream through every stage while cd'ing between
+ * repos, and the branch of whichever repo it stood in last names the wrong
+ * issue or none. Placement by issue put it on the wrong board or nowhere.
+ */
+function claimedSessions(ctx: StageContext, t: Translate): StageItem[] {
+  if (ctx.workstream.stage !== ctx.stage.key) return []
+  return (ctx.sessionsByWorkstream.get(ctx.workstream.id) ?? []).map((s) => sessionItem(s, t))
+}
+
 function renderSessions(ctx: StageContext, t: Translate): StageItem[] {
-  const out: StageItem[] = []
-  // A session is drawn where ITS ISSUE is drawn — the same rule renderIssues
-  // applies, and for the same reason. Iterating every member drew every live
-  // session on every stage that declared `session`, which was invisible while
-  // exactly one stage declared it and became three identical rows per stage
-  // the moment a second one did. A row saying a session is here is a claim
-  // about where the work is; repeating it on five stages makes it a claim
-  // about nothing.
+  const out = claimedSessions(ctx, t)
+  // An unclaimed session is drawn where ITS ISSUE is drawn — the same rule
+  // renderIssues applies, and for the same reason. Iterating every member drew
+  // every live session on every stage that declared `session`, which was
+  // invisible while exactly one stage declared it and became three identical
+  // rows per stage the moment a second one did. A row saying a session is here
+  // is a claim about where the work is; repeating it on five stages makes it a
+  // claim about nothing.
+  //
+  // A claimed session is skipped here even when its branch names a member: its
+  // claim is the better evidence, and honouring both would draw it twice — or
+  // on another workstream's board, which is the bug the claim exists to fix.
   const currentIsFallback = ctx.workstream.stage === ctx.stage.key
   for (const m of ctx.members) {
     const home = stageForIssue(m, ctx.pipeline)
     if (!(home ? home.key === ctx.stage.key : currentIsFallback)) continue
     for (const s of ctx.sessionsByIssue.get(m.identifier) ?? []) {
-      // Only `blocked` warns. `waiting` means the turn ended and it is your
-      // move whenever you like; `blocked` means nothing is running at all until
-      // someone answers a prompt. Folding them together loses the only status
-      // worth walking over for.
-      const hints =
-        s.status === 'blocked'
-          ? [t('stage.needsYou')]
-          : s.status === 'waiting'
-            ? [t('stage.yourMove')]
-            : []
-      out.push(
-        item({
-          token: 'session',
-          text: s.label,
-          hints,
-          tone: s.status === 'blocked' ? 'warn' : s.status === 'active' ? 'ok' : 'muted',
-          issue: m.identifier,
-        }),
-      )
+      if (s.workstreamId !== null) continue
+      out.push(sessionItem(s, t))
     }
   }
   return out
@@ -554,6 +574,11 @@ export function renderStage(ctx: StageContext, t: Translate): StageItem[] {
     const fn = RENDERERS[name]
     if (fn) out.push(...fn(ctx, t))
   }
+  // A session that claimed the workstream shows on its current stage whether
+  // or not that stage lists `session` — the same rule as a hand attachment:
+  // the session said, by writing to it, that it is working here, and a
+  // pipeline configured before sessions existed must not make that invisible.
+  if (!ctx.stage.fields.includes('session')) out.push(...claimedSessions(ctx, t))
   // Last, and outside the token loop on purpose: an attachment the stage's
   // own boxes did not claim still has to appear somewhere.
   out.push(...renderAttachments(ctx, t))

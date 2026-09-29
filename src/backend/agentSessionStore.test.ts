@@ -21,6 +21,7 @@ const row = (over: Partial<AgentSessionRow> = {}): AgentSessionRow => ({
   last_seen: 1_000_000,
   payload_version: HOOK_PAYLOAD_VERSION,
   label: null,
+  workstream_id: null,
   ...over,
 })
 
@@ -45,6 +46,8 @@ describe('parseSessionReport', () => {
       // An old plugin still reports 'idle'; it means the same as 'waiting'.
       status: 'waiting',
       label: null,
+      // Only the PostToolUse hook on the issue-graph tools sends one.
+      workstreamId: null,
       payloadVersion: 1,
     })
   })
@@ -142,6 +145,7 @@ describe('sessionRowToDTO', () => {
       status: 'active',
       lastSeen: 1_000_000,
       label: 'repo · fix/one-393-x',
+      workstreamId: null,
     })
   })
 
@@ -177,5 +181,20 @@ describe('indexSessionsByIssue', () => {
     // They are real sessions, but no card can display them — a branch with no
     // ticket is ordinary, not an error.
     expect(indexSessionsByIssue([dto('a', null)]).size).toBe(0)
+  })
+})
+
+describe('workstream claim', () => {
+  it('parses a positive integer workstreamId and nothing else', () => {
+    const base = { sessionId: 's1' }
+    expect(parseSessionReport({ ...base, workstreamId: 7 })?.workstreamId).toBe(7)
+    for (const bad of [0, -3, 1.5, '7', null, undefined, Number.NaN]) {
+      expect(parseSessionReport({ ...base, workstreamId: bad })?.workstreamId).toBeNull()
+    }
+  })
+
+  it('carries the claim onto the DTO', () => {
+    expect(sessionRowToDTO(row({ workstream_id: 4 })).workstreamId).toBe(4)
+    expect(sessionRowToDTO(row()).workstreamId).toBeNull()
   })
 })

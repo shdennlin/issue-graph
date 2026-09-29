@@ -427,6 +427,14 @@ export interface AgentSessionDTO {
   /** A name a person can recognise the terminal by — the repo directory and the
    *  branch. Derived server-side; a UUID identifies nothing to a reader. */
   label: string
+  /**
+   * The workstream this session last wrote to through the issue-graph tools,
+   * or null. When set it OUTRANKS `identifier` for placement on the board: a
+   * session run from a superproject spans several repos, and the branch of
+   * whichever one it last cd'd into says nothing about what it is working on.
+   * What it wrote to does.
+   */
+  workstreamId: number | null
 }
 
 /**

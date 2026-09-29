@@ -2,7 +2,7 @@
 #
 # Report this Claude Code session's presence to an issue-graph server.
 #
-#   session.sh start | beat | idle | blocked | end
+#   session.sh start | beat | touch | idle | blocked | end
 #
 # Configuration, both required — with either missing the hook does nothing at
 # all, silently. That is deliberate: this ships enabled to anyone who installs
@@ -22,7 +22,16 @@
 # rule in the server can be fixed by restarting it, while one baked into an
 # installed plugin needs every install updated.
 #
-# Output protocol note: `beat`, `idle` and `end` print nothing.
+# `touch` runs on PostToolUse for this plugin's OWN MCP tools, and is how a
+# session comes to belong to a WORKSTREAM rather than to an issue. The payload
+# carries both the session id and the tool's input, so the workstream the agent
+# just wrote to is known exactly — no tool has to be taught to say "I am working
+# on this", and nothing depends on the agent remembering to. A session run from
+# a superproject cds between repos, and the branch of whichever it stood in
+# last named the wrong issue or none; what it WROTE TO is the better evidence.
+# `get_workstream` is excluded: reading one is looking, not working on it.
+#
+# Output protocol note: `beat`, `touch`, `idle` and `end` print nothing.
 #
 # `idle` runs on Stop, and an earlier version of this comment said Stop has no
 # member in Claude Code's hookSpecificOutput union. That is wrong: Stop and
@@ -141,6 +150,27 @@ if [ "$ACTION" = "start" ] && command -v jq >/dev/null 2>&1; then
   LABEL=$(printf '%s' "$HOOK_INPUT" | jq -r '.session_title // empty' 2>/dev/null | cut -c1-120 || true)
 fi
 
+# The workstream this tool call touched — see `touch` in the header. Taken
+# from the input for every tool that names one, and from the response for
+# create_workstream, whose id does not exist until it returns. Digits only: the
+# server takes a number, and a model that passed "7" as a string still meant 7.
+WSID=""
+if [ "$ACTION" = "touch" ] && command -v jq >/dev/null 2>&1; then
+  WSID=$(printf '%s' "$HOOK_INPUT" | jq -r '
+    (.tool_name // "") as $tool
+    | if ($tool | endswith("__get_workstream")) then empty
+      elif (.tool_input.workstreamId? // null) != null then .tool_input.workstreamId
+      elif ($tool | endswith("__create_workstream")) then
+        (.tool_response
+          | if type == "array" then map(.text? // empty) | join("")
+            elif type == "object" and has("content") then (.content | map(.text? // empty) | join(""))
+            elif type == "string" then .
+            else empty end
+          | (try fromjson catch null) | .id? // empty)
+      else empty end' 2>/dev/null | head -n1 || true)
+  case "$WSID" in ''|*[!0-9]*) WSID="" ;; esac
+fi
+
 # Build the body with jq when available so quoting is correct for any path or
 # branch name; fall back to a hand-rolled object with the two fields that
 # cannot contain a quote.
@@ -153,8 +183,10 @@ if command -v jq >/dev/null 2>&1; then
     --arg phase "$PHASE" \
     --arg status "$STATUS" \
     --arg label "$LABEL" \
+    --arg workstreamId "$WSID" \
     --argjson payloadVersion "$PAYLOAD_VERSION" \
     '{sessionId: $sessionId, branch: $branch, cwd: $cwd, host: $host, phase: $phase, status: $status, label: $label, payloadVersion: $payloadVersion}
+     + (if $workstreamId == "" then {} else {workstreamId: ($workstreamId | tonumber)} end)
      | with_entries(select(.value != ""))' 2>/dev/null || true)
 fi
 if [ -z "${BODY:-}" ]; then

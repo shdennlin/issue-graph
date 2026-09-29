@@ -32,6 +32,21 @@ export function indexSessionsByIssue(
   return map
 }
 
+/** Sessions by the workstream they last wrote to. Unclaimed ones are left
+ *  out — they are placed by issue instead (see stageRender `claimedSessions`). */
+export function indexSessionsByWorkstream(
+  sessions: AgentSessionDTO[] | undefined,
+): Map<number, AgentSessionDTO[]> {
+  const map = new Map<number, AgentSessionDTO[]>()
+  for (const s of sessions ?? []) {
+    if (s.workstreamId === null) continue
+    const list = map.get(s.workstreamId)
+    if (list) list.push(s)
+    else map.set(s.workstreamId, [s])
+  }
+  return map
+}
+
 /**
  * Collapse the sessions on one issue into a single presence.
  *

@@ -56,10 +56,14 @@ agentSessionRoutes.post('/api/agent-sessions', async (c) => {
   const now = Date.now()
   getDb()
     .prepare(
-      `INSERT INTO agent_session(session_id, identifier, branch, cwd, host, phase, status, last_seen, payload_version, label)
-       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO agent_session(session_id, identifier, branch, cwd, host, phase, status, last_seen, payload_version, label, workstream_id)
+       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(session_id) DO UPDATE SET
-         identifier = excluded.identifier,
+         -- A report from a directory whose branch names no issue must not
+         -- erase the issue a report from the right directory found. A session
+         -- run from a superproject moves between repos all the time, and
+         -- clearing on every move made it flicker between an issue and none.
+         identifier = COALESCE(excluded.identifier, agent_session.identifier),
          branch = excluded.branch,
          cwd = excluded.cwd,
          host = excluded.host,
@@ -69,7 +73,10 @@ agentSessionRoutes.post('/api/agent-sessions', async (c) => {
          status = excluded.status,
          last_seen = excluded.last_seen,
          payload_version = excluded.payload_version,
-         label = COALESCE(excluded.label, agent_session.label)`,
+         label = COALESCE(excluded.label, agent_session.label),
+         -- Only the PostToolUse hook on the issue-graph tools sends this; every
+         -- heartbeat carries none and must leave the claim where it was.
+         workstream_id = COALESCE(excluded.workstream_id, agent_session.workstream_id)`,
     )
     .run(
       report.sessionId,
@@ -82,6 +89,7 @@ agentSessionRoutes.post('/api/agent-sessions', async (c) => {
       now,
       report.payloadVersion,
       report.label,
+      report.workstreamId,
     )
 
   // Only when asked. `start` asks; the heartbeats from UserPromptSubmit and
@@ -181,7 +189,7 @@ agentSessionRoutes.delete('/api/agent-sessions/:sessionId', (c) => {
 agentSessionRoutes.get('/api/agent-sessions', (c) => {
   const rows = getDb()
     .prepare(
-      `SELECT session_id, identifier, branch, cwd, host, phase, status, last_seen, payload_version, label FROM agent_session`,
+      `SELECT session_id, identifier, branch, cwd, host, phase, status, last_seen, payload_version, label, workstream_id FROM agent_session`,
     )
     .all() as AgentSessionRow[]
   return c.json({ entries: rows.map(sessionRowToDTO) })

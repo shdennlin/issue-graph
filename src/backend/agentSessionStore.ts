@@ -41,6 +41,7 @@ export interface AgentSessionRow {
   last_seen: number
   payload_version: number
   label: string | null
+  workstream_id: number | null
 }
 
 export const SESSION_ID_MAX = 200
@@ -63,6 +64,10 @@ export interface SessionReport {
   /** Overrides the derived label. Optional — the derivation is usually better
    *  than anything a script would invent. */
   label: string | null
+  /** The workstream this session last WROTE to through the issue-graph tools.
+   *  Sent only by the PostToolUse hook on those tools; every other report
+   *  carries none, and the server keeps the last one rather than clearing it. */
+  workstreamId: number | null
   payloadVersion: number
 }
 
@@ -113,6 +118,10 @@ export function parseSessionReport(raw: unknown): SessionReport | null {
     phase: str(o.phase, 100),
     status,
     label: str(o.label, 120),
+    workstreamId:
+      typeof o.workstreamId === 'number' && Number.isSafeInteger(o.workstreamId) && o.workstreamId > 0
+        ? o.workstreamId
+        : null,
     payloadVersion: version,
   }
 }
@@ -129,6 +138,7 @@ export function sessionRowToDTO(row: AgentSessionRow): AgentSessionDTO {
       row.status === 'blocked' ? 'blocked' : row.status === 'waiting' || row.status === 'idle' ? 'waiting' : 'active',
     lastSeen: row.last_seen,
     label: row.label ?? deriveLabel(row.cwd, row.branch),
+    workstreamId: row.workstream_id ?? null,
   }
 }
 
