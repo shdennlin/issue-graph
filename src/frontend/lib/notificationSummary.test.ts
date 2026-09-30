@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { translate, type DictKey } from '../i18n'
 import type { StoredEntry } from './notificationHistory'
-import { describeEntry, summarizeEntry, toastPreview } from './notificationSummary'
+import { describeEntry, toastPreview } from './notificationSummary'
 
 const t = (k: DictKey, p?: Record<string, string | number>): string => translate('en', k, p)
 
@@ -18,32 +18,6 @@ function entry(over: Partial<StoredEntry> = {}): StoredEntry {
     ...over,
   }
 }
-
-describe('summarizeEntry', () => {
-  it('says "created" for a new issue', () => {
-    expect(summarizeEntry(entry({ kind: 'created' }), t, 'en')).toBe('created')
-  })
-
-  it('names the value moved to, and the field where there is no value', () => {
-    const e = entry({ fields: ['state', 'comment'], to: { state: 'In Review' } })
-    expect(summarizeEntry(e, t, 'en')).toBe('→ In Review · new comment')
-  })
-
-  it('quotes what a comment said rather than pointing at it', () => {
-    const e = entry({ fields: ['comment'], to: { comment: 'Did the thing' } })
-    expect(summarizeEntry(e, t, 'en')).toBe('new comment: Did the thing')
-  })
-
-  it('marks a cleared field with a dash', () => {
-    const e = entry({ fields: ['assignee'], to: { assignee: null } })
-    expect(summarizeEntry(e, t, 'en')).toBe('assignee —')
-  })
-
-  it('renders priority as its label, not its number', () => {
-    const e = entry({ fields: ['priority'], to: { priority: '1' } })
-    expect(summarizeEntry(e, t, 'en')).toBe('→ Urgent')
-  })
-})
 
 describe('toastPreview', () => {
   const many = ['A', 'B', 'C', 'D', 'E'].map((id) => entry({ id, identifier: id }))
@@ -109,7 +83,7 @@ describe('describeEntry', () => {
     const e = entry({ fields: ['title', 'comment'] })
     expect(lines(e)).toEqual([
       { label: 'Renamed' },
-      { label: 'Comment', to: { text: 'new' } },
+      { label: 'Comment', to: { text: 'new' }, prose: true },
     ])
   })
 
@@ -132,10 +106,10 @@ describe('describeEntry', () => {
 
   it('says what the comment was about, and who when it was not you', () => {
     expect(lines(entry({ fields: ['comment'], to: { comment: 'Did the thing' } }))).toEqual([
-      { label: 'Comment', to: { text: 'Did the thing' } },
+      { label: 'Comment', to: { text: 'Did the thing' }, prose: true },
     ])
     expect(
       lines(entry({ fields: ['comment'], to: { comment: 'Looks good' }, commentAuthor: 'Alice' })),
-    ).toEqual([{ label: 'Comment', to: { text: 'Alice: Looks good' } }])
+    ).toEqual([{ label: 'Comment', to: { text: 'Alice: Looks good' }, prose: true }])
   })
 })

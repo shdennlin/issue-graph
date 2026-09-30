@@ -3600,8 +3600,74 @@ label + .settings-help {
 }
 .notif-row-what {
   grid-area: what;
-  font-size: var(--fs-chip);
-  color: var(--accent);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 1px;
+  font-size: 12px;
+  min-width: 0;
+}
+/* One moved field, shared by the bell rows and the toast (ChangeLines.tsx).
+   Colours are --change-* with the theme tokens as fallback: the bell sits on
+   the themed surface and uses the fallbacks, the always-dark toast sets them. */
+.change-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+/* A comment excerpt wraps to two lines, then ellipsis — one line kept too
+   little of it to be worth showing in the 320px popover. */
+.change-line-prose {
+  white-space: normal;
+}
+.change-line-prose .change-val {
+  font-weight: 500;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.change-field {
+  color: var(--change-muted, var(--fg-muted));
+  min-width: 4.5em;
+  flex-shrink: 0;
+}
+.change-old {
+  color: var(--change-muted, var(--fg-muted));
+  text-decoration: line-through;
+  flex-shrink: 0;
+}
+.change-val {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.change-val.is-state::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: 1px;
+}
+.change-val.tone-triage { color: var(--change-triage, var(--state-triage)); }
+.change-val.tone-backlog { color: var(--change-backlog, var(--state-backlog)); }
+.change-val.tone-unstarted { color: var(--change-unstarted, var(--state-unstarted)); }
+.change-val.tone-started { color: var(--change-started, var(--state-started)); }
+.change-val.tone-completed { color: var(--change-completed, var(--state-completed)); }
+.change-val.tone-canceled { color: var(--change-canceled, var(--state-canceled)); }
+.change-val.tone-warn { color: var(--change-warn, var(--warn)); }
+.change-val.tone-danger { color: var(--change-danger, var(--danger)); }
+.change-val.tone-none {
+  color: var(--change-muted, var(--fg-muted));
+  font-style: italic;
+  font-weight: 400;
 }
 .notif-popover-foot {
   padding: 6px 8px;
@@ -3622,6 +3688,17 @@ label + .settings-help {
   --toast-fg: #ebeef2;
   --toast-muted: #9aa4b1;
   --toast-accent: #6ea8fb;
+  /* The shared change lines read these; the fallbacks are the THEME's, which
+     on this fixed surface would be the wrong palette half the time. */
+  --change-muted: var(--toast-muted);
+  --change-triage: #fb923c;
+  --change-backlog: #94a3b8;
+  --change-unstarted: #a78bfa;
+  --change-started: #60a5fa;
+  --change-completed: #4ade80;
+  --change-canceled: #9ca3af;
+  --change-warn: #f5c84b;
+  --change-danger: #ff8a8a;
   position: fixed;
   bottom: 16px;
   right: 16px;
@@ -3686,50 +3763,10 @@ label + .settings-help {
 .notif-toast-what {
   grid-column: 2;
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  gap: 1px;
   font-size: 12px;
-  overflow: hidden;
-  white-space: nowrap;
-}
-.notif-toast-field {
-  color: var(--toast-muted);
-  min-width: 4.5em;
-}
-.notif-toast-old {
-  color: var(--toast-muted);
-  text-decoration: line-through;
-}
-.notif-toast-val {
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* A state carries a dot as well as a colour, so the type still reads for
-   anyone who cannot tell blue from violet. Dark-theme state colours, fixed
-   for the same reason as the surface above. */
-.notif-toast-val.is-state::before {
-  content: '';
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin-right: 4px;
-  border-radius: 50%;
-  background: currentColor;
-  vertical-align: 1px;
-}
-.notif-toast-val.tone-triage { color: #fb923c; }
-.notif-toast-val.tone-backlog { color: #94a3b8; }
-.notif-toast-val.tone-unstarted { color: #a78bfa; }
-.notif-toast-val.tone-started { color: #60a5fa; }
-.notif-toast-val.tone-completed { color: #4ade80; }
-.notif-toast-val.tone-canceled { color: #9ca3af; }
-.notif-toast-val.tone-warn { color: #f5c84b; }
-.notif-toast-val.tone-danger { color: #ff8a8a; }
-.notif-toast-val.tone-none {
-  color: var(--toast-muted);
-  font-style: italic;
-  font-weight: 400;
+  min-width: 0;
 }
 .notif-toast-more {
   color: var(--toast-muted);

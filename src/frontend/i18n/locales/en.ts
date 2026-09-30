@@ -786,7 +786,7 @@ export const en = {
     toastView: 'View',
     toastDismiss: 'Dismiss',
     toastMore: '+{count} more — View for all',
-    // One line per moved field in the toast — "Status  Todo → In Review"
+    // One line per moved field, in the toast and the bell — "Status  Todo → In Review"
     line: {
       state: 'Status',
       assignee: 'Assignee',
@@ -801,17 +801,6 @@ export const en = {
       created: 'Created',
       none: 'none',
     },
-    // What moved — used both in the panel rows and the toast rows
-    created: 'created',
-    fieldTitle: 'renamed',
-    fieldState: 'status',
-    fieldAssignee: 'assignee',
-    fieldPriority: 'priority',
-    fieldLabels: 'labels',
-    fieldProject: 'project',
-    fieldMilestone: 'milestone',
-    fieldDueDate: 'due date',
-    fieldComment: 'new comment',
     // Settings
     settingsHeading: 'Notifications',
     enable: 'Show a toast when issues change',

@@ -12,8 +12,8 @@ import {
 } from '../lib/stageNudges'
 import { useViewStore } from '../store/viewStore'
 import { currentQuery } from '../store/urlSync'
-import { useT, useLocale } from '../i18n'
-import { summarizeEntry } from '../lib/notificationSummary'
+import { useT } from '../i18n'
+import { ChangeLines } from './ChangeLines'
 
 /**
  * Anchored popover, not a modal.
@@ -34,7 +34,6 @@ export function NotificationBell({ iconSize }: { iconSize: number }) {
   const scopeQuery = useNotificationStore((s) => s.scopeQuery)
   const setScopeQuery = useNotificationStore((s) => s.setScopeQuery)
   const t = useT()
-  const locale = useLocale()
 
   const scoped = scopeQuery !== ''
 
@@ -213,7 +212,9 @@ export function NotificationBell({ iconSize }: { iconSize: number }) {
                 >
                   <span className="notif-row-id">{e.identifier}</span>
                   <span className="notif-row-title">{e.title}</span>
-                  <span className="notif-row-what">{summarizeEntry(e, t, locale)}</span>
+                  <span className="notif-row-what">
+                    <ChangeLines entry={e} />
+                  </span>
                   <span className="notif-row-when">{when(e.at, now)}</span>
                 </button>
               ))}

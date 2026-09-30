@@ -1,45 +1,12 @@
-// How one change-log entry reads as a line of text. Shared by the bell's rows
-// and the toast, and pulled out of NotificationBell.tsx because `.tsx` is
-// outside vitest's reach — the wording is the part worth pinning.
+// How one change-log entry reads: one line per moved field. Shared by the
+// bell's rows and the toast, and kept out of `.tsx` because that is outside
+// vitest's reach — the wording is the part worth pinning.
 
 import type { IssueStateType } from '@shared/types.js'
 import type { DictKey, Locale } from '../i18n'
 import { priorityLabelFor } from './colors'
 import type { ChangedField } from './issueDiff'
 import type { StoredEntry } from './notificationHistory'
-
-const FIELD_KEY: Record<ChangedField, DictKey> = {
-  title: 'notifications.fieldTitle',
-  state: 'notifications.fieldState',
-  assignee: 'notifications.fieldAssignee',
-  priority: 'notifications.fieldPriority',
-  labels: 'notifications.fieldLabels',
-  project: 'notifications.fieldProject',
-  milestone: 'notifications.fieldMilestone',
-  dueDate: 'notifications.fieldDueDate',
-  comment: 'notifications.fieldComment',
-}
-
-export function summarizeEntry(
-  e: StoredEntry,
-  t: (k: DictKey) => string,
-  locale: Locale,
-): string {
-  if (e.kind === 'created') return t('notifications.created')
-  // "→ In Review · +bug · new comment" — the value where there is one, the
-  // field name where naming the value would say less than naming the field.
-  return e.fields
-    .map((f) => {
-      const to = e.to[f]
-      if (to === undefined) return t(FIELD_KEY[f])
-      if (f === 'comment') return `${t(FIELD_KEY[f])}: ${to}`
-      if (to === null) return `${t(FIELD_KEY[f])} —`
-      if (f === 'priority') return `→ ${priorityLabelFor(Number(to), locale)}`
-      if (f === 'labels') return to
-      return `→ ${to}`
-    })
-    .join(' · ')
-}
 
 /** How a value is coloured. A state takes its canonical type, so it matches
  *  the graph; priority flags only the two levels that ask for attention. */
@@ -61,6 +28,10 @@ export interface ChangeLine {
   label: string
   from?: LineValue
   to?: LineValue
+  /** A sentence rather than a value — a comment excerpt. Allowed to wrap,
+   *  because cut to one line in a 320px popover it kept about twenty
+   *  characters, which is less than the point of showing it. */
+  prose?: true
 }
 
 const LINE_KEY: Record<ChangedField, DictKey> = {
@@ -112,7 +83,11 @@ export function describeEntry(
     if (f === 'comment') {
       // An entry from before excerpts existed has none; it still says "new".
       const said = e.to.comment ?? t('notifications.line.commentNew')
-      return { label: t(LINE_KEY[f]), to: { text: e.commentAuthor ? `${e.commentAuthor}: ${said}` : said } }
+      return {
+        label: t(LINE_KEY[f]),
+        to: { text: e.commentAuthor ? `${e.commentAuthor}: ${said}` : said },
+        prose: true,
+      }
     }
     const from = value(f, e.from?.[f], e.stateType?.from)
     const to = value(f, e.to[f], e.stateType?.to)
