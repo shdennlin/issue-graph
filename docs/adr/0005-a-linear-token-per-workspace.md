@@ -34,9 +34,11 @@ shape `ig-notify-log` already uses.
   token is stored where Connect was pressed, not wherever `?w=` points when
   the redirect returns. A stash without a workspace predates this change and
   is refused.
-- A write records its workspace before its first `await`, so a 401 clears
-  the token that write was actually sent with, even if the user switched
-  tabs while it was in flight.
+- A write records its workspace before its first `await`, and builds both its
+  route (`?w=`) and its bearer token from that one value. The two used to be
+  read at different moments, with a token renewal awaited in between, so a
+  tab switch during the renewal could send A's token to B's route. A 401
+  likewise clears the token the write was actually sent with.
 - Refresh locks are per workspace (`ig-linear-refresh:<workspaceId>`). Each
   slot rotates its own refresh token, so nothing needs to serialise across
   workspaces.
@@ -58,8 +60,21 @@ yet.
 - Two workspaces on the same Linear organisation need a Connect each.
 - Settings describes the current workspace's connection, and the Connect
   button is disabled when there is no workspace.
+- **Nothing checks that the organisation authorised is the workspace's.**
+  Linear's consent screen lets someone in several organisations pick any of
+  them. Choosing the wrong one stores a valid token under this workspace, and
+  every write then fails with not-found or forbidden rather than 401, so the
+  token is never cleared and the controls stay enabled. This predates
+  scoping, since the single slot had the same exposure, and it is not fixed
+  here: checking would need the workspace's organisation id from the server
+  plus a viewer query after the exchange.
 
 ## Revisit when
+
+- **Someone authorises the wrong organisation and gets stuck.** That is the
+  point to add a post-exchange check against the workspace's organisation,
+  or at least to map a not-found or forbidden write to a "wrong Linear
+  organisation? Reconnect" hint.
 
 - **People routinely run several workspaces on one Linear organisation**, and
   the repeated Connect becomes the complaint. At that point, keying by

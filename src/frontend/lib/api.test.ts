@@ -11,6 +11,8 @@
 // defect was already sitting in savedViewsStore's delete path.
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { api } from './api'
+import { authKey } from './linearAuth'
+import { useWorkspaceStore } from '../store/workspaceStore'
 
 const mockFetch = vi.fn()
 
@@ -54,5 +56,37 @@ describe('http response bodies', () => {
   it('covers the saved-view delete that had the same defect', async () => {
     respond(204, null)
     await expect(api.deleteSavedView(1)).resolves.toBeUndefined()
+  })
+})
+
+// A write's URL and its bearer token must name the SAME workspace. They used to
+// be read at two different moments — the header before `await`, the `?w=` after
+// it inside http() — so a tab switch during a token renewal sent workspace A's
+// Linear token to workspace B's route. The write's own workspace is now passed
+// in once and both are built from it.
+describe('write routing', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    localStorage.setItem(
+      authKey('team_a'),
+      JSON.stringify({ token: 'a-token', expiresAt: Date.now() + 3600_000 }),
+    )
+    // The tab now shows B, as if the user switched while the write was pending.
+    useWorkspaceStore.setState({ currentWorkspaceId: 'team_b' })
+    respond(200, '{"ok":true}')
+  })
+
+  it('routes an issue update to the workspace it was issued in, with that workspace\'s token', async () => {
+    await api.updateIssue('ENG-1', { priority: 1 }, 'team_a')
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit]
+    expect(new URL(url, 'http://x').searchParams.get('w')).toBe('team_a')
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer a-token')
+  })
+
+  it('routes a comment the same way', async () => {
+    await api.addIssueComment('ENG-1', 'hi', 'team_a')
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit]
+    expect(new URL(url, 'http://x').searchParams.get('w')).toBe('team_a')
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer a-token')
   })
 })

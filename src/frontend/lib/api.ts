@@ -25,10 +25,24 @@ import { authHeader } from './linearAuth'
  *   - the workspace store hasn't initialised yet (early bootstrap before
  *     /api/workspaces returns; the backend then falls back to its default).
  */
-/** The caller's Linear credential for the current tab's workspace, or none. */
-function writeAuthHeader(): Promise<Record<string, string>> {
-  const id = useWorkspaceStore.getState().currentWorkspaceId
-  return id ? authHeader(id) : Promise.resolve({})
+/**
+ * The route and the credential for one write, both built from ONE workspace id.
+ *
+ * They used to be read at two moments — the header before its `await`, the
+ * `?w=` inside http() after it — and a token renewal sits in that await. A tab
+ * switch during it sent workspace A's Linear token to workspace B's route. The
+ * write's workspace is now captured by the caller before anything awaits and
+ * passed in, and an explicit `?w=` is what withWorkspaceParam leaves alone.
+ * With no workspace there is no token to send, and the path is left to the
+ * default routing.
+ */
+async function writeRequest(
+  path: string,
+  workspaceId: string | null,
+): Promise<{ path: string; headers: Record<string, string> }> {
+  if (!workspaceId) return { path, headers: {} }
+  const sep = path.includes('?') ? '&' : '?'
+  return { path: `${path}${sep}w=${encodeURIComponent(workspaceId)}`, headers: await authHeader(workspaceId) }
 }
 
 export function withWorkspaceParam(path: string): string {
@@ -167,25 +181,28 @@ export const api = {
       addedLabelIds?: string[]
       removedLabelIds?: string[]
     },
-  ) =>
-    // `await authHeader()` rather than a plain call: it renews a token that is
-    // near expiry first, so a write started minutes before the 24h mark does
-    // not race the clock. Its Promise return is what stops a future write path
-    // from silently skipping that.
-    //
-    // Scoped to this tab's workspace: a Linear token belongs to one
-    // organisation, and a tab with no workspace has no token to send.
-    http<{ ok: true }>(`/api/issues/${encodeURIComponent(identifier)}`, {
+    // The workspace the write was issued in, captured by the caller before any
+    // await (see writeRequest). Required, so a new caller cannot fall back to
+    // "whatever the tab shows by the time the token is ready".
+    workspaceId: string | null,
+  ) => {
+    // writeRequest awaits authHeader, which renews a token near expiry first,
+    // so a write started minutes before the 24h mark does not race the clock.
+    const req = await writeRequest(`/api/issues/${encodeURIComponent(identifier)}`, workspaceId)
+    return http<{ ok: true }>(req.path, {
       method: 'PATCH',
-      headers: await writeAuthHeader(),
+      headers: req.headers,
       body: JSON.stringify(patch),
-    }),
-  addIssueComment: async (identifier: string, body: string) =>
-    http<{ ok: true }>(`/api/issues/${encodeURIComponent(identifier)}/comments`, {
+    })
+  },
+  addIssueComment: async (identifier: string, body: string, workspaceId: string | null) => {
+    const req = await writeRequest(`/api/issues/${encodeURIComponent(identifier)}/comments`, workspaceId)
+    return http<{ ok: true }>(req.path, {
       method: 'POST',
-      headers: await writeAuthHeader(),
+      headers: req.headers,
       body: JSON.stringify({ body }),
-    }),
+    })
+  },
   fetchProjectDetail: (projectId: string, opts?: { fresh?: boolean }) =>
     http<{ data: ProjectDetail }>(
       `/api/projects/${encodeURIComponent(projectId)}${opts?.fresh ? '?fresh=1' : ''}`,

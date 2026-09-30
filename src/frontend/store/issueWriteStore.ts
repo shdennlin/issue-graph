@@ -93,7 +93,7 @@ export const useIssueWriteStore = create<IssueWriteState>((set) => ({
       state: { name: state.name, type: state.type },
     })
     try {
-      await api.updateIssue(identifier, { stateId: state.id })
+      await api.updateIssue(identifier, { stateId: state.id }, wid)
       set((s) => ({ status: { ...s.status, [identifier]: 'idle' } }))
       await settle()
     } catch (e) {
@@ -107,7 +107,7 @@ export const useIssueWriteStore = create<IssueWriteState>((set) => ({
     try {
       // `null` unassigns; the key's presence is what carries that, so it is
       // always sent rather than spread conditionally.
-      await api.updateIssue(identifier, { assigneeId: assignee?.id ?? null })
+      await api.updateIssue(identifier, { assigneeId: assignee?.id ?? null }, wid)
       set((s) => ({ status: { ...s.status, [identifier]: 'idle' } }))
       await settle()
     } catch (e) {
@@ -119,7 +119,7 @@ export const useIssueWriteStore = create<IssueWriteState>((set) => ({
     const wid = begin(identifier, set)
     useGraphStore.getState().applyIssuePatch(identifier, { priority })
     try {
-      await api.updateIssue(identifier, { priority })
+      await api.updateIssue(identifier, { priority }, wid)
       set((s) => ({ status: { ...s.status, [identifier]: 'idle' } }))
       await settle()
     } catch (e) {
@@ -134,7 +134,7 @@ export const useIssueWriteStore = create<IssueWriteState>((set) => ({
       // A delta, not the resulting set: `labelIds` would overwrite any label
       // someone else added since our last sync, and the graph is a cache so
       // our idea of "current" is always slightly behind.
-      await api.updateIssue(identifier, { addedLabelIds: [label.id] })
+      await api.updateIssue(identifier, { addedLabelIds: [label.id] }, wid)
       set((s) => ({ status: { ...s.status, [identifier]: 'idle' } }))
       await settle()
     } catch (e) {
@@ -148,7 +148,7 @@ export const useIssueWriteStore = create<IssueWriteState>((set) => ({
       labels: current.filter((l) => l.id !== label.id),
     })
     try {
-      await api.updateIssue(identifier, { removedLabelIds: [label.id] })
+      await api.updateIssue(identifier, { removedLabelIds: [label.id] }, wid)
       set((s) => ({ status: { ...s.status, [identifier]: 'idle' } }))
       await settle()
     } catch (e) {
@@ -161,7 +161,7 @@ export const useIssueWriteStore = create<IssueWriteState>((set) => ({
   async addComment(identifier, body) {
     const wid = begin(identifier, set)
     try {
-      await api.addIssueComment(identifier, body)
+      await api.addIssueComment(identifier, body, wid)
       set((s) => ({ status: { ...s.status, [identifier]: 'idle' } }))
       // No optimistic append: comments live inside the lazily-fetched issue
       // detail, not in the graph, and the route busts that cache on write. The
