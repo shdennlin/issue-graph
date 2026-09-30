@@ -244,6 +244,26 @@ export function nextCandidate(
   return null
 }
 
+export type DoneMiss = 'not_found' | 'not_claimed' | 'claimed_elsewhere' | 'already_done' | 'done_elsewhere'
+
+/**
+ * Why a guarded `/done` UPDATE changed nothing, from the member row as it
+ * stands (or undefined when the identifier is not in the batch).
+ *
+ * "No row changed" used to be answered with one message for every cause —
+ * "not claimed by you" — so an agent that sent a mistyped identifier was told
+ * to go and claim it, which could never help. `already_done` is not a failure:
+ * the UPDATE is guarded on `done_at IS NULL`, so a retry of a call that already
+ * landed (MCP clients retry on timeout) arrives here and must succeed without
+ * moving the finish time.
+ */
+export function explainDoneMiss(row: BatchMemberRow | undefined, claimant: string): DoneMiss {
+  if (!row) return 'not_found'
+  if (row.done_at !== null) return row.claimed_by === claimant ? 'already_done' : 'done_elsewhere'
+  if (row.claimed_by === null) return 'not_claimed'
+  return 'claimed_elsewhere'
+}
+
 export interface BatchProgress {
   total: number
   done: number

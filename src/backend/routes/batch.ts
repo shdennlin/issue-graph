@@ -21,6 +21,7 @@ import { agentTokenValid, originAllowed } from '../lib/http.js'
 import { readCachedIssues } from '../cache.js'
 import {
   batchProgress,
+  explainDoneMiss,
   normalizeAssignees,
   normalizeLinkKind,
   normalizeLinkValue,
@@ -543,15 +544,42 @@ batchRoutes.post('/api/batches/:id/done', async (c) => {
   if (!parsed.success) return c.json(invalid(parsed.error.message), 400)
   const identifier = parsed.data.identifier.toUpperCase()
 
-  // Only the holder may finish it. Otherwise a stale session could mark work
-  // done that another one is mid-way through.
-  const r = getDb()
+  const claimant = parsed.data.claimant
+  const db = getDb()
+  // Only the holder may finish it — otherwise a stale session could mark work
+  // done that another is mid-way through — and only once: `done_at IS NULL`
+  // keeps a retry from moving the finish time, which nothing else records.
+  const r = db
     .prepare(
-      `UPDATE batch_member SET done_at = ? WHERE batch_id = ? AND identifier = ? AND claimed_by = ?`,
+      `UPDATE batch_member SET done_at = ?
+       WHERE batch_id = ? AND identifier = ? AND claimed_by = ? AND done_at IS NULL`,
     )
-    .run(Date.now(), id, identifier, parsed.data.claimant)
-  if (r.changes === 0) return c.json(invalid('not claimed by you'), 409)
-  return c.json({ ok: true, progress: batchProgress(membersOf(id), readCachedIssues()) })
+    .run(Date.now(), id, identifier, claimant)
+  const progress = () => batchProgress(membersOf(id), readCachedIssues())
+  if (r.changes > 0) return c.json({ ok: true, progress: progress() })
+
+  // Nothing changed. Say which of five reasons, since each asks the caller to
+  // do something different and one of them is not a failure at all.
+  if (!db.prepare(`SELECT id FROM batch WHERE id = ?`).get(id)) return c.json(notFound(), 404)
+  const miss = explainDoneMiss(
+    membersOf(id).find((m) => m.identifier === identifier),
+    claimant,
+  )
+  if (miss === 'already_done') return c.json({ ok: true, progress: progress() })
+  if (miss === 'not_found') {
+    return c.json(
+      { error: { code: 'not_found', message: `${identifier} is not a member of workstream ${id}.` } },
+      404,
+    )
+  }
+  const message = {
+    not_claimed: `Nobody holds ${identifier}. Take it with next_issue first.`,
+    claimed_elsewhere: `${identifier} is held by another session; only the holder can report it done.`,
+    done_elsewhere: `${identifier} was already reported done by another session.`,
+  }[miss]
+  // A conflict's code on a conflict's status. This used to send `invalid` —
+  // a request error — with a 409, for every cause at once.
+  return c.json({ error: { code: miss, message } }, 409)
 })
 
 batchRoutes.delete('/api/batches/:id', (c) => {

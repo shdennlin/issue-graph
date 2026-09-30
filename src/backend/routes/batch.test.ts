@@ -147,6 +147,10 @@ vi.mock('../db.js', () => ({
           const [at, batchId, identifier, claimant] = args as [number, number, string, string]
           const m = members.find((x) => x.batch_id === batchId && x.identifier === identifier)
           if (!m || m.claimed_by !== claimant) return { changes: 0 }
+          // Mirrors the `done_at IS NULL` guard only when the SQL carries it,
+          // so a route that drops the guard fails the retry test instead of
+          // being papered over by the mock.
+          if (sql.includes('done_at IS NULL') && m.done_at !== null) return { changes: 0 }
           m.done_at = at
           return { changes: 1 }
         }
@@ -312,6 +316,47 @@ describe('POST /api/batches/:id/done', () => {
     expect(
       (await req('/api/batches/1/done', 'POST', { identifier: 'ONE-1', claimant: 'a' })).status,
     ).toBe(409)
+  })
+
+  // An MCP retry after the first call landed. It must succeed, and must not
+  // move the finish time — nothing else records when the work was done.
+  it('accepts a repeat from the holder without moving done_at', async () => {
+    await seed()
+    await req('/api/batches/1/next', 'POST', { claimant: 'a' })
+    await req('/api/batches/1/done', 'POST', { identifier: 'ONE-1', claimant: 'a' })
+    const first = members.find((m) => m.identifier === 'ONE-1')?.done_at
+    await new Promise((r) => setTimeout(r, 5))
+    const res = await req('/api/batches/1/done', 'POST', { identifier: 'ONE-1', claimant: 'a' })
+    expect(res.status).toBe(200)
+    expect(members.find((m) => m.identifier === 'ONE-1')?.done_at).toBe(first)
+  })
+
+  it('answers 404 for a batch that does not exist', async () => {
+    await seed()
+    const res = await req('/api/batches/99/done', 'POST', { identifier: 'ONE-1', claimant: 'a' })
+    expect(res.status).toBe(404)
+  })
+
+  it('answers 404 for an identifier that is not a member, not "not claimed"', async () => {
+    await seed()
+    const res = await req('/api/batches/1/done', 'POST', { identifier: 'ONE-12', claimant: 'a' })
+    expect(res.status).toBe(404)
+  })
+
+  // The code must name the conflict. It said `invalid` with a 409 — a request
+  // error's code on a conflict's status — for every cause at once.
+  it('names who holds it when a different session does', async () => {
+    await seed()
+    await req('/api/batches/1/next', 'POST', { claimant: 'b' })
+    const res = await req('/api/batches/1/done', 'POST', { identifier: 'ONE-1', claimant: 'a' })
+    expect(res.status).toBe(409)
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe('claimed_elsewhere')
+  })
+
+  it('says not_claimed, not invalid, when nobody holds it', async () => {
+    await seed()
+    const res = await req('/api/batches/1/done', 'POST', { identifier: 'ONE-1', claimant: 'a' })
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe('not_claimed')
   })
 })
 

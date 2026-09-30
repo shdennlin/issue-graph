@@ -21,6 +21,7 @@ import {
   parseStringArray,
   tallyPullRequests,
   batchProgress,
+  explainDoneMiss,
   memberOutcome,
   nextCandidate,
   normalizeBatchName,
@@ -294,6 +295,31 @@ describe('batchProgress from Linear state', () => {
 
   it('counts a member missing from the cache as open', () => {
     expect(batchProgress([member('ONE-9')], [])).toEqual({ total: 1, done: 0, claimed: 0 })
+  })
+})
+
+// POST /done answers from a conditional UPDATE, and "no row changed" used to
+// mean four different things under one message, "not claimed by you". An agent
+// that sent a typo was told to go and claim it, which could never help.
+describe('explainDoneMiss', () => {
+  it('reports a member that is not in the batch as not found', () => {
+    expect(explainDoneMiss(undefined, 'a')).toBe('not_found')
+  })
+
+  it('distinguishes nobody holding it from someone else holding it', () => {
+    expect(explainDoneMiss(member('ONE-1'), 'a')).toBe('not_claimed')
+    expect(explainDoneMiss(member('ONE-1', { claimed_by: 'b' }), 'a')).toBe('claimed_elsewhere')
+  })
+
+  // MCP clients retry on timeout. A retry that arrives after the first call
+  // landed must succeed without touching anything — the UPDATE is guarded on
+  // `done_at IS NULL`, so it changes nothing and lands here.
+  it('treats a repeat from the same claimant as already done, not a failure', () => {
+    expect(explainDoneMiss(member('ONE-1', { claimed_by: 'a', done_at: 5 }), 'a')).toBe('already_done')
+  })
+
+  it('refuses a claimant who never held a member someone else finished', () => {
+    expect(explainDoneMiss(member('ONE-1', { claimed_by: 'b', done_at: 5 }), 'a')).toBe('done_elsewhere')
   })
 })
 
