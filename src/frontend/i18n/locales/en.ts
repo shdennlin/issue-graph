@@ -121,7 +121,7 @@ export const en = {
     // what per-user authorisation fixes. Kept on its own line because it is the
     // part Disconnect cannot undo — changes already made stay made, as yours.
     writeAccessAttribution:
-      'Changes you make here are recorded in Linear as yours, exactly as if you had made them in Linear itself. Access lasts about a day, then you reconnect.',
+      'Changes you make here are recorded in Linear as yours, exactly as if you had made them in Linear itself. The connection renews itself, and lasts until you disconnect. Each workspace connects separately.',
     writeAccessConnect: 'Connect Linear',
     writeAccessDisconnect: 'Disconnect',
     writeAccessConnected: 'Connected to Linear.',

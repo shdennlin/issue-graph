@@ -117,7 +117,7 @@ export const zhTW: Dict = {
     writeAccessDisabled:
       '這台伺服器還沒有設定 Linear OAuth 應用程式，所以目前沒有人能修改。請在伺服器環境變數設定 LINEAR_OAUTH_CLIENT_ID 後重啟。',
     writeAccessAttribution:
-      '你在這裡做的修改，在 Linear 上會記錄成你本人所為，就跟你直接在 Linear 操作一樣。授權大約維持一天，之後需要重新連結。',
+      '你在這裡做的修改，在 Linear 上會記錄成你本人所為，就跟你直接在 Linear 操作一樣。連結會自動續期，直到你中斷連結為止。每個 workspace 需要各自連結。',
     writeAccessConnect: '連結 Linear',
     writeAccessDisconnect: '解除連結',
     writeAccessConnected: '已連結 Linear。',
