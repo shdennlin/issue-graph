@@ -785,7 +785,8 @@ export const en = {
     toastMany: '{count} issues changed',
     toastView: 'View',
     toastDismiss: 'Dismiss',
-    // What moved — used both in the panel rows and the toast summary
+    toastMore: '+{count} more — View for all',
+    // What moved — used both in the panel rows and the toast rows
     created: 'created',
     fieldTitle: 'renamed',
     fieldState: 'status',

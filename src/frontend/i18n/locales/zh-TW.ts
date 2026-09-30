@@ -759,6 +759,7 @@ export const zhTW: Dict = {
     toastMany: '{count} 個議題有變更',
     toastView: '查看',
     toastDismiss: '關閉',
+    toastMore: '還有 {count} 則，點「查看」看全部',
     created: '新增',
     fieldTitle: '改名',
     fieldState: '狀態',

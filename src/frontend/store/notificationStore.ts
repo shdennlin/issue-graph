@@ -80,9 +80,10 @@ interface NotificationState {
    *
    * Held here rather than derived from `entries` because a toast is about one
    * sync, while the list accumulates: after two syncs the newest entries alone
-   * cannot say whether they arrived together.
+   * cannot say whether they arrived together. It carries the batch's own
+   * entries so the toast can say WHAT changed, not only how many.
    */
-  toast: { count: number; at: number } | null
+  toast: { entries: NotificationEntry[]; at: number } | null
   dismissToast: () => void
   /** Workspace the `entries` belong to. Null until the first hydrate. */
   workspaceId: string | null
@@ -220,7 +221,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     // Newest first, oldest dropped past the cap.
     const entries = [...fresh, ...get().entries].slice(0, MAX_ENTRIES)
     writeHistory(workspaceId, entries)
-    set({ entries, toast: { count: fresh.length, at } })
+    set({ entries, toast: { entries: fresh, at } })
     if (get().desktopEnabled) raiseDesktop(fresh, workspaceId)
   },
 

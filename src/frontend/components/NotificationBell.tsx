@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bell } from 'lucide-react'
 import { useClickOutside } from '../hooks/useClickOutside'
-import type { ChangedField } from '../lib/issueDiff'
 import { unreadCount, useNotificationStore } from '../store/notificationStore'
 import { useGraphStore } from '../store/graphStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
@@ -13,10 +12,8 @@ import {
 } from '../lib/stageNudges'
 import { useViewStore } from '../store/viewStore'
 import { currentQuery } from '../store/urlSync'
-import { useT, useLocale, type DictKey } from '../i18n'
-import { priorityLabelFor } from '../lib/colors'
-import type { NotificationEntry } from '../store/notificationStore'
-import type { Locale } from '../i18n/store'
+import { useT, useLocale } from '../i18n'
+import { summarizeEntry } from '../lib/notificationSummary'
 
 /**
  * Anchored popover, not a modal.
@@ -216,7 +213,7 @@ export function NotificationBell({ iconSize }: { iconSize: number }) {
                 >
                   <span className="notif-row-id">{e.identifier}</span>
                   <span className="notif-row-title">{e.title}</span>
-                  <span className="notif-row-what">{summarize(e, t, locale)}</span>
+                  <span className="notif-row-what">{summarizeEntry(e, t, locale)}</span>
                   <span className="notif-row-when">{when(e.at, now)}</span>
                 </button>
               ))}
@@ -252,36 +249,4 @@ function when(at: number, now: number): string {
   return sameDay
     ? `${pad(d.getHours())}:${pad(d.getMinutes())}`
     : `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
-
-const FIELD_KEY: Record<ChangedField, DictKey> = {
-  title: 'notifications.fieldTitle',
-  state: 'notifications.fieldState',
-  assignee: 'notifications.fieldAssignee',
-  priority: 'notifications.fieldPriority',
-  labels: 'notifications.fieldLabels',
-  project: 'notifications.fieldProject',
-  milestone: 'notifications.fieldMilestone',
-  dueDate: 'notifications.fieldDueDate',
-  comment: 'notifications.fieldComment',
-}
-
-function summarize(
-  e: NotificationEntry,
-  t: (k: DictKey) => string,
-  locale: Locale,
-): string {
-  if (e.kind === 'created') return t('notifications.created')
-  // "→ In Review · +bug · new comment" — the value where there is one, the
-  // field name where naming the value would say less than naming the field.
-  return e.fields
-    .map((f) => {
-      const to = e.to[f]
-      if (to === undefined) return t(FIELD_KEY[f])
-      if (to === null) return `${t(FIELD_KEY[f])} —`
-      if (f === 'priority') return `→ ${priorityLabelFor(Number(to), locale)}`
-      if (f === 'labels') return to
-      return `→ ${to}`
-    })
-    .join(' · ')
 }
