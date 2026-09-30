@@ -30,6 +30,11 @@ const BY_CODE: Record<string, DictKey> = {
   // client discard its stored token — so the reader needs to know that their
   // connection is fine and this one issue is not theirs to change.
   forbidden: 'apiError.forbidden',
+  // Thrown client-side by authHeader, not sent by a route: a renewal that could
+  // not reach Linear. It says the opposite of `unauthenticated` — the
+  // connection is fine, the network was not — and the write store leaves the
+  // credential alone precisely because this code is not that one.
+  refresh_failed: 'apiError.refreshFailed',
 }
 
 export function apiErrorKey(code: string | null | undefined): DictKey | null {

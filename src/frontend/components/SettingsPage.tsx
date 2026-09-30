@@ -6,7 +6,7 @@ import { ModalHeader } from './ModalHeader'
 import { NotificationSettings } from './NotificationSettings'
 import { WorkspaceSettings } from './WorkspaceSettings'
 import { readDefaultView, writeDefaultView } from '../lib/preferences'
-import { InsecureContextError, beginAuth, clearAuth, readAuth } from '../lib/linearAuth'
+import { InsecureContextError, beginAuth, readAuth, revokeAuth } from '../lib/linearAuth'
 import { useCapabilityStore } from '../store/capabilityStore'
 import type { ThemeMode, ViewId } from '../store/viewStore'
 import { LOCALES, useLocale, useSetLocale, useT, type Locale } from '../i18n'
@@ -505,7 +505,11 @@ export function SettingsPage() {
             <button
               type="button"
               onClick={() => {
-                clearAuth()
+                // Revoke, not just forget. `revokeAuth` drops local state
+                // synchronously before it awaits anything, so the UI flips at
+                // once; the upstream call is what makes Disconnect mean the
+                // same thing it did when a forgotten token died within a day.
+                void revokeAuth()
                 const cap = useCapabilityStore.getState()
                 cap.refreshUnlocked()
                 cap.setAuthError(null)

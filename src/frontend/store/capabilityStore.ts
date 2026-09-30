@@ -16,7 +16,7 @@
 
 import { create } from 'zustand'
 import { api } from '../lib/api'
-import { hasValidAuth } from '../lib/linearAuth'
+import { hasValidAuth, refreshAuthIfStale } from '../lib/linearAuth'
 
 interface CapabilityState {
   /** null until asked. Distinguished from `false` so the UI can avoid
@@ -83,7 +83,12 @@ export const useCapabilityStore = create<CapabilityState>((set) => ({
   },
   async load() {
     try {
-      const res = await api.fetchSettings()
+      // Renewed alongside the settings fetch, not after it: `writeEnabled: null`
+      // hides the controls until this resolves, so folding the renewal into the
+      // same wait means a returning user never sees them flash from locked to
+      // unlocked. The refresh cannot reject — it classifies its own failures
+      // and clears the token itself when one is terminal.
+      const [res] = await Promise.all([api.fetchSettings(), refreshAuthIfStale()])
       // `env` is typed Record<string, unknown>, so a backend rename does not
       // surface here as a type error — it surfaces as a permanently undefined
       // field. Worth reading the key name twice.
@@ -92,6 +97,9 @@ export const useCapabilityStore = create<CapabilityState>((set) => ({
         clientId: typeof clientId === 'string' && clientId ? clientId : null,
         writeEnabled: typeof clientId === 'string' && clientId.length > 0,
         webhookConfigured: Boolean(res.webhook?.secret_set),
+        // Read AFTER the refresh above, in the same set() as the rest, so the
+        // three bits the write controls gate on land in one render.
+        unlocked: hasValidAuth(),
       })
     } catch {
       // Treat unreachable as "no writes". The optimistic alternative shows

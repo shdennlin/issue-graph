@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { consumeCallback, resolveCallback, type PendingAuth } from './linearAuth'
+import {
+  classifyRefreshFailure,
+  consumeCallback,
+  decideRefresh,
+  mergeRefreshResponse,
+  resolveCallback,
+  type PendingAuth,
+  type StoredAuth,
+} from './linearAuth'
 
 function stash(over: Partial<PendingAuth> = {}): string {
   return JSON.stringify({
@@ -100,5 +108,129 @@ describe('consumeCallback', () => {
     const out = consumeCallback('some-code', 'some-state')
     expect(out.exchange).toBeNull()
     expect(out.rejected).toBe('no_pending')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Refresh. The decision, the merge and the failure classification are pure so
+// they can be tested in node — the fetch and the cross-tab lock around them
+// cannot, and are kept correspondingly thin.
+// ---------------------------------------------------------------------------
+
+const HOUR = 3600_000
+const NOW = 1_700_000_000_000
+
+function auth(over: Partial<StoredAuth> = {}): StoredAuth {
+  return {
+    token: 'access-token',
+    expiresAt: NOW + 20 * HOUR,
+    refreshToken: 'refresh-token',
+    clientId: 'client-abc',
+    ...over,
+  }
+}
+
+describe('decideRefresh', () => {
+  it('leaves a token with hours left alone', () => {
+    expect(decideRefresh(auth(), NOW)).toBe('fresh')
+  })
+
+  // The skew exists so a write started 30 seconds before expiry does not race
+  // the clock and land as a 401 the user has to retry by hand.
+  it('renews inside the skew window, before the token actually lapses', () => {
+    expect(decideRefresh(auth({ expiresAt: NOW + 60_000 }), NOW)).toBe('stale')
+  })
+
+  // A long-lived refresh token outlives the access token by design, so an
+  // expired entry is renewable — this is the case that makes a tab left open
+  // over a weekend heal itself instead of demanding a reconnect.
+  it('renews a token that already expired, rather than giving up on it', () => {
+    expect(decideRefresh(auth({ expiresAt: NOW - 8 * 24 * HOUR }), NOW)).toBe('stale')
+  })
+
+  // Entries written before refresh existed. They cannot be renewed, but while
+  // they are still valid there is nothing to do about that.
+  it('reports an unexpired entry with no refresh token as fresh, not broken', () => {
+    expect(decideRefresh(auth({ refreshToken: undefined }), NOW)).toBe('fresh')
+  })
+
+  it('reports an EXPIRED entry with no refresh token as unrefreshable', () => {
+    expect(decideRefresh(auth({ refreshToken: undefined, expiresAt: NOW - HOUR }), NOW)).toBe(
+      'unrefreshable',
+    )
+  })
+
+  // The exchange must use the id the token was issued for. Without it we would
+  // be guessing, and a wrong id fails the refresh in a way that looks like a
+  // dead token.
+  it('cannot renew without the client id the token was issued for', () => {
+    expect(decideRefresh(auth({ clientId: undefined, expiresAt: NOW - HOUR }), NOW)).toBe(
+      'unrefreshable',
+    )
+  })
+
+  it('has nothing to decide when there is no stored auth at all', () => {
+    expect(decideRefresh(null, NOW)).toBe('unrefreshable')
+  })
+})
+
+describe('mergeRefreshResponse', () => {
+  it('takes the new access token and dates it from now', () => {
+    const next = mergeRefreshResponse(auth(), { access_token: 'new-access', expires_in: 86399 }, NOW)
+    expect(next?.token).toBe('new-access')
+    expect(next?.expiresAt).toBe(NOW + 86399_000)
+  })
+
+  // Linear rotates the refresh token on every use. Storing the new one is the
+  // whole reason this merge exists rather than a field assignment.
+  it('stores the rotated refresh token', () => {
+    const next = mergeRefreshResponse(
+      auth(),
+      { access_token: 'a', expires_in: 10, refresh_token: 'rotated' },
+      NOW,
+    )
+    expect(next?.refreshToken).toBe('rotated')
+  })
+
+  // Dropping to an entry that cannot refresh would cost the user a manual
+  // reconnect a day later, for a response that never asked us to.
+  it('keeps the previous refresh token when the response omits one', () => {
+    const next = mergeRefreshResponse(auth(), { access_token: 'a', expires_in: 10 }, NOW)
+    expect(next?.refreshToken).toBe('refresh-token')
+  })
+
+  it('carries the client id forward so the NEXT refresh can run too', () => {
+    const next = mergeRefreshResponse(auth(), { access_token: 'a', expires_in: 10 }, NOW)
+    expect(next?.clientId).toBe('client-abc')
+  })
+
+  it('refuses a response with no access token rather than storing a blank one', () => {
+    expect(mergeRefreshResponse(auth(), { expires_in: 10 }, NOW)).toBeNull()
+  })
+})
+
+describe('classifyRefreshFailure', () => {
+  // invalid_grant: the refresh token is dead. Keeping it means every app load
+  // fires a request that cannot ever succeed.
+  it('treats a 400 as the refresh token being rejected', () => {
+    expect(classifyRefreshFailure(400)).toBe('rejected')
+  })
+
+  it('treats a 401 as rejected', () => {
+    expect(classifyRefreshFailure(401)).toBe('rejected')
+  })
+
+  // A 5xx or an offline laptop says nothing about the token. Discarding it here
+  // would turn Linear's bad afternoon into the user reconnecting by hand.
+  it('treats a 500 as transient, leaving the token in place', () => {
+    expect(classifyRefreshFailure(500)).toBe('transient')
+  })
+
+  it('treats a rate limit as transient', () => {
+    expect(classifyRefreshFailure(429)).toBe('transient')
+  })
+
+  it('treats a network failure — no status at all — as transient', () => {
+    expect(classifyRefreshFailure(null)).toBe('transient')
   })
 })

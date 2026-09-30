@@ -61,6 +61,97 @@ export interface StoredAuth {
   /** Epoch ms. Recorded so the UI can say "expired, reconnect" instead of
    *  surfacing a bare 401 from a write the user thought would work. */
   expiresAt: number
+  /**
+   * Linear's rotating refresh token. **Optional**, and that is a migration
+   * story rather than a nicety: entries written before this existed hold an
+   * access token and nothing else, and must keep parsing. They simply cannot
+   * be renewed — one more manual Connect and the next entry can.
+   */
+  refreshToken?: string
+  /**
+   * The client id this token was issued for. Stored for the same reason
+   * `PendingAuth` carries one: a refresh must present the id the credential
+   * belongs to, and a server reconfigured since would report a different one.
+   * Reading it back from /api/settings would also make this module depend on
+   * ./api, which the header explains it must not.
+   */
+  clientId?: string
+}
+
+/**
+ * Renew this long before the access token actually lapses.
+ *
+ * Without a margin, a write begun a few seconds before expiry arrives at Linear
+ * after it — a 401 on an action the user had every reason to think would work.
+ */
+const REFRESH_SKEW_MS = 5 * 60_000
+
+export type RefreshDecision = 'fresh' | 'stale' | 'unrefreshable'
+
+/**
+ * Whether the stored credential needs renewing, can be renewed at all, or is
+ * fine as it stands. Pure, and separated from the fetch because this is the
+ * part with edge cases.
+ *
+ * Note that an *expired* entry is 'stale', not a lost cause: Linear's refresh
+ * token outlives the 24h access token, so a tab left over a weekend heals
+ * itself. Only an entry with nothing to refresh *with* is unrefreshable.
+ */
+export function decideRefresh(auth: StoredAuth | null, now: number): RefreshDecision {
+  if (!auth) return 'unrefreshable'
+  const renewable = Boolean(auth.refreshToken && auth.clientId)
+  if (auth.expiresAt - now > REFRESH_SKEW_MS) return 'fresh'
+  // Past the skew line. Renewable entries get renewed; the rest are only
+  // reportable as broken once they have actually lapsed — until then there is
+  // a usable token and nothing to be done about its lack of a successor.
+  if (renewable) return 'stale'
+  return auth.expiresAt > now ? 'fresh' : 'unrefreshable'
+}
+
+/** The shape Linear's token endpoint returns, for both grant types. */
+export interface TokenResponse {
+  access_token?: string
+  expires_in?: number
+  refresh_token?: string
+}
+
+/**
+ * Fold a refresh response into the entry it renews, or null when the response
+ * carried no access token and there is nothing to store.
+ *
+ * The `?? prev.refreshToken` is load-bearing. Linear rotates the refresh token
+ * on every use and documents returning a new one, but a response that omits it
+ * must leave the old one in place — overwriting with undefined would silently
+ * demote the entry to one that can never refresh again.
+ */
+export function mergeRefreshResponse(
+  prev: StoredAuth,
+  json: TokenResponse,
+  now: number,
+): StoredAuth | null {
+  if (!json.access_token) return null
+  const ttl = typeof json.expires_in === 'number' && json.expires_in > 0 ? json.expires_in : 0
+  return {
+    token: json.access_token,
+    expiresAt: now + ttl * 1000,
+    refreshToken: json.refresh_token ?? prev.refreshToken,
+    clientId: prev.clientId,
+  }
+}
+
+/**
+ * Whether a failed refresh means the token is dead or merely that this attempt
+ * did not land.
+ *
+ * The distinction decides whether we throw the credential away. A 4xx is
+ * `invalid_grant` — keeping it means every app load fires a request that can
+ * never succeed. A 5xx, a rate limit or an offline laptop says nothing about
+ * the token, and discarding it there turns Linear's bad afternoon into the user
+ * reconnecting by hand.
+ */
+export function classifyRefreshFailure(status: number | null): 'transient' | 'rejected' {
+  if (status === 400 || status === 401 || status === 403) return 'rejected'
+  return 'transient'
 }
 
 /** sessionStorage/localStorage are absent under vitest's node environment and
@@ -224,23 +315,126 @@ async function exchangeCode(code: string, verifier: string, clientId: string): P
     }).toString(),
   })
   if (!res.ok) throw new Error(`token exchange failed (${res.status})`)
-  const json = (await res.json()) as { access_token?: string; expires_in?: number }
+  const json = (await res.json()) as TokenResponse
   if (!json.access_token) throw new Error('token exchange returned no access_token')
-  storeAuth(json.access_token, json.expires_in)
+  storeAuth(json, clientId)
 }
 
 /**
- * **The access token only — never the refresh token.**
+ * **The refresh token is kept, and this reverses an earlier decision.**
  *
  * Linear returns a ~24h access token (`expires_in: 86399`) alongside a
- * long-lived refresh token. Keeping the refresh token here would turn a
- * one-day exposure into a permanent one, which is a poor trade for saving a
- * single click a day while the user's Linear session is already live.
+ * rotating refresh token. This module used to discard the latter, on the
+ * grounds that holding it turns a one-day exposure into a permanent one. That
+ * reasoning does not survive the details: the refresh token rotates on every
+ * use, and it lives in the same localStorage, on the same origin, as the access
+ * token it renews — same reachability, same attacker. What the old shape
+ * actually bought was a mandatory reconnect every single day.
+ *
+ * What the trade DOES require is that Disconnect revoke rather than forget —
+ * see `revokeAuth`. Forgetting a 24h token was near enough to ending it;
+ * forgetting a long-lived one is not. See docs/adr/0004.
  */
-export function storeAuth(token: string, expiresInSeconds: number | undefined): void {
-  const ttl = typeof expiresInSeconds === 'number' && expiresInSeconds > 0 ? expiresInSeconds : 0
-  const auth: StoredAuth = { token, expiresAt: Date.now() + ttl * 1000 }
+export function storeAuth(json: TokenResponse, clientId: string): void {
+  if (!json.access_token) return
+  const ttl = typeof json.expires_in === 'number' && json.expires_in > 0 ? json.expires_in : 0
+  const auth: StoredAuth = {
+    token: json.access_token,
+    expiresAt: Date.now() + ttl * 1000,
+    refreshToken: json.refresh_token,
+    clientId,
+  }
   writeRaw('local', AUTH_KEY, JSON.stringify(auth))
+}
+
+const REVOKE_URL = 'https://api.linear.app/oauth/revoke'
+const REFRESH_LOCK = 'ig-linear-refresh'
+
+/**
+ * Serialise refreshes across tabs.
+ *
+ * Two tabs waking together would otherwise both spend the same rotating refresh
+ * token; the loser's copy is then stale and its next attempt fails. `Web Locks`
+ * is absent under vitest's node environment and in older browsers, where
+ * running unserialised is the right fallback — Linear's 30-minute replay grace
+ * on a refresh covers the race that remains.
+ */
+async function withRefreshLock(fn: () => Promise<void>): Promise<void> {
+  const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined
+  if (!locks) return fn()
+  await locks.request(REFRESH_LOCK, fn)
+}
+
+async function performRefresh(prev: StoredAuth): Promise<void> {
+  let status: number | null = null
+  try {
+    const res = await fetch(TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: prev.refreshToken ?? '',
+        // No client_secret: Linear documents it as unnecessary when refreshing
+        // a PKCE-generated token, which is the only kind this app issues. That
+        // one fact is what keeps the whole flow in the browser and out of the
+        // server, where a caller's token must never be persisted.
+        client_id: prev.clientId ?? '',
+      }).toString(),
+    })
+    status = res.status
+    if (!res.ok) throw new Error(`refresh failed (${res.status})`)
+    const next = mergeRefreshResponse(prev, (await res.json()) as TokenResponse, Date.now())
+    if (!next) throw new Error('refresh returned no access_token')
+    writeRaw('local', AUTH_KEY, JSON.stringify(next))
+  } catch {
+    if (classifyRefreshFailure(status) === 'rejected') clearAuth()
+  }
+}
+
+/**
+ * Renew the stored token if it is near or past expiry. A no-op otherwise, and
+ * safe to call on every app load and before every write.
+ *
+ * The re-read *inside* the lock is the load-bearing part: by the time this tab
+ * acquires it, another may already have refreshed, and spending the rotated
+ * token a second time would fail. Nothing anywhere caches `StoredAuth` in
+ * memory for the same reason — `readAuth()` re-reads raw storage each call, and
+ * that is what makes rotation safe between tabs.
+ */
+export async function refreshAuthIfStale(): Promise<void> {
+  if (decideRefresh(readAuth(), Date.now()) !== 'stale') return
+  await withRefreshLock(async () => {
+    const current = readAuth()
+    if (!current || decideRefresh(current, Date.now()) !== 'stale') return
+    await performRefresh(current)
+  })
+}
+
+/**
+ * End the credential at Linear, not just in this browser.
+ *
+ * While a stored token died on its own within 24 hours, forgetting it locally
+ * was equivalent to revoking it. A rotating refresh token has no such horizon,
+ * so Disconnect has to say so upstream — otherwise "disconnect" leaves a live
+ * credential behind, and the argument in `storeAuth` for keeping it stops
+ * holding. Local state is cleared first and synchronously: the user asked to
+ * disconnect, and a network failure must not leave the token sitting there.
+ */
+export async function revokeAuth(): Promise<void> {
+  const auth = readAuth()
+  clearAuth()
+  if (!auth) return
+  const revoke = (token: string, hint: string) =>
+    fetch(REVOKE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ token, token_type_hint: hint }).toString(),
+    })
+  const calls = [revoke(auth.token, 'access_token')]
+  if (auth.refreshToken) calls.push(revoke(auth.refreshToken, 'refresh_token'))
+  // Best effort, and both are attempted: Linear does not document revoking one
+  // as revoking the other, and the local state is already gone either way.
+  await Promise.allSettled(calls)
 }
 
 export function readAuth(): StoredAuth | null {
@@ -266,10 +460,45 @@ export function clearAuth(): void {
   writeRaw('local', AUTH_KEY, null)
 }
 
-/** The Authorization header for a write request, or `{}` when there is no
- *  usable token — the server answers 401 either way, and sending `Bearer `
- *  (empty) would only make the failure harder to read in a network log. */
-export function authHeader(): Record<string, string> {
+/**
+ * A renewal that did not land, on a credential that is still good.
+ *
+ * Carries a `code` because that is how `apiErrorMessage` and the write store
+ * read an error, and because the code it must NOT be is `unauthenticated` —
+ * see the comment in `authHeader`.
+ */
+export class RefreshFailedError extends Error {
+  readonly code = 'refresh_failed'
+  constructor() {
+    super('Could not renew the Linear token.')
+    this.name = 'RefreshFailedError'
+  }
+}
+
+/**
+ * The Authorization header for a write request, or `{}` when there is no usable
+ * token — the server answers 401 either way, and sending `Bearer ` (empty)
+ * would only make the failure harder to read in a network log.
+ *
+ * **Async, and deliberately so.** Renewing here rather than in the callers is
+ * what makes it impossible to add a write path that forgets: `headers:
+ * authHeader()` without the await is a Promise where a record belongs, which
+ * is a type error rather than a token that quietly lapses in production.
+ *
+ * **Throws rather than returning `{}` when a renewable entry could not be
+ * renewed.** `performRefresh` deliberately keeps the credential through a 5xx
+ * or an offline laptop, since neither says anything about it — but falling
+ * through to `{}` here would send the write with no bearer, the server would
+ * answer 401 `unauthenticated`, and `forgetTokenIfRejected` would delete the
+ * entry that was just preserved. Linear having a bad minute would read to the
+ * user as "connect your account". An entry that is expired and has nothing to
+ * renew *with* still returns `{}`: there, reconnecting really is the answer.
+ */
+export async function authHeader(): Promise<Record<string, string>> {
+  await refreshAuthIfStale()
   const auth = readAuth()
-  return auth && auth.expiresAt > Date.now() ? { Authorization: `Bearer ${auth.token}` } : {}
+  const now = Date.now()
+  if (auth && auth.expiresAt > now) return { Authorization: `Bearer ${auth.token}` }
+  if (decideRefresh(auth, now) === 'stale') throw new RefreshFailedError()
+  return {}
 }

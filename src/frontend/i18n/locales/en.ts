@@ -263,6 +263,7 @@ export const en = {
     switchFailed: 'Could not change the default workspace. Check the server logs.',
     unauthenticated: 'Connect your Linear account in Settings to make changes.',
     forbidden: 'Your Linear account is not allowed to change this issue.',
+    refreshFailed: 'Could not reach Linear to renew your session. Your connection is intact — try again.',
   },
   onboarding: {
     submitting: 'Checking the key…',

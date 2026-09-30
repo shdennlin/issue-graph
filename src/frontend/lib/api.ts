@@ -152,7 +152,7 @@ export const api = {
   // `assigneeId: null` means unassign; omitting the key leaves the assignee
   // alone. JSON.stringify preserves that difference, which is the whole reason
   // the patch is built by the caller rather than spread from a form.
-  updateIssue: (
+  updateIssue: async (
     identifier: string,
     patch: {
       stateId?: string
@@ -162,15 +162,19 @@ export const api = {
       removedLabelIds?: string[]
     },
   ) =>
+    // `await authHeader()` rather than a plain call: it renews a token that is
+    // near expiry first, so a write started minutes before the 24h mark does
+    // not race the clock. Its Promise return is what stops a future write path
+    // from silently skipping that.
     http<{ ok: true }>(`/api/issues/${encodeURIComponent(identifier)}`, {
       method: 'PATCH',
-      headers: authHeader(),
+      headers: await authHeader(),
       body: JSON.stringify(patch),
     }),
-  addIssueComment: (identifier: string, body: string) =>
+  addIssueComment: async (identifier: string, body: string) =>
     http<{ ok: true }>(`/api/issues/${encodeURIComponent(identifier)}/comments`, {
       method: 'POST',
-      headers: authHeader(),
+      headers: await authHeader(),
       body: JSON.stringify({ body }),
     }),
   fetchProjectDetail: (projectId: string, opts?: { fresh?: boolean }) =>

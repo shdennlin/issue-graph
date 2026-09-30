@@ -257,6 +257,7 @@ export const zhTW: Dict = {
     switchFailed: '無法變更預設工作區，請查看伺服器 log。',
     unauthenticated: '請先在設定中連結你的 Linear 帳號才能修改。',
     forbidden: '你的 Linear 帳號沒有權限修改這個 issue。',
+    refreshFailed: '無法連上 Linear 更新連線憑證。你的連結還在，請再試一次。',
   },
   onboarding: {
     submitting: '驗證金鑰中…',
