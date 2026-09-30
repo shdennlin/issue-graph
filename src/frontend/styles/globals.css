@@ -3568,7 +3568,7 @@ label + .settings-help {
 .notif-row {
   display: grid;
   grid-template-columns: auto 1fr;
-  grid-template-areas: 'id title' 'id what';
+  grid-template-areas: 'id title' 'what what';
   gap: 0 8px;
   align-items: baseline;
   width: 100%;
@@ -3587,13 +3587,13 @@ label + .settings-help {
 .notif-row-id {
   grid-area: id;
   font-variant-numeric: tabular-nums;
-  font-size: var(--fs-meta);
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--fg-muted);
 }
 .notif-row-title {
   grid-area: title;
-  font-size: var(--fs-meta);
+  font-size: var(--fs-base);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3604,6 +3604,10 @@ label + .settings-help {
   flex-direction: column;
   gap: 1px;
   margin-top: 1px;
+  /* Starts under the id rather than the title: the id column is dead space
+     on every line after the first, and a comment needs the width. The
+     small indent keeps it reading as belonging to the row above. */
+  padding-left: 12px;
   font-size: 12px;
   min-width: 0;
 }
@@ -3759,7 +3763,9 @@ label + .settings-help {
   white-space: nowrap;
 }
 .notif-toast-what {
-  grid-column: 2;
+  /* Under the id, indented a little — same as the bell rows. */
+  grid-column: 1 / -1;
+  padding-left: 12px;
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -3810,7 +3816,7 @@ label + .settings-help {
 }
 .notif-row {
   grid-template-columns: auto 1fr auto;
-  grid-template-areas: 'id title when' 'id what when';
+  grid-template-areas: 'id title when' 'what what when';
 }
 .notif-row-when {
   grid-area: when;
