@@ -259,3 +259,44 @@ function out(before: NormalizedIssue, after: NormalizedIssue) {
   if (!first || first.kind !== 'changed') throw new Error('expected one changed entry')
   return first
 }
+
+describe('diffIssues — what it was', () => {
+  // "→ In Review" alone does not say where from, which is half of what makes a
+  // move readable at a glance.
+  it('records the previous value beside the new one', () => {
+    const before = makeIssue({
+      state: { name: 'Todo', type: 'unstarted' },
+      assignee: { id: 'u1', displayName: 'Alice' },
+      priority: 3,
+    })
+    const after = makeIssue({
+      state: { name: 'In Review', type: 'started' },
+      assignee: null,
+      priority: 2,
+    })
+    expect(out(before, after).from).toEqual({ state: 'Todo', assignee: 'Alice', priority: '3' })
+  })
+
+  it('uses null for a field that was empty before', () => {
+    const after = makeIssue({ assignee: { id: 'u1', displayName: 'Alice' } })
+    expect(out(makeIssue({}), after).from).toEqual({ assignee: null })
+  })
+
+  // Labels already travel as a signed delta, which says both sides at once.
+  it('offers no previous value for labels', () => {
+    const before = makeIssue({ labels: [label('a')] })
+    const after = makeIssue({ labels: [label('b')] })
+    expect(out(before, after).from).toEqual({})
+  })
+
+  // The colour of a state is its canonical type; the name alone cannot give it.
+  it('carries both state types when the state moved', () => {
+    const before = makeIssue({ state: { name: 'Todo', type: 'unstarted' } })
+    const after = makeIssue({ state: { name: 'In Review', type: 'started' } })
+    expect(out(before, after).stateType).toEqual({ from: 'unstarted', to: 'started' })
+  })
+
+  it('carries no state type when the state did not move', () => {
+    expect(out(makeIssue({ priority: 1 }), makeIssue({ priority: 2 })).stateType).toBeUndefined()
+  })
+})

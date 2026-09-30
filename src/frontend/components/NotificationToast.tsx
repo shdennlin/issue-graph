@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useNotificationStore } from '../store/notificationStore'
 import { useViewStore } from '../store/viewStore'
 import { useLocale, useT } from '../i18n'
-import { summarizeEntry, toastPreview } from '../lib/notificationSummary'
+import { describeEntry, toastPreview, type LineValue, type Tone } from '../lib/notificationSummary'
 
 /** How long the banner stays up. Long enough to read an identifier, short
  *  enough not to sit over the graph while you work. */
@@ -91,7 +91,14 @@ export function NotificationToast() {
             >
               <span className="notif-toast-id">{e.identifier}</span>
               <span className="notif-toast-title">{e.title}</span>
-              <span className="notif-toast-what">{summarizeEntry(e, t, locale)}</span>
+              {describeEntry(e, t, locale).map((line, i) => (
+                <span key={i} className="notif-toast-what">
+                  <span className="notif-toast-field">{line.label}</span>
+                  {line.from && <Value v={line.from} old />}
+                  {line.from && line.to && <span aria-hidden>→</span>}
+                  {line.to && <Value v={line.to} />}
+                </span>
+              ))}
             </button>
           </li>
         ))}
@@ -101,4 +108,16 @@ export function NotificationToast() {
       )}
     </div>
   )
+}
+
+const NON_STATE: ReadonlySet<Tone> = new Set<Tone>(['warn', 'danger', 'none'])
+
+/** One side of a change. The old side is struck through and muted whatever its
+ *  tone — it is context, and colouring both would compete with the new one. */
+function Value({ v, old = false }: { v: LineValue; old?: boolean }) {
+  const state = v.tone !== undefined && !NON_STATE.has(v.tone)
+  const cls = old
+    ? 'notif-toast-old'
+    : `notif-toast-val${v.tone ? ` tone-${v.tone}` : ''}${state ? ' is-state' : ''}`
+  return <span className={cls}>{v.text}</span>
 }

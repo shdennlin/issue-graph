@@ -15,6 +15,7 @@
 // another's — a mild annoyance while it was memory-only, a permanent one once
 // it survives reloads.
 
+import type { IssueStateType } from '@shared/types.js'
 import type { ChangedField } from './issueDiff'
 
 /** One recorded change. Mirrors the store's entry, and is the wire format on
@@ -26,6 +27,12 @@ export interface StoredEntry {
   kind: 'created' | 'changed'
   fields: ChangedField[]
   to: Partial<Record<ChangedField, string | null>>
+  /** What each field was. Optional because entries written before it existed
+   *  are still on disk; those show only the new side. */
+  from?: Partial<Record<ChangedField, string | null>>
+  /** Canonical state types, for colouring. `from` is absent on a created
+   *  issue, which has no previous state. */
+  stateType?: { from?: IssueStateType; to: IssueStateType }
   at: number
   read: boolean
 }

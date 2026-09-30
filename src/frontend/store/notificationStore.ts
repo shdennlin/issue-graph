@@ -108,15 +108,24 @@ interface NotificationState {
 }
 
 function toEntry(change: IssueChange, at: number): NotificationEntry {
+  const base = { id: nextId(change.identifier), identifier: change.identifier, title: change.title, at, read: false }
+  if (change.kind === 'created') {
+    // Where it landed is the one thing worth saying about a new issue.
+    return {
+      ...base,
+      kind: 'created',
+      fields: [],
+      to: { state: change.after.state.name },
+      stateType: { to: change.after.state.type },
+    }
+  }
   return {
-    id: nextId(change.identifier),
-    identifier: change.identifier,
-    title: change.title,
-    kind: change.kind,
-    fields: change.kind === 'changed' ? change.fields : [],
-    to: change.kind === 'changed' ? change.to : {},
-    at,
-    read: false,
+    ...base,
+    kind: 'changed',
+    fields: change.fields,
+    to: change.to,
+    from: change.from,
+    ...(change.stateType ? { stateType: change.stateType } : {}),
   }
 }
 

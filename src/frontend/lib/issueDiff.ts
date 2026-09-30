@@ -21,7 +21,7 @@
 // silently drop the single most notable event. Callers that persist changes
 // should project them down to something lighter first.
 
-import type { NormalizedIssue } from '@shared/types.js'
+import type { IssueStateType, NormalizedIssue } from '@shared/types.js'
 
 /**
  * Which semantic dimension moved. `comment` covers `lastCommentAt`.
@@ -68,6 +68,12 @@ export interface IssueChanged {
    * `priorityLabelFor`, which belongs to the component.
    */
   to: Partial<Record<ChangedField, string | null>>
+  /** What each field was, in the same form as `to`. `labels` is absent: its
+   *  signed delta already names both sides. */
+  from: Partial<Record<ChangedField, string | null>>
+  /** Canonical types of both states, present only when `state` moved — a
+   *  state's colour comes from its type, which its name cannot give. */
+  stateType?: { from: IssueStateType; to: IssueStateType }
   before: NormalizedIssue
   after: NormalizedIssue
 }
@@ -151,46 +157,44 @@ function labelDelta(before: NormalizedIssue, after: NormalizedIssue): string {
   return [...added, ...removed].join(' ')
 }
 
-/** Short new value per moved field. Only fields in `fields` are looked at, so
- *  nothing here can invent a change the comparison did not find. */
-function newValues(
-  fields: readonly ChangedField[],
-  before: NormalizedIssue,
-  after: NormalizedIssue,
-): Partial<Record<ChangedField, string | null>> {
-  const to: Partial<Record<ChangedField, string | null>> = {}
-  for (const f of fields) {
-    switch (f) {
-      case 'state':
-        to.state = after.state.name
-        break
-      case 'assignee':
-        to.assignee = after.assignee?.displayName ?? null
-        break
-      case 'priority':
-        to.priority = String(after.priority)
-        break
-      case 'project':
-        to.project = after.project?.name ?? null
-        break
-      case 'milestone':
-        to.milestone = after.projectMilestone?.name ?? null
-        break
-      case 'dueDate':
-        // 'YYYY-MM-DD' -> 'MM-DD'. The year is noise on a line this short, and
-        // trimming beats reaching for a locale formatter this module cannot have.
-        to.dueDate = after.dueDate ? after.dueDate.slice(5) : null
-        break
-      case 'labels':
-        to.labels = labelDelta(before, after)
-        break
-      // `title` and `comment` carry no useful "to": the row already shows the
-      // new title, and a comment's value is that it exists.
-      default:
-        break
-    }
+/** One field's short value on one side of a change, or `undefined` when the
+ *  field has no one-sided value (`title`, `comment`, `labels`). */
+function sideValue(f: ChangedField, issue: NormalizedIssue): string | null | undefined {
+  switch (f) {
+    case 'state':
+      return issue.state.name
+    case 'assignee':
+      return issue.assignee?.displayName ?? null
+    case 'priority':
+      return String(issue.priority)
+    case 'project':
+      return issue.project?.name ?? null
+    case 'milestone':
+      return issue.projectMilestone?.name ?? null
+    case 'dueDate':
+      // 'YYYY-MM-DD' -> 'MM-DD'. The year is noise on a line this short, and
+      // trimming beats reaching for a locale formatter this module cannot have.
+      return issue.dueDate ? issue.dueDate.slice(5) : null
+    // `title` and `comment` carry no useful value: the row already shows the
+    // new title, and a comment's value is that it exists. `labels` is a delta
+    // over both sides, built by the caller.
+    default:
+      return undefined
   }
-  return to
+}
+
+/** Short value per moved field on one side. Only fields in `fields` are looked
+ *  at, so nothing here can invent a change the comparison did not find. */
+function sideValues(
+  fields: readonly ChangedField[],
+  issue: NormalizedIssue,
+): Partial<Record<ChangedField, string | null>> {
+  const out: Partial<Record<ChangedField, string | null>> = {}
+  for (const f of fields) {
+    const v = sideValue(f, issue)
+    if (v !== undefined) out[f] = v
+  }
+  return out
 }
 
 /**
@@ -228,7 +232,14 @@ export function diffIssues(
       identifier: after.identifier,
       title: after.title,
       fields,
-      to: newValues(fields, before, after),
+      to: {
+        ...sideValues(fields, after),
+        ...(fields.includes('labels') ? { labels: labelDelta(before, after) } : {}),
+      },
+      from: sideValues(fields, before),
+      ...(fields.includes('state')
+        ? { stateType: { from: before.state.type, to: after.state.type } }
+        : {}),
       before,
       after,
     })
