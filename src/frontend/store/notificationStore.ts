@@ -110,12 +110,12 @@ interface NotificationState {
 function toEntry(change: IssueChange, at: number): NotificationEntry {
   const base = { id: nextId(change.identifier), identifier: change.identifier, title: change.title, at, read: false }
   if (change.kind === 'created') {
-    // Where it landed is the one thing worth saying about a new issue.
+    // Where it landed and how urgent it is — what a new issue is worth knowing.
     return {
       ...base,
       kind: 'created',
       fields: [],
-      to: { state: change.after.state.name },
+      to: { state: change.after.state.name, priority: String(change.after.priority) },
       stateType: { to: change.after.state.type },
     }
   }

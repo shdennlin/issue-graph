@@ -92,6 +92,27 @@ describe('describeEntry', () => {
     expect(lines(e)).toEqual([{ label: 'Labels', to: { text: '+bug −ux' } }])
   })
 
+  it('adds the priority of a created issue beside its state', () => {
+    const e = entry({
+      kind: 'created',
+      to: { state: 'Backlog', priority: '2' },
+      stateType: { to: 'backlog' },
+    })
+    expect(lines(e)).toEqual([
+      {
+        label: 'Created',
+        to: { text: 'Backlog', tone: 'backlog' },
+        extra: { text: 'High', tone: 'warn' },
+      },
+    ])
+  })
+
+  // "No priority" is the absence of one; saying it adds a word and no news.
+  it('leaves out "No priority" on a created issue', () => {
+    const e = entry({ kind: 'created', to: { state: 'Todo', priority: '0' }, stateType: { to: 'unstarted' } })
+    expect(lines(e)[0]).not.toHaveProperty('extra')
+  })
+
   it('says where a created issue landed when it knows', () => {
     const e = entry({ kind: 'created', to: { state: 'Todo' }, stateType: { to: 'unstarted' } })
     expect(lines(e)).toEqual([{ label: 'Created', to: { text: 'Todo', tone: 'unstarted' } }])

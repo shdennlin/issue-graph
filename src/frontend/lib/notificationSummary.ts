@@ -33,6 +33,9 @@ export interface ChangeLine {
    *  of a 320px row, and two wrapped lines made one comment outweigh a
    *  status change. The full excerpt is the hover title. */
   prose?: true
+  /** A second value on the same line — a created issue's priority beside its
+   *  state. Same line rather than its own, so a new issue costs one line. */
+  extra?: LineValue
 }
 
 const LINE_KEY: Record<ChangedField, DictKey> = {
@@ -77,7 +80,16 @@ export function describeEntry(
 
   if (e.kind === 'created') {
     const to = value('state', e.to.state, e.stateType?.to)
-    return [{ label: t('notifications.line.created'), ...(to ? { to } : {}) }]
+    // "No priority" (0) is the absence of one — saying so adds a word, no news.
+    const p = e.to.priority
+    const extra = p && p !== '0' ? value('priority', p, undefined) : undefined
+    return [
+      {
+        label: t('notifications.line.created'),
+        ...(to ? { to } : {}),
+        ...(extra ? { extra } : {}),
+      },
+    ]
   }
 
   return e.fields.map((f) => {

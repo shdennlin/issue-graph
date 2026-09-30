@@ -3638,6 +3638,9 @@ label + .settings-help {
   min-width: 4.5em;
   flex-shrink: 0;
 }
+.change-sep {
+  color: var(--change-muted, var(--fg-muted));
+}
 .change-old {
   color: var(--change-muted, var(--fg-muted));
   text-decoration: line-through;

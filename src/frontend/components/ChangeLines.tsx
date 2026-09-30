@@ -28,6 +28,14 @@ export function ChangeLines({ entry }: { entry: StoredEntry }) {
             {line.from && <Value v={line.from} old />}
             {line.from && line.to && <span aria-hidden>→</span>}
             {line.to && <Value v={line.to} />}
+            {line.extra && (
+              <>
+                <span aria-hidden className="change-sep">
+                  ·
+                </span>
+                <Value v={line.extra} />
+              </>
+            )}
           </span>
         ),
       )}
