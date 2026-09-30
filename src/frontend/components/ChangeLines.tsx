@@ -1,3 +1,4 @@
+import { MessageSquare } from 'lucide-react'
 import { useLocale, useT } from '../i18n'
 import type { StoredEntry } from '../lib/notificationHistory'
 import { describeEntry, type LineValue, type Tone } from '../lib/notificationSummary'
@@ -15,14 +16,21 @@ export function ChangeLines({ entry }: { entry: StoredEntry }) {
   const locale = useLocale()
   return (
     <>
-      {describeEntry(entry, t, locale).map((line, i) => (
-        <span key={i} className={line.prose ? 'change-line change-line-prose' : 'change-line'}>
-          <span className="change-field">{line.label}</span>
-          {line.from && <Value v={line.from} old />}
-          {line.from && line.to && <span aria-hidden>→</span>}
-          {line.to && <Value v={line.to} />}
-        </span>
-      ))}
+      {describeEntry(entry, t, locale).map((line, i) =>
+        line.prose ? (
+          <span key={i} className="change-line change-line-prose" title={line.to?.text}>
+            <MessageSquare size={12} className="change-icon" aria-label={line.label} />
+            <span className="change-prose">{line.to?.text}</span>
+          </span>
+        ) : (
+          <span key={i} className="change-line">
+            <span className="change-field">{line.label}</span>
+            {line.from && <Value v={line.from} old />}
+            {line.from && line.to && <span aria-hidden>→</span>}
+            {line.to && <Value v={line.to} />}
+          </span>
+        ),
+      )}
     </>
   )
 }

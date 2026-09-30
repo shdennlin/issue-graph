@@ -28,9 +28,10 @@ export interface ChangeLine {
   label: string
   from?: LineValue
   to?: LineValue
-  /** A sentence rather than a value — a comment excerpt. Allowed to wrap,
-   *  because cut to one line in a 320px popover it kept about twenty
-   *  characters, which is less than the point of showing it. */
+  /** A sentence rather than a value — a comment excerpt. Drawn lighter, with
+   *  an icon where the label would be: the label column alone cost a fifth
+   *  of a 320px row, and two wrapped lines made one comment outweigh a
+   *  status change. The full excerpt is the hover title. */
   prose?: true
 }
 

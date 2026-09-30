@@ -200,6 +200,20 @@ function plainInline(line: string): string {
 }
 
 /**
+ * "2026-09-30 — MinIO mirrored" -> "MinIO mirrored". Agents date their comment
+ * titles, and on a notification row the date repeats the row's own timestamp
+ * while eating a third of the width. Only a date at the START followed by a
+ * separator AND more text goes: a bare date, or one mid-sentence, is content.
+ */
+function stripLeadingDate(text: string): string {
+  const m = /^\[?\d{4}[-/.]\d{1,2}[-/.]\d{1,2}\]?\s*(?:[—–:|-]\s*)?(.+)$/.exec(text)
+  // Require a separator or a bracket, so "2026-09-30 release" style prose that
+  // merely starts with a date is kept whole.
+  if (!m || !/^\[?\d{4}[-/.]\d{1,2}[-/.]\d{1,2}(\]|\s*[—–:|-])/.test(text)) return text
+  return m[1]!.trim()
+}
+
+/**
  * The line of a comment that says what it is about, or null when none does.
  *
  * Measured on a live workspace: 43 of 53 newest comments opened with a
@@ -219,7 +233,9 @@ export function commentExcerpt(body: string): string | null {
     }
     if (inFence || line === '' || line.startsWith('|') || /^([-*_])\1{2,}$/.test(line)) continue
     const heading = /^#{1,6}\s+/.test(line)
-    const text = plainInline(line.replace(/^#{1,6}\s+/, '').replace(/^>\s*/, '').replace(/^[-*+]\s+/, ''))
+    const text = stripLeadingDate(
+      plainInline(line.replace(/^#{1,6}\s+/, '').replace(/^>\s*/, '').replace(/^[-*+]\s+/, '')),
+    )
     if (text) lines.push({ text, weak: heading && !text.includes(' ') })
   }
   const pick = (lines.find((l) => !l.weak) ?? lines[0])?.text

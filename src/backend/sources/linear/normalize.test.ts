@@ -401,6 +401,20 @@ describe('commentExcerpt', () => {
     expect(commentExcerpt('## Summary')).toBe('Summary')
   })
 
+  // Agents title comments "2026-09-30 — what happened". The date repeats the
+  // row's own timestamp and is identical on every line from the same day.
+  it('drops a leading date and its separator', () => {
+    expect(commentExcerpt('## 2026-09-30 — MinIO image mirrored')).toBe('MinIO image mirrored')
+    expect(commentExcerpt('2026-09-30: Phase 1 probe done')).toBe('Phase 1 probe done')
+    expect(commentExcerpt('[2026-09-30] 驗收標準在 prod 未成立')).toBe('驗收標準在 prod 未成立')
+    expect(commentExcerpt('2026/09/30 - retry fixed')).toBe('retry fixed')
+  })
+
+  it('keeps a date that is the whole line, or not at the start', () => {
+    expect(commentExcerpt('2026-09-30')).toBe('2026-09-30')
+    expect(commentExcerpt('Shipped on 2026-09-30')).toBe('Shipped on 2026-09-30')
+  })
+
   it('caps the length with an ellipsis', () => {
     const out = commentExcerpt('x'.repeat(500))
     expect(out).toHaveLength(140)

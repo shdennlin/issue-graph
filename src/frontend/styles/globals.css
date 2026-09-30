@@ -3618,18 +3618,16 @@ label + .settings-help {
   white-space: nowrap;
   overflow: hidden;
 }
-/* A comment excerpt wraps to two lines, then ellipsis — one line kept too
-   little of it to be worth showing in the 320px popover. */
-.change-line-prose {
-  white-space: normal;
+/* A comment excerpt: one line, an icon instead of the label column, and
+   regular weight — it is context for the change, not the change itself. */
+.change-icon {
+  flex-shrink: 0;
+  color: var(--change-muted, var(--fg-muted));
+  align-self: center;
 }
-.change-line-prose .change-val {
-  font-weight: 500;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+.change-prose {
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 .change-field {
   color: var(--change-muted, var(--fg-muted));
