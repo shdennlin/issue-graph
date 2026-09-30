@@ -262,6 +262,7 @@ export const en = {
     switchInProgress: 'Another workspace change is already running. Try again in a moment.',
     switchFailed: 'Could not change the default workspace. Check the server logs.',
     unauthenticated: 'Connect your Linear account in Settings to make changes.',
+    forbidden: 'Your Linear account is not allowed to change this issue.',
   },
   onboarding: {
     submitting: 'Checking the key…',

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { syncFailureKind } from './syncStatus.js'
+import { syncFailureKind, syncStatusForError } from './syncStatus.js'
+import { AuthError, ForbiddenError, RateLimitError } from '../sources/types.js'
 
 // A first-time user's most likely mistake is a typo'd API key. The sync then
 // fails with auth_error and the graph renders empty — previously with nothing
@@ -34,5 +35,31 @@ describe('syncFailureKind', () => {
   // outlive the build that wrote it.
   it('treats an unrecognised status as a generic failure rather than ignoring it', () => {
     expect(syncFailureKind('some_future_status')).toBe('error')
+  })
+})
+
+// Splitting 403 out of AuthError changed what a *read* failure is called, and
+// sync.ts cannot be imported under vitest (it reaches db.ts → bun:sqlite), so
+// the mapping is pinned here instead.
+describe('syncStatusForError', () => {
+  it('calls a rejected credential an auth error', () => {
+    expect(syncStatusForError(new AuthError('401'))).toBe('auth_error')
+  })
+
+  // A sync runs on the WORKSPACE's stored API key, not on a person's token, so
+  // "this key may not read that" is something the operator fixes in the same
+  // place as a wrong key — 403 stays auth_error here even though the write path
+  // now reports it separately.
+  it('also calls a permission refusal an auth error, not a generic api error', () => {
+    expect(syncStatusForError(new ForbiddenError('403'))).toBe('auth_error')
+  })
+
+  it('calls a rate limit a rate limit', () => {
+    expect(syncStatusForError(new RateLimitError('429'))).toBe('rate_limited')
+  })
+
+  it('falls back to api_error for anything unrecognised', () => {
+    expect(syncStatusForError(new Error('socket hang up'))).toBe('api_error')
+    expect(syncStatusForError('not even an error')).toBe('api_error')
   })
 })

@@ -24,7 +24,7 @@ vi.mock('../sources/factory.js', () => ({
   buildBackendWithToken: (token: string) => buildBackendWithToken(token),
 }))
 
-import { AuthError } from '../sources/types.js'
+import { AuthError, ForbiddenError } from '../sources/types.js'
 import { __resetIssueDetailCacheForTests, issueRoutes } from './issue.js'
 
 const AUTH = { authorization: 'Bearer user-oauth-token' }
@@ -99,6 +99,19 @@ describe('the write gate', () => {
     const res = await patch({ stateId: 's1' })
     expect(res.status).toBe(401)
     expect(await errorCode(res)).toBe('unauthenticated')
+  })
+
+  // The distinction that matters to the *client*: `unauthenticated` is the one
+  // code the frontend reacts to by discarding the caller's stored token. A
+  // permission failure must therefore not wear it, or writing to an issue the
+  // user cannot touch logs them out of everything else.
+  it('answers 403 forbidden, not 401, when the adapter reports a permission failure', async () => {
+    updateIssue.mockImplementation(async () => {
+      throw new ForbiddenError('Linear refused: 403')
+    })
+    const res = await patch({ stateId: 's1' })
+    expect(res.status).toBe(403)
+    expect(await errorCode(res)).toBe('forbidden')
   })
 
   it('rejects a cross-origin write before looking at the token', async () => {

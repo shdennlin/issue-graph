@@ -256,6 +256,7 @@ export const zhTW: Dict = {
     switchInProgress: '另一個工作區變更正在進行中，請稍候再試。',
     switchFailed: '無法變更預設工作區，請查看伺服器 log。',
     unauthenticated: '請先在設定中連結你的 Linear 帳號才能修改。',
+    forbidden: '你的 Linear 帳號沒有權限修改這個 issue。',
   },
   onboarding: {
     submitting: '驗證金鑰中…',

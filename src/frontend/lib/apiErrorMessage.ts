@@ -25,6 +25,11 @@ const BY_CODE: Record<string, DictKey> = {
   // themselves — worth translating rather than falling through to the server's
   // English sentence.
   unauthenticated: 'apiError.unauthenticated',
+  // Deliberately NOT folded into `unauthenticated`. The two arrive from the
+  // same write and read almost alike, but only `unauthenticated` makes the
+  // client discard its stored token — so the reader needs to know that their
+  // connection is fine and this one issue is not theirs to change.
+  forbidden: 'apiError.forbidden',
 }
 
 export function apiErrorKey(code: string | null | undefined): DictKey | null {

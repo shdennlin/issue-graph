@@ -21,7 +21,7 @@ import {
   deleteIssuesNotIn,
 } from './cache.js'
 import { getBackend } from './sources/factory.js'
-import { AuthError, RateLimitError } from './sources/types.js'
+import { syncStatusForError } from './lib/syncStatus.js'
 import { runDesignDocScan } from './designdoc/factory.js'
 
 interface SyncResult {
@@ -221,9 +221,7 @@ async function doSync({ force = false }: { force?: boolean } = {}): Promise<Sync
     }
   } catch (err) {
     const finishedAt = Date.now()
-    let status: SyncResult['status'] = 'api_error'
-    if (err instanceof AuthError) status = 'auth_error'
-    else if (err instanceof RateLimitError) status = 'rate_limited'
+    const status: SyncResult['status'] = syncStatusForError(err)
     const message = err instanceof Error ? err.message : String(err)
     log.error({ err: message }, 'sync failed')
     updateSyncLog(logId, { finishedAt, status, issuesCount: null, errorMessage: message })
