@@ -16,7 +16,15 @@
 
 import { create } from 'zustand'
 import { api } from '../lib/api'
-import { hasValidAuth, refreshAuthIfStale } from '../lib/linearAuth'
+import { dropLegacyAuth, hasValidAuth, refreshAuthIfStale } from '../lib/linearAuth'
+import { useWorkspaceStore } from './workspaceStore'
+
+/** Whether THIS tab's workspace holds an unexpired Linear token. The token is
+ *  per workspace, so a tab with no workspace has none by definition. */
+function unlockedHere(): boolean {
+  const id = useWorkspaceStore.getState().currentWorkspaceId
+  return id ? hasValidAuth(id) : false
+}
 
 interface CapabilityState {
   /** null until asked. Distinguished from `false` so the UI can avoid
@@ -74,9 +82,12 @@ export const useCapabilityStore = create<CapabilityState>((set) => ({
   clientId: null,
   webhookConfigured: null,
   authError: null,
-  unlocked: hasValidAuth(),
+  // Read at creation too, not just in load(): the capability store is
+  // created lazily on first import, by which point parseUrl has usually set
+  // the workspace. When it has not, this is false and load() corrects it.
+  unlocked: unlockedHere(),
   refreshUnlocked() {
-    set({ unlocked: hasValidAuth() })
+    set({ unlocked: unlockedHere() })
   },
   setAuthError(failure) {
     set({ authError: failure })
@@ -88,7 +99,14 @@ export const useCapabilityStore = create<CapabilityState>((set) => ({
       // same wait means a returning user never sees them flash from locked to
       // unlocked. The refresh cannot reject — it classifies its own failures
       // and clears the token itself when one is terminal.
-      const [res] = await Promise.all([api.fetchSettings(), refreshAuthIfStale()])
+      const id = useWorkspaceStore.getState().currentWorkspaceId
+      const [res] = await Promise.all([
+        api.fetchSettings(),
+        id ? refreshAuthIfStale(id) : Promise.resolve(),
+        // Once per load and idempotent: the unscoped v1 slot is revoked and
+        // removed, since it cannot say which workspace it belonged to.
+        dropLegacyAuth(),
+      ])
       // `env` is typed Record<string, unknown>, so a backend rename does not
       // surface here as a type error — it surfaces as a permanently undefined
       // field. Worth reading the key name twice.
@@ -99,7 +117,7 @@ export const useCapabilityStore = create<CapabilityState>((set) => ({
         webhookConfigured: Boolean(res.webhook?.secret_set),
         // Read AFTER the refresh above, in the same set() as the rest, so the
         // three bits the write controls gate on land in one render.
-        unlocked: hasValidAuth(),
+        unlocked: unlockedHere(),
       })
     } catch {
       // Treat unreachable as "no writes". The optimistic alternative shows

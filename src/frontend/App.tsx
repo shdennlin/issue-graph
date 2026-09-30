@@ -3,6 +3,7 @@ import { coalesce } from './lib/coalesce'
 import { useGraphStore } from './store/graphStore'
 import { useNotesStore } from './store/notesStore'
 import { useSchemaStore } from './store/schemaStore'
+import { refreshAuthIfStale } from './lib/linearAuth'
 import { useCapabilityStore } from './store/capabilityStore'
 import { useViewStore } from './store/viewStore'
 import { makeTabId, useWorkspaceStore } from './store/workspaceStore'
@@ -186,6 +187,16 @@ export function App() {
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
   const refetchSilent = useGraphStore((s) => s.refetchSilent)
   const prevTabIdRef = useRef<string | null>(null)
+  // The Linear token is per workspace, so a switch changes both whether the
+  // write controls are unlocked and which token may need renewing. Recomputed
+  // at once (the new workspace may simply not be connected) and again after
+  // the renewal, which may turn an expired slot back into a usable one.
+  useEffect(() => {
+    if (!currentWorkspaceId) return
+    const cap = useCapabilityStore.getState()
+    cap.refreshUnlocked()
+    void refreshAuthIfStale(currentWorkspaceId).then(() => cap.refreshUnlocked())
+  }, [currentWorkspaceId])
   useEffect(() => {
     if (!initialized) return
     const prev = prevTabIdRef.current

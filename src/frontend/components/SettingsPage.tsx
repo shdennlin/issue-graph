@@ -8,6 +8,7 @@ import { WorkspaceSettings } from './WorkspaceSettings'
 import { readDefaultView, writeDefaultView } from '../lib/preferences'
 import { InsecureContextError, beginAuth, readAuth, revokeAuth } from '../lib/linearAuth'
 import { useCapabilityStore } from '../store/capabilityStore'
+import { useWorkspaceStore } from '../store/workspaceStore'
 import type { ThemeMode, ViewId } from '../store/viewStore'
 import { LOCALES, useLocale, useSetLocale, useT, type Locale } from '../i18n'
 
@@ -35,6 +36,9 @@ export function SettingsPage() {
   // and read rather than recomputed so "is this token usable" has one answer,
   // shared with the controls in the detail panel that gate on it.
   const unlocked = useCapabilityStore((s) => s.unlocked)
+  // The Linear token is per workspace, so this section describes the current
+  // one. Subscribed so a workspace switch with the panel open re-renders it.
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
   // Disconnecting an *already expired* token leaves `unlocked` false either
   // way, so the store's change is not enough to re-render this section. This
   // counter is what makes the expiry hint disappear on click.
@@ -85,7 +89,7 @@ export function SettingsPage() {
   // memo recompute for nothing while reading as if it were load-bearing.
   // `authTick` is referenced only to tie this render to the disconnect click.
   void authTick
-  const storedAuth = readAuth()
+  const storedAuth = workspaceId ? readAuth(workspaceId) : null
   const connectedAuth = unlocked && storedAuth ? storedAuth : null
   // Present but past its expiry — worth saying so, because the user's mental
   // model is "I connected this already" while the controls sit disabled.
@@ -509,7 +513,7 @@ export function SettingsPage() {
                 // synchronously before it awaits anything, so the UI flips at
                 // once; the upstream call is what makes Disconnect mean the
                 // same thing it did when a forgotten token died within a day.
-                void revokeAuth()
+                if (workspaceId) void revokeAuth(workspaceId)
                 const cap = useCapabilityStore.getState()
                 cap.refreshUnlocked()
                 cap.setAuthError(null)
@@ -524,15 +528,16 @@ export function SettingsPage() {
             <button
               type="button"
               className="primary"
-              disabled={!oauthClientId}
+              disabled={!oauthClientId || !workspaceId}
               onClick={() => {
                 setStartError(null)
                 useCapabilityStore.getState().setAuthError(null)
+                if (!workspaceId) return
                 // Navigates away. Deliberately NOT routed through the `run()`
                 // helper the workspace fields use — that ends in
                 // window.location.reload(), which would discard the PKCE
                 // verifier this call has just stashed.
-                void beginAuth(oauthClientId).catch((err: unknown) =>
+                void beginAuth(oauthClientId, workspaceId).catch((err: unknown) =>
                   setStartError(err instanceof InsecureContextError ? 'insecure' : 'generic'),
                 )
               }}

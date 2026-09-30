@@ -15,6 +15,7 @@ function stash(over: Partial<PendingAuth> = {}): string {
     nonce: 'n'.repeat(43),
     clientId: 'client-abc',
     returnTo: '?w=team_a&view=project&state=started,unstarted',
+    workspaceId: 'team_a',
     ...over,
   } satisfies PendingAuth)
 }
@@ -95,6 +96,24 @@ describe('resolveCallback client id', () => {
   it('tolerates a stash with no client id', () => {
     const out = resolveCallback(stash({ clientId: undefined as unknown as string }), 'n'.repeat(43))
     expect(out.ok && out.clientId).toBe('')
+  })
+})
+
+describe('resolveCallback workspace', () => {
+  // The token must land in the workspace whose Connect started the flow — the
+  // code was issued for that installation — not whichever workspace the tab
+  // shows by the time the redirect returns.
+  it('returns the workspace the flow was started from', () => {
+    const out = resolveCallback(stash(), 'n'.repeat(43))
+    expect(out.ok && out.workspaceId).toBe('team_a')
+  })
+
+  // A stash from before this field existed (a redirect in flight across the
+  // deploy). Storing it under a guessed workspace is the defect being fixed,
+  // so it is refused like any other unvouched callback.
+  it('refuses a stash that does not say which workspace it was for', () => {
+    const out = resolveCallback(stash({ workspaceId: undefined as unknown as string }), 'n'.repeat(43))
+    expect(out).toMatchObject({ ok: false, reason: 'no_pending' })
   })
 })
 

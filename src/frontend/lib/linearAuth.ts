@@ -39,7 +39,25 @@ const TOKEN_URL = 'https://api.linear.app/oauth/token'
 const SCOPES = 'read,write'
 
 const PENDING_KEY = 'ig-linear-pkce-v1'
-const AUTH_KEY = 'ig-linear-auth-v1'
+
+/**
+ * One slot per issue-graph workspace.
+ *
+ * A Linear OAuth token belongs to ONE workspace installation — Linear's docs
+ * say to store the installation id alongside the token for exactly this
+ * reason. A single browser-wide slot sent workspace A's token for workspace B's
+ * writes and, once refresh existed, dutifully renewed it there. Same
+ * `prefix:<workspaceId>` shape as `ig-notify-log`. `v2` because v1 was
+ * unscoped; see `dropLegacyAuth`.
+ *
+ * Every export below that touches the slot takes the workspace as a REQUIRED
+ * parameter rather than reading a store: this module must not import stores
+ * (see the header), and a required parameter makes a forgotten call site a type
+ * error instead of a token sent to the wrong organisation.
+ */
+export function authKey(workspaceId: string): string {
+  return `ig-linear-auth-v2:${workspaceId}`
+}
 
 export interface PendingAuth {
   verifier: string
@@ -54,6 +72,10 @@ export interface PendingAuth {
   /** The app's query string from before the redirect, restored on return so
    *  the round trip does not cost the user their filters, focus and view. */
   returnTo: string
+  /** The workspace whose Connect started this flow. The code Linear returns is
+   *  for the installation that workspace points at, so the token is stored
+   *  there — not under whatever `?w=` the tab shows on return. */
+  workspaceId: string
 }
 
 export interface StoredAuth {
@@ -203,7 +225,7 @@ export function redirectUri(): string {
  * Stash the PKCE state and hand the browser to Linear. Never returns in
  * practice — `location.assign` navigates away.
  */
-export async function beginAuth(clientId: string): Promise<void> {
+export async function beginAuth(clientId: string, workspaceId: string): Promise<void> {
   // WebCrypto's SubtleCrypto is only exposed in a secure context, so PKCE is
   // impossible over plain http to a LAN or tailnet IP — a documented way to run
   // this app, and the same constraint that costs it offline support there.
@@ -220,6 +242,7 @@ export async function beginAuth(clientId: string): Promise<void> {
     nonce: randomNonce(),
     clientId,
     returnTo: window.location.search,
+    workspaceId,
   }
   // Stashed before navigating, and in sessionStorage rather than localStorage:
   // the verifier is single-use material for one redirect in one tab, and an
@@ -245,7 +268,7 @@ export async function beginAuth(clientId: string): Promise<void> {
 export type CallbackRejection = 'no_pending' | 'state_mismatch'
 
 export type CallbackResolution =
-  | { ok: true; verifier: string; clientId: string; returnTo: string }
+  | { ok: true; verifier: string; clientId: string; returnTo: string; workspaceId: string }
   | { ok: false; reason: CallbackRejection; returnTo: string }
 
 /**
@@ -263,7 +286,12 @@ export function resolveCallback(stashRaw: string | null, state: string | null): 
   } catch {
     pending = null
   }
-  if (!pending?.verifier) return { ok: false, reason: 'no_pending', returnTo: '' }
+  // A stash with no workspace predates scoping. Storing its token under a
+  // guessed workspace is the very defect scoping fixes, so it is refused like
+  // any other callback we cannot vouch for.
+  if (!pending?.verifier || !pending.workspaceId) {
+    return { ok: false, reason: 'no_pending', returnTo: pending?.returnTo ?? '' }
+  }
 
   const returnTo = pending.returnTo ?? ''
   // The CSRF check. A callback whose state does not match the nonce we stored
@@ -271,7 +299,13 @@ export function resolveCallback(stashRaw: string | null, state: string | null): 
   if (!state || state !== pending.nonce) {
     return { ok: false, reason: 'state_mismatch', returnTo }
   }
-  return { ok: true, verifier: pending.verifier, clientId: pending.clientId ?? '', returnTo }
+  return {
+    ok: true,
+    verifier: pending.verifier,
+    clientId: pending.clientId ?? '',
+    returnTo,
+    workspaceId: pending.workspaceId,
+  }
 }
 
 /**
@@ -297,12 +331,17 @@ export function consumeCallback(
   }
   return {
     returnTo: resolution.returnTo,
-    exchange: exchangeCode(code, resolution.verifier, resolution.clientId),
+    exchange: exchangeCode(code, resolution.verifier, resolution.clientId, resolution.workspaceId),
     rejected: null,
   }
 }
 
-async function exchangeCode(code: string, verifier: string, clientId: string): Promise<void> {
+async function exchangeCode(
+  code: string,
+  verifier: string,
+  clientId: string,
+  workspaceId: string,
+): Promise<void> {
   const res = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -317,7 +356,7 @@ async function exchangeCode(code: string, verifier: string, clientId: string): P
   if (!res.ok) throw new Error(`token exchange failed (${res.status})`)
   const json = (await res.json()) as TokenResponse
   if (!json.access_token) throw new Error('token exchange returned no access_token')
-  storeAuth(json, clientId)
+  storeAuth(json, clientId, workspaceId)
 }
 
 /**
@@ -335,7 +374,7 @@ async function exchangeCode(code: string, verifier: string, clientId: string): P
  * see `revokeAuth`. Forgetting a 24h token was near enough to ending it;
  * forgetting a long-lived one is not. See docs/adr/0004.
  */
-export function storeAuth(json: TokenResponse, clientId: string): void {
+export function storeAuth(json: TokenResponse, clientId: string, workspaceId: string): void {
   if (!json.access_token) return
   const ttl = typeof json.expires_in === 'number' && json.expires_in > 0 ? json.expires_in : 0
   const auth: StoredAuth = {
@@ -344,11 +383,10 @@ export function storeAuth(json: TokenResponse, clientId: string): void {
     refreshToken: json.refresh_token,
     clientId,
   }
-  writeRaw('local', AUTH_KEY, JSON.stringify(auth))
+  writeRaw('local', authKey(workspaceId), JSON.stringify(auth))
 }
 
 const REVOKE_URL = 'https://api.linear.app/oauth/revoke'
-const REFRESH_LOCK = 'ig-linear-refresh'
 
 /**
  * Serialise refreshes across tabs.
@@ -358,14 +396,17 @@ const REFRESH_LOCK = 'ig-linear-refresh'
  * is absent under vitest's node environment and in older browsers, where
  * running unserialised is the right fallback — Linear's 30-minute replay grace
  * on a refresh covers the race that remains.
+ *
+ * One lock per workspace: each slot rotates its own refresh token, so two tabs
+ * on different workspaces have nothing to serialise against each other.
  */
-async function withRefreshLock(fn: () => Promise<void>): Promise<void> {
+async function withRefreshLock(workspaceId: string, fn: () => Promise<void>): Promise<void> {
   const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined
   if (!locks) return fn()
-  await locks.request(REFRESH_LOCK, fn)
+  await locks.request(`ig-linear-refresh:${workspaceId}`, fn)
 }
 
-async function performRefresh(prev: StoredAuth): Promise<void> {
+async function performRefresh(prev: StoredAuth, workspaceId: string): Promise<void> {
   let status: number | null = null
   try {
     const res = await fetch(TOKEN_URL, {
@@ -385,9 +426,9 @@ async function performRefresh(prev: StoredAuth): Promise<void> {
     if (!res.ok) throw new Error(`refresh failed (${res.status})`)
     const next = mergeRefreshResponse(prev, (await res.json()) as TokenResponse, Date.now())
     if (!next) throw new Error('refresh returned no access_token')
-    writeRaw('local', AUTH_KEY, JSON.stringify(next))
+    writeRaw('local', authKey(workspaceId), JSON.stringify(next))
   } catch {
-    if (classifyRefreshFailure(status) === 'rejected') clearAuth()
+    if (classifyRefreshFailure(status) === 'rejected') clearAuth(workspaceId)
   }
 }
 
@@ -401,12 +442,12 @@ async function performRefresh(prev: StoredAuth): Promise<void> {
  * memory for the same reason — `readAuth()` re-reads raw storage each call, and
  * that is what makes rotation safe between tabs.
  */
-export async function refreshAuthIfStale(): Promise<void> {
-  if (decideRefresh(readAuth(), Date.now()) !== 'stale') return
-  await withRefreshLock(async () => {
-    const current = readAuth()
+export async function refreshAuthIfStale(workspaceId: string): Promise<void> {
+  if (decideRefresh(readAuth(workspaceId), Date.now()) !== 'stale') return
+  await withRefreshLock(workspaceId, async () => {
+    const current = readAuth(workspaceId)
     if (!current || decideRefresh(current, Date.now()) !== 'stale') return
-    await performRefresh(current)
+    await performRefresh(current, workspaceId)
   })
 }
 
@@ -420,10 +461,36 @@ export async function refreshAuthIfStale(): Promise<void> {
  * holding. Local state is cleared first and synchronously: the user asked to
  * disconnect, and a network failure must not leave the token sitting there.
  */
-export async function revokeAuth(): Promise<void> {
-  const auth = readAuth()
-  clearAuth()
-  if (!auth) return
+export async function revokeAuth(workspaceId: string): Promise<void> {
+  const auth = readAuth(workspaceId)
+  clearAuth(workspaceId)
+  if (auth) await revokeTokens(auth)
+}
+
+const LEGACY_AUTH_KEY = 'ig-linear-auth-v1'
+
+/**
+ * Remove the pre-scoping entry. It cannot be migrated — it never recorded which
+ * workspace it belonged to, and guessing is what scoping exists to stop — so it
+ * is revoked (when it holds a refresh token, which only entries from the
+ * refresh commit do; an access-only one dies within a day on its own) and
+ * deleted. Idempotent; called once per app load.
+ */
+export async function dropLegacyAuth(): Promise<void> {
+  const raw = readRaw('local', LEGACY_AUTH_KEY)
+  if (raw === null) return
+  writeRaw('local', LEGACY_AUTH_KEY, null)
+  let legacy: StoredAuth | null
+  try {
+    legacy = JSON.parse(raw) as StoredAuth
+  } catch {
+    return
+  }
+  if (legacy?.token && legacy.refreshToken) await revokeTokens(legacy)
+}
+
+/** The upstream half of a disconnect, shared by revokeAuth and dropLegacyAuth. */
+async function revokeTokens(auth: StoredAuth): Promise<void> {
   const revoke = (token: string, hint: string) =>
     fetch(REVOKE_URL, {
       method: 'POST',
@@ -437,8 +504,8 @@ export async function revokeAuth(): Promise<void> {
   await Promise.allSettled(calls)
 }
 
-export function readAuth(): StoredAuth | null {
-  const raw = readRaw('local', AUTH_KEY)
+export function readAuth(workspaceId: string): StoredAuth | null {
+  const raw = readRaw('local', authKey(workspaceId))
   if (!raw) return null
   try {
     const parsed = JSON.parse(raw) as StoredAuth
@@ -451,13 +518,13 @@ export function readAuth(): StoredAuth | null {
 /** Whether this browser holds an unexpired token. Expiry is checked locally so
  *  the UI can offer "reconnect" instead of letting the user discover it as a
  *  401 on a write they thought had worked. */
-export function hasValidAuth(): boolean {
-  const auth = readAuth()
+export function hasValidAuth(workspaceId: string): boolean {
+  const auth = readAuth(workspaceId)
   return auth !== null && auth.expiresAt > Date.now()
 }
 
-export function clearAuth(): void {
-  writeRaw('local', AUTH_KEY, null)
+export function clearAuth(workspaceId: string): void {
+  writeRaw('local', authKey(workspaceId), null)
 }
 
 /**
@@ -494,9 +561,9 @@ export class RefreshFailedError extends Error {
  * user as "connect your account". An entry that is expired and has nothing to
  * renew *with* still returns `{}`: there, reconnecting really is the answer.
  */
-export async function authHeader(): Promise<Record<string, string>> {
-  await refreshAuthIfStale()
-  const auth = readAuth()
+export async function authHeader(workspaceId: string): Promise<Record<string, string>> {
+  await refreshAuthIfStale(workspaceId)
+  const auth = readAuth(workspaceId)
   const now = Date.now()
   if (auth && auth.expiresAt > now) return { Authorization: `Bearer ${auth.token}` }
   if (decideRefresh(auth, now) === 'stale') throw new RefreshFailedError()

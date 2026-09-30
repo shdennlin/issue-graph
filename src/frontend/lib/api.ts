@@ -25,6 +25,12 @@ import { authHeader } from './linearAuth'
  *   - the workspace store hasn't initialised yet (early bootstrap before
  *     /api/workspaces returns; the backend then falls back to its default).
  */
+/** The caller's Linear credential for the current tab's workspace, or none. */
+function writeAuthHeader(): Promise<Record<string, string>> {
+  const id = useWorkspaceStore.getState().currentWorkspaceId
+  return id ? authHeader(id) : Promise.resolve({})
+}
+
 export function withWorkspaceParam(path: string): string {
   const id = useWorkspaceStore.getState().currentWorkspaceId
   if (!id) return path
@@ -166,15 +172,18 @@ export const api = {
     // near expiry first, so a write started minutes before the 24h mark does
     // not race the clock. Its Promise return is what stops a future write path
     // from silently skipping that.
+    //
+    // Scoped to this tab's workspace: a Linear token belongs to one
+    // organisation, and a tab with no workspace has no token to send.
     http<{ ok: true }>(`/api/issues/${encodeURIComponent(identifier)}`, {
       method: 'PATCH',
-      headers: await authHeader(),
+      headers: await writeAuthHeader(),
       body: JSON.stringify(patch),
     }),
   addIssueComment: async (identifier: string, body: string) =>
     http<{ ok: true }>(`/api/issues/${encodeURIComponent(identifier)}/comments`, {
       method: 'POST',
-      headers: await authHeader(),
+      headers: await writeAuthHeader(),
       body: JSON.stringify({ body }),
     }),
   fetchProjectDetail: (projectId: string, opts?: { fresh?: boolean }) =>
