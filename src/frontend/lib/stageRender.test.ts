@@ -9,7 +9,9 @@ import type {
   WorkstreamSummaryDTO,
 } from '@shared/types.js'
 import {
+  bandTone,
   indexBlockedBy,
+  panelItems,
   notePreview,
   noteRows,
   renderStage,
@@ -763,5 +765,28 @@ describe('notePreview', () => {
     const words = (s: string) => s.replace(/[^a-z0-9 ]/gi, ' ').split(/\s+/).filter(Boolean)
     const src = '## Title\n\n- `x` and **y**\n- [z](http://e.com)'
     expect(words(notePreview(src))).toEqual(['Title', 'x', 'and', 'y', 'z'])
+  })
+})
+
+describe('bandTone', () => {
+  const it_ = (tone: 'ok' | 'warn' | 'muted') => ({ tone }) as Parameters<typeof bandTone>[0][number]
+  it('is the most urgent session: blocked beats active beats waiting', () => {
+    expect(bandTone([it_('muted'), it_('ok'), it_('warn')])).toBe('warn')
+    expect(bandTone([it_('muted'), it_('ok')])).toBe('ok')
+    expect(bandTone([it_('muted')])).toBe('muted')
+  })
+})
+
+describe('panelItems', () => {
+  it('drops what the panel already shows editably: the note and hand attachments', () => {
+    const c = ctx({
+      members: [mk('A-1', { prs: [{}] })],
+      stage: stage({ fields: ['issue', 'pr', 'note'] }),
+      workstream: ws({ members: ['A-1'], notes: { impl: 'a note' } }),
+    })
+    const all = renderStage(c, t)
+    expect(all.some((i) => i.token === 'note')).toBe(true)
+    expect(panelItems(all).map((i) => i.token)).toEqual(['issue', 'pr'])
+    expect(panelItems([{ ...all[0]!, manual: true }])).toEqual([])
   })
 })

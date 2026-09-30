@@ -572,6 +572,24 @@ export function stageSessions(ctx: StageContext, t: Translate): StageItem[] {
   return out
 }
 
+/** A session band's colour: its most urgent session. One blocked session is
+ *  the thing to notice, whatever the others are doing. */
+export function bandTone(sessions: StageItem[]): StageItem['tone'] {
+  if (sessions.some((s) => s.tone === 'warn')) return 'warn'
+  if (sessions.some((s) => s.tone === 'ok')) return 'ok'
+  return 'muted'
+}
+
+/**
+ * What the StagePanel lists under "On this stage": everything the card draws
+ * EXCEPT what the panel already shows in a form you can edit — the note (its
+ * editor) and hand attachments ("Attached by hand", with detach). Listing
+ * those twice would make the panel longer and say nothing new.
+ */
+export function panelItems(items: StageItem[]): StageItem[] {
+  return items.filter((i) => i.token !== 'note' && !i.manual)
+}
+
 /** One renderer per name the app can fill by itself. A name with no entry is
  *  a field somebody attaches, and its items arrive through
  *  `renderAttachments` instead — except `session`, which is drawn in a band

@@ -10,6 +10,9 @@ import { compactAge } from '../lib/relativeTime'
 import { useT, type DictKey } from '../i18n'
 import { useDetailTextSize } from '../lib/detailTextSize'
 import { MarkdownBody } from './MarkdownBody'
+import { ItemRow } from './nodes/StageNode'
+import { stageContext, stageIndexes } from '../lib/stageContext'
+import { bandTone, panelItems, renderStage, stageSessions } from '../lib/stageRender'
 
 // Editing one workstream's occupancy of one stage, in a side panel.
 //
@@ -123,8 +126,16 @@ export function StagePanel() {
       setCustomKind(!OFFERABLE.includes(first) && isAutoField(first))
     }
   }
-  if (!target || !workstream || !stage) return null
+  if (!target || !workstream || !stage || !graph) return null
   const note = draft.key === target.stageKey ? draft.note : noteFromServer
+
+  // The SAME context the card on the canvas is drawn from, so the panel shows
+  // what the card shows — issues, PRs, specs, sessions — rather than only the
+  // note and the hand attachments. Built on render: one stage, and the graph
+  // object only changes on a refetch.
+  const ctx = stageContext(stageIndexes(graph.data), workstream, stage, graph.data.lifecycle ?? [])
+  const sessions = stageSessions(ctx, t)
+  const onStage = panelItems(renderStage(ctx, t))
 
   const visit = stageVisits(workstream.stageEvents, now).get(stage.key)
   const age = visit ? compactAge(visit.enteredAt, visit.leftAt ?? now) : null
@@ -240,6 +251,27 @@ export function StagePanel() {
             ? t('stage.expectsStates', { states: stage.states.join(', ') })
             : t('lifecycle.constrainsNothing')}
         </p>
+
+        {/* Who is here now, in the same band the card uses — above the note,
+            because it is the one thing on this stage that may need you. */}
+        {sessions.length > 0 && (
+          <div className={`stage-sessions stage-sessions-${bandTone(sessions)} stage-panel-sessions`}>
+            {sessions.map((item, i) => (
+              <ItemRow key={`${item.text}:${i}`} item={item} />
+            ))}
+          </div>
+        )}
+
+        {onStage.length > 0 && (
+          <>
+            <h4>{t('stage.onStageTitle')}</h4>
+            <div className="stage-panel-items">
+              {onStage.map((item, i) => (
+                <ItemRow key={`${item.token}:${item.text}:${i}`} item={item} />
+              ))}
+            </div>
+          </>
+        )}
 
         <div className="stage-panel-note-head">
           <h4>{t('stage.notesTitle')}</h4>

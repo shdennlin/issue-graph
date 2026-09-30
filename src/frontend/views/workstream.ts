@@ -34,8 +34,9 @@ import { stageVisits } from '@shared/stageHistory.js'
 import { compactAge } from '../lib/relativeTime'
 import type { ViewDefinition } from './types'
 import { buildChainLayout } from './chainLayout'
-import { indexBlockedBy, noteRows, renderStage, stageSessions, type StageContext } from '../lib/stageRender'
-import { headerSessions, indexSessionsByIssue, indexSessionsByWorkstream } from '../lib/agentSession'
+import { noteRows, renderStage, stageSessions } from '../lib/stageRender'
+import { headerSessions } from '../lib/agentSession'
+import { stageContext, stageIndexes } from '../lib/stageContext'
 import { workstreamColor } from '../lib/colors'
 import type { StageNodeData } from '../components/nodes/StageNode'
 import type { StageNotesData } from '../components/nodes/StageNotesNode'
@@ -121,33 +122,17 @@ export const workstreamView: ViewDefinition = {
     // Built once for the whole canvas and shared by every stage of every
     // workstream. `blockedBy` scans the entire graph, which is exactly why it
     // must not happen per stage.
-    const byId = new Map(data.issues.map((i) => [i.identifier, i]))
-    const sessionsByIssue = indexSessionsByIssue(data.agentSessions)
-    const sessionsByWorkstream = indexSessionsByWorkstream(data.agentSessions)
-    const blockedBy = indexBlockedBy(data.issues)
-    const designdocs = data.designdocs ?? []
+    const idx = stageIndexes(data)
 
     const nodes: Node[] = []
     const edges: Edge[] = []
     let y = 0
 
     for (const workstream of shown) {
-      const members = workstream.members
-        .map((id) => byId.get(id))
-        .filter((i): i is NonNullable<typeof i> => i !== undefined)
       const visits = stageVisits(workstream.stageEvents, now)
 
       const built = stages.map((stage, i) => {
-        const render: StageContext = {
-          workstream,
-          stage,
-          members,
-          sessionsByIssue,
-          sessionsByWorkstream,
-          designdocs,
-          blockedBy,
-          pipeline: stages,
-        }
+        const render = stageContext(idx, workstream, stage, stages)
         // SUM of rows, not a count of items: a note wraps over several. A
         // stage node is never measured after the fact, so an undercount shows
         // up as clipped text that nothing corrects.
@@ -213,7 +198,7 @@ export const workstreamView: ViewDefinition = {
             count: workstream.members.length,
             projectId: null,
             copyName: true,
-            sessions: headerSessions(sessionsByWorkstream.get(workstream.id)),
+            sessions: headerSessions(idx.sessionsByWorkstream.get(workstream.id)),
           },
         },
         position: { x: 0, y },

@@ -4485,6 +4485,10 @@ button.stage-item:hover,
   color: var(--fg-muted);
 }
 .stage-panel-states { margin: 0; color: var(--fg-muted); }
+/* The card's band and items, reused. Rounded here because in the panel the
+   band is a block in a column, not the full-bleed strip under a card header. */
+.stage-panel-sessions { border: 1px solid var(--node-border); border-radius: 6px; }
+.stage-panel-items { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 /* Shaped like the CURRENT badge it stands in for, not like a form button: the
    two are alternatives in one row, and a default button beside a pill reads as
    the panel's submit. `margin-left: auto` puts it at the far end so the row is

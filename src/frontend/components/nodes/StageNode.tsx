@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import { useT, type DictKey } from '../../i18n'
 import { useViewStore } from '../../store/viewStore'
-import { renderStage, stageSessions, type StageContext, type StageItem } from '../../lib/stageRender'
+import { bandTone, renderStage, stageSessions, type StageContext, type StageItem } from '../../lib/stageRender'
 import { api } from '../../lib/api'
 import { useGraphStore } from '../../store/graphStore'
 
@@ -89,7 +89,7 @@ export interface StageNodeData {
   stale: boolean
 }
 
-function ItemRow({ item, onDetach }: { item: StageItem; onDetach?: (value: string) => void }) {
+export function ItemRow({ item, onDetach }: { item: StageItem; onDetach?: (value: string) => void }) {
   const t = useT()
   const setFocusedId = useViewStore((s) => s.setFocusedId)
   const setDetailPanelOpen = useViewStore((s) => s.setDetailPanelOpen)
@@ -209,13 +209,7 @@ function StageImpl({ data }: NodeProps<StageNodeData>) {
   // node never gets a corrected height.
   const items = useMemo(() => (data.render ? renderStage(data.render, t) : []), [data.render, t])
   const sessions = useMemo(() => (data.render ? stageSessions(data.render, t) : []), [data.render, t])
-  // The band takes the colour of its most urgent session: one blocked session
-  // is the thing to notice, whatever the others are doing.
-  const bandTone = sessions.some((s) => s.tone === 'warn')
-    ? 'warn'
-    : sessions.some((s) => s.tone === 'ok')
-      ? 'ok'
-      : 'muted'
+
 
   // Only when this node belongs to a workstream and is not the one it is on.
   const moveTarget =
@@ -306,7 +300,7 @@ function StageImpl({ data }: NodeProps<StageNodeData>) {
       </div>
 
       {sessions.length > 0 && (
-        <div className={`stage-sessions stage-sessions-${bandTone}`}>
+        <div className={`stage-sessions stage-sessions-${bandTone(sessions)}`}>
           {sessions.map((item, i) => (
             <ItemRow key={`${item.text}:${i}`} item={item} onDetach={detach} />
           ))}

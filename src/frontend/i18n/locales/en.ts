@@ -659,6 +659,7 @@ export const en = {
     note_clean: 'Saved',
     note_dirty: 'Unsaved\u2026',
     note_saving: 'Saving\u2026',
+    onStageTitle: 'On this stage',
     notesTitle: 'Notes',
     moveHereShort: 'Move here',
     noteEdit: 'Edit',
