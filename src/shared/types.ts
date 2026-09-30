@@ -156,6 +156,15 @@ export interface NormalizedIssue {
    * somebody was talking on 45 seconds earlier drops out of "recent activity".
    */
   lastCommentAt?: string
+  /**
+   * The newest comment, cut to one line: its first informative line, markdown
+   * stripped, capped short (see `commentExcerpt` in linear/normalize.ts). What
+   * lets a change notification say what a comment was ABOUT rather than only
+   * that one exists. `author` is set only when it is known to be somebody
+   * other than the viewer — the agent writes as the viewer, so naming the
+   * viewer would print the same name on every line.
+   */
+  lastComment?: { excerpt: string; author?: string }
   /** Pull requests Linear has linked to this issue, across repositories. Absent
    *  rather than empty when the field was not fetched, so "no PRs" and "not
    *  asked for" stay distinguishable. */

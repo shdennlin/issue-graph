@@ -300,3 +300,19 @@ describe('diffIssues — what it was', () => {
     expect(out(makeIssue({ priority: 1 }), makeIssue({ priority: 2 })).stateType).toBeUndefined()
   })
 })
+
+describe('diffIssues — what the comment said', () => {
+  const at = '2026-09-02T00:00:00.000Z'
+
+  it('carries the new comment excerpt as its value', () => {
+    const after = makeIssue({ lastCommentAt: at, lastComment: { excerpt: 'Did the thing' } })
+    expect(out(makeIssue({}), after).to.comment).toBe('Did the thing')
+  })
+
+  it('carries the author only when the backend named one', () => {
+    const mine = makeIssue({ lastCommentAt: at, lastComment: { excerpt: 'x' } })
+    expect(out(makeIssue({}), mine).commentAuthor).toBeUndefined()
+    const theirs = makeIssue({ lastCommentAt: at, lastComment: { excerpt: 'x', author: 'Alice' } })
+    expect(out(makeIssue({}), theirs).commentAuthor).toBe('Alice')
+  })
+})

@@ -32,6 +32,7 @@ export function summarizeEntry(
     .map((f) => {
       const to = e.to[f]
       if (to === undefined) return t(FIELD_KEY[f])
+      if (f === 'comment') return `${t(FIELD_KEY[f])}: ${to}`
       if (to === null) return `${t(FIELD_KEY[f])} —`
       if (f === 'priority') return `→ ${priorityLabelFor(Number(to), locale)}`
       if (f === 'labels') return to
@@ -109,7 +110,9 @@ export function describeEntry(
 
   return e.fields.map((f) => {
     if (f === 'comment') {
-      return { label: t(LINE_KEY[f]), to: { text: t('notifications.line.commentNew') } }
+      // An entry from before excerpts existed has none; it still says "new".
+      const said = e.to.comment ?? t('notifications.line.commentNew')
+      return { label: t(LINE_KEY[f]), to: { text: e.commentAuthor ? `${e.commentAuthor}: ${said}` : said } }
     }
     const from = value(f, e.from?.[f], e.stateType?.from)
     const to = value(f, e.to[f], e.stateType?.to)

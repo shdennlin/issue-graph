@@ -29,6 +29,11 @@ describe('summarizeEntry', () => {
     expect(summarizeEntry(e, t, 'en')).toBe('→ In Review · new comment')
   })
 
+  it('quotes what a comment said rather than pointing at it', () => {
+    const e = entry({ fields: ['comment'], to: { comment: 'Did the thing' } })
+    expect(summarizeEntry(e, t, 'en')).toBe('new comment: Did the thing')
+  })
+
   it('marks a cleared field with a dash', () => {
     const e = entry({ fields: ['assignee'], to: { assignee: null } })
     expect(summarizeEntry(e, t, 'en')).toBe('assignee —')
@@ -123,5 +128,14 @@ describe('describeEntry', () => {
     const zt = (k: DictKey, p?: Record<string, string | number>) => translate('zh-TW', k, p)
     const e = entry({ fields: ['assignee'], from: { assignee: 'Alice' }, to: { assignee: null } })
     expect(describeEntry(e, zt, 'zh-TW')[0]).toMatchObject({ label: '指派對象', to: { text: '無' } })
+  })
+
+  it('says what the comment was about, and who when it was not you', () => {
+    expect(lines(entry({ fields: ['comment'], to: { comment: 'Did the thing' } }))).toEqual([
+      { label: 'Comment', to: { text: 'Did the thing' } },
+    ])
+    expect(
+      lines(entry({ fields: ['comment'], to: { comment: 'Looks good' }, commentAuthor: 'Alice' })),
+    ).toEqual([{ label: 'Comment', to: { text: 'Alice: Looks good' } }])
   })
 })

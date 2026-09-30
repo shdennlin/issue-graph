@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { coerceProjectStateType, coerceStateType, normalizeIssue, normalizeLabel, normalizeProjectDetail, normalizePullRequests, normalizeRelations } from './normalize.js'
+import { coerceProjectStateType, coerceStateType, commentExcerpt, normalizeIssue, normalizeLabel, normalizeProjectDetail, normalizePullRequests, normalizeRelations } from './normalize.js'
 
 describe('coerceStateType', () => {
   it("maps 'cancelled' (en-GB) → 'canceled' so workflowStates lookups stay safe", () => {
@@ -369,5 +369,78 @@ describe('normalizeIssue — pull requests', () => {
       attachments: { nodes: [] },
     })
     expect(issue.pullRequests).toEqual([])
+  })
+})
+
+describe('commentExcerpt', () => {
+  // Measured on a live workspace: 43 of 53 newest comments open with a heading,
+  // and 50 of 53 first lines were distinct — the heading IS the summary.
+  it('takes the first line, without its heading marker', () => {
+    expect(commentExcerpt('## Refresh implementation summary\n\nLong body…')).toBe(
+      'Refresh implementation summary',
+    )
+  })
+
+  it('strips inline markdown down to the words', () => {
+    expect(commentExcerpt('**Done** — see [the PR](https://x.test/1) and `authHeader`')).toBe(
+      'Done — see the PR and authHeader',
+    )
+  })
+
+  it('skips blank lines, fences, tables and rules to reach prose', () => {
+    expect(commentExcerpt('\n\n---\n```ts\ncode\n```\n| a | b |\nActual words here')).toBe(
+      'Actual words here',
+    )
+  })
+
+  // "## Summary" on every comment would make every toast line identical.
+  it('passes over a one-word heading when something follows it', () => {
+    expect(commentExcerpt('## Summary\n\nMoved token refresh into the browser.')).toBe(
+      'Moved token refresh into the browser.',
+    )
+    expect(commentExcerpt('## Summary')).toBe('Summary')
+  })
+
+  it('caps the length with an ellipsis', () => {
+    const out = commentExcerpt('x'.repeat(500))
+    expect(out).toHaveLength(140)
+    expect(out?.endsWith('…')).toBe(true)
+  })
+
+  it('is null when there is nothing to show', () => {
+    expect(commentExcerpt('')).toBeNull()
+    expect(commentExcerpt('```\ncode only\n```')).toBeNull()
+  })
+})
+
+describe('normalizeIssue — last comment', () => {
+  const base = {
+    id: 'x', identifier: 'X-1', title: 't', url: 'u', priority: 0,
+    state: { name: 'Todo', type: 'unstarted' },
+  }
+  const withComment = (node: Record<string, unknown>) =>
+    normalizeIssue({ ...base, comments: { nodes: [{ createdAt: '2026-09-30T00:00:00Z', ...node }] } })
+
+  // The agent writes as the user, so the author is "me" almost always — naming
+  // it would print the same name on every line.
+  it('carries the excerpt, and no author, when the viewer wrote it', () => {
+    const i = withComment({ body: '## Did the thing', user: { displayName: 'Shawn', isMe: true } })
+    expect(i.lastComment).toEqual({ excerpt: 'Did the thing' })
+  })
+
+  it('names the author when it was somebody else', () => {
+    const i = withComment({ body: 'Looks good', user: { displayName: 'Alice', isMe: false } })
+    expect(i.lastComment).toEqual({ excerpt: 'Looks good', author: 'Alice' })
+  })
+
+  // The detail query asks for `user { displayName }` without `isMe`. Unknown
+  // is not "somebody else".
+  it('leaves the author out when it cannot tell whose it is', () => {
+    const i = withComment({ body: 'Looks good', user: { displayName: 'Alice' } })
+    expect(i.lastComment).toEqual({ excerpt: 'Looks good' })
+  })
+
+  it('is absent when the body was not fetched', () => {
+    expect(withComment({}).lastComment).toBeUndefined()
   })
 })

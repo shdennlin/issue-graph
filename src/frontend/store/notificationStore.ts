@@ -126,6 +126,7 @@ function toEntry(change: IssueChange, at: number): NotificationEntry {
     to: change.to,
     from: change.from,
     ...(change.stateType ? { stateType: change.stateType } : {}),
+    ...(change.commentAuthor ? { commentAuthor: change.commentAuthor } : {}),
   }
 }
 

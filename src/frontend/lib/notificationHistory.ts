@@ -33,6 +33,8 @@ export interface StoredEntry {
   /** Canonical state types, for colouring. `from` is absent on a created
    *  issue, which has no previous state. */
   stateType?: { from?: IssueStateType; to: IssueStateType }
+  /** Author of a new comment, only when it was not the viewer. */
+  commentAuthor?: string
   at: number
   read: boolean
 }

@@ -74,6 +74,9 @@ export interface IssueChanged {
   /** Canonical types of both states, present only when `state` moved — a
    *  state's colour comes from its type, which its name cannot give. */
   stateType?: { from: IssueStateType; to: IssueStateType }
+  /** Who wrote the new comment, present only when the backend knows it was
+   *  somebody other than the viewer. */
+  commentAuthor?: string
   before: NormalizedIssue
   after: NormalizedIssue
 }
@@ -171,13 +174,16 @@ function sideValue(f: ChangedField, issue: NormalizedIssue): string | null | und
       return issue.project?.name ?? null
     case 'milestone':
       return issue.projectMilestone?.name ?? null
+    case 'comment':
+      // Only the `after` side is ever asked for in a way that matters — a
+      // comment has no "was". Absent when the backend sent no excerpt.
+      return issue.lastComment?.excerpt
     case 'dueDate':
       // 'YYYY-MM-DD' -> 'MM-DD'. The year is noise on a line this short, and
       // trimming beats reaching for a locale formatter this module cannot have.
       return issue.dueDate ? issue.dueDate.slice(5) : null
-    // `title` and `comment` carry no useful value: the row already shows the
-    // new title, and a comment's value is that it exists. `labels` is a delta
-    // over both sides, built by the caller.
+    // `title` carries no useful value: the row already shows the new title.
+    // `labels` is a delta over both sides, built by the caller.
     default:
       return undefined
   }
@@ -236,7 +242,14 @@ export function diffIssues(
         ...sideValues(fields, after),
         ...(fields.includes('labels') ? { labels: labelDelta(before, after) } : {}),
       },
-      from: sideValues(fields, before),
+      // The previous comment's excerpt is not a "was" for the new one.
+      from: sideValues(
+        fields.filter((f) => f !== 'comment'),
+        before,
+      ),
+      ...(fields.includes('comment') && after.lastComment?.author
+        ? { commentAuthor: after.lastComment.author }
+        : {}),
       ...(fields.includes('state')
         ? { stateType: { from: before.state.type, to: after.state.type } }
         : {}),

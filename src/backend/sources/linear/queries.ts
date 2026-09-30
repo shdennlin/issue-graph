@@ -43,8 +43,16 @@ export const ISSUES_QUERY = /* GraphQL */ `
         # first:1 is the one we want — measured at +64ms and +2 complexity over
         # a 100-issue page, which is what makes it affordable in the BULK query
         # rather than only in ISSUE_DETAIL_QUERY.
+        #
+        # body and user ride on that same node so a change notification can
+        # say what the comment was about. Measured 2026-09-30 on this whole
+        # query, one 100-issue page: complexity 95 -> 97, median 509 -> 553ms,
+        # response 195KB -> 301KB — agent comments run to kilobytes (median
+        # 2.4KB). normalize.ts cuts the body to one line, so only this hop pays
+        # for it; the cache, the wire to the browser and its notification log
+        # do not.
         comments(first: 1) {
-          nodes { createdAt }
+          nodes { createdAt body user { displayName isMe } }
         }
         # Linear's GitHub integration attaches every linked PR to its issue,
         # across every repository, so this is the whole cross-repo picture with
