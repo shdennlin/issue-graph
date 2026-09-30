@@ -153,6 +153,34 @@ export function orderMembers(members: string[], issues: NormalizedIssue[]): stri
   return out
 }
 
+export type MemberOutcome = 'open' | 'done' | 'canceled'
+
+/**
+ * Where a member has got to: the union of what the board was told and what
+ * Linear says.
+ *
+ * `done_at` has one writer — a claim followed by `/done` — so on its own it
+ * measured "went through claim-then-report", not "finished". A member closed in
+ * Linear the ordinary way never counted, which read 0/N on finished
+ * workstreams, and (worse, because it was invisible) made `/next` hand out
+ * finished work and wait on blockers that had long since shipped. Issue #1.
+ *
+ * The board's report still wins, since it is the early signal — an agent can
+ * finish before anyone moves the ticket — so it outranks a later cancel too.
+ *
+ * **An issue missing from the cache is open.** The sync window is active plus
+ * recent, so a member need not be there. Guessing "done" would make `/next`
+ * skip real work and drop real blockers, silently; guessing "open" at worst
+ * re-offers finished work, which the agent notices at once.
+ */
+export function memberOutcome(m: BatchMemberRow, issue: NormalizedIssue | undefined): MemberOutcome {
+  if (m.done_at !== null) return 'done'
+  const type = issue?.state?.type
+  if (type === 'completed') return 'done'
+  if (type === 'canceled') return 'canceled'
+  return 'open'
+}
+
 /** Members of the batch that block `identifier` and are not done yet. */
 export function unfinishedBlockers(
   identifier: string,
@@ -160,7 +188,10 @@ export function unfinishedBlockers(
   issues: NormalizedIssue[],
 ): string[] {
   const byId = new Map(issues.map((i) => [i.identifier, i]))
-  const doneInBatch = new Set(members.filter((m) => m.done_at !== null).map((m) => m.identifier))
+  // Closed either way — done or canceled — a member no longer holds anything up.
+  const doneInBatch = new Set(
+    members.filter((m) => memberOutcome(m, byId.get(m.identifier)) !== 'open').map((m) => m.identifier),
+  )
   const inBatch = new Set(members.map((m) => m.identifier))
   const out: string[] = []
   for (const m of members) {
@@ -199,10 +230,11 @@ export function nextCandidate(
     issues,
   )
   const byId = new Map(members.map((m) => [m.identifier, m]))
+  const issueById = new Map(issues.map((i) => [i.identifier, i]))
   for (const id of order) {
     const m = byId.get(id)
     if (!m) continue
-    if (m.done_at !== null) continue
+    if (memberOutcome(m, issueById.get(id)) !== 'open') continue
     // Its own claim is resumable — a session that reconnects should get its
     // issue back rather than a second one.
     if (m.claimed_by !== null && m.claimed_by !== claimant) continue
@@ -218,14 +250,26 @@ export interface BatchProgress {
   claimed: number
 }
 
-export function batchProgress(members: BatchMemberRow[]): BatchProgress {
+/**
+ * A canceled member leaves the denominator rather than joining the numerator,
+ * as in Linear's own project progress: counted in `total` but never in `done`
+ * it would make the workstream unfinishable, and counted as done it would
+ * claim work that was dropped. This is a PROGRESS decision only — the member
+ * stays in the batch and on the board.
+ */
+export function batchProgress(members: BatchMemberRow[], issues: NormalizedIssue[]): BatchProgress {
+  const byId = new Map(issues.map((i) => [i.identifier, i]))
+  let total = 0
   let done = 0
   let claimed = 0
   for (const m of members) {
-    if (m.done_at !== null) done++
+    const outcome = memberOutcome(m, byId.get(m.identifier))
+    if (outcome === 'canceled') continue
+    total++
+    if (outcome === 'done') done++
     else if (m.claimed_by !== null) claimed++
   }
-  return { total: members.length, done, claimed }
+  return { total, done, claimed }
 }
 
 

@@ -124,6 +124,8 @@ batchRoutes.get('/api/batches', (c) => {
   const batches = db
     .prepare(`${BATCH_SELECT} ORDER BY created_at DESC, id DESC`)
     .all() as BatchRow[]
+  // Read once for the whole list: progress now counts Linear state (issue #1).
+  const issues = readCachedIssues()
   return c.json({
     entries: batches
       .filter((b) => wantAll || b.status !== 'archived')
@@ -142,7 +144,7 @@ batchRoutes.get('/api/batches', (c) => {
         stageEnteredAt: b.stage_entered_at,
         status: b.status,
         assignees: parseStringArray(b.assignees),
-        progress: batchProgress(membersOf(b.id)),
+        progress: batchProgress(membersOf(b.id), issues),
       })),
   })
 })
@@ -179,7 +181,7 @@ batchRoutes.get('/api/batches/:id', (c) => {
       value: l.value,
       label: l.label,
     })),
-    progress: batchProgress(members),
+    progress: batchProgress(members, issues),
     members: order.map((identifier) => {
       const m = byId.get(identifier)
       return {
@@ -503,7 +505,7 @@ batchRoutes.post('/api/batches/:id/next', async (c) => {
 
     const candidate = nextCandidate(members, issues, claimant)
     if (candidate === null) {
-      const progress = batchProgress(members)
+      const progress = batchProgress(members, issues)
       return c.json({
         identifier: null,
         // "done" and "blocked" are different answers: one means the batch is
@@ -525,7 +527,7 @@ batchRoutes.post('/api/batches/:id/next', async (c) => {
     return c.json({
       identifier: candidate,
       blockedBy: unfinishedBlockers(candidate, fresh, issues),
-      progress: batchProgress(fresh),
+      progress: batchProgress(fresh, issues),
     })
   }
   // Five losses in a row means heavy contention, not a stuck batch.
@@ -549,7 +551,7 @@ batchRoutes.post('/api/batches/:id/done', async (c) => {
     )
     .run(Date.now(), id, identifier, parsed.data.claimant)
   if (r.changes === 0) return c.json(invalid('not claimed by you'), 409)
-  return c.json({ ok: true, progress: batchProgress(membersOf(id)) })
+  return c.json({ ok: true, progress: batchProgress(membersOf(id), readCachedIssues()) })
 })
 
 batchRoutes.delete('/api/batches/:id', (c) => {

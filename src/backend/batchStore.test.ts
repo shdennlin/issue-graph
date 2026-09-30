@@ -21,6 +21,7 @@ import {
   parseStringArray,
   tallyPullRequests,
   batchProgress,
+  memberOutcome,
   nextCandidate,
   normalizeBatchName,
   normalizeMembers,
@@ -35,6 +36,14 @@ const issue = (identifier: string, blocks: string[] = []): NormalizedIssue =>
     identifier,
     relations: blocks.map((t) => ({ type: 'blocks' as const, targetIdentifier: t })),
   }) as NormalizedIssue
+
+/** An issue in a given Linear state type. The plain `issue()` above leaves the
+ *  state unset, which is how every older test in this file reads "still open". */
+const issueIn = (
+  identifier: string,
+  type: 'completed' | 'canceled' | 'started',
+  blocks: string[] = [],
+): NormalizedIssue => ({ ...issue(identifier, blocks), state: { name: type, type } }) as NormalizedIssue
 
 const member = (identifier: string, over: Partial<BatchMemberRow> = {}): BatchMemberRow => ({
   batch_id: 1,
@@ -185,16 +194,106 @@ describe('batchProgress', () => {
         member('ONE-1', { done_at: 1 }),
         member('ONE-2', { claimed_by: 's1' }),
         member('ONE-3'),
-      ]),
+      ], []),
     ).toEqual({ total: 3, done: 1, claimed: 1 })
   })
 
   it('does not count a done member as also claimed', () => {
-    expect(batchProgress([member('ONE-1', { done_at: 1, claimed_by: 's1' })])).toEqual({
+    expect(batchProgress([member('ONE-1', { done_at: 1, claimed_by: 's1' })], [])).toEqual({
       total: 1,
       done: 1,
       claimed: 0,
     })
+  })
+})
+
+// Issue #1: `done_at` has one writer — a claim followed by /done — so a member
+// closed in Linear the normal way never counted as done. That read 0/N on
+// finished workstreams, and worse, `/next` handed out finished work and waited
+// on blockers that had long since shipped. A member's outcome is now the union
+// of the board's report and Linear's state.
+describe('memberOutcome', () => {
+  it('is open while nothing says otherwise', () => {
+    expect(memberOutcome(member('ONE-1'), issueIn('ONE-1', 'started'))).toBe('open')
+  })
+
+  it('is done when the board was told, whatever Linear says', () => {
+    // The early signal: an agent finished before anyone moved the ticket.
+    expect(memberOutcome(member('ONE-1', { done_at: 1 }), issueIn('ONE-1', 'started'))).toBe('done')
+  })
+
+  it('is done when Linear completed it, though the board was never told', () => {
+    expect(memberOutcome(member('ONE-1'), issueIn('ONE-1', 'completed'))).toBe('done')
+  })
+
+  it('is canceled when Linear canceled it', () => {
+    expect(memberOutcome(member('ONE-1'), issueIn('ONE-1', 'canceled'))).toBe('canceled')
+  })
+
+  it('lets a board report outrank a later cancel', () => {
+    expect(memberOutcome(member('ONE-1', { done_at: 1 }), issueIn('ONE-1', 'canceled'))).toBe('done')
+  })
+
+  // The sync window is active + recent, so a member can be missing from the
+  // cache. Treating the unknown as done would make /next skip real work and
+  // drop real blockers — silently, because the symptom is an absence. Treating
+  // it as open at worst re-offers finished work, which an agent notices.
+  it('fails CLOSED when the issue is not in the cache', () => {
+    expect(memberOutcome(member('ONE-1'), undefined)).toBe('open')
+    expect(memberOutcome(member('ONE-1', { done_at: 1 }), undefined)).toBe('done')
+  })
+})
+
+describe('Linear state reaches the coordination logic', () => {
+  it('stops blocking once the blocker is completed in Linear, unreported', () => {
+    const issues = [issueIn('ONE-1', 'completed', ['ONE-2']), issue('ONE-2')]
+    expect(unfinishedBlockers('ONE-2', [member('ONE-1'), member('ONE-2')], issues)).toEqual([])
+  })
+
+  it('stops blocking once the blocker is canceled', () => {
+    const issues = [issueIn('ONE-1', 'canceled', ['ONE-2']), issue('ONE-2')]
+    expect(unfinishedBlockers('ONE-2', [member('ONE-1'), member('ONE-2')], issues)).toEqual([])
+  })
+
+  it('never hands out a member Linear already completed', () => {
+    const issues = [issueIn('ONE-1', 'completed'), issue('ONE-2')]
+    expect(nextCandidate([member('ONE-1'), member('ONE-2')], issues, 's1')).toBe('ONE-2')
+  })
+
+  it('never hands out a canceled member', () => {
+    const issues = [issueIn('ONE-1', 'canceled'), issue('ONE-2')]
+    expect(nextCandidate([member('ONE-1'), member('ONE-2')], issues, 's1')).toBe('ONE-2')
+  })
+
+  it('still hands out a member missing from the cache', () => {
+    expect(nextCandidate([member('ONE-9')], [], 's1')).toBe('ONE-9')
+  })
+})
+
+describe('batchProgress from Linear state', () => {
+  it('counts a member completed in Linear as done', () => {
+    const issues = [issueIn('ONE-1', 'completed'), issueIn('ONE-2', 'started')]
+    expect(batchProgress([member('ONE-1'), member('ONE-2')], issues)).toEqual({
+      total: 2,
+      done: 1,
+      claimed: 0,
+    })
+  })
+
+  // Counted in total but never in done, a canceled member would make the
+  // workstream unfinishable. Dropped from the denominator instead, as Linear's
+  // own project progress does — progress only; it stays in members[].
+  it('drops a canceled member from the total rather than counting it done', () => {
+    const issues = [issueIn('ONE-1', 'completed'), issueIn('ONE-2', 'canceled')]
+    expect(batchProgress([member('ONE-1'), member('ONE-2')], issues)).toEqual({
+      total: 1,
+      done: 1,
+      claimed: 0,
+    })
+  })
+
+  it('counts a member missing from the cache as open', () => {
+    expect(batchProgress([member('ONE-9')], [])).toEqual({ total: 1, done: 0, claimed: 0 })
   })
 })
 
