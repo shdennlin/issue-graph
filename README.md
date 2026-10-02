@@ -409,7 +409,7 @@ A [Raycast](https://raycast.com) extension lives in [`integrations/raycast/`](in
 - **Search Issues** — type to filter by id, title, assignee, or workspace. Results are grouped by state (Triage → In Progress → Todo → Backlog → Completed → Canceled) and the issues you open most often float to the top (frecency).
 - **Inline detail** (`⌘D`) — status, priority, assignee, due date (overdue flagged red), labels, project, milestone, relations, sub-issues, comments — read from the local cache, no extra calls.
 - **Open straight into the PWA** via the `web+issuegraph://` URL scheme — the OS routes it into the installed app, which focuses the issue and opens its detail panel (the PWA equivalent of Linear's `linear://`). Browser fallbacks (`⌥↵`) work with no PWA installed.
-- **Jumps land in a preview tab**, not the tab you are on — so a lookup from Raycast never overwrites, say, the workstream you are watching. The next jump reuses the same tab (shown in italics); double-click it to keep it as an ordinary tab, and the next jump opens a fresh preview.
+- **Jumps land in a preview tab**, not the tab you are on — so a lookup from Raycast never overwrites, say, the workstream you are watching. The next jump reuses the same tab (dashed outline, `↗`); double-click it to keep it as an ordinary tab, and the next jump opens a fresh preview.
 
 Install (needs the Raycast app):
 

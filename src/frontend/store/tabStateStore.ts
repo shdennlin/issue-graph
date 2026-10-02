@@ -330,6 +330,24 @@ export function hasTabSnapshot(tabId: string): boolean {
   return snapshots.has(tabId)
 }
 
+/** What a tab not on screen is looking at, for its label (lib/tabLabel.ts).
+ *  Null when the tab has nothing stored yet. */
+export function peekTabLabelState(tabId: string): {
+  activeView: ViewId
+  focusedId: string | null
+  focusedWorkstreamId: number | null
+  appliedSavedViewId: number | null
+} | null {
+  const view = snapshots.get(tabId)?.view
+  if (!view) return null
+  return {
+    activeView: view.activeView,
+    focusedId: view.focusedId,
+    focusedWorkstreamId: view.focusedWorkstreamId,
+    appliedSavedViewId: view.appliedSavedViewId,
+  }
+}
+
 export function peekTabSavedViewId(tabId: string): number | null {
   return snapshots.get(tabId)?.view.appliedSavedViewId ?? null
 }

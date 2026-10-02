@@ -22,16 +22,26 @@
 // available workspaces; `×` on a tab closes it (last tab can't be closed).
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Loader2, RefreshCw } from 'lucide-react'
+import { ArrowUpRight, Bookmark, ChevronLeft, ChevronRight, CircleDot, Layers, Loader2, RefreshCw } from 'lucide-react'
 import { api } from '../lib/api'
 import { useClickOutside } from '../hooks/useClickOutside'
 import { useWorkspaceStore, type Tab } from '../store/workspaceStore'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { useHistoryAvailability } from '../store/urlSync'
-import { forgetTab, peekTabSavedViewId, snapshotTab } from '../store/tabStateStore'
+import { forgetTab, getTabGraph, peekTabLabelState, snapshotTab } from '../store/tabStateStore'
 import { useSavedViewsStore } from '../store/savedViewsStore'
 import { MOD_GLYPH, formatShortcut } from '../lib/platform'
+import { tabLabel, workspaceHue, type TabLabel } from '../lib/tabLabel'
+import { useT, type DictKey } from '../i18n'
+
+const LABEL_ICON: Record<TabLabel['kind'], typeof Layers | null> = {
+  workstream: Layers,
+  workstreams: Layers,
+  issue: CircleDot,
+  saved: Bookmark,
+  view: null,
+}
 
 function colorClass(ageMinutes: number): string {
   if (ageMinutes < 5) return 'stale-ok'
@@ -54,14 +64,9 @@ export function TabBar() {
   // the active one reads the live store, the rest read their own snapshot.
   // Same reason as FacetBar: the tab's label depends on the whole serialized
   // query, not only the filters.
-  useViewStore()
+  const live = useViewStore()
+  const t = useT()
   const savedViews = useSavedViewsStore((s) => s.views)
-  const liveAppliedId = useViewStore((s) => s.appliedSavedViewId)
-  const savedViewName = (tab: Tab, isActive: boolean): string | null => {
-    const id = isActive ? liveAppliedId : peekTabSavedViewId(tab.id)
-    if (id === null) return null
-    return savedViews.find((v) => v.id === id)?.name ?? null
-  }
   const unconfigured = useWorkspaceStore((s) => s.unconfigured)
   const tabs = useWorkspaceStore((s) => s.tabs)
   const activeTabId = useWorkspaceStore((s) => s.activeTabId)
@@ -82,6 +87,33 @@ export function TabBar() {
   const syncing = useGraphStore((s) => s.syncing)
   const forceSync = useGraphStore((s) => s.forceSync)
   const setSyncHistoryOpen = useViewStore((s) => s.setSyncHistoryOpen)
+
+  // Named for what the tab is looking at (lib/tabLabel.ts). The active tab
+  // reads the live store; the rest read their own snapshot, and a workstream
+  // name comes from whichever graph that tab can see — the live one when it
+  // shares the workspace, else its own snapshotted graph, else `#id`.
+  const labelFor = (tab: Tab, isActive: boolean): { label: TabLabel; text: string } | null => {
+    const state = isActive ? live : peekTabLabelState(tab.id)
+    if (!state) return null
+    const savedViewName =
+      state.appliedSavedViewId === null
+        ? null
+        : (savedViews.find((v) => v.id === state.appliedSavedViewId)?.name ?? null)
+    const data = (tab.workspaceId === currentWorkspaceId ? graph : getTabGraph(tab.id))?.data
+    const label = tabLabel(
+      { ...state, savedViewName },
+      (id) => data?.workstreams?.find((w) => w.id === id)?.name ?? null,
+    )
+    const text =
+      label.kind === 'workstream' ? (label.name ?? `#${label.id}`)
+      : label.kind === 'workstreams' ? t('views.workstream.label')
+      : label.kind === 'issue' ? label.identifier
+      : label.kind === 'saved' ? label.name
+      : t(`views.${label.view}.label` as DictKey)
+    return { label, text }
+  }
+  // The workspace is worth showing only when there is another to tell it from.
+  const multiWorkspace = new Set(tabs.map((tab) => tab.workspaceId)).size > 1
 
   const [addMenuOpen, setAddMenuOpen] = useState(false)
   const [draggingId, setDraggingId] = useState<string | null>(null)
@@ -342,7 +374,9 @@ export function TabBar() {
             const profile = profileById.get(tab.workspaceId)
             const name = profile?.name ?? tab.workspaceId
             const isActive = tab.id === activeTabId
-            const viewName = savedViewName(tab, isActive)
+            const named = labelFor(tab, isActive)
+            const text = named?.text ?? name
+            const Icon = tab.preview ? ArrowUpRight : named ? LABEL_ICON[named.label.kind] : null
             const shortcut = idx < 9 ? `${MOD_GLYPH}${idx + 1}` : null
             const isDragging = draggingId === tab.id
             return (
@@ -364,8 +398,8 @@ export function TabBar() {
                 onDoubleClick={() => keepTab(tab.id)}
                 title={
                   tab.preview
-                    ? `Preview — the next jump from Raycast replaces it. Double-click to keep it.`
-                    : `Switch to ${name}${shortcut ? ` (${shortcut})` : ''} — drag to reorder`
+                    ? `${text} · ${name} — opened from outside; the next jump replaces it. Double-click to keep it.`
+                    : `${text} · ${name}${shortcut ? ` (${shortcut})` : ''} — drag to reorder`
                 }
                 type="button"
                 draggable
@@ -376,18 +410,20 @@ export function TabBar() {
                 onDragEnd={onDragEnd}
               >
                 {shortcut && <span className="tabbar-shortcut">{shortcut}</span>}
-                <span className="tabbar-label">{name}</span>
-                {viewName && (
-                  // No dirty marker here. Whether you have edited away from
-                  // the view is only knowable for the active tab, and a
-                  // marker that appears on one tab and not the others would
-                  // read as a difference between the tabs rather than a limit
-                  // of what this label can say. The panel and the window
-                  // title carry it, where it is accurate.
-                  <span className="tabbar-view" title={viewName}>
-                    {viewName}
-                  </span>
+                {multiWorkspace && (
+                  <span
+                    className="tabbar-ws-dot"
+                    style={{ '--ws-hue': workspaceHue(tab.workspaceId) } as React.CSSProperties}
+                    aria-label={name}
+                  />
                 )}
+                {Icon && <Icon size={13} className="tabbar-kind" aria-hidden />}
+                {/* No dirty marker for a saved view here. Whether you have
+                    edited away from it is only knowable for the active tab, and
+                    a marker on one tab and not the others would read as a
+                    difference between the tabs rather than a limit of what this
+                    label can say. The panel and the window title carry it. */}
+                <span className="tabbar-label">{text}</span>
                 {canClose && (
                   <span
                     role="button"

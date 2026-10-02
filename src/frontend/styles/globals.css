@@ -396,11 +396,6 @@ a:hover { text-decoration: underline; }
   position: relative;
   top: 1px; /* overlap the banner border so the active tab fuses with it */
 }
-/* The tab jumps from outside land in, and the next jump reuses — italic, as
-   an editor marks its preview tab. Double-click makes it an ordinary tab. */
-.tabbar-tab.is-preview .tabbar-label {
-  font-style: italic;
-}
 .tabbar-tab:hover {
   background: var(--chip-bg);
   color: var(--fg);
@@ -413,6 +408,45 @@ a:hover { text-decoration: underline; }
 }
 .tabbar-tab.is-dragging {
   opacity: 0.4;
+}
+/* Declared before the preview rules so their accent icon wins at equal
+   specificity. */
+.tabbar-tab.is-active .tabbar-kind {
+  color: var(--fg);
+}
+/* The tab jumps from outside land in, and the next jump reuses. Italics alone
+   were too quiet at tab size to tell it from the tab you were working in, so it
+   also gets a dashed outline, an accent tint and the ↗ icon. Double-click makes
+   it an ordinary tab, and all three going away is the confirmation. Dashed
+   even when active: being the current tab does not make it any less temporary. */
+.tabbar-tab.is-preview {
+  border: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+  border-bottom: none;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.tabbar-tab.is-preview.is-active {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elev));
+}
+.tabbar-tab.is-preview .tabbar-label {
+  font-style: italic;
+}
+.tabbar-tab.is-preview .tabbar-kind {
+  color: var(--accent);
+}
+
+/* What the tab is looking at — see lib/tabLabel.ts. */
+.tabbar-kind {
+  flex: none;
+  color: var(--fg-muted);
+}
+
+/* Only drawn when tabs span more than one workspace. */
+.tabbar-ws-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: hsl(var(--ws-hue) 60% 55%);
 }
 
 .tabbar-shortcut {
@@ -429,6 +463,10 @@ a:hover { text-decoration: underline; }
 
 .tabbar-label {
   user-select: none;
+  /* A workstream name can be long; the tooltip has it in full. */
+  max-width: 24ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tabbar-close {
@@ -3133,23 +3171,6 @@ label + .settings-help {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* The saved view a tab is on, shown after the workspace name. Recessive,
-   because the workspace is what the tab is FOR; the view is what it currently
-   shows. */
-.tabbar-view {
-  max-width: 12ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--fg-muted);
-  font-size: var(--fs-meta);
-}
-.tabbar-view::before {
-  content: '·';
-  margin: 0 5px 0 4px;
-  opacity: 0.6;
 }
 
 /* The committing action among the panel's trailing buttons. Slightly forward
