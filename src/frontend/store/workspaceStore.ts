@@ -20,6 +20,9 @@ import type { WorkspaceProfile } from '../lib/api'
 export interface Tab {
   id: string
   workspaceId: string
+  /** Where jumps from outside the app land, and the next jump reuses it —
+   *  see lib/previewTab.ts. Optional so layouts saved before it load as is. */
+  preview?: boolean
 }
 
 interface WorkspaceState {
@@ -44,7 +47,9 @@ interface WorkspaceState {
 
   // Tab actions
   setTabs: (tabs: Tab[], activeTabId: string | null) => void
-  addTab: (workspaceId: string) => string
+  addTab: (workspaceId: string, opts?: { preview?: boolean }) => string
+  /** Make a preview tab an ordinary one, so the next jump leaves it alone. */
+  keepTab: (tabId: string) => void
   closeTab: (tabId: string) => void
   setActiveTab: (tabId: string) => void
   /** Move a tab from one index to another. Used by drag-to-reorder. */
@@ -166,10 +171,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     })
   },
 
-  addTab: (workspaceId) => {
+  addTab: (workspaceId, opts) => {
     const id = makeTabId()
     set((s) => {
-      const tabs = [...s.tabs, { id, workspaceId }]
+      const tab: Tab = opts?.preview ? { id, workspaceId, preview: true } : { id, workspaceId }
+      const tabs = [...s.tabs, tab]
       savePersisted(tabs, id)
       return { tabs, activeTabId: id, currentWorkspaceId: workspaceId }
     })
@@ -193,6 +199,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       }
       savePersisted(tabs, activeTabId)
       return { tabs, activeTabId, currentWorkspaceId }
+    })
+  },
+
+  keepTab: (tabId) => {
+    set((s) => {
+      if (!s.tabs.some((t) => t.id === tabId && t.preview)) return s
+      const tabs = s.tabs.map((t) => (t.id === tabId ? { id: t.id, workspaceId: t.workspaceId } : t))
+      savePersisted(tabs, s.activeTabId)
+      return { tabs }
     })
   },
 

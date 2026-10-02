@@ -70,6 +70,7 @@ export function TabBar() {
   const setActiveTab = useWorkspaceStore((s) => s.setActiveTab)
   const addTab = useWorkspaceStore((s) => s.addTab)
   const closeTab = useWorkspaceStore((s) => s.closeTab)
+  const keepTab = useWorkspaceStore((s) => s.keepTab)
   const reorderTabs = useWorkspaceStore((s) => s.reorderTabs)
   const changeTabWorkspace = useWorkspaceStore((s) => s.changeTabWorkspace)
   const setDefaultWorkspaceIdInStore = useWorkspaceStore((s) => s.setDefaultWorkspaceId)
@@ -357,9 +358,15 @@ export function TabBar() {
                   'tabbar-tab',
                   isActive ? 'is-active' : '',
                   isDragging ? 'is-dragging' : '',
+                  tab.preview ? 'is-preview' : '',
                 ].filter(Boolean).join(' ')}
                 onClick={() => switchTo(tab.id)}
-                title={`Switch to ${name}${shortcut ? ` (${shortcut})` : ''} — drag to reorder`}
+                onDoubleClick={() => keepTab(tab.id)}
+                title={
+                  tab.preview
+                    ? `Preview — the next jump from Raycast replaces it. Double-click to keep it.`
+                    : `Switch to ${name}${shortcut ? ` (${shortcut})` : ''} — drag to reorder`
+                }
                 type="button"
                 draggable
                 onDragStart={(e) => onDragStart(tab, e)}

@@ -66,6 +66,9 @@ export function focusUrl(
   if (workspaceId) u.searchParams.set("w", workspaceId);
   u.searchParams.set("focus", identifier);
   u.searchParams.set("detail", "1");
+  // Marks this as a jump, so the app opens it in its preview tab instead of
+  // overwriting the tab the user is on (the app's `isJumpArrival`).
+  u.searchParams.set("peek", "1");
   return u.toString();
 }
 
@@ -83,5 +86,6 @@ export function chainUrl(
   const u = new URL(`${baseUrl}/`);
   if (workspaceId) u.searchParams.set("w", workspaceId);
   u.searchParams.set("chain", identifier);
+  u.searchParams.set("peek", "1");
   return u.toString();
 }

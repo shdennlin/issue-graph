@@ -15,7 +15,7 @@ import {
   restoreViewportOnly,
   snapshotTab,
 } from './store/tabStateStore'
-import { arrivedViaBareDeepLink, arrivedWithEmptyUrl, useUrlSync } from './store/urlSync'
+import { arrivedViaBareDeepLink, arrivedWithEmptyUrl, consumeJumpEntry, useUrlSync } from './store/urlSync'
 import { useTheme } from './hooks/useTheme'
 import { useFontSize } from './hooks/useFontSize'
 import { api } from './lib/api'
@@ -202,8 +202,11 @@ export function App() {
     const prev = prevTabIdRef.current
     let restored = false
     if (prev !== null && prev !== activeTabId && activeTabId) {
-      // Tab switched: snapshot/restore the new tab's view state.
-      restored = loadTab(activeTabId)
+      // Tab switched: snapshot/restore the new tab's view state — unless a jump
+      // from outside switched it, restored it and applied its URL already
+      // (urlSync.enterJumpTab); loading again would throw that URL away.
+      const jump = consumeJumpEntry(activeTabId)
+      restored = jump ? jump.restored : loadTab(activeTabId)
     } else if (prev === null && activeTabId && arrivedWithEmptyUrl() && hasTabSnapshot(activeTabId)) {
       // First mount from a URL that named nothing — the PWA's start_url after a
       // quit and relaunch, or the bare host typed by hand.

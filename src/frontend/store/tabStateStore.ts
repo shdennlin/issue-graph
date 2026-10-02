@@ -31,6 +31,9 @@ interface PerTabView {
   mixGroupBy: string | null
   filters: Filters
   focusedId: string | null
+  /** The workstream view's focus. Without it a tab switch carried one tab's
+   *  focused workstream into the next, and coming back lost your own. */
+  focusedWorkstreamId: number | null
   chainRootIds: string[]
   chainDepthUp: number | null
   chainDepthDown: number | null
@@ -61,6 +64,7 @@ const defaultView: PerTabView = {
   mixGroupBy: null,
   filters: defaultFilters,
   focusedId: null,
+  focusedWorkstreamId: null,
   chainRootIds: [],
   chainDepthUp: null,
   chainDepthDown: null,
@@ -145,6 +149,7 @@ function hydrate(): void {
         view: {
           ...snap.view,
           mixGroupBy: snap.view.mixGroupBy ?? null,
+          focusedWorkstreamId: snap.view.focusedWorkstreamId ?? null,
           filters: { ...defaultFilters, ...snap.view.filters },
         },
         viewport: snap.viewport ?? null,
@@ -204,6 +209,7 @@ function captureCurrentView(): PerTabView {
     mixGroupBy: v.mixGroupBy,
     filters: v.filters,
     focusedId: v.focusedId,
+    focusedWorkstreamId: v.focusedWorkstreamId,
     chainRootIds: v.chainRootIds,
     chainDepthUp: v.chainDepthUp,
     chainDepthDown: v.chainDepthDown,
@@ -244,7 +250,7 @@ export function snapshotTab(tabId: string): void {
  *
  * Either way, the view store is populated correctly before this returns.
  */
-export function loadTab(tabId: string): boolean {
+export function loadTab(tabId: string, opts: { viewport?: boolean } = {}): boolean {
   const snap = snapshots.get(tabId)
   if (snap) {
     useViewStore.setState(snap.view)
@@ -272,7 +278,9 @@ export function loadTab(tabId: string): boolean {
     // on tab switch, so there's nothing to conflict with. Without this,
     // returning to a tab where the user clicked an issue (focusedId set)
     // would lose the pan/zoom they had carefully framed.
-    if (snap.viewport && viewportRestoreCallback) {
+    // A jump into the preview tab passes viewport: false — it is about to fit
+    // onto the linked issue, and an old pan restored after layout would win.
+    if (opts.viewport !== false && snap.viewport && viewportRestoreCallback) {
       viewportRestoreCallback(snap.viewport)
     }
     // Sync GraphCanvas's per-tab refs to the just-restored store values

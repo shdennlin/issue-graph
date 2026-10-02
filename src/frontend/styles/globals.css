@@ -396,6 +396,11 @@ a:hover { text-decoration: underline; }
   position: relative;
   top: 1px; /* overlap the banner border so the active tab fuses with it */
 }
+/* The tab jumps from outside land in, and the next jump reuses — italic, as
+   an editor marks its preview tab. Double-click makes it an ordinary tab. */
+.tabbar-tab.is-preview .tabbar-label {
+  font-style: italic;
+}
 .tabbar-tab:hover {
   background: var(--chip-bg);
   color: var(--fg);
