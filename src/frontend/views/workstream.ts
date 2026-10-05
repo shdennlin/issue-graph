@@ -198,6 +198,7 @@ export const workstreamView: ViewDefinition = {
             count: workstream.members.length,
             projectId: null,
             copyName: true,
+            showId: true,
             sessions: headerSessions(idx.sessionsByWorkstream.get(workstream.id)),
           },
         },

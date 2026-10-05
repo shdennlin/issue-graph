@@ -31,6 +31,10 @@ interface MixedContainerData {
      *  (React Flow claims the pointerdown for dragging). Ignored when
      *  `projectId` is set, since that click already opens a panel. */
     copyName?: boolean
+    /** Optional: show `#<id>` beside the name; a click copies the bare id.
+     *  Workstream view only — the numeric id is what an agent passes as
+     *  `workstreamId`, and nothing else on screen states it. */
+    showId?: boolean
     /** Optional: sessions working on this container, named in its header.
      *  Workstream view only — see `headerSessions`. */
     sessions?: HeaderSession[]
@@ -123,6 +127,17 @@ function MixedContainerImpl({ data }: NodeProps<MixedContainerData>) {
           </button>
         ) : (
           <span className="mixed-container-name" style={{ color: tint }}>{name}</span>
+        )}
+        {b.showId && (
+          <button
+            type="button"
+            className="mixed-container-id"
+            onClick={(e) => void copy(e, b.id, 'id')}
+            onPointerDown={stopPointer}
+            title={t('workstreams.copyId', { id: b.id })}
+          >
+            {copied === 'id' ? t('workstreams.copied') : `#${b.id}`}
+          </button>
         )}
         {copied === 'name' && <span className="mixed-container-copied">{t('workstreams.copied')}</span>}
         <span className="mixed-container-count">{countLabel}</span>

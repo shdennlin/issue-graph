@@ -520,6 +520,7 @@ export const en = {
   workstreams: {
     title: 'Workstreams',
     copyName: 'Copy name',
+    copyId: 'Copy workstream id {id}',
     copied: 'Copied!',
     copySessionId: 'Copy session id {id} (for claude --resume)',
     hint: 'Every workstream, including the ones off the board. Rename, archive or delete one here; the board is where you move them through the pipeline.',
