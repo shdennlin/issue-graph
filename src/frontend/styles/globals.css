@@ -1427,7 +1427,7 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   padding: 1px 6px;
   font-size: var(--fs-meta);
   color: var(--fg-muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-mono, ui-monospace, monospace);
   cursor: pointer;
 }
 .project-panel-id:hover { color: var(--fg); border-color: var(--accent); }

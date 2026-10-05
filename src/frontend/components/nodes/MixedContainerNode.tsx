@@ -103,6 +103,17 @@ function MixedContainerImpl({ data }: NodeProps<MixedContainerData>) {
       style={{ '--bucket-tint': tint } as CSSProperties}
     >
       <div className="mixed-container-header">
+        {b.showId && (
+          <button
+            type="button"
+            className="mixed-container-id"
+            onClick={(e) => void copy(e, b.id, 'id')}
+            onPointerDown={stopPointer}
+            title={t('workstreams.copyId', { id: b.id })}
+          >
+            {copied === 'id' ? t('workstreams.copied') : `#${b.id}`}
+          </button>
+        )}
         {canOpen ? (
           <button
             type="button"
@@ -127,17 +138,6 @@ function MixedContainerImpl({ data }: NodeProps<MixedContainerData>) {
           </button>
         ) : (
           <span className="mixed-container-name" style={{ color: tint }}>{name}</span>
-        )}
-        {b.showId && (
-          <button
-            type="button"
-            className="mixed-container-id"
-            onClick={(e) => void copy(e, b.id, 'id')}
-            onPointerDown={stopPointer}
-            title={t('workstreams.copyId', { id: b.id })}
-          >
-            {copied === 'id' ? t('workstreams.copied') : `#${b.id}`}
-          </button>
         )}
         {copied === 'name' && <span className="mixed-container-copied">{t('workstreams.copied')}</span>}
         <span className="mixed-container-count">{countLabel}</span>
