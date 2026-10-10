@@ -2,7 +2,7 @@
 
 # issue-graph
 
-Self-hosted, read-only graph viewer for issue dependencies. Fetches from Linear, renders an interactive graph of issues, buckets, and `blocks` relationships. Optionally enriches with local design-doc progress.
+Self-hosted issue dependency graph and workstream tracker. Fetches from Linear, renders an interactive graph of issues, buckets, and `blocks` relationships, and tracks feature progress through configurable pipelines. Supports optional Linear write-back, Claude Code integration, and local design-doc progress.
 
 ![Issue Graph — dependency view with detail panel showing the selected issue's design-doc progress, blocks/blocked-by, and annotations](docs/screenshots/dependency.png)
 
@@ -300,7 +300,7 @@ For full design rationale, see [`docs/PRD.md`](docs/PRD.md).
 
 ## Backends
 
-- **v1**: [Linear](https://linear.app) (read-only via personal API key)
+- **Current**: [Linear](https://linear.app) — sync via the workspace API key; optional issue edits and comments via each user's OAuth token
 - **Future** (architecture is in place): Jira, Plane, GitHub Projects
 
 ## URL deep linking
@@ -312,7 +312,7 @@ http://localhost:31415/?w=team_a&view=project&proj=p1&priority=1,2&recent=7d&neg
 ```
 
 Share a link in chat — your teammate sees the same view. Valid `view=`
-values are `dependency`, `mix`, `project`, `milestone`, `designdoc`. The `w=`
+values are `dependency`, `mix`, `project`, `milestone`, `designdoc`, `workstream`. The `w=`
 parameter selects a workspace profile by id, `neg=` lists the dimensions whose
 selection is inverted, and `q=` carries the search box.
 

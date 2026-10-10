@@ -308,13 +308,30 @@
 - `Filters.tagIds`：從初版就有儲存與序列化，但 `applyFilters` 從未讀取它。
   它原本要做的事早已由 `orphanValues` 實作
 
-## v1.6 — 接下來
+## v2.0 — 已發布（2026-10-10）
+
+**Workstreams 與代理工作流程。** 追蹤整個功能跨議題、跨 PR 的進度，並呈現代理 session 的即時狀態。
+
+- [x] **流程設定** — 每個工作區可設定有順序的階段、對應的 Linear 狀態與停留過久的提醒；直接從看板開啟編輯器。
+- [x] **Workstreams 檢視** — 每個工作流呈現自己的階段卡片，追蹤狀態、負責人與階段歷程。
+- [x] **統一階段欄位** — 每個階段以單一欄位清單宣告所需內容，區分自動呈現與手動附加的資料。
+- [x] **欄位定義** — 每個工作區統一定義欄位含義，並提供給代理作為背景。
+- [x] **筆記與手動附件** — Markdown 筆記、自訂欄位與值，手動附件標記為 `BY HAND`。
+- [x] **Linear PR 附件** — 呈現跨 repository 的 PR，區分 `closes` 與 `contributes`。
+- [x] **Claude Code plugin** — session hooks、啟動背景摘要、進度 skill 與指令，以及 18 個 MCP 工具；不修改 Linear 狀態。session 有存活期限，異常結束也會自動清理。
+- [x] **代理協作** — 依相依關係領取議題、將 session 歸屬至它更新的工作流，代理寫入後即時更新看板。
+- [x] **變更通知** — 鈴鐺與提示訊息顯示欄位變更及留言摘要，支援獨立通知範圍與各工作區的歷史紀錄。
+- [x] **Linear 授權更新與隔離** — 自動更新 token，依工作區分開保存；既有使用者需在各工作區重新連線一次。
+- [x] **導覽與閱讀** — Raycast 預覽分頁、反映內容的分頁名稱、各面板字級，以及可複製的工作流名稱與編號。
+
+## 下一版
 
 - [ ] 非 localhost 部署的選用驗證（basic-auth 或 token gate）
+- [ ] **不重啟即可輪替 `AGENT_SESSION_TOKEN`** — 以目前 token 保護更新操作；初始值仍須從外部設定，不可透過未驗證的 `/api/settings` 或 `/api/workspaces` 設定。
 - [ ] 把剩下的 v7 hook-rule 違規（`set-state-in-effect`、`purity`）遷移完，目前是逐個呼叫點壓抑警告
 - [ ] 把 `/api/export` 的 JSON 結構文件化，讓使用者能在上面建自己的工具
 
-## v1.7+ — 大概會做
+## 後續 — 大概會做
 
 - [ ] **GitHub Issues 後端** — 跟 Linear 同樣的 `Source` 介面；對 OSS 團隊價值高
 - [ ] **Mix view 排版改進** — bucket-as-container 的排版超過約 15 個節點就太擠：
@@ -332,11 +349,11 @@
 
 ## 不會做
 
-- 取代 Linear/Jira/GitHub UI — 這是個 *visualizer*，不是 tracker
+- 取代 Linear/Jira/GitHub — 議題狀態仍由來源管理，Workstreams 補上功能層級的進度與代理協作
 - 多租戶 SaaS hosting — 設計上就是 self-hosted
 - Mobile app — desktop-first；mobile web view 應該還是能用，但不會有原生 app
 
 ---
 
-如果你想做 **v1.6** 或 **v1.7+** 的東西，請先開 issue 對齊範圍。
+如果你想做**下一版**或**後續**的東西，請先開 issue 對齊範圍。
 **Maybe** 項目請在開工前先開 issue 看看意願。

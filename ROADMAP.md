@@ -336,7 +336,7 @@ Direction, not commitment. Issues and PRs welcome on anything below.
 - `Filters.tagIds`, stored and serialized since the first release but never
   read by `applyFilters`. Its intended role shipped as `orphanValues`
 
-## v1.6 — shipped
+## v2.0 — shipped (2026-10-10)
 
 **Workstreams and the agent lifecycle.** The three things Linear structurally cannot hold, each measured rather than assumed: a pipeline is finer than a state, one feature spans several PRs in several repos, and nothing records that a session is alive.
 
@@ -346,17 +346,21 @@ Direction, not commitment. Issues and PRs welcome on anything below.
 - [x] **Field definitions** — what a name MEANS, written once per workspace and handed to agents, so they learn what belongs in a field and not just what to call it.
 - [x] **Hand attachments** — any field, any value, marked `BY HAND` so a manual item never looks as good as a projected one.
 - [x] **Stage history** — every arrival, so "how did this get here and where did it stall" has an answer.
-- [x] **Claude Code plugin** — session hooks (alive / waiting / blocked, with a TTL so a crash cleans itself up) and an MCP server with 17 tools over this app's own data. Never writes a Linear state.
+- [x] **Claude Code plugin** — session hooks (alive / waiting / blocked, with a TTL so a crash cleans itself up), session-start context, progress skill and commands, and an MCP server with 18 tools over this app's own data. Never writes a Linear state.
 - [x] **Linear PR attachments** — pull requests Linear linked to an issue, across repositories, with `closes` vs `contributes` distinguished.
+- [x] **Agent coordination** — claim issues in dependency order, associate sessions with the workstream they write to, and update the board live after agent writes.
+- [x] **Change notifications** — bell and toast show field changes and comment summaries; independent scope controls and history per workspace.
+- [x] **Linear OAuth renewal and isolation** — automatically refresh tokens and store them per workspace. Existing users reconnect once per workspace.
+- [x] **Navigation and readability** — Raycast preview tabs, content-aware tab names, per-panel text sizes, and copyable workstream names and IDs.
 
-## v1.7 — next
+## Next release
 
 - [ ] Optional auth (basic-auth or token gate) for non-localhost deployments
 - [ ] **Rotate `AGENT_SESSION_TOKEN` without a restart** — `PUT` guarded by the *current* token, so the first value still arrives out of band and changing it needs somebody who already holds it. It must not become settable through `/api/settings` or `/api/workspaces`: those are unauthenticated, and a gate whose key is handed out by an ungated endpoint is not a gate.
 - [ ] Migrate the remaining v7 hook-rule violations (`set-state-in-effect`, `purity`) — currently suppressed per-call-site
 - [ ] Document the JSON shape of `/api/export` so users can build their own tools on top
 
-## v1.7+ — likely
+## Later — likely
 
 - [ ] **GitHub Issues backend** — same `Source` interface as Linear; high-value for OSS teams
 - [ ] **Mix view layout improvements** — the bucket-as-container layout gets cramped past ~15 nodes:
@@ -374,11 +378,11 @@ Direction, not commitment. Issues and PRs welcome on anything below.
 
 ## Not planned
 
-- Replacing Linear/Jira/GitHub UI — this is a *visualizer*, not a tracker
+- Replacing Linear/Jira/GitHub — issue state remains owned by the source; workstreams add feature-level progress and agent coordination
 - Multi-tenant SaaS hosting — self-hosted by design
 - Mobile app — desktop-first; the mobile web view should still work, but no native app
 
 ---
 
-If you want to work on something in **v1.6** or **v1.7+**, open an issue first so we can align on scope.
+If you want to work on something in **Next release** or **Later**, open an issue first so we can align on scope.
 For **Maybe** items, open an issue to gauge interest before writing code.

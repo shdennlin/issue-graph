@@ -6,6 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [v2.0.0] - 2026-10-10
+
+範圍：`v1.5.0..1bba0fd`，共 106 筆非 merge 提交、156 個檔案變更。
+
+### 使用者版本說明
+
+- **Workstreams 流程看板**：將相關議題集中管理，追蹤整個功能的階段、負責人與進度。階段可呈現議題、PR、筆記與附件，並提示停留過久或狀態不一致的情況。
+- **Claude Code 整合**：查看代理 session 的工作狀態；代理可讀取流程背景、更新進度，並依相依關係領取下一件工作。
+- **更清楚的變更通知**：通知顯示欄位變更前後值、留言摘要，以及新議題的狀態與優先度。支援獨立通知範圍與各 workspace 的歷史紀錄。
+- **更順暢的操作**：Linear 憑證支援自動更新；Raycast 跳轉使用預覽分頁；面板可調整字級，Workstream 名稱與編號可直接複製。
+- **進度與顯示修正**：正確處理 Linear 已完成或取消的議題，並修正筆記溢出、附件遺漏、面板布局及顏色問題。
+
+### 開發者 changelog
+
+| 類型 | 變更 | 代表提交 |
+|---|---|---|
+| Features | Workstreams 總覽、流程看板、階段歷程與成員管理 | `f815e89`, `dbcfc37`, `b9dbc29` |
+| Features | 階段欄位、共用定義、Markdown 筆記與手動附件 | `f785039`, `fcd4e8e`, `91aa174`, `2330934` |
+| Features | Claude Code hooks、MCP 工具、啟動背景摘要與進度指令 | `de25693`, `125f9eb`, `eb00982`, `dc29217` |
+| Features | 依相依關係派工、session 歸屬與看板即時更新 | `e9fe20b`, `f8d5d55`, `1e78a3c` |
+| Features | 變更通知、範圍設定、歷史紀錄與欄位前後值 | `f3e640a`, `83aed72`, `3bff5a9`, `47e0dc0` |
+| Features | Linear token 自動更新與 workspace 隔離 | `e08de93`, `b2d6bfe` |
+| Features | 面板字級、Raycast 預覽分頁與內容分頁名稱 | `2f54c80`, `0acb21c`, `c3e38f0` |
+| Fixes | 完成判定、解除阻擋與完成回報重試 | `2c7f80e`, `5bbaa66` |
+| Fixes | 寫入路由與 token 使用一致 workspace；403 保留 token | `012563e`, `0e3b174` |
+| Fixes | 重新整理的變更偵測與通知可靠性 | `e9eae1d`, `afc4989` |
+| Fixes | 筆記布局、附件呈現、session 階段歸屬與顏色 | `ca9634f`, `11f8271`, `6c177bb`, `f22d8df` |
+| Fixes | 空白 API 回應處理與 workspace 寫入來源檢查 | `8a7aaa0`, `cc6e0f2` |
+| Refactoring | 流程歸屬 Workstream，統一階段設定為 `fields` | `4539cc4`, `762e692` |
+| Documentation | 補齊 Workstreams、plugin、Docker 與授權設計說明 | `9b915b2`, `b0437ea`, `5310d8d`, `3ee73a3` |
+| Chores | Claude Code plugin 更新至 0.2.0，集中版本來源 | `c63c639` |
+
+### 升級注意事項
+
+Linear 授權改為依 workspace 保存，舊版共用憑證會被移除，使用者需在各 workspace **重新連線一次**。(`b2d6bfe`)
+
+---
+
 ## [v1.5.0] - 2026-09-16
 
 ### What's New
