@@ -2,7 +2,7 @@
 
 # issue-graph
 
-Self-hosted, read-only graph viewer for issue dependencies. Fetches from Linear, renders an interactive graph of issues, buckets, and `blocks` relationships. Optionally enriches with local design-doc progress.
+Self-hosted issue dependency graph and workstream tracker. Fetches from Linear, renders an interactive graph of issues, buckets, and `blocks` relationships, and tracks feature progress through configurable pipelines. Supports optional Linear write-back, Claude Code integration, and local design-doc progress.
 
 ![Issue Graph — dependency view with detail panel showing the selected issue's design-doc progress, blocks/blocked-by, and annotations](docs/screenshots/dependency.png)
 
@@ -12,6 +12,7 @@ Self-hosted, read-only graph viewer for issue dependencies. Fetches from Linear,
 - **Mix view** — issues grouped into buckets by a configurable Linear label group (`service`, `module`, `team`, `area` — auto-detected); cross-bucket `blocks` edges highlighted in red.
 - **Project view** — issues grouped by their Linear project. Each project becomes a container; cross-project `blocks` edges highlighted.
 - **Design-doc view** — issues with linked design-doc changes only.
+- **Workstreams view** — a feature in flight, drawn as the pipeline it is moving through. Each workstream is a block of stage cards; every card shows what belongs on that step. See [Workstreams](#workstreams) below.
 - **Sub-issue hierarchy** — Linear's parent/sub-issue links, shown as violet edges in the dependency view (toggle with `h`, off by default) and as a `3/7 done` progress badge on every parent card. The detail panel lists the parent and each sub-issue.
 
 ## Filtering
@@ -299,7 +300,7 @@ For full design rationale, see [`docs/PRD.md`](docs/PRD.md).
 
 ## Backends
 
-- **v1**: [Linear](https://linear.app) (read-only via personal API key)
+- **Current**: [Linear](https://linear.app) — sync via the workspace API key; optional issue edits and comments via each user's OAuth token
 - **Future** (architecture is in place): Jira, Plane, GitHub Projects
 
 ## URL deep linking
@@ -311,7 +312,7 @@ http://localhost:31415/?w=team_a&view=project&proj=p1&priority=1,2&recent=7d&neg
 ```
 
 Share a link in chat — your teammate sees the same view. Valid `view=`
-values are `dependency`, `mix`, `project`, `milestone`, `designdoc`. The `w=`
+values are `dependency`, `mix`, `project`, `milestone`, `designdoc`, `workstream`. The `w=`
 parameter selects a workspace profile by id, `neg=` lists the dimensions whose
 selection is inverted, and `q=` carries the search box.
 
@@ -335,6 +336,72 @@ Press `?` in the app for the full cheat sheet. Highlights:
 > [!NOTE]
 > **Desktop-first.** Hover-highlight and the keyboard shortcuts above assume a real keyboard + pointer. On touch devices the basics still work (click to focus / pin, pinch to zoom, drag to pan, the toolbar / detail panel) but the fast hover-to-scan flow doesn't translate.
 
+## Workstreams
+
+A **workstream** is one feature in flight: the issues that make it, plus where it has got to.
+
+Linear already tracks where each *issue* is. It cannot track where a *feature* is, for three reasons that are properties of the tool rather than gaps to be filled in: a pipeline is finer than a state (`In Progress` alone covers implementing, reviewing, opening a PR and waiting on CI), finishing one feature routinely spans several pull requests in several repositories, and nothing anywhere records that an agent session is alive right now.
+
+So the pipeline belongs to the workstream, and it is the one thing here that is **stored**. Where an *issue* appears is derived from its Linear state — move it in Linear and it moves here. When the two disagree, the board says so and changes neither.
+
+**This app never writes a Linear state.** Configuring a pipeline moves nothing; state transitions stay with Linear's own MCP or its GitHub automation.
+
+### Stages
+
+Edit the pipeline from the toolbar in the Workstreams view. Each stage names the Linear states whose issues belong to it, and carries one list of **fields** — everything that belongs on that step:
+
+| Field | Names | Who fills it |
+|---|---|---|
+| ⚡ **automatic** | `issue` `session` `pr` `spec` `note` `blocker` `ci` | The app, by reading somewhere else. It stays current and you add nothing. |
+| **attached** | any name you invent — `runbook`, `design`, `load-test` | A person or an agent. Nothing can fetch these, so they carry a `BY HAND` mark. |
+
+The names are yours. A field called `runbook` tells a reader, and an agent, something a bare link cannot — which is why the list is free rather than fixed, and why an unlisted name is still accepted.
+
+Give a name a one-line meaning at the bottom of the pipeline editor. That definition is written once for the workspace and handed to agents, so they learn not just what to call a field but what belongs in it.
+
+## Claude Code plugin
+
+[`integrations/claude-code/`](integrations/claude-code/) is a plugin with two halves — session hooks, and an MCP server.
+
+**Hooks** report which session is alive, on which branch, and whether it is working, waiting on you, or blocked on a permission prompt. The branch is resolved to an issue server-side, so the rules can be fixed by restarting rather than by updating every install. A crashed session disappears on its own: liveness is a TTL, not the `SessionEnd` hook, which a crash never sends.
+
+A session belongs to a **workstream** as soon as it writes to one through the MCP tools — attaching evidence, setting a note, moving a stage, creating one. It is then drawn on that workstream's current stage, whatever branch it happens to be on. The branch is only the fallback, and a weak one for a session run from a superproject: it moves between repos, and the branch of whichever one it stood in last names the wrong issue or none.
+
+`SessionStart` also reads back: it tells the session which workstream the branch belongs to, what that workstream is for, which stage it is on, and what that stage expects attached. It states facts and gives no orders — whether a stage has been cleared is a judgement only the session that did the work can make. Compaction is covered, because `SessionStart` fires again with `source: "compact"`.
+
+**A skill and two commands** close the loop. MCP tools are passive — a session has to decide that now is the moment to reach for one. `workstream-progress` is the skill the model reaches for when work reaches a point worth recording; `/issue-graph:where` reports position without changing anything; `/issue-graph:progress` records it. All three attach evidence freely and move a stage only when every field that stage expects is satisfied.
+
+**The MCP server** gives an agent 18 tools over this app's own data — read the pipeline and the workstreams, build or edit a pipeline, define what a field name means, create and move workstreams, attach fields, and claim issues out of a workstream one at a time in dependency order. It never writes a Linear state.
+
+Install, from inside Claude Code:
+
+```
+/plugin marketplace add shdennlin/issue-graph@develop
+/plugin install issue-graph@issue-graph
+```
+
+The marketplace manifest lives at the repo root, so the GitHub form needs no clone of your own. `@develop` pins the branch: this work has not reached `main`, and without the suffix the add resolves to the default branch and finds no manifest there. `/plugin marketplace update issue-graph` then follows that branch's head rather than the default one. Working on the plugin itself? Point it at your checkout instead — `/plugin marketplace add /path/to/issue-graph` — and re-run `/reload-plugins` after each edit.
+
+Then point it at your server. Both halves read the same three environment variables, so set them where Claude Code will see them — `.claude/settings.local.json` in the repo you work in is the narrowest place, and `~/.claude/settings.json` the one that covers every repo. Use the second if you start sessions from a superproject or across several repos: a repo without the variables reports nothing at all, and says nothing about it.
+
+```json
+{
+  "env": {
+    "ISSUE_GRAPH_URL": "http://localhost:31415",
+    "ISSUE_GRAPH_WORKSPACE": "your-workspace-id",
+    "ISSUE_GRAPH_TOKEN": "same value as AGENT_SESSION_TOKEN"
+  }
+}
+```
+
+`ISSUE_GRAPH_TOKEN` must equal the server's `AGENT_SESSION_TOKEN` (in `.env`). **An unset `AGENT_SESSION_TOKEN` closes the session endpoint rather than opening it** — a server deployed without the variable must not quietly accept writes from anywhere. With either side missing, the hooks do nothing at all, silently and deliberately: this ships enabled to everyone who installs the plugin, and a hook that complained on every prompt in every repo without an issue-graph would be worse than useless.
+
+The MCP server needs only `ISSUE_GRAPH_URL` (and `ISSUE_GRAPH_WORKSPACE` if you run more than one workspace). MCP over stdio has no authorization framework by design — [the spec](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization) says stdio transports should take credentials from the environment, which is what this does.
+
+Run `/reload-plugins` after changing any of it.
+
+**On Docker**, `AGENT_SESSION_TOKEN` rides in from `.env` through `env_file` — nothing to pin in `docker-compose.yml`. The container publishes on `127.0.0.1` only, so `http://localhost:31415` works from the Docker host and nowhere else: Claude Code running on a different machine needs the same path-scoped tunnel the Linear webhook uses, not the whole app.
+
 ## Raycast extension
 
 A [Raycast](https://raycast.com) extension lives in [`integrations/raycast/`](integrations/raycast/) — fuzzy-search every cached issue **across all workspaces** and jump straight to one, without opening the app first.
@@ -342,6 +409,7 @@ A [Raycast](https://raycast.com) extension lives in [`integrations/raycast/`](in
 - **Search Issues** — type to filter by id, title, assignee, or workspace. Results are grouped by state (Triage → In Progress → Todo → Backlog → Completed → Canceled) and the issues you open most often float to the top (frecency).
 - **Inline detail** (`⌘D`) — status, priority, assignee, due date (overdue flagged red), labels, project, milestone, relations, sub-issues, comments — read from the local cache, no extra calls.
 - **Open straight into the PWA** via the `web+issuegraph://` URL scheme — the OS routes it into the installed app, which focuses the issue and opens its detail panel (the PWA equivalent of Linear's `linear://`). Browser fallbacks (`⌥↵`) work with no PWA installed.
+- **Jumps land in a preview tab**, not the tab you are on — so a lookup from Raycast never overwrites, say, the workstream you are watching. The next jump reuses the same tab (dashed outline, `↗`); double-click it to keep it as an ordinary tab, and the next jump opens a fresh preview.
 
 Install (needs the Raycast app):
 

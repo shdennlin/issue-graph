@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { buildBackendWithToken, getBackend } from '../sources/factory.js'
 import { readCachedIssues } from '../cache.js'
 import { readViewerCached } from '../sync.js'
-import { AuthError } from '../sources/types.js'
+import { AuthError, ForbiddenError } from '../sources/types.js'
 import { bearerToken, originAllowed } from '../lib/http.js'
 
 interface CacheEntry { detail: unknown; ts: number }
@@ -108,10 +108,19 @@ function unauthenticated(c: Context): Response {
  * AuthError is split out from the generic 502 so the client can tell "reconnect
  * your account" from "the write itself failed" — a rejected or expired token is
  * the one failure the user can actually fix, and a 502 would send them looking
- * at the wrong thing. `gql` already maps Linear's 401/403 onto AuthError.
+ * at the wrong thing.
+ *
+ * ForbiddenError is split out from *AuthError* for a sharper reason: the client
+ * discards its stored Linear token on `unauthenticated`, so returning that code
+ * for a permission failure logged the user out of every issue because of one
+ * they happened not to be allowed to touch. `errorForStatus` keeps 401 and 403
+ * apart at the source; this is the half that carries the distinction onward.
  */
 function writeFailure(c: Context, err: unknown): Response {
   if (err instanceof AuthError) return unauthenticated(c)
+  if (err instanceof ForbiddenError) {
+    return c.json({ error: { code: 'forbidden', message: err.message } }, 403)
+  }
   const message = err instanceof Error ? err.message : String(err)
   return c.json({ error: { code: 'write_failed', message } }, 502)
 }

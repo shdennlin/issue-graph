@@ -28,6 +28,8 @@ import {
 } from './filterCodec'
 import { consumeCallback } from '../lib/linearAuth'
 import { useCapabilityStore } from './capabilityStore'
+import { loadTab, snapshotTab } from './tabStateStore'
+import { JUMP_PARAM, isJumpArrival, routeJump } from '../lib/previewTab'
 
 interface HistoryEntryState {
   seq: number
@@ -102,6 +104,10 @@ function buildUrl(): string {
   if (s.theme !== 'auto') params.set('theme', s.theme)
   if (s.density !== 'default') params.set('density', s.density)
   if (s.mixGroupBy) params.set('mixby', s.mixGroupBy)
+  // 'stream', not 'ws': `w` is the WORKSPACE id and picks which database the
+  // whole app reads. Two params one letter apart, one of them load-bearing, is
+  // a misreading waiting to happen in a shared link.
+  if (s.focusedWorkstreamId !== null) params.set('stream', String(s.focusedWorkstreamId))
 
   // Filters + search are owned by filterCodec so that all three registration
   // points (write / read / signature) live in one testable module.
@@ -143,6 +149,9 @@ function significantSignature(): string {
     s.showRelated ? '1' : '0',
     s.showHierarchy ? '1' : '0',
     s.mixGroupBy ?? '',
+    // Expanding a workstream is a step, not a preference: it replaces what the
+    // whole canvas is about, so Back has to come out of it.
+    s.focusedWorkstreamId === null ? '' : String(s.focusedWorkstreamId),
     // search + every filter dimension — see filterCodec.filterSignatureParts.
     ...filterSignatureParts({ filters: s.filters, search: s.search }),
     s.notesOpen ? '1' : '0',
@@ -303,6 +312,48 @@ export function resolveActiveView(
   return defaultView
 }
 
+// Set by a warm jump that has already switched tabs and restored the target
+// itself; read once by App.tsx's tab-switch effect, which would otherwise call
+// loadTab again and overwrite what the URL just put there.
+let pendingJumpEntry: { tabId: string; restored: boolean } | null = null
+export function consumeJumpEntry(tabId: string): { restored: boolean } | null {
+  const entry = pendingJumpEntry
+  pendingJumpEntry = null
+  return entry && entry.tabId === tabId ? { restored: entry.restored } : null
+}
+
+function enterJumpTab(mode: 'cold' | 'warm'): void {
+  const ws = useWorkspaceStore.getState()
+  const route = routeJump(ws.tabs, ws.activeTabId)
+  if (route.kind === 'stay') return
+
+  // Warm: the window was already up, so the store holds the tab being left —
+  // save it before anything changes. Cold: that tab was saved on unload and
+  // the store holds nothing of it, so there is nothing to save or carry.
+  const view = useViewStore.getState()
+  const carried = mode === 'warm' ? { filters: view.filters, search: view.search } : null
+  if (mode === 'warm' && ws.activeTabId) snapshotTab(ws.activeTabId)
+
+  let target: string
+  if (route.kind === 'reuse') {
+    ws.setActiveTab(route.tabId)
+    target = route.tabId
+  } else {
+    // The URL's `w` repoints it below if the link is for another workspace.
+    const workspaceId = ws.currentWorkspaceId ?? ws.tabs[0]?.workspaceId
+    if (!workspaceId) return
+    target = ws.addTab(workspaceId, { preview: true })
+  }
+  if (mode === 'cold') return
+
+  // The preview tab keeps its own view and filters between jumps. A new one
+  // has none, so it starts from the filters of the tab the jump came from —
+  // what the user was filtering to a moment ago — rather than the defaults.
+  const restored = loadTab(target, { viewport: false })
+  if (route.kind === 'create' && carried) useViewStore.setState(carried)
+  pendingJumpEntry = { tabId: target, restored }
+}
+
 // Whether the URL parsed most recently was a *bare* deep link — it pinned an
 // issue (`focus`/`chain`) and said nothing about filters. parseUrl acts on this
 // itself when told to preserve; App.tsx reads it on first mount, where the store
@@ -354,9 +405,28 @@ export function arrivedWithEmptyUrl(): boolean {
 function parseUrl({
   preserveViewOnFocus = false,
   preserveFiltersOnFocus = false,
-}: { preserveViewOnFocus?: boolean; preserveFiltersOnFocus?: boolean } = {}): void {
+  jump,
+}: {
+  preserveViewOnFocus?: boolean
+  preserveFiltersOnFocus?: boolean
+  /** Route a jump from outside into the preview tab before applying it. Unset
+   *  for popstate, which replays this tab's own history. */
+  jump?: 'cold' | 'warm'
+} = {}): void {
   lastAppliedSearch = window.location.search
   let params = new URLSearchParams(window.location.search)
+
+  // A jump from outside (Raycast, the protocol handler) goes to the preview tab
+  // rather than overwriting the active one — see lib/previewTab.ts. Decided on
+  // the raw query, before `proto` is translated away, and done before any store
+  // write below so everything the URL says lands in the tab it was meant for.
+  if (jump && isJumpArrival(params)) enterJumpTab(jump)
+  if (params.has(JUMP_PARAM)) {
+    params.delete(JUMP_PARAM)
+    const rest = params.toString()
+    window.history.replaceState(window.history.state, '', rest ? `?${rest}` : window.location.pathname)
+    lastAppliedSearch = window.location.search
+  }
 
   // Protocol-handler entry point: `/?proto=web+issuegraph://...`. Translate it
   // into canonical focus params and rewrite the address bar so buildUrl and the
@@ -487,6 +557,13 @@ function parseUrl({
   // An unresolvable key is tolerated downstream by mixGrouping.resolveMixKey.
   set({ mixGroupBy: params.get('mixby') || null })
 
+  // Same reason as ?mixby= above: assigned unconditionally so a URL without
+  // ?ws= returns to the overview rather than inheriting the previous
+  // expansion. A non-numeric or missing id reads as the overview, and an id
+  // whose workstream has since been deleted is tolerated by the view.
+  const streamParam = Number(params.get('stream'))
+  set({ focusedWorkstreamId: Number.isInteger(streamParam) && streamParam > 0 ? streamParam : null })
+
   // Filters + search: rebuilt wholesale from the URL, so a field whose param is
   // absent resets to its default instead of sticking. `search` is assigned
   // unconditionally for the same reason — otherwise Back cannot clear it.
@@ -549,7 +626,7 @@ export function useUrlSync(): void {
   useEffect(() => {
     // Initial load may be a focus deep link (PWA launch / shared URL); preserve
     // the view it lands in rather than forcing dependency.
-    parseUrl({ preserveViewOnFocus: true })
+    parseUrl({ preserveViewOnFocus: true, jump: 'cold' })
     // Seed the first history entry with seq=0 so we have a sentinel for
     // "no app step yet" — Cmd+[ from here goes to whatever was loaded
     // before our SPA (or no-op at the start of session history).
@@ -606,7 +683,7 @@ export function useUrlSync(): void {
       // deep link that cold-starts the app therefore still lands on default
       // filters; restoring those would mean reading the tabStateStore snapshot,
       // the way App.tsx does for the view.)
-      parseUrl({ preserveViewOnFocus: true, preserveFiltersOnFocus: true })
+      parseUrl({ preserveViewOnFocus: true, preserveFiltersOnFocus: true, jump: 'warm' })
       // The externally-applied search (e.g. `?w=…&focus=…`) omits the view we
       // just preserved, so the address bar would disagree with the store and a
       // reload/share would drop the view. Rewrite it to the canonical URL.

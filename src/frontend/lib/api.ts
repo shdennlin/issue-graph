@@ -5,6 +5,8 @@ import type {
   GraphResponse,
   ProjectDetail,
   SavedViewDTO,
+  FieldDTO,
+  LifecycleStageDTO,
   SyncLogEntry,
   Viewer,
   WorkflowState,
@@ -23,6 +25,26 @@ import { authHeader } from './linearAuth'
  *   - the workspace store hasn't initialised yet (early bootstrap before
  *     /api/workspaces returns; the backend then falls back to its default).
  */
+/**
+ * The route and the credential for one write, both built from ONE workspace id.
+ *
+ * They used to be read at two moments — the header before its `await`, the
+ * `?w=` inside http() after it — and a token renewal sits in that await. A tab
+ * switch during it sent workspace A's Linear token to workspace B's route. The
+ * write's workspace is now captured by the caller before anything awaits and
+ * passed in, and an explicit `?w=` is what withWorkspaceParam leaves alone.
+ * With no workspace there is no token to send, and the path is left to the
+ * default routing.
+ */
+async function writeRequest(
+  path: string,
+  workspaceId: string | null,
+): Promise<{ path: string; headers: Record<string, string> }> {
+  if (!workspaceId) return { path, headers: {} }
+  const sep = path.includes('?') ? '&' : '?'
+  return { path: `${path}${sep}w=${encodeURIComponent(workspaceId)}`, headers: await authHeader(workspaceId) }
+}
+
 export function withWorkspaceParam(path: string): string {
   const id = useWorkspaceStore.getState().currentWorkspaceId
   if (!id) return path
@@ -41,7 +63,18 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
     const { code, message } = extractApiError(text)
     throw new ApiError(message, res.status, code)
   }
-  return (await res.json()) as T
+  // 204 carries no body, and neither does a 200 with an empty one. Calling
+  // res.json() on either throws "Unexpected end of JSON input" — which reads
+  // as a failure even though the request succeeded, so the caller skips its
+  // refresh and leaves a row on screen that the server has already deleted.
+  // Clicking it again then 404s, which is how this surfaced.
+  //
+  // Pre-existing: DELETE /api/saved-views has always returned 204, so
+  // savedViewsStore's delete path has had the same defect.
+  if (res.status === 204) return undefined as T
+  const text = await res.text()
+  if (text.length === 0) return undefined as T
+  return JSON.parse(text) as T
 }
 
 export interface LabelsResponse {
@@ -139,7 +172,7 @@ export const api = {
   // `assigneeId: null` means unassign; omitting the key leaves the assignee
   // alone. JSON.stringify preserves that difference, which is the whole reason
   // the patch is built by the caller rather than spread from a form.
-  updateIssue: (
+  updateIssue: async (
     identifier: string,
     patch: {
       stateId?: string
@@ -148,18 +181,28 @@ export const api = {
       addedLabelIds?: string[]
       removedLabelIds?: string[]
     },
-  ) =>
-    http<{ ok: true }>(`/api/issues/${encodeURIComponent(identifier)}`, {
+    // The workspace the write was issued in, captured by the caller before any
+    // await (see writeRequest). Required, so a new caller cannot fall back to
+    // "whatever the tab shows by the time the token is ready".
+    workspaceId: string | null,
+  ) => {
+    // writeRequest awaits authHeader, which renews a token near expiry first,
+    // so a write started minutes before the 24h mark does not race the clock.
+    const req = await writeRequest(`/api/issues/${encodeURIComponent(identifier)}`, workspaceId)
+    return http<{ ok: true }>(req.path, {
       method: 'PATCH',
-      headers: authHeader(),
+      headers: req.headers,
       body: JSON.stringify(patch),
-    }),
-  addIssueComment: (identifier: string, body: string) =>
-    http<{ ok: true }>(`/api/issues/${encodeURIComponent(identifier)}/comments`, {
+    })
+  },
+  addIssueComment: async (identifier: string, body: string, workspaceId: string | null) => {
+    const req = await writeRequest(`/api/issues/${encodeURIComponent(identifier)}/comments`, workspaceId)
+    return http<{ ok: true }>(req.path, {
       method: 'POST',
-      headers: authHeader(),
+      headers: req.headers,
       body: JSON.stringify({ body }),
-    }),
+    })
+  },
   fetchProjectDetail: (projectId: string, opts?: { fresh?: boolean }) =>
     http<{ data: ProjectDetail }>(
       `/api/projects/${encodeURIComponent(projectId)}${opts?.fresh ? '?fresh=1' : ''}`,
@@ -219,6 +262,116 @@ export const api = {
   // module: this `http` helper throws a typed ApiError that flows into
   // apiErrorMessage -> i18n, whereas notesApi.ts rolls its own and throws a
   // bare Error, which is why note failures surface untranslated.
+  /** Create a batch of issues for agent sessions to work through one at a
+   *  time. Members are stored; the ORDER is derived from `blocks` at read time,
+   *  so it is never sent. */
+  createBatch: (name: string, members: string[]) =>
+    http<{ id: number; name: string; members: string[] }>('/api/batches', {
+      method: 'POST',
+      body: JSON.stringify({ name, members }),
+    }),
+  fetchBatch: (id: number) =>
+    http<{
+      id: number
+      name: string
+      progress: { total: number; done: number; claimed: number }
+      members: { identifier: string; claimedBy: string | null; doneAt: number | null; blockedBy: string[] }[]
+    }>(`/api/batches/${id}`),
+  /** Move a workstream to a stage. Null takes it off the pipeline. The server
+   *  only restamps its clock and records history on a REAL change, so calling
+   *  this with the current stage is a no-op rather than a fake advance. */
+  /** The workstream's own note. Null clears it; the route treats an absent key
+   *  as "leave alone", so this always sends one. */
+  setBatchNote: (id: number, note: string | null) =>
+    http<unknown>(`/api/batches/${id}`, { method: 'PATCH', body: JSON.stringify({ note }) }),
+  setBatchStage: (id: number, stage: string | null) =>
+    http<unknown>(`/api/batches/${id}`, { method: 'PATCH', body: JSON.stringify({ stage }) }),
+  /** Archiving is how you take a workstream off the board without claiming it
+   *  finished — the graph payload drops archived ones entirely. */
+  setBatchStatus: (id: number, status: 'active' | 'archived') =>
+    http<unknown>(`/api/batches/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  renameBatch: (id: number, name: string) =>
+    http<unknown>(`/api/batches/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+  addBatchMembers: (id: number, members: string[]) =>
+    http<unknown>(`/api/batches/${id}/members`, { method: 'POST', body: JSON.stringify({ members }) }),
+  removeBatchMember: (id: number, identifier: string) =>
+    http<unknown>(`/api/batches/${id}/members/${identifier}`, { method: 'DELETE' }),
+  /** A stage note. Writable on ANY stage, not only the current one — the spec
+   *  folder is known before Spec review is reached, and a decision is recorded
+   *  after Result review has passed. */
+  setStageNote: (id: number, stageKey: string, body: string) =>
+    http<unknown>(`/api/batches/${id}/notes/${encodeURIComponent(stageKey)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ body }),
+    }),
+  clearStageNote: (id: number, stageKey: string) =>
+    http<unknown>(`/api/batches/${id}/notes/${encodeURIComponent(stageKey)}`, { method: 'DELETE' }),
+  /** Attach something by hand when the automatic link is missing. `kind` picks
+   *  where it renders — see STAGE_LINK_KINDS. */
+  attachToStage: (id: number, stageKey: string, kind: string, value: string, label?: string) =>
+    http<unknown>(`/api/batches/${id}/links/${encodeURIComponent(stageKey)}`, {
+      method: 'POST',
+      body: JSON.stringify({ kind, value, label }),
+    }),
+  detachFromStage: (id: number, stageKey: string, value: string) =>
+    http<unknown>(`/api/batches/${id}/links/${encodeURIComponent(stageKey)}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ value }),
+    }),
+  deleteBatch: (id: number) => http<unknown>(`/api/batches/${id}`, { method: 'DELETE' }),
+  /** `includeArchived` opts back in to what archiving took off the board. The
+   *  panel is the one place they have to be reachable, or archiving would be
+   *  indistinguishable from deleting. */
+  fetchBatches: (includeArchived = false) =>
+    http<{
+      entries: {
+        id: number
+        name: string
+        /** The note's first line — see shared/noteSummary.ts for why there is
+         *  no separate description column. */
+        summary: string | null
+        stage: string | null
+        status: 'active' | 'archived'
+        createdAt: number
+        updatedAt: number
+        archivedAt: number | null
+        progress: { total: number; done: number }
+      }[]
+    }>(
+      includeArchived ? '/api/batches?status=all' : '/api/batches',
+    ),
+  fetchLifecycle: () => http<{ entries: LifecycleStageDTO[] }>('/api/lifecycle'),
+  fetchFields: () => http<{ entries: FieldDTO[] }>('/api/fields'),
+  /** An empty description removes the definition — see the route's note on why
+   *  that is one call rather than a separate DELETE. */
+  setFieldDescription: (name: string, description: string) =>
+    http<FieldDTO | null>(`/api/fields/${encodeURIComponent(name)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ description }),
+    }),
+  createStage: (s: { name: string; key?: string; states?: string[]; nextCommand?: string | null }) =>
+    http<LifecycleStageDTO>('/api/lifecycle', { method: 'POST', body: JSON.stringify(s) }),
+  patchStage: (
+    id: number,
+    patch: {
+      key?: string
+      name?: string
+      states?: string[]
+      nextCommand?: string | null
+      /** Everything that belongs on this stage — one list. A name in
+       *  AUTO_FIELDS is filled by the app; any other is attached by hand.
+       *  See migration 17 for why this is not two lists. */
+      fields?: string[]
+      /** Null means this stage never goes stale — the honest setting for a
+       *  Discuss stage that legitimately runs for a fortnight. */
+      staleAfterDays?: number | null
+    },
+  ) => http<{ ok: boolean }>(`/api/lifecycle/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deleteStage: (id: number) => http<unknown>(`/api/lifecycle/${id}`, { method: 'DELETE' }),
+  /** The full key list, always — the server refuses a partial reorder rather
+   *  than interleaving a stale order with the current one. */
+  reorderStages: (keys: string[]) =>
+    http<{ ok: boolean }>('/api/lifecycle/reorder', { method: 'POST', body: JSON.stringify({ keys }) }),
   fetchSavedViews: () => http<{ entries: SavedViewDTO[] }>('/api/saved-views'),
   createSavedView: (name: string, query: string) =>
     http<SavedViewDTO>('/api/saved-views', { method: 'POST', body: JSON.stringify({ name, query }) }),

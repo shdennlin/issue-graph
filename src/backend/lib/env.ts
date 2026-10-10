@@ -97,6 +97,19 @@ const ConfigSchema = z.object({
   // server out of the business of holding anybody's token.
   LINEAR_OAUTH_CLIENT_ID: optStr,
 
+  // Shared secret for POST /api/agent-sessions.
+  //
+  // Env-only on purpose. Everything that gates a write has to be unreachable
+  // from /api/settings, which is itself unauthenticated — a secret settable
+  // through an open endpoint is not a secret. Same reasoning as the warning on
+  // LINEAR_OAUTH_CLIENT_ID.
+  //
+  // Unset means the endpoint is CLOSED, not open. This route is meant to be
+  // reachable from outside (the hook runs on a laptop, the server may not be
+  // local), so defaulting to open would quietly expose a write endpoint on an
+  // app that has no auth by design.
+  AGENT_SESSION_TOKEN: optStr,
+
 })
 
 export type Config = z.infer<typeof ConfigSchema>

@@ -2,7 +2,7 @@
 
 # issue-graph
 
-自架的唯讀議題相依關係圖檢視器。從 Linear 拉取資料，繪製議題、分組與 `blocks` 關係的互動式圖表。選擇性地搭配本地設計文件進度。
+自架的議題相依關係圖與工作流程追蹤工具。從 Linear 拉取資料，繪製議題、分組與 `blocks` 關係的互動式圖表，並透過可自訂的流程追蹤功能進度。支援選用的 Linear 寫入功能、Claude Code 整合與本地設計文件進度。
 
 ![Issue Graph — 相依檢視，詳情面板顯示所選議題的設計文件進度、blocks/blocked-by 與註解](docs/screenshots/dependency.png)
 
@@ -265,7 +265,7 @@ secret。它無法重建，不過「重建」也不過就是把每個工作區�
 
 ## 後端
 
-- **v1**：[Linear](https://linear.app)（透過個人 API 金鑰，唯讀）
+- **目前**：[Linear](https://linear.app) — 透過工作區 API 金鑰同步；可選擇以各使用者的 OAuth token 編輯議題與留言
 - **未來**（架構已準備好）：Jira、Plane、GitHub Projects
 
 ## URL 深層連結
@@ -277,7 +277,7 @@ http://localhost:31415/?w=team_a&view=project&proj=p1&priority=1,2&recent=7d&neg
 ```
 
 把連結貼到聊天室 — 隊友看到的就是同一個檢視。`view=` 的合法值有
-`dependency`、`mix`、`project`、`milestone`、`designdoc`。`w=` 參數依 id 選擇工作區設定檔，
+`dependency`、`mix`、`project`、`milestone`、`designdoc`、`workstream`。`w=` 參數依 id 選擇工作區設定檔，
 `neg=` 列出哪些維度的選取被反轉，`q=` 帶的是搜尋框的內容。
 
 ## 鍵盤
@@ -336,6 +336,22 @@ bun run build      # 正式版建置 → dist/ + build/
 
 常見問題（例如更換 `LINEAR_API_KEY` 後快取陳舊、空白頁重設等）請見
 **[Troubleshooting](docs/troubleshooting.zh-TW.md)**。
+
+## Workstreams 與 Claude Code 整合
+
+Workstream 代表一個進行中的功能，將相關議題、負責人、筆記與附件集中到同一條流程。從 Workstreams 檢視的工具列編輯階段；每個階段宣告對應的 Linear 狀態，以及該呈現或附加的欄位。議題依 Linear 狀態出現在對應階段，工作流本身的階段則獨立保存；不一致或停留過久時，看板會提示。
+
+自動欄位包含議題、session、PR 與筆記等；手動欄位可以自訂名稱與含義，並以 `BY HAND` 標記附件。工作流與各階段可記錄 Markdown 筆記，也能回顧階段歷程。
+
+[`Claude Code plugin`](integrations/claude-code/README.md) 提供 session hooks、18 個 MCP 工具、進度 skill 與兩個指令。代理啟動時會取得工作流背景，可依相依關係領取議題、附加證據並更新進度；看板會呈現執行中、等待使用者與等待權限的 session。這些工作流工具不修改 Linear 狀態。
+
+安裝與環境變數設定請見 [plugin 文件](integrations/claude-code/README.md)（英文）。伺服器須設定 `AGENT_SESSION_TOKEN`，plugin 的 `ISSUE_GRAPH_TOKEN` 須與它相同；未設定時，session 回報端點關閉。
+
+## 變更通知與授權
+
+通知鈴鐺與提示訊息會顯示欄位變更前後值、留言摘要，以及新議題的狀態與優先度。通知範圍可獨立設定，歷史紀錄依工作區保存。
+
+Linear OAuth token 會自動更新，並依工作區分開保存。升級至 v2.0.0 後，既有使用者需在各工作區重新連線一次。從 Raycast 跳轉則會使用預覽分頁，保留目前正在查看的畫面。
 
 ## Roadmap
 

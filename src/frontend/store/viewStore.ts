@@ -8,8 +8,18 @@ import {
   writeTheme,
 } from '../lib/preferences'
 import type { RecencyMode, RecencyWindow } from '../lib/recency'
+// The eleven dimension toggles below are one-liners here and the whole of
+// filterToggles.ts: the semantics moved out so the notification-scope editor
+// could reach them without a store to mutate. `toggle` comes along because
+// `toggleSelection` toggles issue ids, which is the same primitive over a
+// different kind of list.
+import * as ft from './filterToggles'
+import { toggle } from './filterToggles'
 
-export type ViewId = 'dependency' | 'mix' | 'project' | 'milestone' | 'designdoc'
+// Must list every view registered in views/index.ts. `workstream` was missing
+// here while the view itself shipped, which is why Toolbar had to cast its
+// setActiveView call — a cast that would equally have accepted a typo.
+export type ViewId = 'dependency' | 'mix' | 'project' | 'milestone' | 'designdoc' | 'workstream'
 export type Density = 'compact' | 'default' | 'verbose'
 export type ThemeMode = 'light' | 'dark' | 'auto'
 // Either a preset (sm/md/lg) or a custom base px value (e.g. 14). When a
@@ -122,15 +132,45 @@ export interface ViewState {
   // primary group), which is the historical behavior. Encoding and the
   // stale-key fallback live in lib/mixGrouping.ts.
   mixGroupBy: string | null
+  /**
+   * Which workstream the Workstreams view expands, or null for the overview.
+   *
+   * The view is stage-first either way: null draws the workspace's pipeline
+   * once with every workstream marked on the stage it reached, and an id draws
+   * that one workstream's own row of stages with each stage's contents. Null is
+   * not "no workstream" — it is the other mode.
+   */
+  focusedWorkstreamId: number | null
+  /** The lifecycle editor, open over the Workstreams view. A preference, not a
+   *  step: it configures the view rather than changing what the view is about,
+   *  so it stays out of the URL and out of significantSignature. */
+  lifecycleEditorOpen: boolean
+  /** A workstream the canvas should centre on. One-shot: GraphCanvas clears it
+   *  after panning, the same way `focusedMilestoneId` works, so asking twice
+   *  for the same one pans twice instead of doing nothing the second time. */
+  workstreamJumpId: number | null
+  /** Which stage the side panel is editing, or null. A pair, because a stage
+   *  key alone means nothing — the same stage exists on every workstream, and
+   *  what you edit is one workstream's occupancy of it. */
+  stagePanel: { workstreamId: number; stageKey: string } | null
+  /** The workstream whose own panel is open — its note, status, assignees and
+   *  dates, none of which belong to any one stage. */
+  workstreamPanelId: number | null
   search: string                 // toolbar filter search (narrows visible set)
   inlineSearch: { open: boolean; query: string; activeIdx: number }
   settingsOpen: boolean
   syncHistoryOpen: boolean
   coverageOpen: boolean
   shortcutsOpen: boolean
+  /** Recent-changes popover, anchored to the toolbar bell. In the store
+   *  rather than local component state only because Esc has to reach it —
+   *  the other toolbar popovers dismiss on outside-click alone. */
+  notificationsOpen: boolean
   // Workspace notes modal. `notesOpen` controls the modal; `focusedNoteId`
   // null → grid view, number → editor view for that note.
   notesOpen: boolean
+  /** Workstreams panel — the cross-feature overview. */
+  workstreamsOpen: boolean
   focusedNoteId: number | null
   /** True while the in-note find bar (Cmd+F inside NoteEditor) is open.
    *  NotesModal's window-level Esc handler checks this so the find bar
@@ -246,6 +286,13 @@ export interface ViewState {
   setFontSize: (f: FontSize) => void
   setMaxColsPerRow: (n: number) => void
   setMixGroupBy: (key: string | null) => void
+  setFocusedWorkstreamId: (id: number | null) => void
+  setLifecycleEditorOpen: (b: boolean) => void
+  setWorkstreamJumpId: (id: number | null) => void
+  openStagePanel: (workstreamId: number, stageKey: string) => void
+  closeStagePanel: () => void
+  openWorkstreamPanel: (id: number) => void
+  closeWorkstreamPanel: () => void
   setSearch: (q: string) => void
   openInlineSearch: () => void
   closeInlineSearch: () => void
@@ -263,7 +310,9 @@ export interface ViewState {
   setSyncHistoryOpen: (b: boolean) => void
   setCoverageOpen: (b: boolean) => void
   setShortcutsOpen: (b: boolean) => void
+  setNotificationsOpen: (b: boolean) => void
   setNotesOpen: (b: boolean) => void
+  setWorkstreamsOpen: (b: boolean) => void
   setFocusedNoteId: (id: number | null) => void
   setNoteFindOpen: (b: boolean) => void
   requestPanToFocused: () => void
@@ -319,10 +368,6 @@ export const defaultFilters: Filters = {
   negated: [],
 }
 
-function toggle<T>(arr: T[], v: T): T[] {
-  return arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]
-}
-
 export const useViewStore = create<ViewState>((set) => ({
   // Where a fresh session lands. Per-browser preference; a `?view=` in the
   // URL overrides it for that visit without rewriting it.
@@ -337,6 +382,11 @@ export const useViewStore = create<ViewState>((set) => ({
   theme: readTheme(),
   density: 'default',
   mixGroupBy: null,
+  focusedWorkstreamId: null,
+  lifecycleEditorOpen: false,
+  workstreamJumpId: null,
+  stagePanel: null,
+  workstreamPanelId: null,
   fontSize: (() => {
     if (typeof window === 'undefined') return 'md' as FontSize
     const raw = window.localStorage?.getItem('ig-font-size')
@@ -361,7 +411,9 @@ export const useViewStore = create<ViewState>((set) => ({
   syncHistoryOpen: false,
   coverageOpen: false,
   shortcutsOpen: false,
+  notificationsOpen: false,
   notesOpen: false,
+  workstreamsOpen: false,
   focusedNoteId: null,
   noteFindOpen: false,
   panToFocusedSeq: 0,
@@ -414,54 +466,17 @@ export const useViewStore = create<ViewState>((set) => ({
   // default is "where new sessions start" and is only written from Settings.
   setActiveView: (v) => set({ activeView: v }),
   setFilter: (k, v) => set((s) => ({ filters: { ...s.filters, [k]: v } })),
-  toggleStateType: (t) =>
-    set((s) => {
-      const nextTypes = toggle(s.filters.stateTypes, t)
-      // This used to also switch off an `activeOnly` boolean when the user
-      // turned ON completed or canceled, because otherwise the click silently
-      // did nothing. That boolean is gone: it was a second filter over the
-      // state dimension whose only possible effect was to contradict this one,
-      // so turning a type on now simply turns it on.
-      //
-      // Names refine within their own type, so unchecking a type must take its
-      // children with it — leaving them behind would keep matching issues of a
-      // type the user just switched off. Other types' names are untouched;
-      // that independence is the whole point of the tree.
-      const removingType = !nextTypes.includes(t) && s.filters.stateTypes.includes(t)
-      const stateNames = removingType
-        ? s.filters.stateNames.filter((k) => !k.startsWith(`${t}::`))
-        : s.filters.stateNames
-      return { filters: { ...s.filters, stateTypes: nextTypes, stateNames } }
-    }),
-  toggleStateName: (name) => set((s) => ({ filters: { ...s.filters, stateNames: toggle(s.filters.stateNames, name) } })),
-  togglePrimary: (id) => set((s) => ({ filters: { ...s.filters, primaryValues: toggle(s.filters.primaryValues, id) } })),
-  toggleType: (id) => set((s) => ({ filters: { ...s.filters, typeValues: toggle(s.filters.typeValues, id) } })),
-  togglePriority: (p) => set((s) => ({ filters: { ...s.filters, priorities: toggle(s.filters.priorities, p) } })),
-  toggleAssignee: (name) => set((s) => ({ filters: { ...s.filters, assignees: toggle(s.filters.assignees, name) } })),
-  togglePrefix: (token, id) =>
-    set((s) => {
-      const cur = s.filters.prefixSelections[token] ?? []
-      return {
-        filters: {
-          ...s.filters,
-          prefixSelections: { ...s.filters.prefixSelections, [token]: toggle(cur, id) },
-        },
-      }
-    }),
-  toggleGroupLabel: (group, id) =>
-    set((s) => {
-      const cur = s.filters.groupSelections[group] ?? []
-      return {
-        filters: {
-          ...s.filters,
-          groupSelections: { ...s.filters.groupSelections, [group]: toggle(cur, id) },
-        },
-      }
-    }),
-  toggleOrphan: (id) => set((s) => ({ filters: { ...s.filters, orphanValues: toggle(s.filters.orphanValues, id) } })),
-  toggleProject: (id) => set((s) => ({ filters: { ...s.filters, projectIds: toggle(s.filters.projectIds, id) } })),
-  toggleMilestone: (key) =>
-    set((s) => ({ filters: { ...s.filters, milestoneIds: toggle(s.filters.milestoneIds, key) } })),
+  toggleStateType: (t) => set((s) => ({ filters: ft.toggleStateType(s.filters, t) })),
+  toggleStateName: (name) => set((s) => ({ filters: ft.toggleStateName(s.filters, name) })),
+  togglePrimary: (id) => set((s) => ({ filters: ft.togglePrimary(s.filters, id) })),
+  toggleType: (id) => set((s) => ({ filters: ft.toggleType(s.filters, id) })),
+  togglePriority: (p) => set((s) => ({ filters: ft.togglePriority(s.filters, p) })),
+  toggleAssignee: (name) => set((s) => ({ filters: ft.toggleAssignee(s.filters, name) })),
+  togglePrefix: (token, id) => set((s) => ({ filters: ft.togglePrefix(s.filters, token, id) })),
+  toggleGroupLabel: (group, id) => set((s) => ({ filters: ft.toggleGroupLabel(s.filters, group, id) })),
+  toggleOrphan: (id) => set((s) => ({ filters: ft.toggleOrphan(s.filters, id) })),
+  toggleProject: (id) => set((s) => ({ filters: ft.toggleProject(s.filters, id) })),
+  toggleMilestone: (key) => set((s) => ({ filters: ft.toggleMilestone(s.filters, key) })),
   setFocusedId: (id) =>
     set((s) => {
       const detailPanelOpen = id !== null && (s.detailPanelAutoOpen || s.detailPanelOpen)
@@ -482,6 +497,20 @@ export const useViewStore = create<ViewState>((set) => ({
   },
   setDensity: (d) => set({ density: d }),
   setMixGroupBy: (key) => set({ mixGroupBy: key }),
+  setFocusedWorkstreamId: (id) => set({ focusedWorkstreamId: id }),
+  // Closes the inspector panels on the way in: the editor is a modal that owns
+  // the screen, and coming back out to a panel about a stage you may have just
+  // renamed or deleted is worse than coming back to the board.
+  setLifecycleEditorOpen: (b) =>
+    set(b ? { lifecycleEditorOpen: true, stagePanel: null, workstreamPanelId: null } : { lifecycleEditorOpen: false }),
+  setWorkstreamJumpId: (id) => set({ workstreamJumpId: id }),
+  openStagePanel: (workstreamId, stageKey) =>
+    set({ stagePanel: { workstreamId, stageKey }, workstreamPanelId: null, lifecycleEditorOpen: false }),
+  closeStagePanel: () => set({ stagePanel: null }),
+  // The two panels share an edge, so opening one closes the other.
+  openWorkstreamPanel: (id) =>
+    set({ workstreamPanelId: id, stagePanel: null, lifecycleEditorOpen: false }),
+  closeWorkstreamPanel: () => set({ workstreamPanelId: null }),
   setFontSize: (f) => {
     if (typeof window !== 'undefined') {
       window.localStorage?.setItem('ig-font-size', String(f))
@@ -516,7 +545,9 @@ export const useViewStore = create<ViewState>((set) => ({
   // Preserve focusedNoteId across open/close cycles so the n shortcut acts as
   // a true toggle that restores the user's last view. Use the in-modal Back
   // button (or Esc-peel) to drop back to the grid explicitly.
+  setNotificationsOpen: (b) => set({ notificationsOpen: b }),
   setNotesOpen: (b) => set({ notesOpen: b }),
+  setWorkstreamsOpen: (b) => set({ workstreamsOpen: b }),
   setFocusedNoteId: (id) => set({ focusedNoteId: id, noteFindOpen: false }),
   setNoteFindOpen: (b) => set({ noteFindOpen: b }),
   requestPanToFocused: () => set((s) => ({ panToFocusedSeq: s.panToFocusedSeq + 1 })),

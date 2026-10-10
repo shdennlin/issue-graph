@@ -2,6 +2,7 @@ import type { NormalizedIssue, NormalizedLabel, ProjectDetail, Viewer, WorkflowS
 import { getLogger } from '../../lib/log.js'
 import {
   AuthError,
+  ForbiddenError,
   RateLimitError,
   type BackendAdapter,
   type FetchOpts,
@@ -26,6 +27,21 @@ interface LinearOptions {
   apiKey: string
   endpoint: string
   teamId?: string | undefined
+}
+
+/**
+ * Classify an HTTP status from Linear, or null when it carries no verdict of
+ * its own and the caller should read the body.
+ *
+ * Pure and exported so the 401/403 split is testable: `gql` itself needs a
+ * live fetch, and the distinction it encodes is the kind that regresses
+ * silently — both statuses used to become AuthError, and nothing failed.
+ */
+export function errorForStatus(status: number): Error | null {
+  if (status === 401) return new AuthError(`Linear auth failed: ${status}`)
+  if (status === 403) return new ForbiddenError(`Linear refused the request: ${status}`)
+  if (status === 429) return new RateLimitError('Linear rate-limited (429).')
+  return null
 }
 
 /**
@@ -152,12 +168,8 @@ export class LinearBackend implements BackendAdapter {
     if (remaining) this.rate.remaining = Number(remaining)
     if (limit) this.rate.limit = Number(limit)
 
-    if (res.status === 401 || res.status === 403) {
-      throw new AuthError(`Linear auth failed: ${res.status}`)
-    }
-    if (res.status === 429) {
-      throw new RateLimitError('Linear rate-limited (429).')
-    }
+    const classified = errorForStatus(res.status)
+    if (classified) throw classified
     if (!res.ok) {
       const text = await res.text().catch(() => '')
       throw new Error(`Linear API ${res.status}: ${text.slice(0, 300)}`)

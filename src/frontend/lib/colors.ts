@@ -101,3 +101,22 @@ export function stateColorVar(stateType: string): string {
     default: return 'var(--fg-muted)'
   }
 }
+
+/**
+ * A stable colour for a workstream, derived from its id.
+ *
+ * Derived rather than stored: a workstream has no colour in Linear and asking
+ * someone to pick one for every feature they track is a chore with no payoff.
+ * Derived rather than assigned in order, too — an ordinal palette shifts every
+ * container's colour the moment one workstream is archived, and the colour is
+ * only useful if it is the same one tomorrow.
+ *
+ * Hues are spaced around the wheel and skip the 60–100° band, where a mid
+ * saturation reads as the same olive against both themes.
+ */
+const WORKSTREAM_HUES = [210, 280, 330, 18, 45, 170, 250, 300, 0, 195]
+
+export function workstreamColor(id: number): string {
+  const hue = WORKSTREAM_HUES[Math.abs(id) % WORKSTREAM_HUES.length] ?? 210
+  return `hsl(${hue} 70% 58%)`
+}

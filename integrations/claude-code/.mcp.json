@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "issue-graph": {
+      "command": "bun",
+      "args": ["run", "${CLAUDE_PLUGIN_ROOT}/mcp/server.ts"],
+      "env": {
+        "ISSUE_GRAPH_URL": "${ISSUE_GRAPH_URL}",
+        "ISSUE_GRAPH_TOKEN": "${ISSUE_GRAPH_TOKEN}",
+        "ISSUE_GRAPH_WORKSPACE": "${ISSUE_GRAPH_WORKSPACE:-}"
+      }
+    }
+  }
+}

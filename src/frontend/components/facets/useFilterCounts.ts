@@ -14,7 +14,7 @@
 import { useMemo } from 'react'
 import type { IssueStateType, NormalizedLabel } from '@shared/types.js'
 import { useGraphStore } from '../../store/graphStore'
-import { useViewStore } from '../../store/viewStore'
+import { useViewStore, type Filters } from '../../store/viewStore'
 import { useSchemaStore } from '../../store/schemaStore'
 import { applyFiltersExcluding, milestoneFilterKey } from '../../views/filters'
 import { groupLabels } from '../../lib/labelSchema'
@@ -41,11 +41,36 @@ export interface ProjectRow {
   children: MilestoneRow[]
 }
 
-export function useFilterCounts() {
+/**
+ * Count against a filter set that is not the tab's own.
+ *
+ * The notification scope is edited with the same facet UI but describes a
+ * different question — "what should interrupt me" rather than "what do I draw" —
+ * so its counts have to be leave-one-out against ITS draft, not against the
+ * graph the user happens to be looking at. Passing the draft in beats giving
+ * the editor its own copy of this hook: the five passes below are the part that
+ * is easy to get subtly wrong, and two copies would drift.
+ */
+export interface FilterCountsOverride {
+  filters: Filters
+  search: string
+}
+
+export function useFilterCounts(override?: FilterCountsOverride) {
   const graph = useGraphStore((s) => s.graph)
-  const filters = useViewStore((s) => s.filters)
+  const storeFilters = useViewStore((s) => s.filters)
+  const storeSearch = useViewStore((s) => s.search)
+  // `staleDays` is NOT overridable, deliberately. It is a workspace-level
+  // display preference ("older than N days is stale"), not part of the filter
+  // set — an editor that carried its own would make `staleOnly` mean one thing
+  // in the graph and another in the scope it is supposed to mirror.
   const staleDays = useViewStore((s) => s.staleDays)
-  const search = useViewStore((s) => s.search)
+  // Resolved here rather than inside the memo below: referencing `override`
+  // from the memo would put a fresh object literal in its dependency array and
+  // recompute five full passes on every render. exhaustive-deps sees the
+  // resolved names and is satisfied by the values.
+  const filters = override?.filters ?? storeFilters
+  const search = override?.search ?? storeSearch
   const { schema, workflowStates } = useSchemaStore()
 
   // Stable reference for the issues array so the leave-one-out useMemos

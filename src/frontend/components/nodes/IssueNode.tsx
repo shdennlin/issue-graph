@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react'
-import { AlertTriangle, ArrowLeft, ArrowRight, ListTree, MessageSquare, Minus, Star } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, ArrowRight, Bot, Hand, ListTree, MessageSquare, Minus, Pause, Star } from 'lucide-react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import type { AnnotationDTO, NormalizedIssue } from '@shared/types.js'
 import { useSchemaStore } from '../../store/schemaStore'
@@ -19,6 +19,7 @@ import type { HierarchyCounts } from '../../views/hierarchy'
 import { compactAge } from '../../lib/relativeTime'
 import { getLinkTouchIndex, linkOnlyTouchAt } from '../../lib/linkTouch'
 import { useT, type DictKey } from '../../i18n'
+import { indexSessionsByIssue, sessionPresence } from '../../lib/agentSession'
 
 function formatDueDate(iso: string): string {
   // Render as locale-short ("MMM D") for the chip; full ISO stays on hover.
@@ -93,7 +94,18 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
   const density = useViewStore((s) => s.density)
   const annotations = useGraphStore((s) => s.graph?.data.annotations ?? EMPTY_ANNOTATIONS)
   const designdocs = useGraphStore((s) => s.graph?.data.designdocs)
+  const agentSessions = useGraphStore((s) => s.graph?.data.agentSessions)
   const t = useT()
+
+  const sessionsByIssue = useMemo(() => indexSessionsByIssue(agentSessions), [agentSessions])
+  // `now` is read at render rather than ticked on a timer: the graph already
+  // re-renders on the 30s poll and on every SSE refresh, which is finer than
+  // this badge needs. A per-card interval would wake every node on the canvas
+  // to move one number.
+  const presence = useMemo(
+    () => sessionPresence(sessionsByIssue.get(issue.identifier)),
+    [sessionsByIssue, issue.identifier],
+  )
 
   const primary = getPrimaryLabel(issue, schema)
   const type = getTypeLabel(issue, schema)
@@ -369,6 +381,34 @@ function IssueNodeImpl({ data }: NodeProps<IssueNodeData>) {
             <span className="annotation-count" title={`${annCount} annotations`} aria-label={`${annCount} annotations`}>
               <MessageSquare size={11} strokeWidth={1.7} aria-hidden />
               {annCount}
+            </span>
+          )}
+          {presence.kind !== 'none' && (
+            <span
+              className={`session-badge is-${presence.kind}`}
+              title={[
+                presence.kind === 'active'
+                  ? t('session.active')
+                  : presence.kind === 'blocked'
+                    ? t('session.blocked')
+                    : t('session.idle'),
+                presence.phase,
+                presence.count > 1 ? t('session.count').replace('{n}', String(presence.count)) : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            >
+              {presence.kind === 'active' ? (
+                <Bot size={11} strokeWidth={1.8} aria-hidden />
+              ) : presence.kind === 'blocked' ? (
+                <Hand size={11} strokeWidth={1.8} aria-hidden />
+              ) : (
+                <Pause size={11} strokeWidth={1.8} aria-hidden />
+              )}
+              {(() => {
+                const { value, unit } = compactAge(presence.lastSeen)
+                return t(AGE_UNIT_KEYS[unit], { count: value })
+              })()}
             </span>
           )}
         </span>

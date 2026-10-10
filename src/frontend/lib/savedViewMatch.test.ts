@@ -21,7 +21,18 @@ describe('canonicalQuery', () => {
 
   // A saved query has already had these stripped server-side while the live
   // URL still carries them, so both sides must drop them to line up.
-  it.each(['w=alpha', 'focus=ONE-1', 'detail=1', 'chain=ONE-1', 'note=3', 'notes=1'])(
+  it.each([
+    'w=alpha',
+    'focus=ONE-1',
+    'detail=1',
+    'chain=ONE-1',
+    'note=3',
+    'notes=1',
+    // Which workstream is expanded is where you are looking, not what you
+    // filtered to — and a view saved before `stream` existed must keep
+    // matching once someone expands one.
+    'stream=4',
+  ])(
     'ignores %s',
     (pair) => {
       expect(canonicalQuery(`${pair}&view=mix`)).toBe(canonicalQuery('view=mix'))

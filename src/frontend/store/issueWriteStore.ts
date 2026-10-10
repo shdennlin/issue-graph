@@ -30,6 +30,7 @@ import { api } from '../lib/api'
 import { clearAuth } from '../lib/linearAuth'
 import { useCapabilityStore } from './capabilityStore'
 import { useGraphStore } from './graphStore'
+import { useWorkspaceStore } from './workspaceStore'
 
 export type WriteStatus = 'idle' | 'saving' | 'error'
 
@@ -53,11 +54,23 @@ interface IssueWriteState {
   clearError: (identifier: string) => void
 }
 
-function begin(identifier: string, set: (fn: (s: IssueWriteState) => Partial<IssueWriteState>) => void) {
+/**
+ * Mark a write as in flight, and return the workspace it belongs to.
+ *
+ * Captured here, synchronously, before the action awaits anything: the Linear
+ * token is per workspace, and if the user switches tabs while the write is in
+ * flight, a 401 must clear the token it was actually SENT with — not the one of
+ * whatever workspace is current by the time the answer arrives.
+ */
+function begin(
+  identifier: string,
+  set: (fn: (s: IssueWriteState) => Partial<IssueWriteState>) => void,
+): string | null {
   set((s) => ({
     status: { ...s.status, [identifier]: 'saving' },
     error: { ...s.error, [identifier]: undefined },
   }))
+  return useWorkspaceStore.getState().currentWorkspaceId
 }
 
 export const useIssueWriteStore = create<IssueWriteState>((set) => ({
@@ -72,7 +85,7 @@ export const useIssueWriteStore = create<IssueWriteState>((set) => ({
   },
 
   async setState(identifier, state) {
-    begin(identifier, set)
+    const wid = begin(identifier, set)
     // Paint from the WorkflowState we already matched: the wire wants the id,
     // the card wants name + type, and NormalizedIssue.state carries no id to
     // derive one from. Both come from this one object.
@@ -80,83 +93,93 @@ export const useIssueWriteStore = create<IssueWriteState>((set) => ({
       state: { name: state.name, type: state.type },
     })
     try {
-      await api.updateIssue(identifier, { stateId: state.id })
+      await api.updateIssue(identifier, { stateId: state.id }, wid)
       set((s) => ({ status: { ...s.status, [identifier]: 'idle' } }))
       await settle()
     } catch (e) {
-      await fail(identifier, e, set)
+      await fail(identifier, e, set, wid)
     }
   },
 
   async setAssignee(identifier, assignee) {
-    begin(identifier, set)
+    const wid = begin(identifier, set)
     useGraphStore.getState().applyIssuePatch(identifier, { assignee })
     try {
       // `null` unassigns; the key's presence is what carries that, so it is
       // always sent rather than spread conditionally.
-      await api.updateIssue(identifier, { assigneeId: assignee?.id ?? null })
+      await api.updateIssue(identifier, { assigneeId: assignee?.id ?? null }, wid)
       set((s) => ({ status: { ...s.status, [identifier]: 'idle' } }))
       await settle()
     } catch (e) {
-      await fail(identifier, e, set)
+      await fail(identifier, e, set, wid)
     }
   },
 
   async setPriority(identifier, priority) {
-    begin(identifier, set)
+    const wid = begin(identifier, set)
     useGraphStore.getState().applyIssuePatch(identifier, { priority })
     try {
-      await api.updateIssue(identifier, { priority })
+      await api.updateIssue(identifier, { priority }, wid)
       set((s) => ({ status: { ...s.status, [identifier]: 'idle' } }))
       await settle()
     } catch (e) {
-      await fail(identifier, e, set)
+      await fail(identifier, e, set, wid)
     }
   },
 
   async addLabel(identifier, label, current) {
-    begin(identifier, set)
+    const wid = begin(identifier, set)
     useGraphStore.getState().applyIssuePatch(identifier, { labels: [...current, label] })
     try {
       // A delta, not the resulting set: `labelIds` would overwrite any label
       // someone else added since our last sync, and the graph is a cache so
       // our idea of "current" is always slightly behind.
-      await api.updateIssue(identifier, { addedLabelIds: [label.id] })
+      await api.updateIssue(identifier, { addedLabelIds: [label.id] }, wid)
       set((s) => ({ status: { ...s.status, [identifier]: 'idle' } }))
       await settle()
     } catch (e) {
-      await fail(identifier, e, set)
+      await fail(identifier, e, set, wid)
     }
   },
 
   async removeLabel(identifier, label, current) {
-    begin(identifier, set)
+    const wid = begin(identifier, set)
     useGraphStore.getState().applyIssuePatch(identifier, {
       labels: current.filter((l) => l.id !== label.id),
     })
     try {
-      await api.updateIssue(identifier, { removedLabelIds: [label.id] })
+      await api.updateIssue(identifier, { removedLabelIds: [label.id] }, wid)
       set((s) => ({ status: { ...s.status, [identifier]: 'idle' } }))
       await settle()
     } catch (e) {
-      await fail(identifier, e, set)
+      await fail(identifier, e, set, wid)
     }
   },
 
   // Returns whether it landed, so the composer knows whether to clear itself —
   // a failed comment whose text was thrown away is worse than no comment.
   async addComment(identifier, body) {
-    begin(identifier, set)
+    const wid = begin(identifier, set)
     try {
-      await api.addIssueComment(identifier, body)
+      await api.addIssueComment(identifier, body, wid)
       set((s) => ({ status: { ...s.status, [identifier]: 'idle' } }))
       // No optimistic append: comments live inside the lazily-fetched issue
       // detail, not in the graph, and the route busts that cache on write. The
       // panel refetches and gets the real comment, author and timestamp.
+      //
+      // `lastCommentAt` is the exception, and it is not about painting — it is
+      // what keeps the change detector from reporting your own comment back to
+      // you. Every other write here pre-paints the field it touches, so the
+      // next sync diffs to nothing; a comment moved a field nothing painted,
+      // so this browser has to claim it explicitly. The timestamp is a
+      // placeholder the sync overwrites moments later.
+      useGraphStore.getState().applyIssuePatch(identifier, {
+        lastCommentAt: new Date().toISOString(),
+      })
       await settle()
       return true
     } catch (e) {
-      await fail(identifier, e, set)
+      await fail(identifier, e, set, wid)
       return false
     }
   },
@@ -199,10 +222,10 @@ async function settle(): Promise<void> {
  * the controls stay enabled and every write fails the same way, with no path
  * back — clearing it flips them to the locked state whose hint says "connect".
  */
-function forgetTokenIfRejected(e: unknown): void {
+function forgetTokenIfRejected(e: unknown, workspaceId: string | null): void {
   const code = e && typeof e === 'object' && 'code' in e ? (e as { code: unknown }).code : null
-  if (code !== 'unauthenticated') return
-  clearAuth()
+  if (code !== 'unauthenticated' || !workspaceId) return
+  clearAuth(workspaceId)
   useCapabilityStore.getState().refreshUnlocked()
 }
 
@@ -210,12 +233,13 @@ async function fail(
   identifier: string,
   e: unknown,
   set: (fn: (s: IssueWriteState) => Partial<IssueWriteState>) => void,
+  workspaceId: string | null,
 ): Promise<void> {
-  forgetTokenIfRejected(e)
+  forgetTokenIfRejected(e, workspaceId)
   // Reload first, so the optimistic paint is replaced by the server's truth,
   // then set the error — the reload must not be what clears it.
   try {
-    await useGraphStore.getState().refetchSilent()
+    await useGraphStore.getState().refetchSilent({ notify: false })
   } catch {
     /* the error below is the thing the user needs either way */
   }

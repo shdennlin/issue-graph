@@ -3,6 +3,7 @@ import { mixView } from './mix'
 import { projectView } from './project'
 import { milestoneView } from './milestone'
 import { designdocView } from './designdoc'
+import { workstreamView } from './workstream'
 import type { ViewDefinition } from './types'
 
 // Bucket view removed: redundant with Mix view (which already shows the same
@@ -17,6 +18,7 @@ export const views: ViewDefinition[] = [
   projectView,
   milestoneView,
   designdocView,
+  workstreamView,
 ]
 
 export function findView(id: string): ViewDefinition | undefined {

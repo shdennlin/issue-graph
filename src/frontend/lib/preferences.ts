@@ -100,3 +100,54 @@ export function readStaleDays(): number {
 export function writeStaleDays(n: number): void {
   writeRaw(KEY_STALE_DAYS, String(n))
 }
+
+// ── Notifications ──────────────────────────────────────────────────────────
+//
+// Per-browser for the same reason as everything above, and here the reason is
+// the feature's point rather than a side effect: several people can reach one
+// instance, and each of them wants to be interrupted about different things.
+// A server-side `setting` row would let them overwrite each other's choice.
+//
+// The scope is stored as a raw query string rather than as a parsed filter
+// object. Two reasons: it is exactly what `currentQuery()` hands over and what
+// a saved view already stores, so no conversion exists to drift; and a stored
+// value can outlive the build that wrote it, where a query string degrades
+// (unknown params ignored) while a serialized object shape would not.
+
+const KEY_NOTIFY_ENABLED = 'ig-notify'
+const KEY_NOTIFY_DESKTOP = 'ig-notify-desktop'
+const KEY_NOTIFY_SCOPE = 'ig-notify-scope'
+
+/** On by default: a notification nobody asked for is recoverable, a silent
+ *  agent edit nobody saw is not. Desktop is opt-in because it needs a
+ *  permission prompt. */
+export const DEFAULT_NOTIFY_ENABLED = true
+
+export function readNotifyEnabled(): boolean {
+  const raw = readRaw(KEY_NOTIFY_ENABLED)
+  if (raw === null) return DEFAULT_NOTIFY_ENABLED
+  return raw === '1'
+}
+
+export function writeNotifyEnabled(v: boolean): void {
+  writeRaw(KEY_NOTIFY_ENABLED, v ? '1' : '0')
+}
+
+export function readNotifyDesktop(): boolean {
+  return readRaw(KEY_NOTIFY_DESKTOP) === '1'
+}
+
+export function writeNotifyDesktop(v: boolean): void {
+  writeRaw(KEY_NOTIFY_DESKTOP, v ? '1' : '0')
+}
+
+/** Empty string means "notify about everything" — see `parseScope`, which
+ *  turns it into `null` so the filter pass is skipped entirely rather than run
+ *  with a default `Filters` that is not neutral. */
+export function readNotifyScope(): string {
+  return readRaw(KEY_NOTIFY_SCOPE) ?? ''
+}
+
+export function writeNotifyScope(query: string): void {
+  writeRaw(KEY_NOTIFY_SCOPE, query)
+}

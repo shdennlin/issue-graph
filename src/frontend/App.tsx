@@ -1,7 +1,9 @@
 import { lazy, Suspense, useEffect, useRef } from 'react'
+import { coalesce } from './lib/coalesce'
 import { useGraphStore } from './store/graphStore'
 import { useNotesStore } from './store/notesStore'
 import { useSchemaStore } from './store/schemaStore'
+import { refreshAuthIfStale } from './lib/linearAuth'
 import { useCapabilityStore } from './store/capabilityStore'
 import { useViewStore } from './store/viewStore'
 import { makeTabId, useWorkspaceStore } from './store/workspaceStore'
@@ -13,7 +15,7 @@ import {
   restoreViewportOnly,
   snapshotTab,
 } from './store/tabStateStore'
-import { arrivedViaBareDeepLink, arrivedWithEmptyUrl, useUrlSync } from './store/urlSync'
+import { arrivedViaBareDeepLink, arrivedWithEmptyUrl, consumeJumpEntry, useUrlSync } from './store/urlSync'
 import { useTheme } from './hooks/useTheme'
 import { useFontSize } from './hooks/useFontSize'
 import { api } from './lib/api'
@@ -26,6 +28,8 @@ import { SyncBanner } from './components/SyncBanner'
 import { SavedViewSync } from './components/SavedViewSync'
 import { Onboarding } from './components/Onboarding'
 import { ContextMenu } from './components/ContextMenu'
+import { useNotificationStore } from './store/notificationStore'
+import { NotificationToast } from './components/NotificationToast'
 import { QuickSwitcher } from './components/QuickSwitcher'
 import { useQuickSwitcherStore } from './store/quickSwitcherStore'
 import type { Candidate } from './components/quickSwitcher/types'
@@ -41,6 +45,11 @@ const SyncHistoryModal = lazy(() =>
 const CoverageModal = lazy(() => import('./components/CoverageModal').then((m) => ({ default: m.CoverageModal })))
 const SettingsPage = lazy(() => import('./components/SettingsPage').then((m) => ({ default: m.SettingsPage })))
 const ShortcutsModal = lazy(() => import('./components/ShortcutsModal').then((m) => ({ default: m.ShortcutsModal })))
+const WorkstreamsPanel = lazy(() => import('./components/WorkstreamsPanel').then((m) => ({ default: m.WorkstreamsPanel })))
+const WorkstreamJumpList = lazy(() => import('./components/WorkstreamJumpList').then((m) => ({ default: m.WorkstreamJumpList })))
+const WorkstreamPanel = lazy(() => import('./components/WorkstreamPanel').then((m) => ({ default: m.WorkstreamPanel })))
+const StagePanel = lazy(() => import('./components/StagePanel').then((m) => ({ default: m.StagePanel })))
+const LifecyclePanel = lazy(() => import('./components/LifecyclePanel').then((m) => ({ default: m.LifecyclePanel })))
 const NotesModal = lazy(() => import('./components/notes/NotesModal').then((m) => ({ default: m.NotesModal })))
 
 export function App() {
@@ -61,6 +70,11 @@ export function App() {
   const settingsOpen = useViewStore((s) => s.settingsOpen)
   const shortcutsOpen = useViewStore((s) => s.shortcutsOpen)
   const notesOpen = useViewStore((s) => s.notesOpen)
+  const workstreamsOpen = useViewStore((s) => s.workstreamsOpen)
+  const lifecycleEditorOpen = useViewStore((s) => s.lifecycleEditorOpen)
+  const stagePanel = useViewStore((s) => s.stagePanel)
+  const workstreamPanelId = useViewStore((s) => s.workstreamPanelId)
+  const activeViewId = useViewStore((s) => s.activeView)
 
   // Bootstrap step 1 — resolve this tab's workspace + tab list BEFORE any
   // graph/schema calls. The fetch helpers in lib/api.ts inject `?w=` from
@@ -173,13 +187,26 @@ export function App() {
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
   const refetchSilent = useGraphStore((s) => s.refetchSilent)
   const prevTabIdRef = useRef<string | null>(null)
+  // The Linear token is per workspace, so a switch changes both whether the
+  // write controls are unlocked and which token may need renewing. Recomputed
+  // at once (the new workspace may simply not be connected) and again after
+  // the renewal, which may turn an expired slot back into a usable one.
+  useEffect(() => {
+    if (!currentWorkspaceId) return
+    const cap = useCapabilityStore.getState()
+    cap.refreshUnlocked()
+    void refreshAuthIfStale(currentWorkspaceId).then(() => cap.refreshUnlocked())
+  }, [currentWorkspaceId])
   useEffect(() => {
     if (!initialized) return
     const prev = prevTabIdRef.current
     let restored = false
     if (prev !== null && prev !== activeTabId && activeTabId) {
-      // Tab switched: snapshot/restore the new tab's view state.
-      restored = loadTab(activeTabId)
+      // Tab switched: snapshot/restore the new tab's view state — unless a jump
+      // from outside switched it, restored it and applied its URL already
+      // (urlSync.enterJumpTab); loading again would throw that URL away.
+      const jump = consumeJumpEntry(activeTabId)
+      restored = jump ? jump.restored : loadTab(activeTabId)
     } else if (prev === null && activeTabId && arrivedWithEmptyUrl() && hasTabSnapshot(activeTabId)) {
       // First mount from a URL that named nothing — the PWA's start_url after a
       // quit and relaunch, or the bare host typed by hand.
@@ -268,6 +295,10 @@ export function App() {
     if (prev !== null && prev !== currentWorkspaceId) {
       useViewStore.getState().setFocusedNoteId(null)
     }
+    // The change log is workspace-scoped too, and unlike notes it has to be
+    // right before the first sync lands — the bell's badge is on screen from
+    // the moment the tab paints.
+    useNotificationStore.getState().hydrate(currentWorkspaceId)
     prevWorkspaceIdRef.current = currentWorkspaceId
   }, [currentWorkspaceId])
 
@@ -348,6 +379,21 @@ export function App() {
       }
       refetchSilent()
     })
+    // A workstream, stage, field or agent session was written — very often by
+    // an MCP tool or a session hook rather than by this page, which is why the
+    // page has to be told. Coalesced: heartbeats arrive several a second while
+    // an agent works, and each would otherwise be a full graph fetch.
+    const board = coalesce(() => void refetchSilent(), 1000)
+    es.addEventListener('workstreams-changed', (e) => {
+      try {
+        const data = JSON.parse((e as MessageEvent).data) as { workspaceId?: string }
+        const cur = useWorkspaceStore.getState().currentWorkspaceId
+        if (data.workspaceId && cur && data.workspaceId !== cur) return
+      } catch {
+        // Malformed payload — refetch anyway; a spurious fetch beats a miss.
+      }
+      board.call()
+    })
     es.addEventListener('default-workspace-changed', (e) => {
       try {
         const data = JSON.parse((e as MessageEvent).data) as { activeId?: string }
@@ -359,7 +405,10 @@ export function App() {
       }
     })
     // hello/ping events are no-ops; just keep the stream alive.
-    return () => es.close()
+    return () => {
+      board.cancel()
+      es.close()
+    }
   }, [refetchSilent])
 
   const openInlineSearch = useViewStore((s) => s.openInlineSearch)
@@ -383,17 +432,18 @@ export function App() {
         //
         //   1. Find on canvas        — closes Find
         //   2. Context menu          — closes the menu
-        //   3. DetailPanel open      — closes the panel (focus retained,
+        //   3. StagePanel / pipeline editor — closes it
+        //   4. DetailPanel open      — closes the panel (focus retained,
         //                               chain mode / find / connectivity
         //                               highlights still work on the
         //                               focused issue)
-        //   4. Chain isolation       — exits chain, KEEPING the focused
+        //   5. Chain isolation       — exits chain, KEEPING the focused
         //                               issue so the full graph recenters
         //                               on it (GraphCanvas chain-clear
         //                               bump → preserveFocus path) instead
         //                               of snapping back to the pre-chain
         //                               viewport
-        //   5. focusedId             — clears the focus
+        //   6. focusedId             — clears the focus
         //
         // Two-step Esc, DetailPanel-style: each layer peels without losing
         // the focused issue until the final step. In chain mode the first
@@ -401,14 +451,37 @@ export function App() {
         // issue you were on, no jump), the next Esc unfocuses. Chain is
         // peeled BEFORE focus precisely so the recenter has a focus target.
         const s = useViewStore.getState()
-        const modalOpen = s.settingsOpen || s.syncHistoryOpen || s.coverageOpen || s.shortcutsOpen || s.notesOpen
+        const modalOpen = s.settingsOpen || s.syncHistoryOpen || s.coverageOpen || s.shortcutsOpen || s.notesOpen || s.workstreamsOpen
         if (modalOpen) return
+        // Peels before the inline finder: an anchored popover is the top-most
+        // non-modal surface, so it is what Esc should reach first.
+        // The pipeline editor is a centred modal, so it is above everything
+        // else that is dismissable and Esc reaches it first.
+        if (s.lifecycleEditorOpen) {
+          s.setLifecycleEditorOpen(false)
+          return
+        }
+        if (s.notificationsOpen) {
+          s.setNotificationsOpen(false)
+          return
+        }
         if (s.inlineSearch.open) {
           s.closeInlineSearch()
           return
         }
         if (s.contextMenu) {
           s.setContextMenu(null)
+          return
+        }
+        // Above DetailPanel in the order because it can be opened FROM it —
+        // clicking an issue inside a stage focuses that issue, so both can be
+        // open at once and Esc should peel the one you opened last.
+        if (s.stagePanel) {
+          s.closeStagePanel()
+          return
+        }
+        if (s.workstreamPanelId !== null) {
+          s.closeWorkstreamPanel()
           return
         }
         if (s.detailPanelOpen) {
@@ -716,12 +789,43 @@ export function App() {
       <div className="app-main">
         {/* Floats over the canvas rather than occupying a full-width strip
             above it — a horizontal bar cost vertical space across the whole
-            window even when only two filters were active. */}
-        <FacetBar />
+            window even when only two filters were active.
+            
+            Not in the workstream view: that view deliberately does NOT apply
+            the filter bar (its subject is the workstream, and its members are
+            a fact about it rather than a subset of the graph), so the panel
+            sat there showing "0/217" and a State chip that changed nothing.
+            A control that does nothing is worse than an absent one — it
+            invites you to reach for it. The jump list takes the corner
+            instead, which is the thing you actually pick from here. */}
+        {activeViewId !== 'workstream' && <FacetBar />}
+        {/* Beside FacetBar so its `position: absolute` resolves against the
+            canvas, not the page — at the app root it sat under the toolbar.
+            Only over the view it configures: a pipeline editor floating over
+            the dependency graph would be editing something off-screen. */}
+        {/* On the LEFT now, in the corner the filter panel vacated — so it no
+            longer has to hide whenever a stage or workstream panel opens on
+            the right edge. Those are exactly the moments you most want to
+            switch between workstreams. */}
+        {activeViewId === 'workstream' && (
+          <Suspense fallback={null}>
+            <WorkstreamJumpList />
+          </Suspense>
+        )}
         <GraphCanvas />
         {focusedId && detailPanelOpen && (
           <Suspense fallback={null}>
             <DetailPanel />
+          </Suspense>
+        )}
+        {stagePanel && (
+          <Suspense fallback={null}>
+            <StagePanel />
+          </Suspense>
+        )}
+        {workstreamPanelId !== null && (
+          <Suspense fallback={null}>
+            <WorkstreamPanel />
           </Suspense>
         )}
         {focusedProjectId && projectPanelOpen && (
@@ -741,8 +845,13 @@ export function App() {
         {settingsOpen && <SettingsPage />}
         {shortcutsOpen && <ShortcutsModal />}
         {notesOpen && <NotesModal />}
+        {workstreamsOpen && <WorkstreamsPanel />}
+        {/* A centred modal now, so it no longer shares the right edge with the
+            inspector panels. Still gated on the view it configures. */}
+        {lifecycleEditorOpen && activeViewId === 'workstream' && <LifecyclePanel />}
       </Suspense>
       <ContextMenu />
+      <NotificationToast />
       <QuickSwitcher onActivate={onQuickSwitcherActivate} />
     </div>
   )

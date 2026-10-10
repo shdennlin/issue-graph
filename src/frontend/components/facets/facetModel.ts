@@ -1,16 +1,16 @@
 // Pure derivation for the filter chip bar: which facets exist right now, what
 // options each offers, and which chips the current Filters should render as.
 //
-// Deliberately DERIVATION ONLY — no toggling. The mutation semantics already
-// live in viewStore's dimension-specific actions and carry behavior that is
-// not expressible as a function of `Filters` alone:
-//     state is switched ON (viewStore.ts), otherwise the click silently does
-//     nothing.
-//   - checking a completed/canceled state calls `graphStore.extendScope(365)`,
-//     because that data may sit outside the sync window.
-// Re-implementing those here as pure reducers would duplicate semantics that
-// viewStore.test.ts already covers, and would drop the second one entirely.
-// The React shell calls the store actions; this module only says what to draw.
+// Deliberately DERIVATION ONLY — no toggling. The mutation semantics live in
+// store/filterToggles.ts, as pure `(Filters, click) → Filters` functions that
+// viewStore's actions and the notification-scope editor both delegate to; their
+// tests are in filterToggles.test.ts. Re-implementing them here would give the
+// same rules a third home.
+//
+// One piece of toggle behavior is not expressible as a function of `Filters` at
+// all and lives in neither module: checking a completed/canceled state calls
+// `graphStore.extendScope(365)`, because that data may sit outside the sync
+// window. That stays in FacetBar, where there is a graph for it to affect.
 //
 // vitest runs `environment: 'node'` for every suite with no happy-dom, so React
 // components in this feature cannot be tested at all. Everything that can carry
@@ -18,7 +18,7 @@
 
 import type { IssueStateType } from '@shared/types.js'
 import type { Filters } from '../../store/viewStore'
-import type { DictKey } from '../../i18n'
+import type { DictKey, Translate } from '../../i18n'
 import { RECENCY_PRESETS, type RecencyWindow } from '../../lib/recency'
 import { stateNameKey } from '../../views/filters'
 import type { ProjectRow, StateNameRow } from './useFilterCounts'
@@ -101,7 +101,7 @@ export interface ChipDescriptor {
   active?: boolean
 }
 
-export type Translate = (key: DictKey, params?: Record<string, string | number>) => string
+export type { Translate }
 
 /** A filter value the user keeps visible in the bar for one-click toggling.
  *  Stored per workspace in localStorage — see lib/pinnedFilters.ts. */

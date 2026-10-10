@@ -1,12 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  coerceProjectStateType,
-  coerceStateType,
-  normalizeIssue,
-  normalizeProjectDetail,
-  normalizeRelations,
-  normalizeLabel,
-} from './normalize.js'
+import { coerceProjectStateType, coerceStateType, commentExcerpt, normalizeIssue, normalizeLabel, normalizeProjectDetail, normalizePullRequests, normalizeRelations } from './normalize.js'
 
 describe('coerceStateType', () => {
   it("maps 'cancelled' (en-GB) → 'canceled' so workflowStates lookups stay safe", () => {
@@ -291,5 +284,177 @@ describe('normalizeIssue', () => {
       team: { id: 't1', key: 'ENG', name: 'Engineering' },
     })
     expect(i.team).toEqual({ id: 't1', key: 'ENG', name: 'Engineering', color: null })
+  })
+})
+
+describe('normalizePullRequests', () => {
+  const gh = (over: Record<string, unknown> = {}) => ({
+    url: 'https://github.com/o/r/pull/1',
+    sourceType: 'github',
+    metadata: {
+      url: 'https://github.com/o/r/pull/1',
+      number: 1,
+      repoName: 'r',
+      status: 'merged',
+      targetBranch: 'develop',
+      hasConflicts: false,
+      linkKind: 'closes',
+      mergedAt: '2026-09-17T02:38:07.000Z',
+      ...over,
+    },
+  })
+
+  it('maps a GitHub attachment', () => {
+    expect(normalizePullRequests({ attachments: { nodes: [gh()] } })).toEqual([
+      {
+        url: 'https://github.com/o/r/pull/1',
+        number: 1,
+        repo: 'r',
+        status: 'merged',
+        targetBranch: 'develop',
+        hasConflicts: false,
+        linkKind: 'closes',
+        mergedAt: '2026-09-17T02:38:07.000Z',
+      },
+    ])
+  })
+
+  it('ignores an attachment that is not a pull request', () => {
+    // An attachment can be a Slack thread or a Figma file. Counting those as
+    // PRs would make "2/5 merged" meaningless.
+    const slack = { url: 'https://slack/x', sourceType: 'slack', metadata: {} }
+    expect(normalizePullRequests({ attachments: { nodes: [slack, gh()] } })).toHaveLength(1)
+  })
+
+  it('de-duplicates the same PR', () => {
+    expect(normalizePullRequests({ attachments: { nodes: [gh(), gh()] } })).toHaveLength(1)
+  })
+
+  it('degrades unexpected metadata to null instead of throwing', () => {
+    // metadata is an untyped blob Linear fills from GitHub; a shape we did not
+    // anticipate must not take down a sync.
+    const odd = { url: 'https://github.com/o/r/pull/2', sourceType: 'github', metadata: { number: '2', status: 7 } }
+    const [pr] = normalizePullRequests({ attachments: { nodes: [odd] } })
+    expect(pr?.number).toBeNull()
+    expect(pr?.status).toBeNull()
+    expect(pr?.url).toBe('https://github.com/o/r/pull/2')
+  })
+
+  it('returns empty for a missing or malformed attachments field', () => {
+    expect(normalizePullRequests({})).toEqual([])
+    expect(normalizePullRequests({ attachments: { nodes: 'nope' } })).toEqual([])
+  })
+
+  it('keeps a status word we did not anticipate rather than dropping it', () => {
+    expect(normalizePullRequests({ attachments: { nodes: [gh({ status: 'queued' })] } })[0]?.status).toBe('queued')
+  })
+})
+
+describe('normalizeIssue — pull requests', () => {
+  it('omits the field entirely when attachments were not fetched', () => {
+    // Absent and empty mean different things: "this issue has no PRs" versus
+    // "we did not ask". A detail query that skips attachments must not look
+    // like an issue with none.
+    const issue = normalizeIssue({
+      id: 'x', identifier: 'X-1', title: 't', url: 'u', priority: 0,
+      state: { name: 'Todo', type: 'unstarted' },
+    })
+    expect('pullRequests' in issue).toBe(false)
+  })
+
+  it('includes an empty array when attachments were fetched and held none', () => {
+    const issue = normalizeIssue({
+      id: 'x', identifier: 'X-1', title: 't', url: 'u', priority: 0,
+      state: { name: 'Todo', type: 'unstarted' },
+      attachments: { nodes: [] },
+    })
+    expect(issue.pullRequests).toEqual([])
+  })
+})
+
+describe('commentExcerpt', () => {
+  // Measured on a live workspace: 43 of 53 newest comments open with a heading,
+  // and 50 of 53 first lines were distinct — the heading IS the summary.
+  it('takes the first line, without its heading marker', () => {
+    expect(commentExcerpt('## Refresh implementation summary\n\nLong body…')).toBe(
+      'Refresh implementation summary',
+    )
+  })
+
+  it('strips inline markdown down to the words', () => {
+    expect(commentExcerpt('**Done** — see [the PR](https://x.test/1) and `authHeader`')).toBe(
+      'Done — see the PR and authHeader',
+    )
+  })
+
+  it('skips blank lines, fences, tables and rules to reach prose', () => {
+    expect(commentExcerpt('\n\n---\n```ts\ncode\n```\n| a | b |\nActual words here')).toBe(
+      'Actual words here',
+    )
+  })
+
+  // "## Summary" on every comment would make every toast line identical.
+  it('passes over a one-word heading when something follows it', () => {
+    expect(commentExcerpt('## Summary\n\nMoved token refresh into the browser.')).toBe(
+      'Moved token refresh into the browser.',
+    )
+    expect(commentExcerpt('## Summary')).toBe('Summary')
+  })
+
+  // Agents title comments "2026-09-30 — what happened". The date repeats the
+  // row's own timestamp and is identical on every line from the same day.
+  it('drops a leading date and its separator', () => {
+    expect(commentExcerpt('## 2026-09-30 — MinIO image mirrored')).toBe('MinIO image mirrored')
+    expect(commentExcerpt('2026-09-30: Phase 1 probe done')).toBe('Phase 1 probe done')
+    expect(commentExcerpt('[2026-09-30] 驗收標準在 prod 未成立')).toBe('驗收標準在 prod 未成立')
+    expect(commentExcerpt('2026/09/30 - retry fixed')).toBe('retry fixed')
+  })
+
+  it('keeps a date that is the whole line, or not at the start', () => {
+    expect(commentExcerpt('2026-09-30')).toBe('2026-09-30')
+    expect(commentExcerpt('Shipped on 2026-09-30')).toBe('Shipped on 2026-09-30')
+  })
+
+  it('caps the length with an ellipsis', () => {
+    const out = commentExcerpt('x'.repeat(500))
+    expect(out).toHaveLength(140)
+    expect(out?.endsWith('…')).toBe(true)
+  })
+
+  it('is null when there is nothing to show', () => {
+    expect(commentExcerpt('')).toBeNull()
+    expect(commentExcerpt('```\ncode only\n```')).toBeNull()
+  })
+})
+
+describe('normalizeIssue — last comment', () => {
+  const base = {
+    id: 'x', identifier: 'X-1', title: 't', url: 'u', priority: 0,
+    state: { name: 'Todo', type: 'unstarted' },
+  }
+  const withComment = (node: Record<string, unknown>) =>
+    normalizeIssue({ ...base, comments: { nodes: [{ createdAt: '2026-09-30T00:00:00Z', ...node }] } })
+
+  // The agent writes as the user, so the author is "me" almost always — naming
+  // it would print the same name on every line.
+  it('carries the excerpt, and no author, when the viewer wrote it', () => {
+    const i = withComment({ body: '## Did the thing', user: { displayName: 'Shawn', isMe: true } })
+    expect(i.lastComment).toEqual({ excerpt: 'Did the thing' })
+  })
+
+  it('names the author when it was somebody else', () => {
+    const i = withComment({ body: 'Looks good', user: { displayName: 'Alice', isMe: false } })
+    expect(i.lastComment).toEqual({ excerpt: 'Looks good', author: 'Alice' })
+  })
+
+  // The detail query asks for `user { displayName }` without `isMe`. Unknown
+  // is not "somebody else".
+  it('leaves the author out when it cannot tell whose it is', () => {
+    const i = withComment({ body: 'Looks good', user: { displayName: 'Alice' } })
+    expect(i.lastComment).toEqual({ excerpt: 'Looks good' })
+  })
+
+  it('is absent when the body was not fetched', () => {
+    expect(withComment({}).lastComment).toBeUndefined()
   })
 })

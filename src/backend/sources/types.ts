@@ -35,6 +35,23 @@ export class AuthError extends Error {
   }
 }
 
+/**
+ * The credential is valid; it is not allowed to do this.
+ *
+ * Split out from AuthError rather than folded into it because the *write* path
+ * treats an authentication failure as "this token is dead" and tells the
+ * browser to discard it (`issueWriteStore.forgetTokenIfRejected`). A 403 means
+ * the opposite — Linear knows exactly who the caller is — so wearing
+ * AuthError's clothes made one refused write throw away a token that was still
+ * good for every other issue in the workspace.
+ */
+export class ForbiddenError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ForbiddenError'
+  }
+}
+
 export class RateLimitError extends Error {
   constructor(message: string) {
     super(message)

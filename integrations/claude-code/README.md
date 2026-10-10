@@ -1,0 +1,252 @@
+# issue-graph — Claude Code plugin
+
+Reports each Claude Code session's presence to an issue-graph server, so the graph
+shows which issue is being worked on **right now**, and whether that session is
+moving or waiting for you.
+
+This is the one fact an issue tracker structurally cannot hold. Linear knows the
+issue's state; it has no field for "a session is live on this, on that machine,
+and it last did something two minutes ago" — and it should not grow one, because
+that is runtime state, not a work item.
+
+## Why hooks rather than the agent announcing itself
+
+A hook fires whether or not the model cooperates. A session that crashes, or
+simply never thinks to mention what it is doing, is still visible — and the
+**absence** of heartbeats is what reveals that it died. A marker the agent sets
+for itself could only ever show the sessions well-behaved enough not to need
+watching.
+
+## Install
+
+```bash
+/plugin marketplace add shdennlin/issue-graph
+/plugin install issue-graph@issue-graph
+```
+
+Then set both variables in your shell profile:
+
+```bash
+export ISSUE_GRAPH_URL=http://localhost:31415
+export ISSUE_GRAPH_TOKEN=<the server's AGENT_SESSION_TOKEN>
+```
+
+**With either variable unset the plugin does nothing at all, silently.** That is
+deliberate: it ships enabled to anyone who installs it, and a hook that
+complained on every prompt in every repo without an issue-graph would be worse
+than useless.
+
+On the server, set the matching secret:
+
+```bash
+AGENT_SESSION_TOKEN=<a long random string>
+```
+
+**Unset means the endpoint is closed, not open.** This route is meant to be
+reachable from outside — the hook runs on your laptop, the server may not be
+local — so a deployment without the variable must not quietly accept writes from
+anywhere. Expose it the same way you expose the Linear webhook: a path-scoped
+tunnel, not the whole app.
+
+## What it sends
+
+| Event | Reports |
+|---|---|
+| `SessionStart` | session id, branch, cwd, host — the session is alive. **Also the only one that reads anything back**: see below |
+| `UserPromptSubmit` | heartbeat; a leading `/slash-command` is recorded as the phase |
+| `PostToolUse` (file edits) | heartbeat |
+| `Notification` | Claude is stopped on a permission prompt — **blocked** |
+| `Stop` | the turn ended — it is waiting on you |
+| `SessionEnd` | remove the row |
+
+Nothing else. No prompt text, no file contents, no transcript.
+
+## What SessionStart reads back
+
+A SessionStart hook's stdout goes into the session's context, so this one asks
+for a briefing (`?context=1`) and prints it:
+
+```
+ONE-393, which this branch names, belongs to the workstream "OAuth migration".
+What it is for: Replace the hand-rolled token flow.
+It is at the stage "Waiting CI".
+The command usually run at that stage is gh run watch.
+The stage after it is "Done".
+That stage expects these to be attached by hand:
+- runbook: The on-call doc for this service
+The workstream moves between stages only when someone records the move; nothing advances it on its own.
+```
+
+Without it a session has to ask where it is before it can know, and it has no
+reason to suspect there is anywhere to ask.
+
+**It states facts and gives no orders**, for two separate reasons that land on
+the same sentence. Claude Code surfaces injected text that reads as an
+out-of-band system instruction to the user instead of using it. And the stage a
+workstream is on is stored, not derived — whether it has moved is a judgement
+only the session that did the work can make, so a briefing that said "when you
+finish, call `set_workstream_stage`" would settle that before anything happened.
+
+It is silent whenever there is nothing to say: a branch naming no issue is the
+ordinary case, and spending context to announce an absence every session is how
+a hook gets switched off.
+
+**Compaction is covered.** `SessionStart` fires again with `source: "compact"`,
+and this hook declares no matcher, so the briefing is restored after the summary
+replaces it. `PostCompact` is deliberately not used: it has no decision control
+in Claude Code at all, so it cannot inject anything.
+
+This is the one place the script blocks — once per session, while you are
+already waiting for `CLAUDE.md` and the skill scan. Measured at 59 ms against a
+local server, with a 2-second connect and 5-second total budget.
+
+## Attributing a session to an issue
+
+The plugin sends the **branch name**; the server extracts the issue id from it
+(`src/backend/branchIssue.ts`). Parsing lives there rather than here because the
+rules need fixing over time, and a rule in the server can be fixed by restarting
+it, while one baked into an installed plugin needs every install updated.
+
+So a session appears on a card when its branch carries an issue id —
+`fix/one-393-task-failed-status`, lowercase is fine. **A branch with no id is a
+normal outcome**, not an error: plenty of real work has no ticket, and such a
+session is simply recorded without appearing anywhere.
+
+Two things the server deliberately will not do:
+
+- **Guess.** A prefix is only accepted if it is a team key the workspace
+  actually has. `feat/gemma-4-mtp` looks exactly like an id and is not one;
+  parking a live session on an unrelated issue is worse than not showing it.
+- **Split a multi-issue branch.** `fix/one-371-372-374-…` resolves to ONE-371
+  only — `372` has no prefix and nothing distinguishes it from a version number.
+  Linear's own matcher behaves the same way.
+
+## Three states, not two
+
+`waiting` and `blocked` look similar and are not. `Stop` fires when a turn ends
+and it is your move — you can look whenever. `Notification` fires when Claude has
+stopped on a permission prompt: nothing is running, and nothing will until you
+answer. Only the second is worth walking over for, so the card shows them
+differently and only `blocked` is loud.
+
+## Liveness
+
+A card stops showing a session **15 minutes after its last heartbeat**, not when
+`SessionEnd` arrives. A session killed with `SIGKILL`, a closed terminal or a
+slept laptop never sends `SessionEnd`; treating its silence as "still running"
+would have cards claiming work is in progress days later. `SessionEnd` just
+removes the row early.
+
+## It cannot break your session
+
+Every path in `hooks/session.sh` exits 0. The five heartbeat events background
+their request with a 3-second timeout and print nothing at all; `SessionStart`
+waits for its briefing but prints nothing when the server is unreachable, the
+token is wrong, or `curl`/`jq` are missing. In every one of those cases the
+session starts normally. A monitoring hook that can block a prompt — or stop a
+session from starting — has its priorities backwards.
+
+Measured: 6 ms per fire with the variables unset, 31 ms configured.
+
+---
+
+# MCP server
+
+The same plugin ships an MCP server, so a session can ask issue-graph things
+rather than only being reported on.
+
+It needs the same two variables as the hooks, plus an optional workspace:
+
+```bash
+export ISSUE_GRAPH_WORKSPACE=onelegion   # omit to use the default workspace
+```
+
+18 tools, in four groups.
+
+**Read the shape of the work**
+
+| Tool | Does |
+|---|---|
+| `list_stages` | The lifecycle in pipeline order, each stage with its fields and what each field means |
+| `list_workstreams` | Every workstream and the stage it is on |
+| `get_workstream` | One in detail: its issues in dependency order, who is on them, what blocks them |
+| `list_linear_states` | The state names a stage may declare |
+| `find_related` | Issues near a given one in the graph |
+
+**Design the pipeline** — a shared convention a person reads. Build it when asked; leave it alone otherwise.
+
+| Tool | Does |
+|---|---|
+| `create_stage` / `update_stage` / `delete_stage` | One stage |
+| `reorder_stages` | The order of all of them |
+| `describe_field` | What a field NAME means here — one sentence, resolved onto every stage that lists it |
+
+**Move the work**
+
+| Tool | Does |
+|---|---|
+| `create_workstream` | Start one from a set of issues |
+| `update_workstream` | Rename it, write its note (what it is for), archive it, add or remove issues |
+| `delete_workstream` | Remove the record. Archiving via `update_workstream` keeps the history; this does not |
+| `set_workstream_stage` | Advance it — or move it back when CI goes red |
+| `set_stage_note` | A note on one stage of one workstream |
+| `attach_to_stage` | Put a link or a file under one of a stage's fields |
+
+**Work through it**
+
+| Tool | Does |
+|---|---|
+| `next_issue` | Claim the next issue, in dependency order, that nobody else holds |
+| `report_done` | Release the claim and unblock what depended on it |
+
+## The skill and the two commands
+
+MCP tools are passive. A session with seventeen of them available still has to
+decide that now is the moment to reach for one, and nothing in a tool list
+supplies that moment. Three things do.
+
+**`workstream-progress`** (skill) — the model reaches for this itself when work
+it has been doing reaches a point worth recording: a PR is open, a check has
+run, a spec is written, a stage's work is finished. It costs one line of
+description in context until it fires.
+
+**`/issue-graph:where`** — read-only. Which workstream, which stage, what that
+stage still expects, and who holds what. Useful mid-session, when the
+SessionStart briefing has scrolled away or a stage has moved since.
+
+**`/issue-graph:progress`** — record what just happened: attach the evidence,
+note the decisions, and move the stage **only if it has genuinely moved**.
+
+All three draw the same line in the same place. Attaching evidence and writing
+notes are cheap and additive, so they happen freely. Moving a stage is a claim
+about the world, so it happens only when every field the stage expects is
+satisfied as its own description defines it. Leaving a workstream one stage
+behind is small, visible and self-correcting; marking a stage done that is not
+done is invisible and misleads everyone reading the board.
+
+## What it will not do
+
+**It never changes a Linear state.** It writes issue-graph's own data only —
+stage assignments and batch claims. State transitions belong to Linear's own MCP
+or its GitHub automation; a second writer on that field is the failure this whole
+design is shaped around.
+
+So `set_stage` records what you assert, and if that disagrees with Linear,
+`get_stage` reports the disagreement and changes neither side.
+
+## Batches
+
+A batch is a set of issues handed out one at a time. Create one by selecting
+issues on the graph and choosing **Queue N as a batch**.
+
+Only membership is stored. The **order is derived on every read** from the
+`blocks` relations, so a blocker is always handed out before what it blocks, and
+editing a relation in Linear changes the order without anyone re-queuing.
+
+`next_issue` will not hand you an issue another session holds, and will not hand
+you one whose in-batch blockers are unfinished. When it returns nothing it says
+which: `done` means the batch is finished, `blocked` means come back shortly.
+Only the session holding a claim may `report_done` it.
+
+A session that reconnects and calls `next_issue` again gets **its own claim
+back** rather than a second issue.

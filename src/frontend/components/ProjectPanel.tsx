@@ -1,17 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Check, ChevronsRight, Circle, Type, X } from 'lucide-react'
 import type { IssueStateType, NormalizedIssue, ProjectStateType } from '@shared/types.js'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { useResizable } from '../hooks/useResizable'
 import { MarkdownBody } from './MarkdownBody'
+import { useDetailTextSize } from '../lib/detailTextSize'
 import { isDoneState, isCountedInTotal, rollupProgress } from '../lib/issueProgress'
 import { useT, type DictKey } from '../i18n'
-
-// Shared with DetailPanel — same storage key so cycling text size in either
-// panel updates the other on next render.
-const TEXT_SIZE_KEY = 'ig-detail-text-size-v1'
-type TextSize = 'sm' | 'md' | 'lg' | 'xl'
 
 const PROJECT_STATE_DICT_KEY: Record<ProjectStateType, DictKey> = {
   backlog: 'projectPanel.projectStates.backlog',
@@ -231,40 +227,7 @@ export function ProjectPanel() {
   const [copied, setCopied] = useState(false)
   const copyTimerRef = useRef<number | null>(null)
 
-  const [textSize, setTextSize] = useState<TextSize>(() => {
-    if (typeof localStorage === 'undefined') return 'md'
-    try {
-      const v = localStorage.getItem(TEXT_SIZE_KEY)
-      return v === 'sm' || v === 'lg' || v === 'xl' ? v : 'md'
-    } catch { return 'md' }
-  })
-  // Re-read when DetailPanel toggles it in the same tab — storage events only
-  // fire across tabs, so we additionally poll on focus to catch same-tab
-  // updates without an extra cross-component event bus. Cheap because the
-  // panel only mounts when focusedProjectId is set.
-  useEffect(() => {
-    const reread = () => {
-      try {
-        const v = localStorage.getItem(TEXT_SIZE_KEY)
-        const next: TextSize = v === 'sm' || v === 'lg' || v === 'xl' ? v : 'md'
-        setTextSize((prev) => (prev === next ? prev : next))
-      } catch { /* silent */ }
-    }
-    window.addEventListener('storage', reread)
-    window.addEventListener('focus', reread)
-    return () => {
-      window.removeEventListener('storage', reread)
-      window.removeEventListener('focus', reread)
-    }
-  }, [])
-  const cycleTextSize = useCallback(() => {
-    setTextSize((prev) => {
-      const next: TextSize =
-        prev === 'sm' ? 'md' : prev === 'md' ? 'lg' : prev === 'lg' ? 'xl' : 'sm'
-      try { localStorage.setItem(TEXT_SIZE_KEY, next) } catch { /* silent */ }
-      return next
-    })
-  }, [])
+  const [textSize, cycleTextSize] = useDetailTextSize()
 
   // Fetch detail on mount / project change. The store handles dedup so this
   // is safe to call repeatedly without thrashing the cache.

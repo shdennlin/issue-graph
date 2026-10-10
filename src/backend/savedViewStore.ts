@@ -45,7 +45,7 @@ export const QUERY_MAX = 4000
  * GraphCanvas only renders in the dependency view, so a saved project-view
  * with a dead chain would otherwise show a blank canvas with no explanation.
  */
-export const STRIPPED_PARAMS = ['w', 'focus', 'detail', 'chain', 'note', 'notes']
+export const STRIPPED_PARAMS = ['w', 'focus', 'detail', 'chain', 'note', 'notes', 'stream']
 
 export function normalizeSavedViewName(raw: unknown): string | null {
   if (typeof raw !== 'string') return null

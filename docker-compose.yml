@@ -23,6 +23,12 @@ services:
       # container caused WAL corruption (SQLite locks are unreliable
       # across the FUSE/virtiofs bind-mount boundary on macOS Docker).
       SQLITE_PATH: /app/data/graph.db
+      # AGENT_SESSION_TOKEN is deliberately NOT pinned here. It comes through
+      # `env_file` from .env, like every other setting that has no reason to
+      # differ inside the container — and pinning it would mean writing a
+      # credential into a file that gets committed. It gates
+      # POST /api/agent-sessions, which the Claude Code plugin writes to; unset
+      # closes that endpoint rather than opening it. See .env.example.
     ports:
       # Loopback only. This app ships with NO authentication, so publishing on
       # 0.0.0.0 exposes every workspace's issue data to anything on the LAN.

@@ -12,7 +12,9 @@ import {
 } from './controlDb.js'
 import { getLogger } from './lib/log.js'
 import { getDb } from './db.js'
-import { UNCONFIGURED_WORKSPACE_ID, runWithWorkspace } from './lib/workspaceContext.js'
+import { UNCONFIGURED_WORKSPACE_ID, getCurrentWorkspaceId, runWithWorkspace } from './lib/workspaceContext.js'
+import { isWorkstreamWrite } from './lib/workstreamWrites.js'
+import { BUS_EVENT, publish } from './lib/eventBus.js'
 import { graphRoutes } from './routes/graph.js'
 import { syncRoutes } from './routes/sync.js'
 import { issueRoutes } from './routes/issue.js'
@@ -22,6 +24,10 @@ import { healthRoutes } from './routes/health.js'
 import { annotationRoutes } from './routes/annotations.js'
 import { notesRoutes } from './routes/notes.js'
 import { savedViewRoutes } from './routes/savedViews.js'
+import { lifecycleRoutes } from './routes/lifecycle.js'
+import { fieldRoutes } from './routes/fields.js'
+import { agentSessionRoutes } from './routes/agentSessions.js'
+import { batchRoutes } from './routes/batch.js'
 import { settingsRoutes } from './routes/settings.js'
 import { snapshotRoutes } from './routes/snapshots.js'
 import { exportRoutes } from './routes/exportRoutes.js'
@@ -101,6 +107,15 @@ export function createApp(): Hono {
     return runWithWorkspace(wid, () => next())
   })
 
+  // After the handler, still inside the workspace scope above: tell open tabs
+  // the board changed. Tagged with the workspace so a tab viewing another one
+  // ignores it, the same as `issues-changed`.
+  app.use('/api/*', async (c, next) => {
+    await next()
+    if (!isWorkstreamWrite(c.req.method, c.req.path, c.res.status)) return
+    publish({ type: BUS_EVENT.WORKSTREAMS_CHANGED, data: { workspaceId: getCurrentWorkspaceId() } })
+  })
+
   app.route('/', healthRoutes)
   app.route('/', graphRoutes)
   app.route('/', syncRoutes)
@@ -110,6 +125,10 @@ export function createApp(): Hono {
   app.route('/', annotationRoutes)
   app.route('/', notesRoutes)
   app.route('/', savedViewRoutes)
+  app.route('/', lifecycleRoutes)
+  app.route('/', fieldRoutes)
+  app.route('/', agentSessionRoutes)
+  app.route('/', batchRoutes)
   app.route('/', settingsRoutes)
   app.route('/', snapshotRoutes)
   app.route('/', exportRoutes)

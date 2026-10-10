@@ -1,9 +1,10 @@
-import { memo } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, MouseEvent, PointerEvent } from 'react'
 import type { NodeProps } from 'reactflow'
 import { useViewStore } from '../../store/viewStore'
 import { useT } from '../../i18n'
 import { UNCLASSIFIED_BUCKET } from '../../views/mix'
+import type { HeaderSession } from '../../lib/agentSession'
 
 interface MixedContainerData {
   bucket: {
@@ -24,6 +25,19 @@ interface MixedContainerData {
      *  the panel also scrolls + expands that milestone's <details>. Used by
      *  milestone view's per-milestone containers. */
     milestoneId?: string | null
+    /** Optional: the name becomes a button that copies it. For containers
+     *  with nothing to open — a workstream's name is typed into branches,
+     *  commits and agent prompts, and a node's text cannot be selected
+     *  (React Flow claims the pointerdown for dragging). Ignored when
+     *  `projectId` is set, since that click already opens a panel. */
+    copyName?: boolean
+    /** Optional: show `#<id>` beside the name; a click copies the bare id.
+     *  Workstream view only — the numeric id is what an agent passes as
+     *  `workstreamId`, and nothing else on screen states it. */
+    showId?: boolean
+    /** Optional: sessions working on this container, named in its header.
+     *  Workstream view only — see `headerSessions`. */
+    sessions?: HeaderSession[]
   }
 }
 
@@ -50,6 +64,14 @@ function MixedContainerImpl({ data }: NodeProps<MixedContainerData>) {
   const openProjectPanel = useViewStore((s) => s.openProjectPanel)
   const t = useT()
   const canOpen = Boolean(b.projectId)
+  const canCopy = !canOpen && b.copyName === true
+  // Which thing was just copied: the name, or one session's id. One slot, so a
+  // second copy moves the confirmation rather than showing two.
+  const [copied, setCopied] = useState<string | null>(null)
+  const copyTimer = useRef<number | null>(null)
+  useEffect(() => () => {
+    if (copyTimer.current !== null) window.clearTimeout(copyTimer.current)
+  }, [])
   // Mix view can't translate its own bucket names (views have no `t`), so the
   // catch-all bucket travels as a sentinel and is localized here.
   const name = b.name === UNCLASSIFIED_BUCKET ? t('views.mix.unclassified') : b.name
@@ -62,6 +84,18 @@ function MixedContainerImpl({ data }: NodeProps<MixedContainerData>) {
     if (b.projectId) openProjectPanel(b.projectId, b.milestoneId ?? null)
   }
   const stopPointer = (e: PointerEvent<HTMLButtonElement>) => e.stopPropagation()
+  const copy = async (e: MouseEvent<HTMLButtonElement>, text: string, slot: string) => {
+    e.stopPropagation()
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(slot)
+      if (copyTimer.current !== null) window.clearTimeout(copyTimer.current)
+      copyTimer.current = window.setTimeout(() => setCopied(null), 1200)
+    } catch {
+      // Clipboard API can fail on http:// origins other than localhost — silent,
+      // as in ProjectPanel.
+    }
+  }
 
   return (
     <div
@@ -69,6 +103,17 @@ function MixedContainerImpl({ data }: NodeProps<MixedContainerData>) {
       style={{ '--bucket-tint': tint } as CSSProperties}
     >
       <div className="mixed-container-header">
+        {b.showId && (
+          <button
+            type="button"
+            className="mixed-container-id"
+            onClick={(e) => void copy(e, b.id, 'id')}
+            onPointerDown={stopPointer}
+            title={t('workstreams.copyId', { id: b.id })}
+          >
+            {copied === 'id' ? t('workstreams.copied') : `#${b.id}`}
+          </button>
+        )}
         {canOpen ? (
           <button
             type="button"
@@ -80,10 +125,40 @@ function MixedContainerImpl({ data }: NodeProps<MixedContainerData>) {
           >
             {name}
           </button>
+        ) : canCopy ? (
+          <button
+            type="button"
+            className="mixed-container-name mixed-container-name-btn"
+            style={{ color: tint }}
+            onClick={(e) => void copy(e, b.name, 'name')}
+            onPointerDown={stopPointer}
+            title={t('workstreams.copyName')}
+          >
+            {name}
+          </button>
         ) : (
           <span className="mixed-container-name" style={{ color: tint }}>{name}</span>
         )}
+        {copied === 'name' && <span className="mixed-container-copied">{t('workstreams.copied')}</span>}
         <span className="mixed-container-count">{countLabel}</span>
+        {/* The full id is what `claude --resume` takes, so that is what a
+            click copies; the name is how a person knows which terminal. */}
+        {(b.sessions ?? []).map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            className={`mixed-container-session is-${s.status}`}
+            onClick={(e) => void copy(e, s.id, s.id)}
+            onPointerDown={stopPointer}
+            title={t('workstreams.copySessionId', { id: s.id })}
+          >
+            <span className="mixed-container-session-dot" aria-hidden />
+            <span className="mixed-container-session-name">{s.name}</span>
+            <code className="mixed-container-session-id">
+              {copied === s.id ? t('workstreams.copied') : s.shortId}
+            </code>
+          </button>
+        ))}
         {date && (
           <span
             className={`mixed-container-date${date.overdue ? ' overdue' : ''}`}

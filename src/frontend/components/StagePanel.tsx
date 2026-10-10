@@ -1,0 +1,443 @@
+import { useEffect, useRef, useState } from 'react'
+import { Eye, MoveRight, Pencil, Type, X } from 'lucide-react'
+import { ATTACHABLE_AUTO, isAutoField, RICH_LINK_KINDS } from '@shared/fields.js'
+import { stageVisits } from '@shared/stageHistory.js'
+import { api } from '../lib/api'
+import { useGraphStore } from '../store/graphStore'
+import { useViewStore } from '../store/viewStore'
+import { useResizable } from '../hooks/useResizable'
+import { compactAge } from '../lib/relativeTime'
+import { useT, type DictKey } from '../i18n'
+import { useDetailTextSize } from '../lib/detailTextSize'
+import { MarkdownBody } from './MarkdownBody'
+import { ItemRow } from './nodes/StageNode'
+import { stageContext, stageIndexes } from '../lib/stageContext'
+import { bandTone, panelItems, renderStage, stageSessions } from '../lib/stageRender'
+
+// Editing one workstream's occupancy of one stage, in a side panel.
+//
+// It began as a popover over the stage node, and that was the wrong shape: a
+// stage is 340px wide, so the form had to be squeezed into it, the kind picker
+// read as a label rather than a control, and there was nowhere to list what was
+// already attached. A panel has room to show the stage's whole state and to
+// edit it, which is what "add an item" actually needs.
+//
+// Same `<aside>` + useResizable shell as ProjectPanel, so it docks and resizes
+// the way the other panels do.
+
+const AGE_UNIT_KEYS: Record<'m' | 'h' | 'd', DictKey> = {
+  m: 'issueNode.ageMinutes',
+  h: 'issueNode.ageHours',
+  d: 'issueNode.ageDays',
+}
+
+/** Every name the attach picker can offer a button for, before this stage's
+ *  own declarations are folded in. */
+const OFFERABLE = [...ATTACHABLE_AUTO, 'url']
+
+export function StagePanel() {
+  const t = useT()
+  const target = useViewStore((s) => s.stagePanel)
+  const close = useViewStore((s) => s.closeStagePanel)
+  const graph = useGraphStore((s) => s.graph)
+  const refetchSilent = useGraphStore((s) => s.refetchSilent)
+
+  const [viewportW, setViewportW] = useState(() =>
+    typeof window === 'undefined' ? 1440 : window.innerWidth,
+  )
+  useEffect(() => {
+    const onResize = () => setViewportW(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  const sideMax = Math.max(360, Math.floor(viewportW * 0.5))
+  const { width, startResize, resizing } = useResizable({
+    storageKey: 'ig-stage-panel-w',
+    defaultWidth: 380,
+    min: 300,
+    max: sideMax,
+    side: 'right',
+  })
+
+  const workstream = (graph?.data.workstreams ?? []).find((w) => w.id === target?.workstreamId)
+  const stage = (graph?.data.lifecycle ?? []).find((s) => s.key === target?.stageKey)
+
+  // Draft state, keyed by the stage it was typed for. Adjusted during render
+  // rather than synced in an effect: switching stages must not carry the
+  // previous stage's half-written note across, and an effect that calls
+  // setState is what `react-hooks` flags.
+  const noteFromServer = workstream && stage ? (workstream.notes[stage.key] ?? '') : ''
+  const [draft, setDraft] = useState(() => ({ key: target?.stageKey ?? '', note: noteFromServer }))
+  const saveTimer = useRef<number | null>(null)
+  // Free text, seeded from the rich kinds. `RICH_LINK_KINDS` are the ones the
+  // app draws in their own box; any other name is accepted and drawn as a row
+  // carrying that name, which is how a workstream defines its own fields.
+  const [kind, setKind] = useState<string>('pr')
+  const [kindSeededFor, setKindSeededFor] = useState<string | null>(null)
+  const [customKind, setCustomKind] = useState(false)
+  const [value, setValue] = useState('')
+  const [label, setLabel] = useState('')
+  const [busy, setBusy] = useState(false)
+  // 'clean' once what is on screen matches what the server has. Saving is
+  // automatic — an explicit Save on a free-text note is a step you can only
+  // get wrong, and losing a paragraph because you clicked elsewhere is a
+  // worse outcome than a redundant write.
+  const [noteState, setNoteState] = useState<'clean' | 'dirty' | 'saving'>('clean')
+  const [textSize, cycleTextSize] = useDetailTextSize()
+  // A stage note is read far more often than it is written, and it is prose:
+  // headings, a list, a link. Showing it raw forever was the panel disagreeing
+  // with the Notes card on the canvas, which has rendered markdown all along.
+  // Reading is the default WHEN THERE IS SOMETHING TO READ; an empty note
+  // opens ready to type, because a preview of nothing helps nobody.
+  const [writing, setWriting] = useState(false)
+  // Read once and refreshed on a timer, above the early return so the hook
+  // order is stable. Reading the clock in the render body is the impurity
+  // `react-hooks` flags, and it is right to — the same render would otherwise
+  // produce a different age each time.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 60_000)
+    return () => window.clearInterval(id)
+  }, [])
+  // Flush a pending save when the panel closes or moves to another stage —
+  // otherwise the last keystrokes before an Esc are lost, which is exactly the
+  // moment someone finishes a thought.
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current !== null) window.clearTimeout(saveTimer.current)
+    }
+  }, [])
+
+  if (target && draft.key !== target.stageKey) {
+    setDraft({ key: target.stageKey, note: noteFromServer })
+    setWriting(noteFromServer.trim() === '')
+  }
+  // Default to the first thing the stage says it expects, once per stage — a
+  // CI stage should not open on "Pull request" when it declared `ci`.
+  if (target && kindSeededFor !== target.stageKey) {
+    setKindSeededFor(target.stageKey)
+    const first = stage?.fields[0]
+    if (first) {
+      setKind(first)
+      // Custom unless the picker has a button for it. The test used to be
+      // "is it a rich kind", which since the merge is the wrong question: the
+      // picker offers what this stage declared, and `runbook` gets a button
+      // even though nothing draws it richly.
+      setCustomKind(!OFFERABLE.includes(first) && isAutoField(first))
+    }
+  }
+  if (!target || !workstream || !stage || !graph) return null
+  const note = draft.key === target.stageKey ? draft.note : noteFromServer
+
+  // The SAME context the card on the canvas is drawn from, so the panel shows
+  // what the card shows — issues, PRs, specs, sessions — rather than only the
+  // note and the hand attachments. Built on render: one stage, and the graph
+  // object only changes on a refetch.
+  const ctx = stageContext(stageIndexes(graph.data), workstream, stage, graph.data.lifecycle ?? [])
+  const sessions = stageSessions(ctx, t)
+  const onStage = panelItems(renderStage(ctx, t))
+
+  const visit = stageVisits(workstream.stageEvents, now).get(stage.key)
+  const age = visit ? compactAge(visit.enteredAt, visit.leftAt ?? now) : null
+  const isCurrent = workstream.stage === stage.key
+  const links = workstream.links.filter((l) => l.stageKey === stage.key)
+
+  /** What the picker offers, in order: the names this stage declared (marked),
+   *  then the remaining attachable known ones, then Link. `Custom…` is
+   *  appended by the JSX and always last.
+   *
+   *  A declared name with no attachable form — `note`, `session`, `blocker` —
+   *  is left out: there is nothing to paste for it, and the note box is
+   *  already on this panel. */
+  const kindLabel = (name: string) =>
+    (ATTACHABLE_AUTO.includes(name) || name === 'url')
+      ? t(`stage.attachKind_${name}` as 'stage.attachKind_pr')
+      : name
+  const declared = stage.fields.filter((f) => OFFERABLE.includes(f) || !isAutoField(f))
+  const kindChoices = [
+    ...declared.map((name) => ({ name, label: kindLabel(name), declared: true })),
+    ...OFFERABLE
+      .filter((name) => !declared.includes(name))
+      .map((name) => ({ name, label: kindLabel(name), declared: false })),
+  ]
+
+  const saveNote = async (body: string) => {
+    if (body.trim() === noteFromServer.trim()) {
+      setNoteState('clean')
+      return
+    }
+    setNoteState('saving')
+    // An empty note is a DELETE, not an empty string: the server rejects a
+    // blank body, and "I cleared it" is what the user meant either way.
+    const trimmed = body.trim()
+    await (trimmed.length === 0
+      ? api.clearStageNote(workstream.id, stage.key)
+      : api.setStageNote(workstream.id, stage.key, trimmed))
+    await refetchSilent()
+    setNoteState('clean')
+  }
+
+  const run = async (fn: () => Promise<unknown>) => {
+    setBusy(true)
+    try {
+      await fn()
+      await refetchSilent()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <aside
+      className={`stage-panel detail-text-${textSize}${resizing ? ' is-resizing' : ''}`}
+      style={{ width: Math.min(width, sideMax), flexShrink: 0 }}
+    >
+      <div className="resize-handle resize-handle-left" onMouseDown={startResize} />
+      <div className="stage-panel-header">
+        <div>
+          {/* Ellipsized now that the header can actually narrow, so the full
+              name has to be reachable somewhere. */}
+          <div className="stage-panel-ws" title={workstream.name}>{workstream.name}</div>
+          <h2 className="stage-panel-title">{stage.name}</h2>
+        </div>
+        <button
+          className="icon-only detail-text-size-btn"
+          onClick={cycleTextSize}
+          title={t('detailPanel.cycleTextSize', { size: textSize })}
+          aria-label={t('detailPanel.cycleTextSizeAria')}
+        >
+          <Type size={12} />
+          <span className="detail-text-size-label">{textSize}</span>
+        </button>
+        <button className="icon-only" onClick={close} aria-label={t('common.close')}>
+          <X size={16} />
+        </button>
+      </div>
+
+      <div className="stage-panel-body">
+        {/* The move sits in the SAME row as the CURRENT badge, because the two
+            answer one question between them: this stage either is where the
+            workstream is, or it is one click from being. It used to be a bare
+            button of its own below the states line, which read as a form
+            submit for the panel rather than as the opposite of the badge. */}
+        <div className="stage-panel-meta">
+          {isCurrent && <span className="stage-badge">{t('stage.current')}</span>}
+          {age && (
+            <span>
+              {isCurrent
+                ? t('stage.ageHere', { age: t(AGE_UNIT_KEYS[age.unit], { count: age.value }) })
+                : t(AGE_UNIT_KEYS[age.unit], { count: age.value })}
+            </span>
+          )}
+          {visit && visit.visits > 1 && <span>{t('stage.visitsHint', { n: visit.visits })}</span>}
+          {!isCurrent && (
+            <button
+              type="button"
+              className="stage-panel-move"
+              disabled={busy}
+              onClick={() => void run(() => api.setBatchStage(workstream.id, stage.key))}
+              title={t('stage.moveHere')}
+            >
+              <MoveRight size={12} aria-hidden />
+              {t('stage.moveHereShort')}
+            </button>
+          )}
+        </div>
+
+        {/* The states this stage expects — the thing that decides which issues
+            land here at all, and the first place to look when one does not. */}
+        <p className="stage-panel-states">
+          {stage.states.length > 0
+            ? t('stage.expectsStates', { states: stage.states.join(', ') })
+            : t('lifecycle.constrainsNothing')}
+        </p>
+
+        {/* Who is here now, in the same band the card uses — above the note,
+            because it is the one thing on this stage that may need you. */}
+        {sessions.length > 0 && (
+          <div className={`stage-sessions stage-sessions-${bandTone(sessions)} stage-panel-sessions`}>
+            {sessions.map((item, i) => (
+              <ItemRow key={`${item.text}:${i}`} item={item} />
+            ))}
+          </div>
+        )}
+
+        {onStage.length > 0 && (
+          <>
+            <h4>{t('stage.onStageTitle')}</h4>
+            <div className="stage-panel-items">
+              {onStage.map((item, i) => (
+                <ItemRow key={`${item.token}:${item.text}:${i}`} item={item} />
+              ))}
+            </div>
+          </>
+        )}
+
+        <div className="stage-panel-note-head">
+          <h4>{t('stage.notesTitle')}</h4>
+          {note.trim() !== '' && (
+            <button
+              type="button"
+              className="icon-only stage-panel-note-mode"
+              onClick={() => {
+                // Leaving the box is a save either way; switching to the
+                // rendered view must not be the one path that drops the last
+                // few characters typed.
+                if (writing) {
+                  if (saveTimer.current !== null) window.clearTimeout(saveTimer.current)
+                  void saveNote(note)
+                }
+                setWriting((w) => !w)
+              }}
+              title={writing ? t('stage.notePreview') : t('stage.noteEdit')}
+              aria-label={writing ? t('stage.notePreview') : t('stage.noteEdit')}
+            >
+              {writing ? <Eye size={12} /> : <Pencil size={12} />}
+              <span>{writing ? t('stage.notePreview') : t('stage.noteEdit')}</span>
+            </button>
+          )}
+        </div>
+        {!writing && note.trim() !== '' ? (
+          <MarkdownBody body={note} className="stage-panel-note-rendered" />
+        ) : (
+        <textarea
+          className="stage-panel-note"
+          rows={5}
+          value={note}
+          placeholder={t('stage.attachNotePlaceholder')}
+          onChange={(e) => {
+            const next = e.target.value
+            setDraft({ key: target.stageKey, note: next })
+            setNoteState('dirty')
+            if (saveTimer.current !== null) window.clearTimeout(saveTimer.current)
+            // Debounced rather than per-keystroke: a note is written in
+            // sentences, and one request per character would be absurd.
+            saveTimer.current = window.setTimeout(() => void saveNote(next), 700)
+          }}
+          onBlur={() => {
+            if (saveTimer.current !== null) window.clearTimeout(saveTimer.current)
+            void saveNote(note)
+          }}
+        />
+        )}
+        <div className="stage-panel-row">
+          <span className="stage-panel-savestate">{t(`stage.note_${noteState}` as 'stage.note_clean')}</span>
+          {noteFromServer.length > 0 && (
+            <button
+              disabled={busy}
+              onClick={() => void run(() => api.clearStageNote(workstream.id, stage.key))}
+            >
+              {t('stage.attachClear')}
+            </button>
+          )}
+        </div>
+
+        <h4>{t('stage.attachedTitle')}</h4>
+        {links.length === 0 ? (
+          <p className="settings-hint">{t('stage.attachedEmpty')}</p>
+        ) : (
+          <ul className="stage-panel-links">
+            {links.map((l) => (
+              <li key={`${l.kind}:${l.value}`}>
+                <span className="stage-panel-kind">
+                  {/* A custom kind has no dict entry, and should not: it is a
+                      name the workstream chose, so it shows verbatim. */}
+                  {(RICH_LINK_KINDS as readonly string[]).includes(l.kind)
+                    ? t(`stage.attachKind_${l.kind}` as 'stage.attachKind_pr')
+                    : l.kind}
+                </span>
+                {l.value.startsWith('http') ? (
+                  <a href={l.value} target="_blank" rel="noreferrer">
+                    {l.label ?? l.value}
+                  </a>
+                ) : (
+                  <span>{l.label ?? l.value}</span>
+                )}
+                <button
+                  className="icon-only"
+                  disabled={busy}
+                  title={t('stage.detach')}
+                  onClick={() => void run(() => api.detachFromStage(workstream.id, stage.key, l.value))}
+                >
+                  <X size={13} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <h4>{t('stage.attachAddTitle')}</h4>
+        <p className="settings-hint">{t('stage.manualHint')}</p>
+        <div className="stage-panel-add">
+          {/* Radio-style buttons, not a <select>: in the popover the picker
+              read as a label and nobody found the other five kinds. */}
+          {/* The stage's own list comes first and is marked. After the
+              merge, `fields` IS the answer to "what belongs here", so the
+              picker leads with it instead of always laying out the five rich
+              kinds regardless — which is how a stage that never mentioned
+              `spec` still offered Spec, while the editor next door showed a
+              different list entirely.
+
+              The rest follow anyway, because the declaration is advisory: a
+              PR that genuinely belongs on a stage nobody thought to declare it
+              on must not need Custom… and a typed name. */}
+          <div className="stage-panel-kinds">
+            {kindChoices.map((k) => (
+              <button
+                key={k.name}
+                className={`${!customKind && kind === k.name ? 'is-on' : ''}${k.declared ? ' is-declared' : ''}`}
+                onClick={() => {
+                  setCustomKind(false)
+                  setKind(k.name)
+                }}
+                title={k.declared ? t('stage.expectedField') : undefined}
+              >
+                {k.label}
+              </button>
+            ))}
+            <button
+              className={customKind ? 'is-on' : ''}
+              onClick={() => {
+                setCustomKind(true)
+                setKind('')
+              }}
+              title={t('stage.attachKindCustomHint')}
+            >
+              {t('stage.attachKindCustom')}
+            </button>
+          </div>
+          {customKind && (
+            <input
+              value={kind}
+              onChange={(e) => setKind(e.target.value)}
+              placeholder={t('stage.attachKindPlaceholder')}
+            />
+          )}
+          <input
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder={
+              customKind
+                ? t('stage.attachValuePlaceholder')
+                : t(`stage.attachPlaceholder_${kind}` as 'stage.attachPlaceholder_pr')
+            }
+          />
+          <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t('stage.attachLabel')} />
+          <button
+            className="stage-panel-primary"
+            disabled={busy || value.trim().length === 0 || kind.trim().length === 0}
+            onClick={() =>
+              void run(async () => {
+                await api.attachToStage(workstream.id, stage.key, kind, value.trim(), label.trim() || undefined)
+                setValue('')
+                setLabel('')
+              })
+            }
+          >
+            {t('stage.attachSave')}
+          </button>
+        </div>
+      </div>
+    </aside>
+  )
+}

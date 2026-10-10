@@ -8,6 +8,9 @@ import {
   readDesigndocsCached,
   readLastSyncMs,
   readAnnotations,
+  readLiveAgentSessions,
+  readWorkstreamSummaries,
+  readLifecycleStages,
   readMeta,
   readLastSyncOutcome,
 } from '../cache.js'
@@ -34,6 +37,9 @@ graphRoutes.get('/api/graph', async (c) => {
   const labels = readCachedLabels()
   const designdocs = readDesigndocsCached()
   const annotations = readAnnotations()
+  const lifecycle = readLifecycleStages()
+  const agentSessions = readLiveAgentSessions()
+  const workstreams = readWorkstreamSummaries()
   const viewer = readViewerCached()
   const fetchedAt = readLastSyncMs() ?? 0
   const adapter = getActiveDesignDocAdapter(cfg.REPO_PATH, cfg.DESIGNDOC_ADAPTER)
@@ -54,6 +60,9 @@ graphRoutes.get('/api/graph', async (c) => {
       labels,
       designdocs,
       annotations,
+      lifecycle,
+      agentSessions,
+      workstreams,
       viewer,
       fetchedAt,
     },
