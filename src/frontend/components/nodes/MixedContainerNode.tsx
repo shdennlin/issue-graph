@@ -130,9 +130,13 @@ function MixedContainerImpl({ data }: NodeProps<MixedContainerData>) {
             type="button"
             className="mixed-container-name mixed-container-name-btn"
             style={{ color: tint }}
-            onClick={(e) => void copy(e, b.name, 'name')}
+            // With the id shown, hand over "#12 Name" so an agent pasted the
+            // clipboard gets the id it addresses the workstream by as well as
+            // the name a person recognises it by. The chip still copies the
+            // bare id, for when only that is wanted.
+            onClick={(e) => void copy(e, b.showId ? `#${b.id} ${b.name}` : b.name, 'name')}
             onPointerDown={stopPointer}
-            title={t('workstreams.copyName')}
+            title={b.showId ? t('workstreams.copyNameAndId') : t('workstreams.copyName')}
           >
             {name}
           </button>

@@ -509,6 +509,7 @@ export const zhTW: Dict = {
   workstreams: {
     title: '工作線',
     copyName: '複製名稱',
+    copyNameAndId: '複製 id 與名稱',
     copyId: '複製 workstream id {id}',
     copied: '已複製！',
     copySessionId: '複製 session id {id}(給 claude --resume 用)',

@@ -520,6 +520,7 @@ export const en = {
   workstreams: {
     title: 'Workstreams',
     copyName: 'Copy name',
+    copyNameAndId: 'Copy id and name',
     copyId: 'Copy workstream id {id}',
     copied: 'Copied!',
     copySessionId: 'Copy session id {id} (for claude --resume)',
