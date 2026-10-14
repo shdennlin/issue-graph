@@ -2,6 +2,8 @@
 
 # issue-graph
 
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-support-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/shdennlin) [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/shdennlin)
+
 Self-hosted issue dependency graph and workstream tracker. Fetches from Linear, renders an interactive graph of issues, buckets, and `blocks` relationships, and tracks feature progress through configurable pipelines. Supports optional Linear write-back, Claude Code integration, and local design-doc progress.
 
 ![Issue Graph — dependency view with detail panel showing the selected issue's design-doc progress, blocks/blocked-by, and annotations](docs/screenshots/dependency.png)

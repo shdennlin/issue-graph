@@ -2,6 +2,8 @@
 
 # issue-graph
 
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-support-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/shdennlin) [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/shdennlin)
+
 自架的議題相依關係圖與工作流程追蹤工具。從 Linear 拉取資料，繪製議題、分組與 `blocks` 關係的互動式圖表，並透過可自訂的流程追蹤功能進度。支援選用的 Linear 寫入功能、Claude Code 整合與本地設計文件進度。
 
 ![Issue Graph — 相依檢視，詳情面板顯示所選議題的設計文件進度、blocks/blocked-by 與註解](docs/screenshots/dependency.png)
