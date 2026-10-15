@@ -360,6 +360,54 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['workstreamId', 'identifier', 'claimant'],
       },
     },
+    {
+      name: 'list_notes',
+      description:
+        "The workspace's freeform notes board — unstructured markdown, not tied to any issue or workstream (that's `set_stage_note` / `update_workstream`'s `note`, a different concept with the same word). Each carries `id`, `body`, `sortOrder`, `archived`, `createdAt`, `updatedAt`. Archived notes are hidden by default, same reasoning as `list_workstreams`'s `includeArchived`.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          archived: {
+            type: 'string',
+            enum: ['active', 'archived', 'all'],
+            description: "Which notes to return. Omit for 'active' (the default view).",
+          },
+        },
+      },
+    },
+    {
+      name: 'create_note',
+      description: 'Add a new note to the board. It is inserted at the top, ahead of every existing note.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          body: { type: 'string', description: 'Raw markdown. The first non-empty line is shown as its title.' },
+        },
+      },
+    },
+    {
+      name: 'update_note',
+      description:
+        'Change a note’s body and/or archive it. Only the properties you pass are touched — passing `archived: false` un-archives it.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: { type: 'number' },
+          body: { type: 'string', description: 'Replaces the note body entirely.' },
+          archived: { type: 'boolean' },
+        },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'delete_note',
+      description: 'Permanently delete a note, along with any images pasted into it. Not recoverable — archive instead if it might still be wanted.',
+      inputSchema: {
+        type: 'object',
+        properties: { id: { type: 'number' } },
+        required: ['id'],
+      },
+    },
   ],
 }))
 
@@ -639,6 +687,39 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           }),
         })
         return text(r)
+      }
+
+      case 'list_notes': {
+        const archived = a.archived === undefined ? 'active' : String(a.archived)
+        const query = archived === 'active' ? '' : archived === 'archived' ? '?archived=1' : '?archived=all'
+        const r = await call<{ entries: unknown[] }>(`/api/notes${query}`)
+        return text(r.entries)
+      }
+
+      case 'create_note': {
+        const body: Record<string, unknown> = {}
+        if (typeof a.body === 'string') body.body = a.body
+        const r = await call<{ id: number; sortOrder: number }>('/api/notes', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        })
+        return text(r)
+      }
+
+      case 'update_note': {
+        const id = Number(a.id)
+        const patch: Record<string, unknown> = {}
+        if (typeof a.body === 'string') patch.body = a.body
+        if (typeof a.archived === 'boolean') patch.archived = a.archived
+        if (Object.keys(patch).length === 0) return text('nothing to change')
+        await call(`/api/notes/${id}`, { method: 'PATCH', body: JSON.stringify(patch) })
+        return text(`note ${id} updated`)
+      }
+
+      case 'delete_note': {
+        const id = Number(a.id)
+        await call(`/api/notes/${id}`, { method: 'DELETE' })
+        return text(`note ${id} deleted`)
       }
 
       default:

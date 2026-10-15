@@ -161,7 +161,7 @@ It needs the same two variables as the hooks, plus an optional workspace:
 export ISSUE_GRAPH_WORKSPACE=onelegion   # omit to use the default workspace
 ```
 
-18 tools, in four groups.
+22 tools, in five groups.
 
 **Read the shape of the work**
 
@@ -198,6 +198,15 @@ export ISSUE_GRAPH_WORKSPACE=onelegion   # omit to use the default workspace
 |---|---|
 | `next_issue` | Claim the next issue, in dependency order, that nobody else holds |
 | `report_done` | Release the claim and unblock what depended on it |
+
+**Freeform notes** — the workspace's notes board: unstructured markdown, not tied to any issue or workstream (a different concept from a stage's own note).
+
+| Tool | Does |
+|---|---|
+| `list_notes` | Every note, active by default |
+| `create_note` | Add one at the top of the board |
+| `update_note` | Change its body and/or archive it |
+| `delete_note` | Remove it permanently — archive via `update_note` instead if it might still be wanted |
 
 ## The skill and the two commands
 
