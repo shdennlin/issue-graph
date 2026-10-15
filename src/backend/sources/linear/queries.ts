@@ -124,6 +124,9 @@ export const ISSUE_DETAIL_QUERY = /* GraphQL */ `
           user { displayName }
         }
       }
+      attachments(first: 20) {
+        nodes { id title subtitle url sourceType }
+      }
     }
   }
 `

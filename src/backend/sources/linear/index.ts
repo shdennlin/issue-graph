@@ -21,7 +21,7 @@ import {
   VIEWER_QUERY,
   WORKFLOW_STATES_QUERY,
 } from './queries.js'
-import { coerceStateType, normalizeIssue, normalizeLabel, normalizeProjectDetail } from './normalize.js'
+import { coerceStateType, normalizeAttachments, normalizeIssue, normalizeLabel, normalizeProjectDetail } from './normalize.js'
 
 interface LinearOptions {
   apiKey: string
@@ -255,6 +255,7 @@ export class LinearBackend implements BackendAdapter {
       ...base,
       description: data.issue?.description ?? null,
       comments,
+      attachments: normalizeAttachments(data.issue),
     }
   }
 

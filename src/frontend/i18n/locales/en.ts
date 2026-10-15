@@ -497,6 +497,7 @@ export const en = {
     noDescription: '*No description*',
     descriptionLoadFail: 'Could not load description.',
     descriptionLoadingAria: 'Loading description',
+    resources: 'Resources ({count})',
     confirmDeleteAnnotation: 'Delete this annotation?',
     minutesAgo: '{count}m ago',
     hoursAgo: '{count}h ago',

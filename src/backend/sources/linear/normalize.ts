@@ -3,6 +3,7 @@
 
 import type {
   IssueStateType,
+  NormalizedAttachment,
   NormalizedIssue,
   NormalizedLabel,
   NormalizedRelation,
@@ -180,6 +181,44 @@ export function normalizePullRequests(raw: any): NormalizedPullRequest[] {
       hasConflicts: typeof m.hasConflicts === 'boolean' ? m.hasConflicts : null,
       linkKind: typeof m.linkKind === 'string' ? m.linkKind : null,
       mergedAt: typeof m.mergedAt === 'string' ? m.mergedAt : null,
+    })
+  }
+  return out
+}
+
+/**
+ * Every attachment on an issue, kept as-is — unlike `normalizePullRequests`,
+ * nothing is filtered out by `sourceType`. This is the detail panel's
+ * "Resources" list: a hand-added Link is exactly as valid an entry as a
+ * GitHub PR, and dropping it is the bug this function exists to avoid.
+ *
+ * `url` is scheme-checked before it survives into the list: Linear's
+ * `attachmentCreate` mutation does not itself validate the scheme, so a
+ * `javascript:` URL from a malicious or compromised workspace member would
+ * otherwise reach `<a href>` in DetailPanel as a clickable XSS payload.
+ */
+function isSafeAttachmentUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+export function normalizeAttachments(raw: any): NormalizedAttachment[] {
+  const nodes = raw?.attachments?.nodes
+  if (!Array.isArray(nodes)) return []
+  const out: NormalizedAttachment[] = []
+  for (const n of nodes) {
+    const url = typeof n?.url === 'string' && isSafeAttachmentUrl(n.url) ? n.url : null
+    if (!url) continue
+    out.push({
+      id: String(n?.id ?? url),
+      title: typeof n?.title === 'string' ? n.title : null,
+      subtitle: typeof n?.subtitle === 'string' ? n.subtitle : null,
+      url,
+      sourceType: typeof n?.sourceType === 'string' ? n.sourceType : null,
     })
   }
   return out

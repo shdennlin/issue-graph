@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Check, ExternalLink, Maximize2, Minimize2, Type, X } from 'lucide-react'
-import type { AnnotationDTO, IssueComment, NormalizedIssue } from '@shared/types.js'
+import type { AnnotationDTO, IssueComment, NormalizedAttachment, NormalizedIssue } from '@shared/types.js'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { useSchemaStore } from '../store/schemaStore'
@@ -79,6 +79,7 @@ export function DetailPanel() {
   const [description, setDescription] = useState<string | null>(null)
   const [descLoading, setDescLoading] = useState(false)
   const [comments, setComments] = useState<IssueComment[] | null>(null)
+  const [attachments, setAttachments] = useState<NormalizedAttachment[] | null>(null)
   const [annotationDraft, setAnnotationDraft] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editingBody, setEditingBody] = useState('')
@@ -199,6 +200,7 @@ export function DetailPanel() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDescription(null)
     setComments(null)
+    setAttachments(null)
     setCopied(false)
     if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current)
     if (!issueId) return
@@ -210,11 +212,13 @@ export function DetailPanel() {
         if (cancelled) return
         setDescription(res.data.description ?? '')
         setComments(res.data.comments ?? [])
+        setAttachments(res.data.attachments ?? [])
       })
       .catch(() => {
         if (cancelled) return
         setDescription(null)
         setComments(null)
+        setAttachments(null)
       })
       .finally(() => { if (!cancelled) setDescLoading(false) })
     return () => { cancelled = true }
@@ -795,6 +799,25 @@ export function DetailPanel() {
         )}
         {!descLoading && description === null && <div style={{ color: 'var(--fg-muted)' }}>{t('detailPanel.descriptionLoadFail')}</div>}
       </div>
+
+      {attachments !== null && attachments.length > 0 && (
+        <div className="section">
+          <h3>{t('detailPanel.resources', { count: attachments.length })}</h3>
+          {attachments.map((a) => (
+            <a
+              key={a.id}
+              className="detail-resource-link"
+              href={a.url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <ExternalLink size={12} />
+              <span>{a.title || a.url}</span>
+              {a.subtitle && <span className="detail-resource-subtitle">{a.subtitle}</span>}
+            </a>
+          ))}
+        </div>
+      )}
 
       <div className="section">
         <h3>{t('detailPanel.comments', { count: sortedComments?.length ?? 0 })}</h3>

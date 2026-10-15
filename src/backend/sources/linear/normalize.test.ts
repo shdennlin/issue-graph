@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { coerceProjectStateType, coerceStateType, commentExcerpt, normalizeIssue, normalizeLabel, normalizeProjectDetail, normalizePullRequests, normalizeRelations } from './normalize.js'
+import { coerceProjectStateType, coerceStateType, commentExcerpt, normalizeAttachments, normalizeIssue, normalizeLabel, normalizeProjectDetail, normalizePullRequests, normalizeRelations } from './normalize.js'
 
 describe('coerceStateType', () => {
   it("maps 'cancelled' (en-GB) → 'canceled' so workflowStates lookups stay safe", () => {
@@ -347,6 +347,48 @@ describe('normalizePullRequests', () => {
 
   it('keeps a status word we did not anticipate rather than dropping it', () => {
     expect(normalizePullRequests({ attachments: { nodes: [gh({ status: 'queued' })] } })[0]?.status).toBe('queued')
+  })
+})
+
+describe('normalizeAttachments', () => {
+  it('keeps a hand-added Link attachment, unlike normalizePullRequests', () => {
+    const link = { id: 'att-1', title: 'Design doc', subtitle: 'Figma', url: 'https://figma.com/x', sourceType: null }
+    expect(normalizeAttachments({ attachments: { nodes: [link] } })).toEqual([
+      { id: 'att-1', title: 'Design doc', subtitle: 'Figma', url: 'https://figma.com/x', sourceType: null },
+    ])
+  })
+
+  it('keeps a github PR attachment too — this list is not filtered by sourceType', () => {
+    const pr = { id: 'att-2', title: null, subtitle: null, url: 'https://github.com/o/r/pull/1', sourceType: 'github' }
+    expect(normalizeAttachments({ attachments: { nodes: [pr] } })).toEqual([
+      { id: 'att-2', title: null, subtitle: null, url: 'https://github.com/o/r/pull/1', sourceType: 'github' },
+    ])
+  })
+
+  it('drops an attachment with no url rather than throwing', () => {
+    expect(normalizeAttachments({ attachments: { nodes: [{ id: 'att-3', title: 't' }] } })).toEqual([])
+  })
+
+  it('drops a javascript: url instead of letting it reach an <a href>', () => {
+    const payload = { id: 'att-4', title: 'click me', url: 'javascript:alert(1)' }
+    expect(normalizeAttachments({ attachments: { nodes: [payload] } })).toEqual([])
+  })
+
+  it('drops a data: url the same way', () => {
+    const payload = { id: 'att-5', title: 't', url: 'data:text/html,<script>alert(1)</script>' }
+    expect(normalizeAttachments({ attachments: { nodes: [payload] } })).toEqual([])
+  })
+
+  it('keeps http as well as https', () => {
+    const payload = { id: 'att-6', title: null, subtitle: null, url: 'http://example.com', sourceType: null }
+    expect(normalizeAttachments({ attachments: { nodes: [payload] } })).toEqual([
+      { id: 'att-6', title: null, subtitle: null, url: 'http://example.com', sourceType: null },
+    ])
+  })
+
+  it('returns empty for a missing or malformed attachments field', () => {
+    expect(normalizeAttachments({})).toEqual([])
+    expect(normalizeAttachments({ attachments: { nodes: 'nope' } })).toEqual([])
   })
 })
 

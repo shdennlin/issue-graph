@@ -103,6 +103,21 @@ export interface NormalizedPullRequest {
   mergedAt: string | null
 }
 
+/**
+ * Everything Linear calls an "attachment" on an issue — a hand-added link, a
+ * Slack thread, a Figma file, a linked PR — kept as-is rather than filtered
+ * down to pull requests the way `normalizePullRequests` does. Detail-view
+ * only: the bulk `ISSUES_QUERY` does not fetch `title`/`subtitle`, so this
+ * does not belong on `NormalizedIssue`.
+ */
+export interface NormalizedAttachment {
+  id: string
+  title: string | null
+  subtitle: string | null
+  url: string
+  sourceType: string | null
+}
+
 export interface NormalizedIssue {
   id: string
   identifier: string

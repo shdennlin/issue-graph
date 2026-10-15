@@ -155,9 +155,13 @@ export const api = {
     }),
   getSyncScope: () => http<{ days: number }>('/api/sync/extend'),
   fetchIssueDetail: (identifier: string) =>
-    http<{ data: import('@shared/types.js').NormalizedIssue & { description: string | null; comments: import('@shared/types.js').IssueComment[] } }>(
-      `/api/issues/${encodeURIComponent(identifier)}`,
-    ),
+    http<{
+      data: import('@shared/types.js').NormalizedIssue & {
+        description: string | null
+        comments: import('@shared/types.js').IssueComment[]
+        attachments: import('@shared/types.js').NormalizedAttachment[]
+      }
+    }>(`/api/issues/${encodeURIComponent(identifier)}`),
   // ─── Write-back ───────────────────────────────────────────────────────────
   // The only two calls that change something outside this app. They live on
   // `api` for the same reason saved views do (see the note further down): this

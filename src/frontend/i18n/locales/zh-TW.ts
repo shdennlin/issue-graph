@@ -489,6 +489,7 @@ export const zhTW: Dict = {
     noDescription: '*無描述*',
     descriptionLoadFail: '無法載入描述。',
     descriptionLoadingAria: '載入描述中',
+    resources: '資源（{count}）',
     confirmDeleteAnnotation: '刪除此註解？',
     minutesAgo: '{count} 分鐘前',
     hoursAgo: '{count} 小時前',
