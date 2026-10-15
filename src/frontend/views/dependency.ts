@@ -3,9 +3,42 @@ import type { ViewDefinition } from './types'
 import { issueNodeHeight } from './types'
 import { runDagre } from '../lib/layout'
 import { applyFilters } from './filters'
+import type { Filters } from '../store/viewStore'
 import { computeChains } from './chain'
 import { computeConnectivity } from './connectivity'
 import { computeHierarchyCounts, countVisibleChildren } from './hierarchy'
+
+/**
+ * The State dimension of `f` and nothing else.
+ *
+ * Written as a full literal with NO spread on purpose: a field added to
+ * `Filters` later makes this fail to typecheck, forcing a decision about
+ * whether chain mode should honour it, instead of silently leaking the new
+ * filter into chain mode (or silently exempting it).
+ */
+function stateOnlyFilters(f: Filters): Filters {
+  return {
+    stateTypes: f.stateTypes,
+    stateNames: f.stateNames,
+    negated: f.negated.filter((id) => id === 'state'),
+    recencyWindow: 'any',
+    recencyMode: 'updated',
+    recencyIgnoreLinked: true,
+    myIssuesOnly: false,
+    staleOnly: false,
+    primaryValues: [],
+    typeValues: [],
+    priorities: [],
+    assignees: [],
+    prefixSelections: {},
+    groupSelections: {},
+    orphanValues: [],
+    designdocFilter: 'all',
+    dueFilter: 'any',
+    projectIds: [],
+    milestoneIds: [],
+  }
+}
 
 export const dependencyView: ViewDefinition = {
   id: 'dependency',
@@ -13,8 +46,18 @@ export const dependencyView: ViewDefinition = {
   description: 'Issues + blocks edges. Best for "what should I work on next?".',
   build({ data, filters, staleDays, myUserName, selection, focusedId, chainRootIds, chainDepthUp, chainDepthDown, showRelated, showHierarchy, density, search, measuredHeights }) {
     // Chain isolation: when roots are set, show their connected component over
-    // `blocks` edges (both directions, transitive) — bypassing other filters
-    // so an off-state blocker doesn't fragment the chain.
+    // `blocks` edges (both directions, transitive).
+    //
+    // The WALK ignores every filter, so an off-state blocker doesn't fragment
+    // the chain: A -> B(Done) -> C still reaches C. What is DRAWN is then
+    // narrowed by the State filter alone. It used to be narrowed by nothing,
+    // which put Done cards on screen under a State panel that said Done was
+    // hidden. Every other dimension stays ignored here — the user asked about
+    // state, and a project/assignee filter would cut chains in half.
+    //
+    // Roots are exempt: picking one is an explicit act, and a filter must not
+    // overrule an explicit selection (see applyFilters' `alwaysInclude`, which
+    // takes one id, hence the union below for multi-root chains).
     let issues
     if (chainRootIds.length > 0) {
       const { members } = computeChains(data.issues, chainRootIds, {
@@ -23,7 +66,11 @@ export const dependencyView: ViewDefinition = {
         maxUpstream: chainDepthUp,
         maxDownstream: chainDepthDown,
       })
-      issues = data.issues.filter((i) => members.has(i.identifier))
+      const inChain = data.issues.filter((i) => members.has(i.identifier))
+      const stateOk = new Set(
+        applyFilters(inChain, stateOnlyFilters(filters), staleDays, myUserName).map((i) => i.identifier),
+      )
+      issues = inChain.filter((i) => chainRootIds.includes(i.identifier) || stateOk.has(i.identifier))
     } else {
       issues = applyFilters(data.issues, filters, staleDays, myUserName, search, focusedId)
     }
