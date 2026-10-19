@@ -437,6 +437,7 @@ export const zhTW: Dict = {
     copyIdAndTitleAria: '複製 {id} 的 ID 與標題',
     outline: '大綱',
     hideOutline: '隱藏大綱',
+    outlineResize: '拖曳以調整大綱寬度',
     outlineCommentN: '留言 {n}',
     state: '狀態',
     priority: '優先順序',

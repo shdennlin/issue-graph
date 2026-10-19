@@ -1084,12 +1084,17 @@ a:hover { text-decoration: underline; }
   position: absolute;
   top: 12px;
   right: 10px;
+  /* Width is also set inline per-render (DetailPanel.tsx state, dragged via
+     .detail-outline-resize-handle) — this is just the first-render default
+     before that state is read, and the floor/ceiling the drag clamps to. */
   width: 150px;
+  min-width: 110px;
+  max-width: 340px;
   max-height: calc(100% - 24px);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 3px;
   padding: var(--sp-2) 6px;
   border-radius: var(--radius-md);
@@ -1103,6 +1108,15 @@ a:hover { text-decoration: underline; }
 }
 .detail-outline-zone:hover .detail-outline,
 .detail-outline:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+/* Dragging the resize handle (see .detail-outline-resize-handle) moves the
+   pointer out over .detail-body, not this zone — without this, the
+   hover-reveal state (unpinned) would hide mid-drag the moment the cursor
+   left the 56px hover strip. DetailPanel.tsx adds this class for the
+   duration of the drag regardless of pinned state. */
+.detail-outline-zone.is-resizing .detail-outline {
   opacity: 1;
   pointer-events: auto;
 }
@@ -1120,6 +1134,58 @@ a:hover { text-decoration: underline; }
   border: 1px solid var(--node-border);
   box-shadow: var(--shadow-md);
 }
+/* A custom handle, not native CSS `resize` — the native one only ever
+   draws its grip in the box's bottom-right corner, which here sits right
+   at the panel's own right edge (since .detail-outline is anchored via
+   `right`, not `left`) and reads as unreachable / easy to miss. This sits
+   bottom-left instead, next to the edge that actually moves when you drag
+   it (width grows left into the panel, right edge stays pinned). */
+.detail-outline-resize-handle {
+  /* The familiar diagonal-stripe grip a native `resize: horizontal`
+     textarea draws in its corner — mirrored left-right, since this one
+     lives in the bottom-LEFT corner (the native version always draws
+     bottom-right, which is exactly the edge that doesn't move here).
+     clip-path keeps the stripes inside a triangle matching that corner;
+     the box-shadow ring is what actually solves visibility against the
+     panel's translucent, content-bleeding-through background — a plain
+     --node-border line was nearly invisible without a pointer already on
+     it, which defeats a control whose job is to be noticed. Neutral
+     --fg-muted, not --accent: a resize grip isn't a call to action, it's
+     chrome, same as the native one it's standing in for. */
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: ew-resize;
+  opacity: 0.8;
+  touch-action: none;
+  transition: opacity 120ms ease;
+}
+.detail-outline-resize-handle::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  clip-path: polygon(0 0, 0 100%, 100% 100%);
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--fg-muted) 0 1.5px,
+    transparent 1.5px 4px
+  );
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--bg) 50%, transparent);
+}
+.detail-outline-resize-handle:hover,
+.detail-outline-resize-handle.is-resizing {
+  opacity: 1;
+}
+.detail-outline-resize-handle:hover::before,
+.detail-outline-resize-handle.is-resizing::before {
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--fg) 0 1.5px,
+    transparent 1.5px 4px
+  );
+}
 /* Full contrast for every level once pinned, not just the section titles —
    weight (bold for level 0, normal for the rest) is what carries the
    hierarchy here, not a second, dimmer color on top of it. */
@@ -1128,9 +1194,9 @@ a:hover { text-decoration: underline; }
   all: unset;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 4px;
-  max-width: 100%;
+  width: 100%;
   /* fg-muted, not fg-faint — this is the hover-peek state (pinned
      overrides it below to full contrast), and fg-faint read as too dark
      against the translucent background to use during a brief hover. */
@@ -1150,7 +1216,7 @@ a:hover { text-decoration: underline; }
   font-size: var(--fs-meta);
   font-weight: 600;
   color: var(--fg-faint);
-  text-align: right;
+  text-align: left;
   padding: 0 4px 4px;
   margin-bottom: 2px;
   border-bottom: 1px solid var(--node-border);
@@ -1158,6 +1224,13 @@ a:hover { text-decoration: underline; }
 }
 .detail-outline-icon { flex-shrink: 0; opacity: 0.85; }
 .detail-outline-text {
+  /* flex: 1 1 auto + min-width: 0 is what makes truncation track the
+     panel's actual (now resizable) width rather than a fixed px cap per
+     level — the item is already width: 100%, so the text just fills
+     whatever room padding-left/indent and the icon leave on it. */
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1168,26 +1241,32 @@ a:hover { text-decoration: underline; }
    section titles are the top of this outline's real hierarchy. A small
    top margin groups each section's own content headings visually under
    it, except the very first entry (nothing to separate it from). */
-/* Left-aligned and full-width, unlike every tier below it — a section
-   title reads naturally icon-then-text from the left, and spanning the
-   full width gives its indented children (still right-aligned, hanging
-   off the right edge below it) something to visually tuck under. */
 .detail-outline-level-0 {
   font-weight: 700;
   margin-top: 6px;
-  width: 100%;
-  justify-content: flex-start;
 }
-.detail-outline-level-0 .detail-outline-text { text-align: left; }
 .detail-outline-level-0:first-child { margin-top: 0; }
+/* Every tier is left-aligned to the panel edge (see .detail-outline and
+   .detail-outline-item above), so depth has to be real indentation —
+   `padding-left` per level — not just a narrower `max-width` under a
+   shared right edge. The latter used to make two same-level headings
+   with different text lengths look like they sat at different depths
+   (a short string under a right edge reads as "more indented" than a
+   long one, even though neither is). Font-size/weight/opacity remain a
+   secondary cue; indentation alone now tells levels apart correctly. */
+.detail-outline-level-1 { font-weight: 600; padding-left: 8px; }
+.detail-outline-level-2 { padding-left: 16px; }
+.detail-outline-level-3 { padding-left: 24px; }
+.detail-outline-level-4,
+.detail-outline-level-5,
+.detail-outline-level-6 { padding-left: 32px; }
 .detail-outline-level-0 .detail-outline-text,
-.detail-outline-level-1 .detail-outline-text { font-size: var(--fs-meta); max-width: 150px; }
-.detail-outline-level-2 .detail-outline-text { font-size: var(--fs-meta); max-width: 130px; }
-.detail-outline-level-3 .detail-outline-text { font-size: calc(var(--fs-meta) - 1px); max-width: 110px; }
+.detail-outline-level-1 .detail-outline-text { font-size: var(--fs-meta); }
+.detail-outline-level-2 .detail-outline-text { font-size: var(--fs-meta); }
+.detail-outline-level-3 .detail-outline-text { font-size: calc(var(--fs-meta) - 1px); }
 .detail-outline-level-4 .detail-outline-text,
 .detail-outline-level-5 .detail-outline-text,
-.detail-outline-level-6 .detail-outline-text { font-size: calc(var(--fs-meta) - 1px); max-width: 95px; opacity: 0.8; }
-.detail-outline-level-1 { font-weight: 600; }
+.detail-outline-level-6 .detail-outline-text { font-size: calc(var(--fs-meta) - 1px); opacity: 0.8; }
 /* "Comment N" markers — one per comment that actually has a heading in it,
    inserted once right before that comment's own headings so it's clear
    which comment they came from instead of all of Comments' headings
@@ -1199,13 +1278,7 @@ a:hover { text-decoration: underline; }
   font-style: italic;
   color: var(--fg-faint);
   margin-top: 4px;
-  /* Same reasoning as .detail-outline-level-0: a grouping label, not real
-     content, so it gets the same left-aligned, full-width treatment
-     rather than hanging off the right edge like the headings under it. */
-  width: 100%;
-  justify-content: flex-start;
 }
-.detail-outline-comment-marker .detail-outline-text { text-align: left; }
 
 /* One row per Linear attachment ("Resources" section) — a hand-added Link,
    a Slack thread, a PR, anything. Same baseline-icon pairing as
@@ -2875,8 +2948,11 @@ label + .settings-help {
   will-change: transform;
 }
 .mermaid-toolbar {
+  /* Bottom-left, not bottom-right: a diagram/image near the panel's right
+     edge otherwise sits under .detail-outline-zone's hover strip, which
+     covers the controls before the pointer ever reaches them. */
   position: absolute;
-  right: 8px;
+  left: 8px;
   bottom: 8px;
   display: flex;
   gap: 4px;

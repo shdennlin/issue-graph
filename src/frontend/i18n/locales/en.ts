@@ -443,6 +443,7 @@ export const en = {
     copyIdAndTitleAria: 'Copy issue ID and title for {id}',
     outline: 'Outline',
     hideOutline: 'Hide outline',
+    outlineResize: 'Drag to resize outline',
     outlineCommentN: 'Comment {n}',
     state: 'State',
     priority: 'Priority',

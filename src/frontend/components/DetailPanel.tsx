@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import {
   AlertTriangle,
   Ban,
@@ -66,6 +66,11 @@ const WIDE_MODE_KEY = 'ig-detail-wide-v1'
 const FULLSCREEN_KEY = 'ig-detail-fullscreen-v1'
 const ANNOTATIONS_OPEN_KEY = 'ig-detail-annotations-open-v1'
 const OUTLINE_OPEN_KEY = 'ig-detail-outline-open-v1'
+const OUTLINE_WIDTH_KEY = 'ig-detail-outline-width-v1'
+const OUTLINE_DEFAULT_WIDTH = 150
+const OUTLINE_MIN_WIDTH = 110
+const OUTLINE_MAX_WIDTH = 340
+const clampOutlineWidth = (w: number) => Math.min(OUTLINE_MAX_WIDTH, Math.max(OUTLINE_MIN_WIDTH, w))
 
 /**
  * The quiet half of an editable row: "show only issues like this one".
@@ -225,6 +230,44 @@ export function DetailPanel() {
       return next
     })
   }, [])
+  const [outlineWidth, setOutlineWidth] = useState<number>(() => {
+    if (typeof localStorage === 'undefined') return OUTLINE_DEFAULT_WIDTH
+    try {
+      const stored = Number(localStorage.getItem(OUTLINE_WIDTH_KEY))
+      return Number.isFinite(stored) && stored > 0 ? clampOutlineWidth(stored) : OUTLINE_DEFAULT_WIDTH
+    } catch {
+      return OUTLINE_DEFAULT_WIDTH
+    }
+  })
+  const [outlineResizing, setOutlineResizing] = useState(false)
+  // Drag start snapshot, not component state — read on every pointermove,
+  // so it has to stay out of the render cycle or each move would be
+  // computed against a stale `outlineWidth` from the render it started in.
+  const outlineResizeStartRef = useRef<{ x: number; width: number } | null>(null)
+  const handleOutlineResizeStart = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    outlineResizeStartRef.current = { x: e.clientX, width: outlineWidth }
+    setOutlineResizing(true)
+  }
+  const handleOutlineResizeMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const start = outlineResizeStartRef.current
+    if (!start) return
+    // The panel is right-anchored (`right: 10px`), so its left edge is the
+    // one that moves — dragging the handle further left (smaller clientX)
+    // has to grow the width, hence start.x - e.clientX rather than the
+    // other way round.
+    setOutlineWidth(clampOutlineWidth(start.width + (start.x - e.clientX)))
+  }
+  const endOutlineResize = () => {
+    if (!outlineResizeStartRef.current) return
+    outlineResizeStartRef.current = null
+    setOutlineResizing(false)
+    setOutlineWidth((w) => {
+      try { localStorage.setItem(OUTLINE_WIDTH_KEY, String(w)) } catch { /* silent */ }
+      return w
+    })
+  }
   const [textSize, cycleTextSize] = useDetailTextSize()
 
   const toggleWide = useCallback(() => {
@@ -763,9 +806,19 @@ export function DetailPanel() {
       {outline.length > 1 && (
         <div
           ref={outlineZoneRefCallback}
-          className={`detail-outline-zone${outlineOpen ? ' is-pinned' : ''}`}
+          className={`detail-outline-zone${outlineOpen ? ' is-pinned' : ''}${outlineResizing ? ' is-resizing' : ''}`}
         >
-          <nav className="detail-outline" aria-label={t('detailPanel.outline')}>
+          <nav className="detail-outline" aria-label={t('detailPanel.outline')} style={{ width: outlineWidth }}>
+            <div
+              className={`detail-outline-resize-handle${outlineResizing ? ' is-resizing' : ''}`}
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={t('detailPanel.outlineResize')}
+              onPointerDown={handleOutlineResizeStart}
+              onPointerMove={handleOutlineResizeMove}
+              onPointerUp={endOutlineResize}
+              onPointerCancel={endOutlineResize}
+            />
             <div className="detail-outline-title">{t('detailPanel.outline')}</div>
             {outline.map((o) => {
               const Icon = o.icon ? OUTLINE_SECTION_ICONS[o.icon] : o.isCommentMarker ? MessageSquare : null
