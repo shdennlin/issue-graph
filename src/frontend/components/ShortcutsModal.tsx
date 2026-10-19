@@ -35,6 +35,7 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ['d'], descriptionKey: 'shortcuts.items.detailPanelToggle', group: 'Selection' },
   { keys: ['Shift', 'D'], descriptionKey: 'shortcuts.items.detailAutoToggle', group: 'Selection' },
   { keys: ['m'], descriptionKey: 'shortcuts.items.detailWideToggle', group: 'Selection' },
+  { keys: ['Shift', 'M'], descriptionKey: 'shortcuts.items.detailFullScreenToggle', group: 'Selection' },
   { keys: ['Cmd', 'Shift', 'C'], descriptionKey: 'shortcuts.items.detailCopyId', group: 'Selection' },
   { keys: ['Cmd', 'Click'], descriptionKey: 'shortcuts.items.cmdClick', group: 'Selection' },
   { keys: ['Right-click'], descriptionKey: 'shortcuts.items.rightClick', group: 'Selection' },

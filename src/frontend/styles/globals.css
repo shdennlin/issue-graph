@@ -633,9 +633,32 @@ a:hover { text-decoration: underline; }
   position: relative;
   border-left: 1px solid var(--node-border);
   background: var(--bg-elev);
-  overflow-y: auto;
+  /* Scrolling moved to .detail-body below — the panel itself no longer
+     scrolls, which is what lets the outline sit at a fixed spot against
+     the panel's own edge instead of scrolling away with the content (see
+     .detail-outline-zone). Flex column so header/source-link keep their
+     natural height and .detail-body (flex: 1) takes what's left. */
+  display: flex;
+  flex-direction: column;
   padding: 14px;
   font-size: var(--fs-base);
+}
+/* Wraps .detail-header + .detail-source-link — exists so its rendered
+   height can be measured (headAreaH) to position .detail-outline-zone
+   right below it without hardcoding an offset a wrapped multi-line title
+   would throw off. flex-shrink: 0 keeps it at its natural height even if
+   .detail-body ever has too little room to fully satisfy both. */
+.detail-head-area { flex-shrink: 0; }
+.detail-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* Pulls back out to the panel's own edges, then re-applies the same
+     inset as its own padding — so the scrollbar sits flush with the
+     panel edge instead of floating 14px in from it, while the content
+     keeps the same margins it always had. */
+  margin: 0 -14px -14px;
+  padding: 0 14px 14px;
 }
 
 /* Resize handle — invisible 6px strip on panel edge, cursor=col-resize, lights
@@ -721,6 +744,11 @@ a:hover { text-decoration: underline; }
   grid-template-columns: auto 1fr;
   column-gap: var(--sp-3);
   row-gap: 7px;
+  /* Without this, .meta-grid sits flush against .detail-controls-row above
+     it (no gap of its own, and .detail-controls-row .row has its vertical
+     padding zeroed out — see its own comment) — reads as one crowded block
+     instead of two separate groups. */
+  margin-top: var(--sp-3);
   /* Grid's default stretch makes every value cell fill the whole 1fr
      column. Invisible for a plain text value, but a value rendered as a
      bordered/filled pill (Project's .detail-filter-link, see below) then
@@ -889,23 +917,71 @@ a:hover { text-decoration: underline; }
   align-items: flex-start;
   gap: 6px;
 }
-/* Flex so the identifier pill can be aligned against the title text.
-   `align-items: center` is optimal for the common single-line case
-   (pill centers against the title's optical center). For multi-line
-   wrapped titles the pill sits in the vertical middle of the title
-   block — the same pattern Linear uses, reads as the badge being
-   anchored to the title as a whole rather than just the first line. */
+/* The icon cluster (text size, copy, maximize, full screen, outline,
+   close) — wraps to a second row of 2-3 icons in a narrow docked panel
+   instead of overflowing or crowding against the title, which shrinks to
+   make room for whichever row is widest rather than the other way
+   around. flex-shrink: 0 keeps icons themselves from being squashed; it's
+   the row count that adapts, not the icon size. */
+.detail-header-actions {
+  /* A fixed grid, not a flex row that only wraps if it has to — asked for
+     explicitly after the single-row version still read as too wide even
+     with plenty of room to spare, for the DOCKED panel, where width is
+     genuinely short supply. 3 columns always, however many buttons there
+     are (5 when the outline button isn't shown, leaving one empty cell
+     rather than reflowing into 2 columns — a shorter second row reads
+     fine; a whole relayout for one missing icon wouldn't). */
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  justify-content: end;
+  gap: 0;
+  flex-shrink: 0;
+}
+/* Modal and full screen have the opposite problem from docked: plenty of
+   width to spare, so the same compact 3x2 block that solves a cramped
+   docked header just looks small and disconnected up in the corner of a
+   much bigger one — back to a single row, which actually has room here. */
+.detail-panel.is-wide .detail-header-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 2px;
+}
+/* The wide single row's requested sequence (copy, maximize, full screen,
+   text size, outline, close) is just the buttons' own source order, so it
+   needs no CSS here — only the docked grid's sequence differs enough from
+   it to need explicit `order` (copy, text size, close / maximize, full
+   screen, outline — row-major over the 3 columns above) to not just be
+   the same buttons read left-to-right, top-to-bottom. */
+.detail-panel:not(.is-wide) .detail-action-copy { order: 0; }
+.detail-panel:not(.is-wide) .detail-action-textsize { order: 1; }
+.detail-panel:not(.is-wide) .detail-action-close { order: 2; }
+.detail-panel:not(.is-wide) .detail-action-maximize { order: 3; }
+.detail-panel:not(.is-wide) .detail-action-fullscreen { order: 4; }
+.detail-panel:not(.is-wide) .detail-action-outline { order: 5; }
+/* .icon-only's own padding (4px 6px) is sized for a toolbar button sitting
+   on its own; six of them in a row here added up to a visibly wide strip
+   next to the title for not much actual icon. Tighter padding, scoped to
+   this cluster only — .icon-only is used all over the app and this isn't
+   about shrinking it everywhere, just this one crowded spot. */
+.detail-header-actions .icon-only { padding: 3px 4px; }
+/* Was flex (badge + title as two row items), which put the badge in the
+   vertical middle of a wrapped multi-line title instead of beside its
+   first line — correct for a short title, but for a long one it reads as
+   the badge floating in its own column rather than "the id, then the
+   title". Floating the badge into the text flow instead makes the title
+   wrap around it like a paragraph with a leading inline element: shares
+   line one, continues at the left margin from line two on. `flow-root`
+   gives the float a containing block of its own height (a float doesn't
+   otherwise contribute to its parent's height). */
 .detail-header h2 {
   flex: 1;
   min-width: 0;
   margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  display: flow-root;
 }
+.detail-identifier { float: left; margin-right: 6px; }
 .detail-title-text {
-  flex: 1 1 auto;
-  min-width: 0;
+  display: inline;
 }
 /* Clickable rectangular pill — copies the identifier on click. A ✓ icon
    briefly appends during the 1.2s "copied" feedback window (rendered
@@ -971,8 +1047,165 @@ a:hover { text-decoration: underline; }
   align-items: center;
   gap: 4px;
   font-size: var(--fs-meta);
+  /* Now flows inline right after the title text (see the h2 markup)
+     instead of sitting on its own row below it — a small gap so it
+     doesn't crowd whatever word the title happens to end on. */
+  margin-left: 8px;
+  vertical-align: baseline;
 }
 .detail-source-link svg { opacity: 0.7; }
+
+/* Description outline — a slim floating bar over the content's own right
+   edge (Notion's outline, not a docked sidebar). Anchored to .detail-panel
+   itself, not .detail-body — .detail-panel no longer scrolls (that moved
+   to .detail-body, specifically so this could stay put at a fixed spot
+   against the panel's edge while the content scrolls underneath it,
+   instead of scrolling away with it).
+
+   .detail-outline-zone is the actual hover target: wider than the bar
+   itself so there's a generous, easy-to-find strip to reach for, invisible
+   on its own. The bar inside it is opacity: 0 / pointer-events: none at
+   rest and fades in on zone hover (or the bar's own focus-within, for
+   keyboard use) — `.is-pinned` (the header's list-icon toggle) forces it
+   visible regardless. */
+.detail-outline-zone {
+  position: absolute;
+  /* top set inline from the measured header height — see measureHeadArea */
+  right: 0;
+  bottom: 0;
+  width: 56px;
+  /* Without this, .detail-body (a later sibling, painted after this one
+     with no z-index of its own) draws over it — a code block, image or
+     mermaid diagram scrolled under this spot hid the bar instead of the
+     bar floating over it like everything else already does. */
+  z-index: 5;
+}
+.detail-outline {
+  position: absolute;
+  top: 12px;
+  right: 10px;
+  width: 150px;
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  padding: var(--sp-2) 6px;
+  border-radius: var(--radius-md);
+  /* Translucent while it's just a hover-reveal — legible enough over busy
+     content for a quick peek without reading as a permanent panel. */
+  background: color-mix(in srgb, var(--bg-elev) 55%, transparent);
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease, background 150ms ease;
+}
+.detail-outline-zone:hover .detail-outline,
+.detail-outline:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+/* Pinned is a different job: this is meant to stay up and be read/used
+   over whatever's scrolled underneath it (a comment's own table, code,
+   bold text — busy content), not glanced at for a second. The 55%-opacity
+   background and --fg-faint item color that work for a brief hover peek
+   turned out to wash out against that, nearly unreadable — see the
+   screenshot that flagged this. Pinned gets a near-solid background,
+   border, shadow, and full-contrast item text instead. */
+.detail-outline-zone.is-pinned .detail-outline {
+  opacity: 1;
+  pointer-events: auto;
+  background: color-mix(in srgb, var(--bg-elev) 96%, transparent);
+  border: 1px solid var(--node-border);
+  box-shadow: var(--shadow-md);
+}
+/* Full contrast for every level once pinned, not just the section titles —
+   weight (bold for level 0, normal for the rest) is what carries the
+   hierarchy here, not a second, dimmer color on top of it. */
+.detail-outline-zone.is-pinned .detail-outline-item { color: var(--fg); }
+.detail-outline-item {
+  all: unset;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: 100%;
+  /* fg-muted, not fg-faint — this is the hover-peek state (pinned
+     overrides it below to full contrast), and fg-faint read as too dark
+     against the translucent background to use during a brief hover. */
+  color: var(--fg-muted);
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease;
+}
+.detail-outline-item:hover,
+.detail-outline-item:focus-visible {
+  color: var(--fg);
+  background: var(--chip-bg);
+}
+.detail-outline-item:focus-visible { outline: 1px solid var(--accent); }
+.detail-outline-title {
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  color: var(--fg-faint);
+  text-align: right;
+  padding: 0 4px 4px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--node-border);
+  width: 100%;
+}
+.detail-outline-icon { flex-shrink: 0; opacity: 0.85; }
+.detail-outline-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Level 0 = a panel section title (Hierarchy, Related, Description, …),
+   not a markdown heading — always the most prominent tier regardless of
+   what level a nested "### Foo" inside that section happens to use, since
+   section titles are the top of this outline's real hierarchy. A small
+   top margin groups each section's own content headings visually under
+   it, except the very first entry (nothing to separate it from). */
+/* Left-aligned and full-width, unlike every tier below it — a section
+   title reads naturally icon-then-text from the left, and spanning the
+   full width gives its indented children (still right-aligned, hanging
+   off the right edge below it) something to visually tuck under. */
+.detail-outline-level-0 {
+  font-weight: 700;
+  margin-top: 6px;
+  width: 100%;
+  justify-content: flex-start;
+}
+.detail-outline-level-0 .detail-outline-text { text-align: left; }
+.detail-outline-level-0:first-child { margin-top: 0; }
+.detail-outline-level-0 .detail-outline-text,
+.detail-outline-level-1 .detail-outline-text { font-size: var(--fs-meta); max-width: 150px; }
+.detail-outline-level-2 .detail-outline-text { font-size: var(--fs-meta); max-width: 130px; }
+.detail-outline-level-3 .detail-outline-text { font-size: calc(var(--fs-meta) - 1px); max-width: 110px; }
+.detail-outline-level-4 .detail-outline-text,
+.detail-outline-level-5 .detail-outline-text,
+.detail-outline-level-6 .detail-outline-text { font-size: calc(var(--fs-meta) - 1px); max-width: 95px; opacity: 0.8; }
+.detail-outline-level-1 { font-weight: 600; }
+/* "Comment N" markers — one per comment that actually has a heading in it,
+   inserted once right before that comment's own headings so it's clear
+   which comment they came from instead of all of Comments' headings
+   reading as one flat, undifferentiated list. A sub-tier of its own: less
+   prominent than a level-0 section title, but still a grouping label, not
+   real content like the headings under it. */
+.detail-outline-comment-marker {
+  font-weight: 500;
+  font-style: italic;
+  color: var(--fg-faint);
+  margin-top: 4px;
+  /* Same reasoning as .detail-outline-level-0: a grouping label, not real
+     content, so it gets the same left-aligned, full-width treatment
+     rather than hanging off the right edge like the headings under it. */
+  width: 100%;
+  justify-content: flex-start;
+}
+.detail-outline-comment-marker .detail-outline-text { text-align: left; }
 
 /* One row per Linear attachment ("Resources" section) — a hand-added Link,
    a Slack thread, a PR, anything. Same baseline-icon pairing as
