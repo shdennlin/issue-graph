@@ -1,5 +1,6 @@
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
+import { wireImagesIn, wireMermaidDiagram } from './mermaidPanZoom'
 
 const KEYWORDS_BY_LANGUAGE: Record<string, Set<string>> = {
   js: new Set(['const', 'let', 'var', 'function', 'return', 'if', 'else', 'for', 'while', 'class', 'new', 'import', 'from', 'export', 'async', 'await', 'try', 'catch', 'throw']),
@@ -65,10 +66,92 @@ function enhanceCodeBlocks(root: ParentNode) {
     if (!language) return
 
     const pre = code.parentElement
-    pre?.setAttribute('data-language', language)
+    if (!pre) return
+
+    if (language === 'mermaid') {
+      // Can't render the diagram here — mermaid.render() is async and this
+      // function runs synchronously inside renderMarkdownHtml (which has to
+      // stay a plain string-returning function; see its callers). Stash the
+      // raw source as a data attribute and mark the block; renderMermaidIn
+      // finds these once the HTML is actually in the live DOM and swaps
+      // each one for its rendered SVG.
+      pre.dataset.mermaidSource = code.textContent ?? ''
+      pre.classList.add('mermaid-pending')
+      return
+    }
+
+    pre.setAttribute('data-language', language)
     code.classList.add('syntax-highlighted', `language-${language}`)
     appendHighlightedCode(code, code.textContent ?? '', language)
   })
+}
+
+function isDarkTheme(): boolean {
+  const explicit = document.documentElement.getAttribute('data-theme')
+  if (explicit === 'dark') return true
+  if (explicit === 'light') return false
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
+}
+
+let mermaidSeq = 0
+
+/** Finishes what renderMarkdownHtml couldn't: renders any `.mermaid-pending`
+ *  blocks into their diagrams, and wraps any large inline image, both with
+ *  fit/pan/zoom/expand chrome (see mermaidPanZoom.ts). Call after the
+ *  markdown HTML this produced is actually attached to the document —
+ *  mermaid needs a live layout to measure text for sizing, and an <img>'s
+ *  naturalWidth/Height needs it to have at least started loading. See
+ *  MarkdownBody and DetailPanel's description/annotation effects for the
+ *  call sites. Safe to call on a root with nothing to do (images are
+ *  checked and resolved either way; the mermaid half short-circuits).
+ *  Mermaid's theme is picked once per call from the current theme; doesn't
+ *  re-render on a later theme flip, which would need every caller to track
+ *  theme changes for a diagram that's usually read once and then scrolled
+ *  past. */
+export async function renderMermaidIn(root: ParentNode): Promise<void> {
+  wireImagesIn(root)
+  const blocks = Array.from(root.querySelectorAll<HTMLElement>('pre.mermaid-pending'))
+  if (blocks.length === 0) return
+  const { default: mermaid } = await import('mermaid')
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'strict',
+    theme: isDarkTheme() ? 'dark' : 'default',
+    // Mermaid's default labels are <foreignObject><span>text</span></foreignObject>
+    // — arbitrary embedded HTML, which DOMPurify's SVG profile (correctly)
+    // strips as unsafe, leaving every node blank. The root-level htmlLabels
+    // (the per-diagram flowchart.htmlLabels etc. are deprecated in favor of
+    // this) forces native SVG <text> labels instead, which survive
+    // sanitization without having to widen the allowlist to foreignObject.
+    htmlLabels: false,
+  })
+  for (const pre of blocks) {
+    const source = pre.dataset.mermaidSource ?? ''
+    try {
+      const { svg } = await mermaid.render(`mermaid-${++mermaidSeq}`, source)
+      const wrapper = document.createElement('div')
+      wrapper.className = 'mermaid-diagram'
+      // The diagram SOURCE is issue/comment content (mermaid supports HTML
+      // node labels), so the rendered SVG isn't any more trustworthy than
+      // the markdown it came from — sanitize it the same way, just with an
+      // SVG-aware profile instead of marked's default HTML one.
+      wrapper.innerHTML = DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } })
+      pre.replaceWith(wrapper)
+      // Fit-to-viewport + drag/wheel pan-zoom + expand-to-overlay chrome —
+      // a diagram this size is routinely bigger than the panel. See
+      // mermaidPanZoom.ts.
+      wireMermaidDiagram(wrapper)
+    } catch (err) {
+      // Leave the source visible rather than an empty gap — a malformed
+      // diagram is still useful as text, and the error names what broke.
+      pre.classList.remove('mermaid-pending')
+      pre.classList.add('mermaid-error')
+      const notice = document.createElement('div')
+      notice.className = 'mermaid-error-text'
+      notice.textContent = `Mermaid: ${err instanceof Error ? err.message : 'failed to render'}`
+      pre.before(notice)
+    }
+  }
 }
 
 export function renderMarkdownHtml(body: string, fallback = ''): string {

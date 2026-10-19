@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { renderMarkdownNodes } from '../lib/markdown'
+import { renderMarkdownNodes, renderMermaidIn } from '../lib/markdown'
 
 interface MarkdownBodyProps {
   body: string
@@ -22,6 +22,11 @@ export function MarkdownBody({ body, className }: MarkdownBodyProps) {
       return
     }
     el.replaceChildren(...nodes)
+    // Nodes are now attached to `el`, which is in the live document — the
+    // earliest point a ```mermaid block can actually be rendered (see
+    // renderMermaidIn's own comment for why this can't happen earlier,
+    // inside renderMarkdownNodes itself).
+    void renderMermaidIn(el)
   }, [body])
   const cls = className ? `markdown-body ${className}` : 'markdown-body'
   return <div ref={ref} className={cls} />

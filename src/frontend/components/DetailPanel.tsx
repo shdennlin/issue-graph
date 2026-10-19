@@ -1,5 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, Check, ExternalLink, Maximize2, Minimize2, Type, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  Maximize,
+  Maximize2,
+  Minimize,
+  Minimize2,
+  Type,
+  X,
+} from 'lucide-react'
 import type { AnnotationDTO, IssueComment, NormalizedAttachment, NormalizedIssue } from '@shared/types.js'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
@@ -12,7 +24,7 @@ import { getDesignDocsForIssue, groupIssueLabels, shortPrefixDisplay, type Label
 import { isOverdueIssue } from '../lib/dueDate'
 import { milestoneFilterKey } from '../views/filters'
 import { resolveHierarchy } from '../views/hierarchy'
-import { renderMarkdownHtml } from '../lib/markdown'
+import { renderMarkdownHtml, renderMermaidIn } from '../lib/markdown'
 import { MarkdownBody } from './MarkdownBody'
 import { useDetailTextSize } from '../lib/detailTextSize'
 import { translate, useLocale, useT } from '../i18n'
@@ -41,6 +53,8 @@ function timeAgo(iso: string, locale: ReturnType<typeof useLocale>): string {
 // so users who want a roomier read of a single issue without inflating the rest
 // of the UI can opt in here.
 const WIDE_MODE_KEY = 'ig-detail-wide-v1'
+const FULLSCREEN_KEY = 'ig-detail-fullscreen-v1'
+const ANNOTATIONS_OPEN_KEY = 'ig-detail-annotations-open-v1'
 
 /**
  * The quiet half of an editable row: "show only issues like this one".
@@ -83,11 +97,42 @@ export function DetailPanel() {
   const [annotationDraft, setAnnotationDraft] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editingBody, setEditingBody] = useState('')
+  // Description and Annotations render via dangerouslySetInnerHTML directly
+  // (not <MarkdownBody>, which already does this itself) — these two refs
+  // let the same ```mermaid post-render pass run here once the HTML is
+  // actually attached to the document.
+  const descRef = useRef<HTMLDivElement | null>(null)
+  const annotationsRef = useRef<HTMLDivElement | null>(null)
 
   const [wideMode, setWideMode] = useState<boolean>(() => {
     if (typeof localStorage === 'undefined') return false
     try { return localStorage.getItem(WIDE_MODE_KEY) === '1' } catch { return false }
   })
+  // Full screen is a size preset on top of modal mode, not a third
+  // independent mode — it only has a visible effect while wideMode is on,
+  // so its own toggle button only renders then (see the header buttons).
+  const [fullScreen, setFullScreen] = useState<boolean>(() => {
+    if (typeof localStorage === 'undefined') return false
+    try { return localStorage.getItem(FULLSCREEN_KEY) === '1' } catch { return false }
+  })
+  const toggleFullScreen = useCallback(() => {
+    setFullScreen((prev) => {
+      const next = !prev
+      try { localStorage.setItem(FULLSCREEN_KEY, next ? '1' : '0') } catch { /* silent */ }
+      return next
+    })
+  }, [])
+  const [annotationsOpen, setAnnotationsOpen] = useState<boolean>(() => {
+    if (typeof localStorage === 'undefined') return true
+    try { return localStorage.getItem(ANNOTATIONS_OPEN_KEY) !== '0' } catch { return true }
+  })
+  const toggleAnnotationsOpen = useCallback(() => {
+    setAnnotationsOpen((prev) => {
+      const next = !prev
+      try { localStorage.setItem(ANNOTATIONS_OPEN_KEY, next ? '1' : '0') } catch { /* silent */ }
+      return next
+    })
+  }, [])
   const [textSize, cycleTextSize] = useDetailTextSize()
 
   const toggleWide = useCallback(() => {
@@ -224,6 +269,26 @@ export function DetailPanel() {
     return () => { cancelled = true }
   }, [issueId, detailNonce])
 
+  // Description's HTML is set via dangerouslySetInnerHTML above, which runs
+  // during render — by the time this effect fires, descRef.current already
+  // has the real nodes attached to the document, which is what a ```mermaid
+  // block needs to render (see renderMermaidIn).
+  useEffect(() => {
+    if (!descRef.current) return
+    void renderMermaidIn(descRef.current)
+  }, [description, descLoading])
+
+  // Same idea for annotations — re-runs when the list changes, and when
+  // closing an edit (editingId back to null) swaps a textarea back for the
+  // rendered body. Depends on graph.data.annotations directly (the
+  // per-issue filtered `annotations` array is computed further down, after
+  // the early `if (!issue) return null` — can't reference it from a hook,
+  // which has to run unconditionally above that point).
+  useEffect(() => {
+    if (!annotationsRef.current) return
+    void renderMermaidIn(annotationsRef.current)
+  }, [graph?.data.annotations, issueId, editingId, annotationsOpen])
+
   // Viewport-adaptive max: never wider than 75% of the window, never wider
   // than 1200px (long-form reading column ceiling). Re-derived on window
   // resize so the hook's clamp tracks the current viewport.
@@ -254,6 +319,9 @@ export function DetailPanel() {
     min: 600,
     max: wideMax,
     side: 'right',
+    // Modal mode is centered (translate(-50%, -50%)), not right-docked —
+    // see the `symmetric` option's own comment in useResizable.
+    symmetric: true,
   })
   const active = wideMode ? wide : side
   const activeMax = wideMode ? wideMax : sideMax
@@ -343,15 +411,25 @@ export function DetailPanel() {
   const hierarchy = resolveHierarchy(issue, byId)
 
   return (
-    <aside
-      className={[
-        'detail-panel',
-        `detail-text-${textSize}`,
-        wideMode ? 'is-wide' : '',
-        resizing ? 'is-resizing' : '',
-      ].filter(Boolean).join(' ')}
-      style={wideMode ? { width: renderedWidth } : { width: renderedWidth, flexShrink: 0 }}
-    >
+    <>
+      {/* Modal mode's backdrop — click it to collapse back to the docked
+          side panel (same as pressing 'm' again). Not a close; focusedId
+          and the rest of the panel's state are untouched. */}
+      {wideMode && <div className="detail-modal-backdrop" onClick={toggleWide} />}
+      <aside
+        className={[
+          'detail-panel',
+          `detail-text-${textSize}`,
+          wideMode ? 'is-wide' : '',
+          wideMode && fullScreen ? 'is-fullscreen' : '',
+          resizing ? 'is-resizing' : '',
+        ].filter(Boolean).join(' ')}
+        style={
+          wideMode && fullScreen
+            ? undefined
+            : wideMode ? { width: renderedWidth } : { width: renderedWidth, flexShrink: 0 }
+        }
+      >
       <div className="resize-handle resize-handle-left" onMouseDown={startResize} title="Drag to resize" />
       <div className="detail-header">
         <h2>
@@ -361,7 +439,9 @@ export function DetailPanel() {
             onClick={() => void copyIdentifier(issue.identifier)}
             title={copied ? t('detailPanel.copied') : t('detailPanel.copyId')}
             aria-label={t('detailPanel.copyIdAria', { id: issue.identifier })}
+            style={{ '--identifier-state': stateColorVar(issue.state.type) } as CSSProperties}
           >
+            <span className="detail-identifier-dot" aria-hidden />
             <span className="detail-identifier-text">{issue.identifier}</span>
             {copied && (
               <span className="detail-identifier-icon" aria-hidden>
@@ -388,6 +468,20 @@ export function DetailPanel() {
         >
           {wideMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
         </button>
+        {/* Full screen is a size preset of modal mode, not a mode of its own —
+            only meaningful once you're already in the modal, so the button
+            only exists then. Separate icon family (Maximize/Minimize, no
+            "2") so it doesn't read as the same control as the one above. */}
+        {wideMode && (
+          <button
+            className="icon-only"
+            onClick={toggleFullScreen}
+            title={fullScreen ? t('detailPanel.collapseFullScreen') : t('detailPanel.expandFullScreen')}
+            aria-label={fullScreen ? t('detailPanel.collapseFullScreen') : t('detailPanel.expandFullScreen')}
+          >
+            {fullScreen ? <Minimize size={16} /> : <Maximize size={16} />}
+          </button>
+        )}
         <button
           className="icon-only detail-close"
           onClick={() => setDetailPanelOpen(false)}
@@ -412,208 +506,223 @@ export function DetailPanel() {
             Filtering keeps its place but says what it does instead of
             repeating the value a second time, which is what made the old row
             read as two identical controls. */}
-        <div className="row">
-          <span className="k">{t('detailPanel.state')}</span>
-          {writable ? (
-            <>
-              <StatusControl issue={issue} />
-              <FilterOnlyButton
+        <div className="detail-controls-row">
+          <div className="row">
+            <span className="k">{t('detailPanel.state')}</span>
+            {writable ? (
+              <>
+                <StatusControl issue={issue} />
+                <FilterOnlyButton
+                  onClick={() => { setFilter('stateTypes', [issue.state.type]); setDetailPanelOpen(false) }}
+                  title={t('detailPanel.filterByState', { value: stateLabelFor(issue.state.type, locale) })}
+                />
+              </>
+            ) : (
+              <button
+                type="button"
+                className={`state-pill detail-state-pill is-${issue.state.type}`}
+                style={{ color: stateColorVar(issue.state.type) }}
                 onClick={() => { setFilter('stateTypes', [issue.state.type]); setDetailPanelOpen(false) }}
                 title={t('detailPanel.filterByState', { value: stateLabelFor(issue.state.type, locale) })}
-              />
-            </>
-          ) : (
-            <button
-              type="button"
-              className={`state-pill detail-state-pill is-${issue.state.type}`}
-              style={{ color: stateColorVar(issue.state.type) }}
-              onClick={() => { setFilter('stateTypes', [issue.state.type]); setDetailPanelOpen(false) }}
-              title={t('detailPanel.filterByState', { value: stateLabelFor(issue.state.type, locale) })}
-            >
-              <span className="glyph" aria-hidden>{stateIcon(issue.state.type)}</span>
-              <span>{issue.state.name}</span>
-            </button>
-          )}
-        </div>
-        <div className="row">
-          <span className="k">{t('detailPanel.priority')}</span>
-          {writable ? (
-            <>
-              <PriorityControl issue={issue} />
-              <FilterOnlyButton
+              >
+                <span className="glyph" aria-hidden>{stateIcon(issue.state.type)}</span>
+                <span>{issue.state.name}</span>
+              </button>
+            )}
+          </div>
+          <div className="row">
+            <span className="k">{t('detailPanel.priority')}</span>
+            {writable ? (
+              <>
+                <PriorityControl issue={issue} />
+                <FilterOnlyButton
+                  onClick={() => { setFilter('priorities', [issue.priority]); setDetailPanelOpen(false) }}
+                  title={t('detailPanel.filterByPriority', { value: priorityLabelFor(issue.priority, locale) })}
+                />
+              </>
+            ) : (
+              <button
+                type="button"
+                className="detail-filter-link"
                 onClick={() => { setFilter('priorities', [issue.priority]); setDetailPanelOpen(false) }}
                 title={t('detailPanel.filterByPriority', { value: priorityLabelFor(issue.priority, locale) })}
-              />
-            </>
-          ) : (
-            <button
-              type="button"
-              className="detail-filter-link"
-              onClick={() => { setFilter('priorities', [issue.priority]); setDetailPanelOpen(false) }}
-              title={t('detailPanel.filterByPriority', { value: priorityLabelFor(issue.priority, locale) })}
-            >
-              {priorityLabelFor(issue.priority, locale)}
-            </button>
-          )}
-        </div>
-        <div className="row">
-          <span className="k">{t('detailPanel.assignee')}</span>
-          {writable ? (
-            <>
-              <AssigneeControl issue={issue} />
-              <FilterOnlyButton
+              >
+                {priorityLabelFor(issue.priority, locale)}
+              </button>
+            )}
+          </div>
+          <div className="row">
+            <span className="k">{t('detailPanel.assignee')}</span>
+            {writable ? (
+              <>
+                <AssigneeControl issue={issue} />
+                <FilterOnlyButton
+                  onClick={() => { setFilter('assignees', [issue.assignee?.displayName ?? '(unassigned)']); setDetailPanelOpen(false) }}
+                  title={t('detailPanel.filterByAssignee', { value: issue.assignee?.displayName ?? t('detailPanel.unassignedShort') })}
+                />
+              </>
+            ) : (
+              <button
+                type="button"
+                className="detail-filter-link"
                 onClick={() => { setFilter('assignees', [issue.assignee?.displayName ?? '(unassigned)']); setDetailPanelOpen(false) }}
                 title={t('detailPanel.filterByAssignee', { value: issue.assignee?.displayName ?? t('detailPanel.unassignedShort') })}
-              />
-            </>
-          ) : (
-            <button
-              type="button"
-              className="detail-filter-link"
-              onClick={() => { setFilter('assignees', [issue.assignee?.displayName ?? '(unassigned)']); setDetailPanelOpen(false) }}
-              title={t('detailPanel.filterByAssignee', { value: issue.assignee?.displayName ?? t('detailPanel.unassignedShort') })}
-            >
-              {issue.assignee?.displayName ?? t('detailPanel.unassignedShort')}
-            </button>
-          )}
+              >
+                {issue.assignee?.displayName ?? t('detailPanel.unassignedShort')}
+              </button>
+            )}
+          </div>
         </div>
-        <div className="row">
+
+        <div className="meta-grid">
           <span className="k">{t('detailPanel.project')}</span>
           {issue.project ? (
             <button
               type="button"
-              className="detail-filter-link"
+              className="detail-filter-link v"
               onClick={() => { setFilter('projectIds', [issue.project!.id]); setDetailPanelOpen(false) }}
               title={t('detailPanel.filterByProject', { value: issue.project.name })}
             >
               {issue.project.name}
             </button>
           ) : (
-            <span style={{ color: 'var(--fg-muted)' }}>—</span>
+            <span className="v" style={{ color: 'var(--fg-faint)' }}>—</span>
           )}
-        </div>
-        {/* Milestone row only renders when the issue has a project — a
-            milestone without a project isn't representable in Linear's data
-            model and would have no filter key. Mirrors the milestone view's
-            "skip projectless issues" rule. */}
-        {issue.project && (
-          <div className="row">
-            <span className="k">{t('detailPanel.milestone')}</span>
-            {issue.projectMilestone ? (
-              <button
-                type="button"
-                className="detail-filter-link"
-                onClick={() => {
-                  setFilter('milestoneIds', [
-                    milestoneFilterKey(issue.project!.id, issue.projectMilestone!.id),
-                  ])
-                  setDetailPanelOpen(false)
-                }}
-                title={t('detailPanel.filterByMilestone', { value: issue.projectMilestone.name })}
-              >
-                {issue.projectMilestone.name}
-              </button>
-            ) : (
-              <span style={{ color: 'var(--fg-muted)' }}>{t('detailPanel.noMilestone')}</span>
-            )}
-          </div>
-        )}
-        {issue.team && (
-          <div className="row">
-            <span className="k">{t('detailPanel.team')}</span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              {issue.team.color && (
-                <span
-                  aria-hidden
-                  style={{
-                    display: 'inline-block',
-                    width: 8,
-                    height: 8,
-                    borderRadius: 999,
-                    background: issue.team.color,
+          {/* Milestone only renders when the issue has a project — a
+              milestone without a project isn't representable in Linear's
+              data model and would have no filter key. Mirrors the milestone
+              view's "skip projectless issues" rule. */}
+          {issue.project && (
+            <>
+              <span className="k">{t('detailPanel.milestone')}</span>
+              {issue.projectMilestone ? (
+                <button
+                  type="button"
+                  className="detail-filter-link v"
+                  onClick={() => {
+                    setFilter('milestoneIds', [
+                      milestoneFilterKey(issue.project!.id, issue.projectMilestone!.id),
+                    ])
+                    setDetailPanelOpen(false)
                   }}
-                />
+                  title={t('detailPanel.filterByMilestone', { value: issue.projectMilestone.name })}
+                >
+                  {issue.projectMilestone.name}
+                </button>
+              ) : (
+                <span className="v" style={{ color: 'var(--fg-faint)' }}>{t('detailPanel.noMilestone')}</span>
               )}
-              <span>
-                {issue.team.name}
-                {issue.team.key && (
-                  <span style={{ color: 'var(--fg-muted)', marginLeft: 6 }}>
-                    {issue.team.key}
+            </>
+          )}
+          {issue.team && (
+            <>
+              <span className="k">{t('detailPanel.team')}</span>
+              <span className="v" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                {issue.team.color && (
+                  <span
+                    aria-hidden
+                    style={{
+                      display: 'inline-block',
+                      width: 8,
+                      height: 8,
+                      borderRadius: 999,
+                      background: issue.team.color,
+                    }}
+                  />
+                )}
+                <span>
+                  {issue.team.name}
+                  {issue.team.key && (
+                    <span style={{ color: 'var(--fg-faint)', marginLeft: 6 }}>
+                      {issue.team.key}
+                    </span>
+                  )}
+                </span>
+              </span>
+            </>
+          )}
+          {typeof issue.estimate === 'number' && (
+            <>
+              <span className="k">{t('detailPanel.estimate')}</span>
+              <span className="v">{t('detailPanel.estimatePointsShort', { value: issue.estimate })}</span>
+            </>
+          )}
+          {issue.dueDate && (
+            <>
+              <span className="k">{t('detailPanel.dueDate')}</span>
+              <span
+                className="v mono"
+                title={issue.dueDate}
+                style={
+                  isOverdueIssue(issue)
+                    ? { color: 'var(--danger, #ef4444)', fontWeight: 600 }
+                    : undefined
+                }
+              >
+                {issue.dueDate}
+                {isOverdueIssue(issue) && (
+                  <span style={{ marginLeft: 6, fontSize: 11 }}>
+                    · {t('detailPanel.overdue')}
                   </span>
                 )}
               </span>
-            </span>
-          </div>
-        )}
-        {typeof issue.estimate === 'number' && (
-          <div className="row">
-            <span className="k">{t('detailPanel.estimate')}</span>
-            <span>{t('detailPanel.estimatePointsShort', { value: issue.estimate })}</span>
-          </div>
-        )}
-        {issue.dueDate && (
-          <div className="row">
-            <span className="k">{t('detailPanel.dueDate')}</span>
-            <span
-              title={issue.dueDate}
-              style={
-                isOverdueIssue(issue)
-                  ? { color: 'var(--danger, #ef4444)', fontWeight: 600 }
-                  : undefined
-              }
-            >
-              {issue.dueDate}
-              {isOverdueIssue(issue) && (
-                <span style={{ marginLeft: 6, fontSize: 11 }}>
-                  · {t('detailPanel.overdue')}
-                </span>
-              )}
-            </span>
-          </div>
-        )}
-        {issue.startedAt && (
-          <div className="row">
-            <span className="k">{t('detailPanel.startedAt')}</span>
-            <span title={issue.startedAt}>{timeAgo(issue.startedAt, locale)}</span>
-          </div>
-        )}
-        <div className="row"><span className="k">{t('detailPanel.created')}</span><span>{timeAgo(issue.createdAt, locale)}</span></div>
-        <div className="row"><span className="k">{t('detailPanel.updated')}</span><span>{timeAgo(issue.updatedAt, locale)}</span></div>
-        {/* Every label on the issue, one row per schema section. Driven by
+            </>
+          )}
+          {issue.startedAt && (
+            <>
+              <span className="k">{t('detailPanel.startedAt')}</span>
+              <span className="v mono" title={issue.startedAt}>{timeAgo(issue.startedAt, locale)}</span>
+            </>
+          )}
+          <span className="k">{t('detailPanel.created')}</span>
+          <span className="v mono">{timeAgo(issue.createdAt, locale)}</span>
+          <span className="k">{t('detailPanel.updated')}</span>
+          <span className="v mono">{timeAgo(issue.updatedAt, locale)}</span>
+        </div>
+        {/* Every label on the issue, one field per schema section. Driven by
             groupIssueLabels rather than by looking up the groups the schema
             named, so a label from a group autodetection has not classified
             (or has not seen yet) still surfaces under "Labels" instead of
-            vanishing. Chips filter the dimension they belong to, matching the
-            state/priority/assignee rows above. */}
-        {labelSections.map((sec) => (
-          <div className="row" key={`${sec.kind}:${sec.key}`}>
-            <span className="k">
-              {sec.kind === 'prefix' ? `${sec.key}:` : sec.kind === 'orphan' ? t('detailPanel.labels') : sec.key}
-            </span>
-            <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {sec.labels.map((l) => (
-                <span key={l.id} className="detail-label-chip">
-                <button
-                  type="button"
-                  className="detail-filter-link"
-                  onClick={() => { applyLabelFilter(sec, l.id); setDetailPanelOpen(false) }}
-                  title={
-                    sec.kind === 'orphan'
-                      ? t('detailPanel.filterByLabel', { value: l.name })
-                      : t('detailPanel.filterByGroup', {
-                          group: sec.kind === 'prefix' ? `${sec.key}:` : sec.key,
-                          value: l.name,
-                        })
-                  }
-                >
-                  {sec.kind === 'prefix' ? shortPrefixDisplay(l.name, sec.key) : l.name}
-                </button>
-                <LabelRemoveButton issue={issue} label={l} />
+            vanishing. Chips filter the dimension they belong to, matching
+            the state/priority/assignee rows above.
+
+            A flex-wrap row, not more rows in the meta-grid above: each field
+            here is a short label + one or two chips, nothing like Project's
+            or Milestone's long values, so forcing one per grid row wastes
+            most of a wide panel's width. Wrapping packs 2-3 per line when
+            there's room and falls back to one-per-line in the narrow docked
+            panel — same content, no fixed column count to get wrong. */}
+        <div className="detail-label-row">
+          {labelSections.map((sec) => (
+            <div className="detail-label-field" key={`${sec.kind}:${sec.key}`}>
+              <span className="k">
+                {sec.kind === 'prefix' ? `${sec.key}:` : sec.kind === 'orphan' ? t('detailPanel.labels') : sec.key}
               </span>
-              ))}
-            </span>
-          </div>
-        ))}
+              <span className="v chips">
+                {sec.labels.map((l) => (
+                  <span key={l.id} className="detail-label-chip">
+                  <button
+                    type="button"
+                    className="detail-filter-link"
+                    onClick={() => { applyLabelFilter(sec, l.id); setDetailPanelOpen(false) }}
+                    title={
+                      sec.kind === 'orphan'
+                        ? t('detailPanel.filterByLabel', { value: l.name })
+                        : t('detailPanel.filterByGroup', {
+                            group: sec.kind === 'prefix' ? `${sec.key}:` : sec.key,
+                            value: l.name,
+                          })
+                    }
+                  >
+                    {sec.kind === 'prefix' ? shortPrefixDisplay(l.name, sec.key) : l.name}
+                  </button>
+                  <LabelRemoveButton issue={issue} label={l} />
+                </span>
+                ))}
+              </span>
+            </div>
+          ))}
+        </div>
         <LabelAddControl issue={issue} />
       </div>
 
@@ -749,39 +858,56 @@ export function DetailPanel() {
       )}
 
       <div className="section">
-        <h3>{t('detailPanel.annotations', { count: annotations.length })}</h3>
-        {annotations.map((a) => (
-          <div key={a.id} style={{ borderTop: '1px solid var(--node-border)', paddingTop: 6, marginTop: 6 }}>
-            {editingId === a.id ? (
-              <>
-                <textarea value={editingBody} onChange={(e) => setEditingBody(e.target.value)} rows={3} style={{ width: '100%' }} />
-                <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-                  <button className="primary" onClick={saveEdit}>{t('common.save')}</button>
-                  <button onClick={() => setEditingId(null)}>{t('common.cancel')}</button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div dangerouslySetInnerHTML={{ __html: renderMarkdownHtml(a.body) }} />
-                <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-                  <button onClick={() => { setEditingId(a.id); setEditingBody(a.body) }}>{t('common.edit')}</button>
-                  <button onClick={() => remove(a.id)}>{t('common.delete')}</button>
-                  <span style={{ color: 'var(--fg-muted)', fontSize: 11, marginLeft: 'auto' }}>
-                    {timeAgo(new Date(a.updatedAt).toISOString(), locale)}
-                  </span>
-                </div>
-              </>
-            )}
-          </div>
-        ))}
-        <textarea
-          rows={3}
-          placeholder={t('detailPanel.addAnnotationPlaceholder')}
-          value={annotationDraft}
-          onChange={(e) => setAnnotationDraft(e.target.value)}
-          style={{ width: '100%', marginTop: 6 }}
-        />
-        <button className="primary" onClick={submitAnnotation} style={{ marginTop: 4 }}>{t('detailPanel.addAnnotation')}</button>
+        <div className="section-head-row">
+          <h3>{t('detailPanel.annotations', { count: annotations.length })}</h3>
+          <button
+            type="button"
+            className="icon-only"
+            onClick={toggleAnnotationsOpen}
+            title={annotationsOpen ? t('detailPanel.collapseAnnotations') : t('detailPanel.expandAnnotations')}
+            aria-label={annotationsOpen ? t('detailPanel.collapseAnnotations') : t('detailPanel.expandAnnotations')}
+          >
+            {annotationsOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+        </div>
+        {annotationsOpen && (
+          <>
+            <div ref={annotationsRef}>
+            {annotations.map((a) => (
+              <div key={a.id} style={{ borderTop: '1px solid var(--node-border)', paddingTop: 6, marginTop: 6 }}>
+                {editingId === a.id ? (
+                  <>
+                    <textarea value={editingBody} onChange={(e) => setEditingBody(e.target.value)} rows={3} style={{ width: '100%' }} />
+                    <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+                      <button className="primary" onClick={saveEdit}>{t('common.save')}</button>
+                      <button onClick={() => setEditingId(null)}>{t('common.cancel')}</button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="desc-body" dangerouslySetInnerHTML={{ __html: renderMarkdownHtml(a.body) }} />
+                    <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+                      <button onClick={() => { setEditingId(a.id); setEditingBody(a.body) }}>{t('common.edit')}</button>
+                      <button onClick={() => remove(a.id)}>{t('common.delete')}</button>
+                      <span style={{ color: 'var(--fg-muted)', fontSize: 11, marginLeft: 'auto' }}>
+                        {timeAgo(new Date(a.updatedAt).toISOString(), locale)}
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+            </div>
+            <textarea
+              rows={3}
+              placeholder={t('detailPanel.addAnnotationPlaceholder')}
+              value={annotationDraft}
+              onChange={(e) => setAnnotationDraft(e.target.value)}
+              style={{ width: '100%', marginTop: 6 }}
+            />
+            <button className="primary" onClick={submitAnnotation} style={{ marginTop: 4 }}>{t('detailPanel.addAnnotation')}</button>
+          </>
+        )}
       </div>
 
       <div className="section">
@@ -795,7 +921,7 @@ export function DetailPanel() {
           </div>
         )}
         {!descLoading && description !== null && (
-          <div dangerouslySetInnerHTML={{ __html: renderMarkdownHtml(description || '', t('detailPanel.noDescription')) }} />
+          <div ref={descRef} className="desc-body" dangerouslySetInnerHTML={{ __html: renderMarkdownHtml(description || '', t('detailPanel.noDescription')) }} />
         )}
         {!descLoading && description === null && <div style={{ color: 'var(--fg-muted)' }}>{t('detailPanel.descriptionLoadFail')}</div>}
       </div>
@@ -838,6 +964,7 @@ export function DetailPanel() {
         ))}
         <CommentComposer identifier={issue.identifier} onPosted={() => setDetailNonce((n) => n + 1)} />
       </div>
-    </aside>
+      </aside>
+    </>
   )
 }

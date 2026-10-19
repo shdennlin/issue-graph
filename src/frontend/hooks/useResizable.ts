@@ -6,6 +6,14 @@ interface Options {
   min: number              // px — clamp lower bound (avoid hidden / unrecoverable)
   max: number              // px — clamp upper bound (avoid eating canvas)
   side: 'left' | 'right'   // which edge the handle lives on
+  // True when the panel is centered (both edges move as width changes, e.g.
+  // the detail panel's modal mode via `transform: translate(-50%, -50%)`).
+  // A centered box's edge moves at HALF the rate of a normal edge-anchored
+  // one for a given width change (growing the box by dw moves each edge by
+  // dw/2, since the center stays put) — so the dragged edge would visually
+  // lag the cursor at the normal 1:1 formula. Doubling the delta here makes
+  // the dragged edge track the cursor again.
+  symmetric?: boolean
 }
 
 interface Result {
@@ -51,7 +59,8 @@ export function useResizable(opts: Options): Result {
     const onMove = (e: MouseEvent) => {
       const drag = dragRef.current
       if (!drag) return
-      const delta = e.clientX - drag.startX
+      const rawDelta = e.clientX - drag.startX
+      const delta = opts.symmetric ? rawDelta * 2 : rawDelta
       // Left panel grows when handle pulled right; right panel grows when handle pulled left.
       const next = opts.side === 'left' ? drag.startW + delta : drag.startW - delta
       const clamped = Math.max(opts.min, Math.min(opts.max, next))
@@ -75,7 +84,7 @@ export function useResizable(opts: Options): Result {
       document.body.style.userSelect = prevUserSelect
       document.body.style.cursor = ''
     }
-  }, [resizing, opts.side, opts.min, opts.max])
+  }, [resizing, opts.side, opts.min, opts.max, opts.symmetric])
 
   // Persist after each width change (debounced via simple setTimeout).
   useEffect(() => {

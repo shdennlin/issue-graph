@@ -658,9 +658,114 @@ a:hover { text-decoration: underline; }
 .resize-handle-left { left: -3px; }
 .detail-panel h2 { margin: 0 0 var(--sp-1); font-size: var(--fs-title); line-height: 1.3; }
 .detail-panel .section { margin-top: var(--sp-4); }
-.detail-panel .section h3 { margin: 0 0 var(--sp-2); font-size: var(--fs-base); font-weight: 600; color: var(--fg-muted); }
+/* Direct child only (`>`), not a plain descendant selector: a descendant
+   match also caught every <h3> that `marked` generates from a `###` line
+   inside rendered markdown (Description, comments, annotations) — those
+   live several levels deeper inside .desc-body / .detail-comment, not
+   straight under .section. That's why a markdown heading like "### 3.
+   Silent fallback…" rendered barely-visible grey while the body text
+   around it was full contrast: this rule's muted color was never meant for
+   it, it just also matched. The .section-head-row branch covers Annotations,
+   whose <h3> sits one level deeper (inside that row) than a plain section
+   title. */
+.detail-panel .section > h3,
+.detail-panel .section > .section-head-row > h3 {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--fg-muted);
+}
+.detail-panel .section > h3 { margin: 0 0 var(--sp-2); }
+/* Markdown headings inside rendered content — the Dracula "rainbow title"
+   convention (one hue per level), not this panel's muted chrome color.
+   Headings are the content's own structure; giving every level the same
+   flat --fg would have fixed the contrast bug but thrown away the level
+   distinction a reader uses to tell "### subsection" from "## section" at
+   a glance. */
+.desc-body h1, .detail-comment h1 { color: var(--md-pink); }
+.desc-body h2, .detail-comment h2 { color: var(--md-purple); }
+.desc-body h3, .detail-comment h3 { color: var(--md-red); }
+.desc-body h4, .detail-comment h4 { color: var(--md-orange); }
+.desc-body h5, .detail-comment h5 { color: var(--md-green); }
+.desc-body h6, .detail-comment h6 { color: var(--md-cyan); }
+.desc-body h1, .desc-body h2, .desc-body h3, .desc-body h4, .desc-body h5, .desc-body h6,
+.detail-comment h1, .detail-comment h2, .detail-comment h3, .detail-comment h4, .detail-comment h5, .detail-comment h6 {
+  margin: 0.8em 0 0.4em;
+}
 .detail-panel .row { display: flex; gap: var(--sp-2); padding: 2px 0; }
 .detail-panel .row .k { color: var(--fg-muted); min-width: 80px; }
+
+/* State / Priority / Assignee — the three fields changed most often. Lays
+   their existing .row markup out side by side instead of stacked, so they
+   read as one compact control strip. Purely a layout wrapper: each .row
+   keeps its own label, write control and "filter only" button unchanged. */
+.detail-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+}
+.detail-controls-row .row { padding: 0; }
+/* The 80px label column (.detail-panel .row .k) exists to align a vertical
+   stack of rows. Side by side that reserved width just bloats each row to
+   near the panel's full content width, so none fit on the same line —
+   not wrapping, just one-per-line at the panel's width. Drop it here. */
+.detail-controls-row .row .k { min-width: 0; }
+
+/* Secondary metadata (Project, Milestone, Team, dates…) — a two-column
+   label/value grid instead of one stacked row per field. Each field now
+   renders its label and value as two direct grid children (no wrapping
+   .row div) so the grid can place them; --fg-faint for labels keeps them
+   a notch quieter than real values without re-using the "body text" muted
+   tone (see --fg-faint comment in tokens.css). */
+.meta-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: var(--sp-3);
+  row-gap: 7px;
+  /* Grid's default stretch makes every value cell fill the whole 1fr
+     column. Invisible for a plain text value, but a value rendered as a
+     bordered/filled pill (Project's .detail-filter-link, see below) then
+     stretches into a big, out-of-place button bar. Values size to their
+     own content by default; .chips opts back into full width because it
+     needs the room to wrap multiple label chips. */
+  justify-items: start;
+}
+.meta-grid .k { color: var(--fg-faint); }
+.meta-grid .v.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+/* Base for any "one or more chips" value, wherever it's used (meta-grid's
+   Team/estimate-adjacent rows today, .detail-label-row below). */
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.meta-grid .v.chips { justify-self: stretch; }
+
+/* Schema label fields (service/Type/horizon/affects/…) — each is a short
+   label + one or two chips, so group label+value as one unit and let units
+   wrap: 2-3 per line in a wide panel, one per line when docked narrow. No
+   fixed column count, so it never has to guess the right number for the
+   current width the way a rigid N-column grid would. */
+.detail-label-row {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--sp-5);
+  row-gap: 7px;
+  margin-top: 7px;
+}
+.detail-label-field {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.detail-label-field .k { color: var(--fg-faint); }
+
+/* A section's title paired with a collapse/expand toggle (Annotations today).
+   Plain .section h3 already carries its own bottom margin; inside this row
+   that margin moves to the row itself so the toggle button stays aligned
+   with the heading's baseline instead of sitting below it. */
+.detail-panel .section-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 var(--sp-2);
+}
+.detail-panel .section-head-row h3 { margin: 0; }
 
 /* Text-size cycle button — pairs the Type icon with a 2-char label
    (sm/md/lg/xl) so users can see the current grade without hovering for
@@ -699,13 +804,22 @@ a:hover { text-decoration: underline; }
 
    Border uses color-mix against --fg-muted so the line reads clearly in
    both light and dark themes — plain --node-border was too close to the
-   dark bg (~2 luminance steps) and tables read as floating text. */
+   dark bg (~2 luminance steps) and tables read as floating text.
+
+   Header/zebra used to be translucent --fg-muted overlays on whatever sat
+   behind them (the panel's own --bg-elev). At low alpha over a dark panel
+   that tint reads as almost nothing — the table barely separated from the
+   surrounding prose. Give the table a real surface (--chip-bg, the same
+   token chips/hover states use to say "this is a distinct, raised thing")
+   instead of a transparency trick, so it reads as a data surface rather
+   than text with thin lines drawn through it. */
 .note-preview table,
 .detail-panel table,
 .project-panel table {
   border-collapse: collapse;
   margin: 0.6em 0;
   font-size: 0.95em;
+  background: var(--chip-bg);
   border: 1px solid color-mix(in srgb, var(--fg-muted) 45%, transparent);
 }
 .note-preview th, .note-preview td,
@@ -719,13 +833,28 @@ a:hover { text-decoration: underline; }
 .note-preview thead th,
 .detail-panel thead th,
 .project-panel thead th {
-  background: color-mix(in srgb, var(--fg-muted) 18%, transparent);
+  background: color-mix(in srgb, var(--fg-muted) 25%, var(--chip-bg));
   font-weight: 600;
 }
 .note-preview tbody tr:nth-child(even) td,
 .detail-panel tbody tr:nth-child(even) td,
 .project-panel tbody tr:nth-child(even) td {
-  background: color-mix(in srgb, var(--fg-muted) 8%, transparent);
+  background: color-mix(in srgb, var(--fg-muted) 10%, var(--chip-bg));
+}
+
+/* Inline code (`foo`) — note-preview already had this; detail/project panel
+   markdown rendering (descriptions, comments) had no rule at all here, so an
+   inline code span fell back to the UA default: monospace font, no
+   background, no visible separation from surrounding prose. Text color is
+   Dracula pink, matching the user's own inline-code-pink.css Obsidian
+   snippet — background pill is this app's own convention, not Obsidian's. */
+.detail-panel code,
+.project-panel code {
+  background: var(--chip-bg);
+  color: var(--md-pink);
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  font-size: 0.9em;
 }
 
 /* Linear comments — card layout so each comment reads as a distinct block
@@ -786,9 +915,13 @@ a:hover { text-decoration: underline; }
 .detail-identifier {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   padding: 1px 6px;
-  border: 1px solid var(--node-border);
+  /* Border tints toward the issue's state color (set as --identifier-state
+     by the component) instead of a separate color block/rail elsewhere on
+     the card — same information, carried by a component that's already
+     there rather than a new decoration. */
+  border: 1px solid color-mix(in srgb, var(--identifier-state, var(--fg-muted)) 40%, var(--node-border));
   border-radius: 4px;
   background: var(--chip-bg);
   color: var(--fg-muted);
@@ -804,6 +937,13 @@ a:hover { text-decoration: underline; }
   /* Vertical alignment is handled by the parent h2's `align-items:
      center` (flex). No vertical-align needed here. */
   transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.detail-identifier-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--identifier-state, var(--fg-muted));
 }
 .detail-identifier:hover {
   background: color-mix(in srgb, var(--accent) 12%, var(--chip-bg));
@@ -848,18 +988,52 @@ a:hover { text-decoration: underline; }
 .detail-resource-link svg { opacity: 0.7; flex-shrink: 0; position: relative; top: 1px; }
 .detail-resource-subtitle { color: var(--fg-muted); }
 
-/* Wide mode — pops the panel out of the flex flow into a fixed overlay
-   on the right. The canvas behind it stays interactive (no backdrop) so
-   you can still pan/click underneath. Width is driven by inline style
-   (its own useResizable instance with `ig-detail-panel-wide-w` storage)
-   so users can drag the same left-edge handle to resize wide mode too. */
+/* Wide mode — a centered modal, not a right-docked drawer. Was previously
+   `position: fixed; top: 0; right: 0; height: 100vh` with no backdrop: a
+   full-height strip pinned to the screen edge. Changed because the panel's
+   own relation links (hierarchy / blocks / related) jump to another issue
+   while reading one — the point of "maximize" here is "let me read this
+   one issue without losing the graph", not "replace the graph with a
+   sidebar". A centered modal with a dimmed backdrop keeps the canvas
+   present (if dark) behind it and gives a click-outside-to-close target;
+   a right-pinned full-height strip gave neither. Width is still driven by
+   inline style (its own useResizable instance, `ig-detail-panel-wide-w`
+   storage) so the same left-edge handle keeps working to resize it. */
 .detail-panel.is-wide {
   position: fixed;
-  top: 0;
-  right: 0;
-  height: 100vh;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  height: auto;
+  max-height: 86vh;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--node-border);
   z-index: 50;
-  box-shadow: -8px 0 24px color-mix(in srgb, var(--fg) 30%, transparent);
+  box-shadow: 0 32px 72px color-mix(in srgb, var(--bg) 55%, transparent);
+}
+/* Dimmed backdrop behind the modal — click it to exit wide mode (the panel
+   stays open, focused on the same issue; this only collapses the modal
+   back to the docked side panel). Sits just under the panel's z-index. */
+.detail-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 49;
+  background: color-mix(in srgb, var(--bg) 65%, transparent);
+}
+
+/* Full screen — a size preset on top of modal mode (toggled independently
+   of wideMode; see the component), not a mode of its own. Overrides the
+   dragged width with a near-viewport size and drops the modal's own
+   chrome (radius/border/shadow), since at this size it reads as a page,
+   not a floating card. */
+.detail-panel.is-wide.is-fullscreen {
+  width: 98vw !important;
+  max-width: 98vw;
+  height: 96vh;
+  max-height: 96vh;
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
 }
 
 /* Text size — relative offsets from whatever the global font scale resolves
@@ -2371,6 +2545,7 @@ label + .settings-help {
 .note-preview ul, .note-preview ol { margin: 0.5em 0; padding-left: 1.6em; }
 .note-preview code {
   background: var(--chip-bg);
+  color: var(--md-pink);
   padding: 1px 4px;
   border-radius: var(--radius-sm);
   font-size: 0.9em;
@@ -2411,19 +2586,157 @@ label + .settings-help {
 }
 .detail-panel pre code,
 .project-panel pre code,
-.note-preview pre code { padding: 0; background: transparent; }
+.note-preview pre code {
+  padding: 0;
+  background: transparent;
+  /* Reset off the pink `code` rule above — only an inline span should be
+     pink; a code block's own plain (non-keyword) text uses normal body
+     contrast, with only the four token classes below carrying color. */
+  color: var(--fg);
+}
+/* Dracula's actual token-color mapping (VS Code's dracula.json
+   tokenColors, cross-checked against the Obsidian port): keyword pink,
+   string yellow, constant/number purple, comment blue-gray italic. The
+   previous choice (accent/ok/warn/fg-muted) wasn't wrong, just a
+   different, unrelated palette — this one is intentionally Dracula's. */
 .detail-panel .syntax-keyword,
 .project-panel .syntax-keyword,
-.note-preview .syntax-keyword { color: var(--accent); font-weight: 600; }
+.note-preview .syntax-keyword { color: var(--md-pink); font-weight: 600; }
 .detail-panel .syntax-string,
 .project-panel .syntax-string,
-.note-preview .syntax-string { color: var(--ok); }
+.note-preview .syntax-string { color: var(--md-yellow); }
 .detail-panel .syntax-number,
 .project-panel .syntax-number,
-.note-preview .syntax-number { color: var(--warn); }
+.note-preview .syntax-number { color: var(--md-purple); }
 .detail-panel .syntax-comment,
 .project-panel .syntax-comment,
-.note-preview .syntax-comment { color: var(--fg-muted); font-style: italic; }
+.note-preview .syntax-comment { color: var(--md-comment); font-style: italic; }
+
+/* Mermaid diagrams AND large inline images share this chrome — fit-to-
+   viewport + drag/wheel pan-zoom, built by mermaidPanZoom.ts (the class
+   names predate images joining in, hence the name). Either can be bigger
+   than the panel (an architecture graph with a dozen nodes easily runs
+   1000px+ wide; so does a pasted screenshot), so this bounds it to a
+   reasonable inline height and lets the bounded box itself be the pan/zoom
+   surface, same shape as Notion's embeds. Small images (icons, avatars)
+   are left as plain <img> — see wireImagesIn's size threshold. */
+.mermaid-diagram {
+  position: relative;
+  margin: 0.6em 0;
+  background: var(--chip-bg);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.mermaid-viewport {
+  height: min(420px, 48vh);
+  min-height: 160px;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  position: relative;
+}
+.mermaid-viewport.is-dragging { cursor: grabbing; }
+.mermaid-stage {
+  transform-origin: 0 0;
+  will-change: transform;
+}
+.mermaid-toolbar {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  gap: 4px;
+  opacity: 0.5;
+  transition: opacity 120ms ease;
+}
+.mermaid-diagram:hover .mermaid-toolbar,
+.mermaid-diagram:focus-within .mermaid-toolbar { opacity: 1; }
+.mermaid-btn {
+  all: unset;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--fg-muted);
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.mermaid-btn:hover { color: var(--fg); border-color: var(--fg-faint); }
+.mermaid-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.mermaid-error-text {
+  color: var(--danger);
+  font-size: var(--fs-meta);
+  margin-bottom: 4px;
+}
+.mermaid-error {
+  opacity: 0.7;
+}
+
+/* Expanded view — a single reused overlay (see getOverlay in
+   mermaidPanZoom.ts), not one per diagram. z-index clears the detail
+   panel's own modal mode (z-index 50) since "expand" can be clicked from
+   inside it. */
+.mermaid-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+}
+.mermaid-overlay.is-open { display: block; }
+.mermaid-overlay-backdrop {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+}
+.mermaid-overlay-panel {
+  position: absolute;
+  inset: 4vh 4vw;
+  background: var(--bg-elev);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 32px 72px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+.mermaid-overlay-viewport {
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+.mermaid-overlay-viewport.is-dragging { cursor: grabbing; }
+.mermaid-overlay-toolbar {
+  position: absolute;
+  right: 48px;
+  bottom: 16px;
+}
+.mermaid-overlay-toolbar .mermaid-btn {
+  width: 28px;
+  height: 28px;
+  font-size: 15px;
+}
+.mermaid-overlay-close {
+  all: unset;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.mermaid-overlay-close:hover { color: var(--fg); background: var(--chip-bg); }
+
 .note-preview a { color: var(--accent); text-decoration: underline; }
 .note-preview a.issue-link {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
