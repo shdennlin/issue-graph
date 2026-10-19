@@ -135,6 +135,29 @@ function pinNaturalSize(media: MediaEl, w: number, h: number) {
   media.style.maxWidth = 'none'
 }
 
+// mermaid's SVG carries its own <style> block for theming (fills, edge
+// colors, …) — unlike a `style` attribute, a <style> *element* is not
+// scoped to the SVG it sits in; once it's anywhere in the real document it
+// applies document-wide. The diagram's source (and therefore what ends up
+// in that CSS — mermaid's `%%{init}%%` directives support a themeCSS
+// override) is issue/comment content, i.e. the same trust level as the
+// rest of rendered markdown, not something to let loose on the whole page.
+// DOMPurify sanitizes the markup but has no way to know which selectors
+// are "safe" — scope the CSS at the DOM level instead: mount the SVG in a
+// shadow root, where the platform guarantees a <style> inside only affects
+// that shadow tree, full stop, regardless of what the selectors say. An
+// <img> carries no such risk and stays in the light DOM.
+function mountMedia(stage: HTMLElement, media: MediaEl) {
+  if (media instanceof SVGSVGElement) {
+    const host = document.createElement('div')
+    host.style.display = 'contents'
+    host.attachShadow({ mode: 'open' }).appendChild(media)
+    stage.appendChild(host)
+  } else {
+    stage.appendChild(media)
+  }
+}
+
 function toolbarHtml(withExpand: boolean): string {
   return `
     <div class="mermaid-toolbar">
@@ -204,7 +227,8 @@ function openExpanded(media: MediaEl) {
   const { overlay: el, viewport, stage, state } = getOverlay()
   const { w, h } = readNaturalSize(media)
   const clone = media.cloneNode(true) as MediaEl
-  stage.replaceChildren(clone)
+  stage.replaceChildren()
+  mountMedia(stage, clone)
   pinNaturalSize(clone, w, h)
   state.naturalW = w
   state.naturalH = h
@@ -212,9 +236,9 @@ function openExpanded(media: MediaEl) {
   requestAnimationFrame(() => fitToViewport(viewport, stage, state))
 }
 
-/** Wraps a just-inserted, already-in-the-live-DOM mermaid SVG or image with
- *  the fit/pan/zoom/expand chrome. `container` is the element `media` was
- *  placed into (its only child); replaces that child in place. */
+/** Wraps an already-sanitized, not-yet-attached mermaid SVG or an in-DOM
+ *  <img> with the fit/pan/zoom/expand chrome, placing it inside `container`
+ *  (which becomes its parent). */
 function wireMedia(container: HTMLElement, media: MediaEl) {
   const { w, h } = readNaturalSize(media)
 
@@ -224,8 +248,8 @@ function wireMedia(container: HTMLElement, media: MediaEl) {
   stage.className = 'mermaid-stage'
   viewport.appendChild(stage)
 
-  container.insertBefore(viewport, media)
-  stage.appendChild(media)
+  container.appendChild(viewport)
+  mountMedia(stage, media)
   pinNaturalSize(media, w, h)
 
   const toolbar = document.createElement('div')
@@ -238,12 +262,13 @@ function wireMedia(container: HTMLElement, media: MediaEl) {
   requestAnimationFrame(() => fitToViewport(viewport, stage, state))
 }
 
-/** Wraps a just-inserted, already-in-the-live-DOM mermaid SVG with the
- *  fit/pan/zoom/expand chrome. `container` is the element the SVG was
- *  placed into (its only child); replaces that child in place. */
-export function wireMermaidDiagram(container: HTMLElement) {
-  const svg = container.querySelector<SVGSVGElement>('svg')
-  if (!svg) return
+/** Wires up a sanitized-but-not-yet-attached mermaid SVG with the
+ *  fit/pan/zoom/expand chrome, inside `container` (not yet in the
+ *  document either). Takes the detached element rather than querying it
+ *  out of `container`'s innerHTML so the SVG (and its <style> block — see
+ *  mountMedia) is never attached to the real, light-DOM document except
+ *  already inside its isolating shadow root. */
+export function wireMermaidDiagram(container: HTMLElement, svg: SVGSVGElement) {
   wireMedia(container, svg)
 }
 

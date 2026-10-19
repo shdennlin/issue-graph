@@ -129,18 +129,31 @@ export async function renderMermaidIn(root: ParentNode): Promise<void> {
     const source = pre.dataset.mermaidSource ?? ''
     try {
       const { svg } = await mermaid.render(`mermaid-${++mermaidSeq}`, source)
+      // The diagram SOURCE is issue/comment content (mermaid supports HTML
+      // node labels and a themeCSS override), so the rendered SVG isn't any
+      // more trustworthy than the markdown it came from — sanitize it the
+      // same way, just with an SVG-aware profile instead of marked's
+      // default HTML one.
+      const sanitized = DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } })
+      // Parsed into a <template>, not assigned as some light-DOM element's
+      // innerHTML — a <template>'s content is an inert DocumentFragment, so
+      // the <style> block mermaid embeds for theming never applies to the
+      // real document even for an instant. wireMermaidDiagram mounts the
+      // extracted <svg> (not this template) into a shadow root, where a
+      // browser-enforced boundary keeps that CSS scoped to the diagram
+      // regardless of what selectors are in it — DOMPurify sanitizes the
+      // markup but can't know which selectors are "safe".
+      const template = document.createElement('template')
+      template.innerHTML = sanitized
+      const svgEl = template.content.querySelector('svg')
+      if (!svgEl) throw new Error('sanitized mermaid output had no <svg>')
       const wrapper = document.createElement('div')
       wrapper.className = 'mermaid-diagram'
-      // The diagram SOURCE is issue/comment content (mermaid supports HTML
-      // node labels), so the rendered SVG isn't any more trustworthy than
-      // the markdown it came from — sanitize it the same way, just with an
-      // SVG-aware profile instead of marked's default HTML one.
-      wrapper.innerHTML = DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } })
       pre.replaceWith(wrapper)
       // Fit-to-viewport + drag/wheel pan-zoom + expand-to-overlay chrome —
       // a diagram this size is routinely bigger than the panel. See
       // mermaidPanZoom.ts.
-      wireMermaidDiagram(wrapper)
+      wireMermaidDiagram(wrapper, svgEl)
     } catch (err) {
       // Leave the source visible rather than an empty gap — a malformed
       // diagram is still useful as text, and the error names what broke.
