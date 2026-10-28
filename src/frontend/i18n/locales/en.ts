@@ -139,6 +139,7 @@ export const en = {
     webhookSecret: 'Signing secret',
     webhookSecretSet: '(set — type to replace, leave blank to keep)',
     webhookSecretUnset: '(not set — webhook disabled)',
+    webhookSecretPlaceholder: 'type to replace',
     webhookAccepted: 'Accepted: {count} · last {when}',
     webhookRejected: 'Rejected: {count} · last reason {reason}',
     webhookNever: 'never',

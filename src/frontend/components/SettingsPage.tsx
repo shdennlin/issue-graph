@@ -577,13 +577,17 @@ export function SettingsPage() {
         </div>
         <label className="settings-field">
           {t('settings.webhookSecret')}{' '}
+          {/* The state lives in plain text, not the placeholder: a placeholder is
+              faint, truncates in a narrow field, and vanishes on the first
+              keystroke — which left "is it set?" unanswerable. */}
+          <span style={data?.webhook?.secret_set ? undefined : { color: 'var(--danger)' }}>
+            {data?.webhook?.secret_set ? t('settings.webhookSecretSet') : t('settings.webhookSecretUnset')}
+          </span>{' '}
           <input
             className="settings-secret-input"
             type="password"
             autoComplete="off"
-            placeholder={
-              data?.webhook?.secret_set ? t('settings.webhookSecretSet') : t('settings.webhookSecretUnset')
-            }
+            placeholder={data?.webhook?.secret_set ? t('settings.webhookSecretPlaceholder') : undefined}
             onChange={(e) => setDraft({ ...draft, linear_webhook_secret: e.target.value })}
           />
         </label>

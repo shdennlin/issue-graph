@@ -133,6 +133,7 @@ export const zhTW: Dict = {
     webhookSecret: '簽章密鑰',
     webhookSecretSet: '（已設定 — 輸入以更換，留空則保持不變）',
     webhookSecretUnset: '（未設定 — webhook 停用中）',
+    webhookSecretPlaceholder: '輸入以更換',
     webhookAccepted: '已接受：{count} 次 · 最後一次 {when}',
     webhookRejected: '已拒絕：{count} 次 · 最後原因 {reason}',
     webhookNever: '從未',
