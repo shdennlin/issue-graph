@@ -73,10 +73,11 @@ export function WorkstreamsPanel() {
   // they have to remain reachable — otherwise archiving is indistinguishable
   // from deleting, and nobody would risk it.
   const [scope, setScope] = useState<Scope>('active')
-  // The server is asked for archived rows whenever the scope can include them;
-  // narrowing to one side is the client's job (visibleRows), so switching
-  // between All and Archived never refetches.
-  const showArchived = scope !== 'active'
+  // The server is ALWAYS asked for archived rows too, and narrowing to a side
+  // is the client's job (visibleRows). It used to fetch only what the scope
+  // showed, which made the default "Active" scope claim "no workstreams yet"
+  // on a workspace whose twenty workstreams were all archived — the screen
+  // could not even say that they existed.
   // Two-step confirm, inline rather than window.confirm(): a browser that has
   // had "prevent this page creating more dialogs" ticked silently returns
   // false, and the dialog blocks the whole page besides. Keyed by
@@ -129,11 +130,11 @@ export function WorkstreamsPanel() {
 
   const loadList = useCallback(async () => {
     try {
-      setList((await api.fetchBatches(showArchived)).entries)
+      setList((await api.fetchBatches(true)).entries)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [showArchived])
+  }, [])
 
   // Inlined rather than `void loadList()`: calling a function that sets state
   // from inside an effect trips react-hooks/set-state-in-effect. Same shape as
@@ -141,11 +142,8 @@ export function WorkstreamsPanel() {
   // this repo already passes lint with.
   useEffect(() => {
     let live = true
-    // `showArchived` has to be in BOTH places: this is the fetch that actually
-    // populates the list, and with an empty dep array the checkbox changed a
-    // flag that nothing ever read again.
     api
-      .fetchBatches(showArchived)
+      .fetchBatches(true)
       .then((r) => {
         if (live) setList(r.entries)
       })
@@ -155,7 +153,7 @@ export function WorkstreamsPanel() {
     return () => {
       live = false
     }
-  }, [showArchived])
+  }, [])
 
   // No fetch here any more. Expanding used to pull the workstream's detail for
   // its member list; the history it shows instead already rides the graph
@@ -281,7 +279,16 @@ export function WorkstreamsPanel() {
 
           {list.length === 0 && <p className="settings-hint">{t('workstreams.empty')}</p>}
           {list.length > 0 && rows.length === 0 && (
-            <p className="settings-hint">{t('workstreams.noMatch')}</p>
+            <p className="settings-hint">
+              {scope === 'active' && !query.trim() && stageFilter === null
+                ? t('workstreams.noneActive', { n: list.length })
+                : t('workstreams.noMatch')}{' '}
+              {scope === 'active' && (
+                <button className="workstream-link" onClick={() => setScope('all')}>
+                  {t('workstreams.showAll')}
+                </button>
+              )}
+            </p>
           )}
 
           {rows.length > 0 && (

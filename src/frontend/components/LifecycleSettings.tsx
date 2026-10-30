@@ -17,7 +17,7 @@
 // this file is a shell, because vitest cannot test JSX in this repo.
 
 import { useEffect, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, Plus, Trash2, Zap } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Plus, Trash2, Zap } from 'lucide-react'
 import type { LifecycleStageDTO } from '@shared/types'
 import { AUTO_FIELD_DOC, AUTO_FIELDS, isAutoField, normalizeLinkKind } from '@shared/fields.js'
 import { api } from '../lib/api'
@@ -41,6 +41,18 @@ export function LifecycleSettings() {
   const [pickingFor, setPickingFor] = useState<number | null>(null)
   /** name -> description, for every field this workspace has defined. */
   const [fields, setFields] = useState<Map<string, string>>(new Map())
+  /** Which stages are expanded for editing. Many at once is allowed: tuning a
+   *  pipeline means comparing two stages, and a one-at-a-time accordion would
+   *  close the one you were looking at. Collapsed is the default because the
+   *  question this page answers first is the SHAPE of the pipeline, not the
+   *  settings of any one stage. */
+  const [openIds, setOpenIds] = useState<Set<number>>(new Set())
+  /** Which stage's "add a Linear state" list is open. */
+  const [statesFor, setStatesFor] = useState<number | null>(null)
+  /** The app's own fields, collapsed by default: the app already defines what
+   *  they mean, so listing seven rows of grey placeholder text ahead of the
+   *  ones that need a sentence from you buried the only rows with work to do. */
+  const [showBuiltin, setShowBuiltin] = useState(false)
   const abandoned = useRef(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -137,6 +149,31 @@ export function LifecycleSettings() {
     void run(() => api.reorderStages(next.map((s) => s.key)))
   }
 
+  const toggleOpen = (id: number) =>
+    setOpenIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  /** The flow strip jumps to a stage and opens it, so it is a way into the
+   *  editor and not only a picture of the pipeline. */
+  const jumpTo = (id: number) => {
+    setOpenIds((prev) => new Set(prev).add(id))
+    requestAnimationFrame(() =>
+      document.getElementById(`lifecycle-stage-${id}`)?.scrollIntoView({ block: 'nearest' }),
+    )
+  }
+
+  /** Earlier-or-later stages that also expect `name`. Two stages sharing a state
+   *  is normal (one state spans several steps) and not an error; saying so on
+   *  the chip is what stops it reading as a mistake or going unnoticed. */
+  const sharedWith = (stage: LifecycleStageDTO, name: string) =>
+    stages
+      .filter((o) => o.id !== stage.id && o.states.some((v) => v.toLowerCase() === name.toLowerCase()))
+      .map((o) => o.name)
+
   const toggleState = (stage: LifecycleStageDTO, name: string) => {
     const has = stage.states.some((s) => s.toLowerCase() === name.toLowerCase())
     const states = has
@@ -194,6 +231,13 @@ export function LifecycleSettings() {
    *  stage asking for it is not listed — it stays stored, and reappears the
    *  moment some stage declares that name again. */
   const usedFields = Array.from(new Set(stages.flatMap((s) => s.fields)))
+  /** Yours to define, undefined ones first. A stable sort, so rows already
+   *  written keep their pipeline order and one does not jump when you type. */
+  const customFields = usedFields
+    .filter((n) => !isAutoField(n))
+    .sort((a, b) => Number(!!fields.get(a)) - Number(!!fields.get(b)))
+  const builtinFields = usedFields.filter(isAutoField)
+  const missing = customFields.filter((n) => !fields.get(n)).length
 
   /** Automatic names this stage does not have yet — the ones the + offers,
    *  because they are exactly the names you cannot invent. */
@@ -207,88 +251,266 @@ export function LifecycleSettings() {
     ...fields.filter((n) => !isAutoField(n)),
   ]
 
+  /** One name and the sentence that says what goes in it. For a built-in name
+   *  the app's own sentence is the placeholder, so you see the meaning without
+   *  typing and anything you type overrides it. */
+  const glossaryRow = (name: string) => (
+    <div key={name} className="lifecycle-glossary-row">
+      <span className="lifecycle-field-chip">{name}</span>
+      <input
+        defaultValue={fields.get(name) ?? ''}
+        placeholder={(isAutoField(name) ? AUTO_FIELD_DOC[name] : '') || t('lifecycle.glossaryPlaceholder')}
+        aria-label={name}
+        disabled={busy}
+        onBlur={(e) => {
+          const next = e.target.value.trim().replace(/\s+/g, ' ')
+          if (next === (fields.get(name) ?? '')) return
+          void run(() => api.setFieldDescription(name, next))
+        }}
+      />
+    </div>
+  )
+
   return (
     <div className="lifecycle-settings">
       <p className="settings-hint">{t('lifecycle.hint')}</p>
       {/* Said once, here, rather than under each stage. It explains a rule of
           the editor, not a property of any one stage, and seven copies of it
           was three lines of identical prose between every pair of rows. */}
-      <p className="settings-hint">{t('lifecycle.belongsHint')}</p>
 
       {stages.length === 0 && <p className="settings-hint">{t('lifecycle.empty')}</p>}
 
+      {/* The pipeline as one line. Each box carries what you tune it by — how
+          long it may sit, and how many workstreams are on it — so a stage with
+          no limit or a pile-up reads without opening anything. */}
+      {stages.length > 0 && (
+        <ol className="lifecycle-strip" aria-label={t('lifecycle.title')}>
+          {stages.map((stage) => (
+            <li key={stage.id}>
+              <button
+                type="button"
+                className="lifecycle-strip-stage"
+                title={
+                  stage.staleAfterDays === null
+                    ? stage.name
+                    : `${stage.name} \u2014 ${t('lifecycle.staleLabel')}: ${stage.staleAfterDays}`
+                }
+                onClick={() => jumpTo(stage.id)}
+              >
+                <span className="lifecycle-strip-name">{stage.name}</span>
+                {(usage.get(stage.key) ?? 0) > 0 && (
+                  <span className="lifecycle-strip-count">{usage.get(stage.key)}</span>
+                )}
+                {stage.staleAfterDays !== null && (
+                  <span className="lifecycle-strip-nudge">
+                    {t('lifecycle.nudgeDays', { n: stage.staleAfterDays })}
+                  </span>
+                )}
+              </button>
+            </li>
+          ))}
+        </ol>
+      )}
+      {stages.length > 0 && stages.every((s) => s.staleAfterDays === null) && (
+        <p className="lifecycle-notice">{t('lifecycle.noThresholds')}</p>
+      )}
+
+      {stages.length > 0 && (
+        <div className="lifecycle-colhead" aria-hidden>
+          <span />
+          <span />
+          <span>{t('lifecycle.stageName')}</span>
+          <span>{t('lifecycle.nextCommand')}</span>
+          <span>{t('lifecycle.expectsLabel')}</span>
+          <span>{t('lifecycle.colNudge')}</span>
+          <span />
+        </div>
+      )}
+
       <ol className="lifecycle-list">
-        {stages.map((stage, i) => (
-          <li key={stage.id} className="lifecycle-row">
-            <div className="lifecycle-row-head">
+        {stages.map((stage, i) => {
+          const isOpen = openIds.has(stage.id)
+          const count = usage.get(stage.key) ?? 0
+          return (
+          <li
+            key={stage.id}
+            id={`lifecycle-stage-${stage.id}`}
+            className={`lifecycle-row${isOpen ? ' is-open' : ''}`}
+          >
+            {/* ONE row, in two modes. Closed, each cell reads; open, the same
+                cell becomes the control for that very value. It used to open a
+                second form underneath that repeated the name, the command, the
+                states and the nudge already printed in the row above — four
+                values drawn twice, in a space that had plenty of room for one. */}
+            <div className="lifecycle-summary" onClick={isOpen ? undefined : () => toggleOpen(stage.id)}>
+              <button
+                type="button"
+                className="lifecycle-chevron"
+                aria-expanded={isOpen}
+                aria-label={stage.name}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  toggleOpen(stage.id)
+                }}
+              >
+                {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+              </button>
               <span className="lifecycle-pos">{i + 1}</span>
-              <input
-                defaultValue={stage.name}
-                aria-label={t('lifecycle.stageName')}
-                onBlur={(e) => {
-                  const name = e.target.value.trim()
-                  if (name && name !== stage.name) void run(() => api.patchStage(stage.id, { name }))
-                }}
-              />
-              <input
-                defaultValue={stage.nextCommand ?? ''}
-                placeholder={t('lifecycle.nextCommandPlaceholder')}
-                aria-label={t('lifecycle.nextCommand')}
-                onBlur={(e) => {
-                  const cmd = e.target.value.trim()
-                  if (cmd !== (stage.nextCommand ?? '')) {
-                    void run(() => api.patchStage(stage.id, { nextCommand: cmd || null }))
-                  }
-                }}
-              />
-              <button disabled={busy || i === 0} onClick={() => move(i, -1)} title={t('lifecycle.moveUp')}>
-                <ArrowUp size={14} />
-              </button>
-              <button
-                disabled={busy || i === stages.length - 1}
-                onClick={() => move(i, 1)}
-                title={t('lifecycle.moveDown')}
-              >
-                <ArrowDown size={14} />
-              </button>
-              <button
-                disabled={busy}
-                onClick={() => void run(() => api.deleteStage(stage.id))}
-                title={t('lifecycle.delete')}
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
 
-            <div className="lifecycle-field-label">{t('lifecycle.expectsLabel')}</div>
-            <div className="lifecycle-states">
-              {stateNames.map((name) => {
-                const on = stage.states.some((s) => s.toLowerCase() === name.toLowerCase())
-                return (
+              {isOpen ? (
+                <input
+                  className="lifecycle-name-input"
+                  defaultValue={stage.name}
+                  aria-label={t('lifecycle.stageName')}
+                  onBlur={(e) => {
+                    const name = e.target.value.trim()
+                    if (name && name !== stage.name) void run(() => api.patchStage(stage.id, { name }))
+                  }}
+                />
+              ) : (
+                <span className="lifecycle-summary-name">{stage.name}</span>
+              )}
+
+              {isOpen ? (
+                <textarea
+                  className="lifecycle-command"
+                  rows={2}
+                  defaultValue={stage.nextCommand ?? ''}
+                  placeholder={t('lifecycle.nextCommandPlaceholder')}
+                  aria-label={t('lifecycle.nextCommand')}
+                  onBlur={(e) => {
+                    const cmd = e.target.value.trim()
+                    if (cmd !== (stage.nextCommand ?? '')) {
+                      void run(() => api.patchStage(stage.id, { nextCommand: cmd || null }))
+                    }
+                  }}
+                />
+              ) : (
+                <span className="lifecycle-summary-command">{stage.nextCommand ?? ''}</span>
+              )}
+
+              {isOpen ? (
+                <div className="lifecycle-states lifecycle-states-edit">
+                  {stage.states.map((name) => {
+                    const also = sharedWith(stage, name)
+                    return (
+                      <button
+                        key={name}
+                        className={`lifecycle-state-toggle is-on${also.length ? ' is-shared' : ''}`}
+                        disabled={busy}
+                        title={also.length ? t('lifecycle.sharedState', { names: also.join(', ') }) : undefined}
+                        onClick={() => toggleState(stage, name)}
+                      >
+                        {name}
+                      </button>
+                    )
+                  })}
+                  {stage.states.length === 0 && (
+                    <span className="lifecycle-any-state" title={t('lifecycle.constrainsNothing')}>
+                      {t('lifecycle.anyState')}
+                    </span>
+                  )}
                   <button
-                    key={name}
-                    className={`lifecycle-state-toggle${on ? ' is-on' : ''}`}
+                    type="button"
+                    className="lifecycle-state-toggle"
+                    aria-label={t('lifecycle.addState')}
+                    title={t('lifecycle.addState')}
                     disabled={busy}
-                    onClick={() => toggleState(stage, name)}
+                    onClick={() => setStatesFor(statesFor === stage.id ? null : stage.id)}
                   >
-                    {name}
+                    +
                   </button>
-                )
-              })}
-            </div>
-            <p className="settings-hint">
-              {/* No states selected is a real configuration, not a missing one:
-                  it opts the stage out of conflict detection entirely. Saying so
-                  stops it reading as an unfinished row. */}
-              {stage.states.length === 0
-                ? t('lifecycle.constrainsNothing')
-                : t('lifecycle.usage').replace('{n}', String(usage.get(stage.key) ?? 0))}
-            </p>
+                  {statesFor === stage.id && (
+                    <div className="lifecycle-pick" role="group" aria-label={t('lifecycle.addState')}>
+                      {stateNames
+                        .filter((n) => !stage.states.some((v) => v.toLowerCase() === n.toLowerCase()))
+                        .map((name) => (
+                          <button
+                            key={name}
+                            type="button"
+                            className="lifecycle-state-toggle"
+                            disabled={busy}
+                            onClick={() => toggleState(stage, name)}
+                          >
+                            {name}
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <span
+                  className="lifecycle-summary-states"
+                  title={stage.states.length === 0 ? t('lifecycle.constrainsNothing') : undefined}
+                >
+                  {stage.states.length === 0 ? t('lifecycle.anyState') : stage.states.join(', ')}
+                </span>
+              )}
 
+              {isOpen ? (
+                <input
+                  id={`stale-${stage.id}`}
+                  className="lifecycle-nudge-input"
+                  type="number"
+                  min={0}
+                  max={3650}
+                  defaultValue={stage.staleAfterDays ?? ''}
+                  placeholder={t('lifecycle.staleNever')}
+                  aria-label={t('lifecycle.staleLabel')}
+                  disabled={busy}
+                  onBlur={(e) => {
+                    const raw = e.target.value.trim()
+                    // Blank means "never", which is a real setting and the honest
+                    // one for a stage that legitimately runs for weeks.
+                    const next = raw === '' ? null : Number(raw)
+                    if (next !== null && !Number.isInteger(next)) return
+                    if (next === (stage.staleAfterDays ?? null)) return
+                    void run(() => api.patchStage(stage.id, { staleAfterDays: next }))
+                  }}
+                />
+              ) : (
+                <span className="lifecycle-summary-nudge">
+                  {stage.staleAfterDays === null
+                    ? t('lifecycle.noNudge')
+                    : t('lifecycle.nudgeDays', { n: stage.staleAfterDays })}
+                </span>
+              )}
+
+              {isOpen ? (
+                <span className="lifecycle-row-actions">
+                  <button disabled={busy || i === 0} onClick={() => move(i, -1)} title={t('lifecycle.moveUp')}>
+                    <ArrowUp size={16} />
+                  </button>
+                  <button
+                    disabled={busy || i === stages.length - 1}
+                    onClick={() => move(i, 1)}
+                    title={t('lifecycle.moveDown')}
+                  >
+                    <ArrowDown size={16} />
+                  </button>
+                  <button
+                    disabled={busy}
+                    onClick={() => void run(() => api.deleteStage(stage.id))}
+                    title={t('lifecycle.delete')}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </span>
+              ) : (
+                <span className="lifecycle-summary-count">
+                  {count > 0 && <span className="lifecycle-strip-count">{count}</span>}
+                </span>
+              )}
+            </div>
+
+            {isOpen && (
+              <div className="lifecycle-body">
             {/* One heading, two rows. The heading is the question a person
                 actually has ("what belongs on this stage"); the rows are the
                 two ways an answer gets here. */}
-            <div className="lifecycle-field-label">{t('lifecycle.belongsLabel')}</div>
+            <div className="lifecycle-field-label lifecycle-belongs-label" title={t('lifecycle.belongsHint')}>
+              {t('lifecycle.belongsLabel')}
+            </div>
 
             {/* ONE row. It was two — an "Automatic" row of projections and a
                 "By hand" row of expected names — and they were the same
@@ -300,8 +522,16 @@ export function LifecycleSettings() {
                 {orderFields(stage.fields).map((f) => (
                   <span
                     key={f}
-                    className={`lifecycle-field-chip${isAutoField(f) ? ' is-auto' : ''}`}
-                    title={isAutoField(f) ? t('lifecycle.autoHint') : t('lifecycle.handHint')}
+                    className={`lifecycle-field-chip${isAutoField(f) ? ' is-auto' : ''}${
+                      !isAutoField(f) && !fields.get(f) ? ' is-undefined' : ''
+                    }`}
+                    title={
+                      isAutoField(f)
+                        ? t('lifecycle.autoHint')
+                        : !fields.get(f)
+                          ? t('lifecycle.noDefinition')
+                          : t('lifecycle.handHint')
+                    }
                   >
                     {isAutoField(f) && <Zap size={11} aria-hidden />}
                     {isAutoField(f) ? t(`lifecycle.field_${f}` as 'lifecycle.field_issue') : f}
@@ -424,29 +654,11 @@ export function LifecycleSettings() {
             </div>
 
 
-            <div className="lifecycle-stale">
-              <label htmlFor={`stale-${stage.id}`}>{t('lifecycle.staleLabel')}</label>
-              <input
-                id={`stale-${stage.id}`}
-                type="number"
-                min={0}
-                max={3650}
-                defaultValue={stage.staleAfterDays ?? ''}
-                placeholder={t('lifecycle.staleNever')}
-                disabled={busy}
-                onBlur={(e) => {
-                  const raw = e.target.value.trim()
-                  // Blank means "never", which is a real setting and the honest
-                  // one for a stage that legitimately runs for weeks.
-                  const next = raw === '' ? null : Number(raw)
-                  if (next !== null && !Number.isInteger(next)) return
-                  if (next === (stage.staleAfterDays ?? null)) return
-                  void run(() => api.patchStage(stage.id, { staleAfterDays: next }))
-                }}
-              />
-            </div>
+              </div>
+            )}
           </li>
-        ))}
+          )
+        })}
       </ol>
 
       <div className="settings-control-row">
@@ -473,29 +685,28 @@ export function LifecycleSettings() {
           all you supply is the sentence. */}
       {usedFields.length > 0 && (
         <div className="lifecycle-glossary">
-          <div className="lifecycle-field-label">{t('lifecycle.glossaryLabel')}</div>
+          <div className="lifecycle-field-label lifecycle-glossary-title">
+            {t('lifecycle.glossaryLabel')}
+            {missing > 0 && (
+              <span className="lifecycle-glossary-missing">{t('lifecycle.glossaryMissing', { n: missing })}</span>
+            )}
+          </div>
           <p className="settings-hint">{t('lifecycle.glossaryHint')}</p>
-          {usedFields.map((name) => (
-            <div key={name} className="lifecycle-glossary-row">
-              <span className="lifecycle-field-chip">{name}</span>
-              <input
-                defaultValue={fields.get(name) ?? ''}
-                // The app's own sentence for a built-in name, shown as
-                // placeholder: you see what it means without typing anything,
-                // and what you type overrides it.
-                placeholder={
-                  (isAutoField(name) ? AUTO_FIELD_DOC[name] : '') || t('lifecycle.glossaryPlaceholder')
-                }
-                aria-label={name}
-                disabled={busy}
-                onBlur={(e) => {
-                  const next = e.target.value.trim().replace(/\s+/g, ' ')
-                  if (next === (fields.get(name) ?? '')) return
-                  void run(() => api.setFieldDescription(name, next))
-                }}
-              />
-            </div>
-          ))}
+          {customFields.map((name) => glossaryRow(name))}
+          {builtinFields.length > 0 && (
+            <>
+              <button
+                type="button"
+                className="lifecycle-builtin-toggle"
+                aria-expanded={showBuiltin}
+                onClick={() => setShowBuiltin(!showBuiltin)}
+              >
+                {showBuiltin ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                {t('lifecycle.builtinFields', { n: builtinFields.length })}
+              </button>
+              {showBuiltin && builtinFields.map((name) => glossaryRow(name))}
+            </>
+          )}
         </div>
       )}
 

@@ -580,6 +580,8 @@ export const en = {
     scopeActive: 'Active',
     scopeAll: 'All',
     scopeArchived: 'Archived',
+    noneActive: 'No active workstreams. {n} archived.',
+    showAll: 'Show all',
     rename: 'Rename',
   },
   session: {
@@ -611,8 +613,10 @@ export const en = {
     handHint: 'Nothing can fetch this, so a person or an agent attaches it. Listing it is a hint: it is handed to agents through the MCP and offered first when attaching, so one field keeps one name. Anything attached shows whether or not it is listed.',
     fieldCustom: 'Something else\u2026',
     belongsHint: 'A \u26a1 field is filled by the app and kept current. Any other name is one somebody attaches \u2014 listing it is a hint, and what is attached shows whether or not it is listed.',
-    glossaryLabel: 'What these names mean here',
-    glossaryHint: 'Written once for the workspace and handed to agents through the MCP, so an agent knows not just what to call a field but what to put in it. Optional \u2014 a field works without one.',
+    glossaryLabel: 'Field definitions',
+    glossaryHint: 'Say in one sentence what goes in each field. Agents read this when they attach something.',
+    glossaryMissing: '{n} still to write',
+    builtinFields: 'Built into the app ({n})',
     glossaryPlaceholder: 'One sentence\u2026',
     fieldAdd: 'Add a field',
     fieldBadName: 'letters, digits and hyphens',
@@ -633,6 +637,14 @@ export const en = {
     // to the workstream now and an issue has no stage of its own.
     // Phrased so it reads for 0, 1 and many: this codebase has no plural
     // forms, and "1 workstreams" sits in a panel people stare at while tuning.
+    addState: 'Add a Linear state',
+    noNudge: 'No nudge',
+    nudgeDays: '{n}d',
+    noThresholds: 'No stage has a nudge threshold, so a workstream stuck anywhere is never flagged. Open a stage and set its days.',
+    sharedState: 'Also expected by: {names}',
+    noDefinition: 'No definition yet \u2014 agents get no guidance on what to put in this field. Write one under \u201cWhat these names mean\u201d.',
+    colNudge: 'Nudge (days)',
+    anyState: 'Any state',
     usage: 'on this stage: {n}',
     loadFailed: 'Could not load the lifecycle.',
   },
