@@ -225,6 +225,20 @@ describe('stageForIssue', () => {
     expect(stageForIssue(mk('X', { state: 'Todo' }), [a, b, dup])?.key).toBe('a')
   })
 
+  it("prefers the workstream's own stage when it claims the state", () => {
+    // Without this, a workstream parked on b2 draws its Todo issue on `a` and
+    // b2's own box stays empty.
+    const dup = stage({ key: 'b2', states: ['Todo'], sortOrder: 2 })
+    expect(stageForIssue(mk('X', { state: 'Todo' }), [a, b, dup], 'b2')?.key).toBe('b2')
+  })
+
+  it("falls back to the first match when the workstream's stage does not claim the state", () => {
+    const dup = stage({ key: 'b2', states: ['Todo'], sortOrder: 2 })
+    expect(stageForIssue(mk('X', { state: 'Todo' }), [a, b, dup], 'b')?.key).toBe('a')
+    expect(stageForIssue(mk('X', { state: 'Todo' }), [a, b, dup], null)?.key).toBe('a')
+    expect(stageForIssue(mk('X', { state: 'Todo' }), [a, b, dup], 'gone')?.key).toBe('a')
+  })
+
   it('never matches a stage that expects any state', () => {
     // Empty `states` opts out of the comparison; it must not become a magnet
     // that swallows every issue in the workstream.

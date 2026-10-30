@@ -114,19 +114,28 @@ export interface StageContext {
  * IS stored is the workstream's own stage, because nothing else records where
  * a FEATURE has got to; the two disagreeing is the evidence signal, not a bug.
  *
- * `states` is matched case- and space-insensitively, like everywhere else. The
- * FIRST match wins so that two stages listing the same state (a nine-step
- * pipeline over eight Linear states does this constantly — see ADR-0002) puts
- * the issue in the earlier one deterministically rather than drawing it twice.
+ * `states` is matched case- and space-insensitively, like everywhere else.
+ *
+ * Two stages listing the same state is the normal case (a ten-step pipeline
+ * over eight Linear states — see ADR-0002), so a tie has to be broken somehow.
+ * `preferKey` is the workstream's own stage: if THAT stage claims the state,
+ * the issue is drawn there. Without it, "first match wins" meant every
+ * In Progress issue was drawn on the first In Progress stage for ever, and a
+ * workstream parked on Verify showed an empty Verify box with its issues one
+ * box earlier — a picture that said the work had not got there. Only when the
+ * workstream's stage does not claim the state does the first match decide,
+ * which keeps it deterministic and never draws an issue twice.
  */
 export function stageForIssue(
   issue: NormalizedIssue,
   pipeline: LifecycleStageDTO[],
+  preferKey?: string | null,
 ): LifecycleStageDTO | null {
   const name = issue.state.name.trim().toLowerCase()
-  return (
-    pipeline.find((s) => s.states.some((v) => v.trim().toLowerCase() === name)) ?? null
-  )
+  const claims = (s: LifecycleStageDTO) => s.states.some((v) => v.trim().toLowerCase() === name)
+  const preferred = preferKey ? pipeline.find((s) => s.key === preferKey) : undefined
+  if (preferred && claims(preferred)) return preferred
+  return pipeline.find(claims) ?? null
 }
 
 /**
@@ -241,7 +250,7 @@ function renderIssues(ctx: StageContext, t: Translate): StageItem[] {
   // config, and the issue still has to be somewhere you can see it.
   const currentIsFallback = ctx.workstream.stage === ctx.stage.key
   for (const m of ctx.members) {
-    const home = stageForIssue(m, ctx.pipeline)
+    const home = stageForIssue(m, ctx.pipeline, ctx.workstream.stage)
     const belongsHere = home ? home.key === ctx.stage.key : currentIsFallback
     if (!belongsHere) continue
     out.push(
@@ -334,7 +343,7 @@ function issueSessions(ctx: StageContext, t: Translate): StageItem[] {
   // on another workstream's board, which is the bug the claim exists to fix.
   const currentIsFallback = ctx.workstream.stage === ctx.stage.key
   for (const m of ctx.members) {
-    const home = stageForIssue(m, ctx.pipeline)
+    const home = stageForIssue(m, ctx.pipeline, ctx.workstream.stage)
     if (!(home ? home.key === ctx.stage.key : currentIsFallback)) continue
     for (const s of ctx.sessionsByIssue.get(m.identifier) ?? []) {
       if (s.workstreamId !== null) continue
