@@ -17,14 +17,16 @@
 // All decisions live in lib/agentSession.ts and lib/lifecycle.ts; this file is
 // a shell, because vitest cannot test JSX in this repo.
 
-import { useCallback, useEffect, useState } from 'react'
-import { Archive, ArchiveRestore, ChevronDown, ChevronRight, Trash2, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Archive, ArchiveRestore, ChevronDown, ChevronRight, Pencil, Search, Trash2, X } from 'lucide-react'
 import { api } from '../lib/api'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { compactAge, formatAbsolute } from '../lib/relativeTime'
 import { stageTimeline } from '@shared/stageHistory.js'
+import { isStale } from '@shared/staleness.js'
 import { useT, type DictKey } from '../i18n'
+import { visibleRows, type Scope, type SortKey, type StageFilter } from '../lib/workstreamList'
 
 const AGE_UNIT_KEYS: Record<'m' | 'h' | 'd', DictKey> = {
   m: 'issueNode.ageMinutes',
@@ -47,6 +49,12 @@ interface Summary {
   progress: { total: number; done: number }
 }
 
+const SCOPE_KEYS: Record<Scope, DictKey> = {
+  active: 'workstreams.scopeActive',
+  all: 'workstreams.scopeAll',
+  archived: 'workstreams.scopeArchived',
+}
+
 export function WorkstreamsPanel() {
   const t = useT()
   const ageText = (ts: number) => {
@@ -64,13 +72,27 @@ export function WorkstreamsPanel() {
   // Archived ones are off the board by design, but this panel is the one place
   // they have to remain reachable — otherwise archiving is indistinguishable
   // from deleting, and nobody would risk it.
-  const [showArchived, setShowArchived] = useState(false)
+  const [scope, setScope] = useState<Scope>('active')
+  // The server is asked for archived rows whenever the scope can include them;
+  // narrowing to one side is the client's job (visibleRows), so switching
+  // between All and Archived never refetches.
+  const showArchived = scope !== 'active'
   // Two-step confirm, inline rather than window.confirm(): a browser that has
   // had "prevent this page creating more dialogs" ticked silently returns
   // false, and the dialog blocks the whole page besides. Keyed by
   // `<id>:<action>` so arming one row's delete does not arm another's.
   // Motivated by a real loss — a workstream went in one stray click.
   const [armed, setArmed] = useState<string | null>(null)
+  // Finding one is the job of this screen once there are a few dozen, so search
+  // is first in the toolbar and takes focus on open. Held in component state,
+  // not the URL: it is a scratch filter for a modal, not a view to share.
+  const [query, setQuery] = useState('')
+  const [stageFilter, setStageFilter] = useState<StageFilter>(null)
+  const [sort, setSort] = useState<SortKey>('updated')
+  // Which row's name is being edited. The name is text until asked for — an
+  // always-live <input> clips a long title at the box edge, which is exactly
+  // what made these rows unreadable.
+  const [renaming, setRenaming] = useState<number | null>(null)
 
   const stages = graph?.data.lifecycle ?? []
   // Read once per open rather than in the render body: reading the clock while
@@ -85,6 +107,25 @@ export function WorkstreamsPanel() {
    *  key rather than dropped: the history is what happened, and a leg that
    *  vanished because somebody edited the pipeline afterwards would be a lie. */
   const stageName = (key: string) => stageNames.get(key) ?? key
+  /** When each workstream arrived at its CURRENT stage, and how long that stage
+   *  may run before it counts as stalled. Both are the board's own numbers, so
+   *  this list and the board cannot disagree about what is stuck. */
+  const enteredById = new Map((graph?.data.workstreams ?? []).map((w) => [w.id, w.stageEnteredAt]))
+  const staleAfterByStage = new Map(stages.map((st) => [st.key, st.staleAfterDays]))
+
+  // The summary endpoint does not carry when a workstream arrived at its
+  // stage; the graph payload does. Joined here so the "on stage" sort has it,
+  // keyed on the payload's array (not the per-render Map above) so it only
+  // recomputes when the data does.
+  const graphWorkstreams = graph?.data.workstreams
+  const listWithArrival = useMemo(() => {
+    const arrival = new Map((graphWorkstreams ?? []).map((w) => [w.id, w.stageEnteredAt]))
+    return list.map((w) => ({ ...w, stageEnteredAt: arrival.get(w.id) ?? null }))
+  }, [list, graphWorkstreams])
+  const rows = useMemo(
+    () => visibleRows(listWithArrival, { query, stage: stageFilter, sort, scope }),
+    [listWithArrival, query, stageFilter, sort, scope],
+  )
 
   const loadList = useCallback(async () => {
     try {
@@ -171,6 +212,47 @@ export function WorkstreamsPanel() {
         <div className="modal-body" onClick={() => setArmed(null)}>
           <p className="settings-hint">{t('workstreams.hint')}</p>
 
+          <div className="workstream-toolbar">
+            <label className="workstream-search">
+              <Search size={16} />
+              <input
+                autoFocus
+                type="search"
+                value={query}
+                placeholder={t('workstreams.searchPlaceholder')}
+                aria-label={t('workstreams.search')}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </label>
+            {/* null = any stage, '' = on no stage. Distinct on purpose: the
+                second is how you find what was never put on the pipeline. */}
+            <select
+              className="workstream-filter"
+              aria-label={t('workstreams.filterStage')}
+              value={stageFilter === null ? '__any' : stageFilter}
+              onChange={(e) => setStageFilter(e.target.value === '__any' ? null : e.target.value)}
+            >
+              <option value="__any">{t('workstreams.anyStage')}</option>
+              <option value="">{t('workstreams.noStage')}</option>
+              {stages.map((st) => (
+                <option key={st.key} value={st.key}>
+                  {st.name}
+                </option>
+              ))}
+            </select>
+            <select
+              className="workstream-filter"
+              aria-label={t('workstreams.sort')}
+              value={sort}
+              onChange={(e) => setSort(e.target.value as SortKey)}
+            >
+              <option value="updated">{t('workstreams.sortUpdated')}</option>
+              <option value="onStage">{t('workstreams.sortOnStage')}</option>
+              <option value="created">{t('workstreams.sortCreated')}</option>
+              <option value="name">{t('workstreams.sortName')}</option>
+            </select>
+          </div>
+
           <div className="workstream-actions">
             <button
               onClick={() => {
@@ -180,35 +262,95 @@ export function WorkstreamsPanel() {
             >
               {t('workstreams.create')}
             </button>
-            <label className="workstream-archived-toggle">
-              <input
-                type="checkbox"
-                checked={showArchived}
-                onChange={(e) => setShowArchived(e.target.checked)}
-              />
-              {t('workstreams.showArchived')}
-            </label>
+            <div className="workstream-scope" role="group" aria-label={t('workstreams.scope')}>
+              {(['active', 'all', 'archived'] as const).map((sc) => (
+                <button
+                  key={sc}
+                  className={scope === sc ? 'is-on' : ''}
+                  aria-pressed={scope === sc}
+                  onClick={() => setScope(sc)}
+                >
+                  {t(SCOPE_KEYS[sc])}
+                </button>
+              ))}
+            </div>
+            <span className="workstream-count">
+              {t('workstreams.count', { shown: rows.length, total: list.length })}
+            </span>
           </div>
 
           {list.length === 0 && <p className="settings-hint">{t('workstreams.empty')}</p>}
+          {list.length > 0 && rows.length === 0 && (
+            <p className="settings-hint">{t('workstreams.noMatch')}</p>
+          )}
 
-          {list.map((ws) => {
+          {rows.length > 0 && (
+            <div className="workstream-colhead" aria-hidden>
+              <span />
+              <span>{t('workstreams.colName')}</span>
+              <span>{t('lifecycle.title')}</span>
+              <span>{t('workstreams.members')}</span>
+              <span>{t('workstreams.onStage')}</span>
+              <span>{t('workstreams.updated')}</span>
+              <span>{t('workstreams.created')}</span>
+              <span />
+            </div>
+          )}
+
+          {rows.map((ws) => {
             const isOpen = open.has(ws.id)
+            const archived = ws.status === 'archived'
+            const lastTouched = ws.archivedAt ?? ws.updatedAt
             return (
-              <div key={ws.id} className={`workstream${ws.status === 'archived' ? ' is-archived' : ''}`}>
+              <div key={ws.id} className={`workstream${archived ? ' is-archived' : ''}`}>
                 <div className="workstream-head">
-                  <button className="workstream-toggle" onClick={() => toggle(ws.id)}>
-                    {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  <button
+                    className="workstream-toggle"
+                    onClick={() => toggle(ws.id)}
+                    aria-expanded={isOpen}
+                  >
+                    {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                   </button>
-                  <input
-                    className="workstream-name"
-                    defaultValue={ws.name}
-                    aria-label={t('workstreams.name')}
-                    onBlur={(e) => {
-                      const name = e.target.value.trim()
-                      if (name && name !== ws.name) void run(() => api.renameBatch(ws.id, name))
-                    }}
-                  />
+
+                  {/* The FULL title, wrapped — never clipped. Clicking it opens
+                      the history, like the chevron; renaming is the pencil. */}
+                  <div className="workstream-main">
+                    {renaming === ws.id ? (
+                      <input
+                        className="workstream-name"
+                        autoFocus
+                        defaultValue={ws.name}
+                        aria-label={t('workstreams.name')}
+                        onBlur={(e) => {
+                          setRenaming(null)
+                          const name = e.target.value.trim()
+                          if (name && name !== ws.name) void run(() => api.renameBatch(ws.id, name))
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') e.currentTarget.blur()
+                          if (e.key === 'Escape') {
+                            e.currentTarget.value = ws.name
+                            e.currentTarget.blur()
+                          }
+                        }}
+                      />
+                    ) : (
+                      <button className="workstream-title-text" onClick={() => toggle(ws.id)}>
+                        <span className="workstream-num">#{ws.id}</span>
+                        {ws.name}
+                      </button>
+                    )}
+                    {/* The note's first line. A workstream called "featA" says
+                        nothing next to two others; the sentence somebody
+                        already wrote says what it is, and costs no second
+                        field to keep in step. */}
+                    {ws.summary && (
+                      <p className="workstream-summary" title={ws.summary}>
+                        {ws.summary}
+                      </p>
+                    )}
+                  </div>
+
                   {/* The pipeline is per workspace, so every workstream picks
                       from the same list. "—" takes it off the pipeline without
                       archiving it: not started and shelved are different. */}
@@ -225,79 +367,103 @@ export function WorkstreamsPanel() {
                       </option>
                     ))}
                   </select>
-                  <span className="workstream-progress">
+                  <span className="workstream-progress" title={t('workstreams.members')}>
                     {ws.progress.done}/{ws.progress.total}
                   </span>
-                  {/* Last touched, not created: a list sorted by creation puts
-                      a workstream nobody has looked at in three weeks above one
-                      that moved this morning. The full dates are in the title,
-                      because the badge has room for one number. */}
-                  <span
-                    className="workstream-when"
-                    title={[
-                      `${t('workstreams.created')}: ${formatAbsolute(ws.createdAt)}`,
-                      `${t('workstreams.updated')}: ${formatAbsolute(ws.updatedAt)}`,
-                      ws.archivedAt
-                        ? `${t('workstreams.archived')}: ${formatAbsolute(ws.archivedAt)}`
-                        : null,
-                    ]
-                      .filter(Boolean)
-                      .join('\n')}
-                  >
-                    {ageText(ws.archivedAt ?? ws.updatedAt)}
+                  {/* How long it has sat on THIS stage — the question the list
+                      exists to answer. Lit only when it has overrun what that
+                      stage allows; a Discuss stage with no limit never lights,
+                      however long it runs. An archived row has no live stage. */}
+                  {(() => {
+                    const entered = enteredById.get(ws.id) ?? null
+                    if (archived || !ws.stage || entered === null) {
+                      return <span className="workstream-onstage is-none">{'\u2014'}</span>
+                    }
+                    const limit = staleAfterByStage.get(ws.stage) ?? null
+                    const stale = isStale(entered, limit, now)
+                    return (
+                      <span
+                        className={`workstream-onstage${stale ? ' is-stale' : ''}`}
+                        title={
+                          limit === null
+                            ? formatAbsolute(entered)
+                            : t('workstreams.onStageLimit', { date: formatAbsolute(entered), days: limit })
+                        }
+                      >
+                        {ageText(entered)}
+                      </span>
+                    )
+                  })()}
+                  {/* Dates are columns, not prose under the title: a fixed
+                      width per column is what lets the eye run down the list
+                      comparing them. Last touched first — a list sorted by
+                      creation puts something nobody has opened in three weeks
+                      above what moved this morning. */}
+                  <span className="workstream-date" title={formatAbsolute(lastTouched)}>
+                    {archived ? `${t('workstreams.archived')} ` : ''}
+                    {formatAbsolute(lastTouched)}
                   </span>
-                  {/* Isolate works on an archived workstream too — that is the
-                      only way to look at one at all, now that the board honours
-                      an explicit pick over its archived filter. */}
-                  <button className="workstream-isolate" onClick={() => isolate(ws.id)} title={t('workstreams.isolate')}>
-                    {t('workstreams.isolateShort')}
-                  </button>
-                  {/* Two-step, both of them: archiving and deleting are the two
-                      actions here you cannot undo by clicking again. */}
-                  <button
-                    className={`workstream-act${armed === `${ws.id}:archive` ? ' is-armed' : ''}`}
-                    title={ws.status === 'archived' ? t('workstreams.unarchive') : t('workstreams.archive')}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      if (armed !== `${ws.id}:archive`) {
-                        setArmed(`${ws.id}:archive`)
-                        return
-                      }
-                      setArmed(null)
-                      void run(() =>
-                        api.setBatchStatus(ws.id, ws.status === 'archived' ? 'active' : 'archived'),
-                      )
-                    }}
-                  >
-                    {armed === `${ws.id}:archive` ? (
-                      t('common.confirm')
-                    ) : ws.status === 'archived' ? (
-                      <ArchiveRestore size={14} />
-                    ) : (
-                      <Archive size={14} />
-                    )}
-                  </button>
-                  <button
-                    className={`workstream-act${armed === `${ws.id}:delete` ? ' is-armed' : ''}`}
-                    title={t('workstreams.delete')}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      if (armed !== `${ws.id}:delete`) {
-                        setArmed(`${ws.id}:delete`)
-                        return
-                      }
-                      setArmed(null)
-                      void run(() => api.deleteBatch(ws.id))
-                    }}
-                  >
-                    {armed === `${ws.id}:delete` ? t('common.confirm') : <Trash2 size={14} />}
-                  </button>
+                  <span className="workstream-date" title={formatAbsolute(ws.createdAt)}>
+                    <span>{formatAbsolute(ws.createdAt)}</span>
+                  </span>
+                  <div className="workstream-buttons">
+                    <button
+                      className="workstream-act"
+                      title={t('workstreams.rename')}
+                      onClick={() => setRenaming(ws.id)}
+                    >
+                      <Pencil size={16} />
+                    </button>
+                    {/* Isolate works on an archived workstream too — that is
+                        the only way to look at one at all, now that the board
+                        honours an explicit pick over its archived filter. */}
+                    <button
+                      className="workstream-isolate"
+                      onClick={() => isolate(ws.id)}
+                      title={t('workstreams.isolate')}
+                    >
+                      {t('workstreams.isolateShort')}
+                    </button>
+                    {/* Two-step, both of them: archiving and deleting are the
+                        two actions here you cannot undo by clicking again. */}
+                    <button
+                      className={`workstream-act${armed === `${ws.id}:archive` ? ' is-armed' : ''}`}
+                      title={archived ? t('workstreams.unarchive') : t('workstreams.archive')}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (armed !== `${ws.id}:archive`) {
+                          setArmed(`${ws.id}:archive`)
+                          return
+                        }
+                        setArmed(null)
+                        void run(() => api.setBatchStatus(ws.id, archived ? 'active' : 'archived'))
+                      }}
+                    >
+                      {armed === `${ws.id}:archive` ? (
+                        t('common.confirm')
+                      ) : archived ? (
+                        <ArchiveRestore size={16} />
+                      ) : (
+                        <Archive size={16} />
+                      )}
+                    </button>
+                    <button
+                      className={`workstream-act${armed === `${ws.id}:delete` ? ' is-armed' : ''}`}
+                      title={t('workstreams.delete')}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (armed !== `${ws.id}:delete`) {
+                          setArmed(`${ws.id}:delete`)
+                          return
+                        }
+                        setArmed(null)
+                        void run(() => api.deleteBatch(ws.id))
+                      }}
+                    >
+                      {armed === `${ws.id}:delete` ? t('common.confirm') : <Trash2 size={16} />}
+                    </button>
+                  </div>
                 </div>
-                {/* The note's first line, under the name. A workstream called
-                    "featA" says nothing next to two others; the sentence
-                    somebody already wrote in the note says what it is, and
-                    costs no second field to keep in step. */}
-                {ws.summary && <p className="workstream-summary">{ws.summary}</p>}
                   {isOpen && (
                   // The HISTORY, not the issue list. Where each workstream's
                   // issues are is already the board's whole subject, and

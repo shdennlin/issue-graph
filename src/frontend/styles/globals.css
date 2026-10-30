@@ -4647,7 +4647,7 @@ label + .settings-help {
 .settings-error { color: var(--danger); font-size: var(--fs-meta); }
 
 /* Workstreams panel — the cross-feature overview. */
-.workstreams-modal { width: min(760px, 92vw); }
+.workstreams-modal { width: min(1120px, 94vw); }
 .workstream { border: 1px solid var(--node-border); border-radius: 6px; margin-bottom: 8px; }
 .workstream-head { display: flex; align-items: center; gap: 6px; padding: 6px 8px; }
 .workstream-toggle { background: none; border: 0; color: var(--fg-muted); cursor: pointer; padding: 0; }
@@ -5759,3 +5759,204 @@ button.stage-pill:hover .stage-item-text { text-decoration: underline; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Workstreams manager. A row is two stacked pieces — the full title with its
+   dates under it, and the controls to the right — so a long title wraps instead
+   of being clipped at an input's edge. */
+.workstream-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.workstream-search {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid var(--node-border);
+  border-radius: 6px;
+  color: var(--fg-muted);
+}
+.workstream-search:focus-within { border-color: var(--accent); }
+.workstream-search input {
+  font-size: var(--fs-base);
+  flex: 1 1 0;
+  min-width: 0;
+  background: none;
+  border: 0;
+  outline: 0;
+  color: var(--fg);
+  padding: 6px 0;
+}
+.workstream-filter { flex: 0 0 auto; max-width: 160px; font-size: var(--fs-base); }
+.workstream-count {
+  margin-left: auto;
+  color: var(--fg-muted);
+  font-size: var(--fs-base);
+  font-variant-numeric: tabular-nums;
+}
+.workstream-head .workstream-toggle { padding-top: 3px; }
+.workstream-main { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.workstream-title-text {
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  color: var(--fg);
+  font: inherit;
+  font-size: calc(var(--fs-base) + 2px);
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.workstream-title-text:hover { color: var(--accent); }
+.workstream-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  color: var(--fg-muted);
+  font-size: var(--fs-base);
+  font-variant-numeric: tabular-nums;
+}
+.workstream-num { color: var(--accent); }
+.workstream-main .workstream-summary {
+  padding: 0;
+  font-size: var(--fs-base);
+  line-height: 1.45;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.workstream-buttons { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; }
+.workstream-head > .workstream-stage,
+.workstream-head > .workstream-progress { margin-top: 1px; }
+
+/* One grid template for the header row and every workstream row, so the columns
+   cannot drift apart. The title column is the only one that flexes; everything
+   else is fixed, which is what lets it wrap in full instead of being clipped. */
+.workstream-head,
+.workstream-colhead {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 132px 48px 72px 148px 100px 140px;
+  column-gap: 10px;
+  align-items: start;
+  padding: 8px 10px;
+}
+.workstream-colhead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg);
+  padding-top: 0;
+  padding-bottom: 4px;
+  color: var(--fg-muted);
+  font-size: var(--fs-base);
+}
+.workstream-head > .workstream-stage { max-width: none; width: 100%; }
+.workstream-head > .workstream-progress { text-align: right; font-size: var(--fs-base); }
+.workstream-head button { font-size: var(--fs-base); }
+.workstream-date {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--fs-base);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+  white-space: nowrap;
+  margin-top: 1px;
+}
+.workstream-date-age { color: var(--fg-muted); }
+/* The one loud thing in the list. Everything else stays neutral so a row that
+   has overrun its stage is the only one that reads as warm. */
+.workstream-onstage {
+  margin-top: 1px;
+  font-size: var(--fs-base);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+  cursor: help;
+}
+.workstream-onstage.is-none { color: var(--fg-faint); cursor: default; }
+.workstream-onstage.is-stale { color: var(--warn); font-weight: 600; }
+.workstream-onstage.is-stale::before { content: '\25CF\00a0'; font-size: 0.7em; vertical-align: 0.1em; }
+/* The id rides behind the title instead of taking a line of its own. */
+.workstream-title-text .workstream-num {
+  margin-right: 8px;
+  color: var(--fg-faint);
+  font-size: var(--fs-base);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.workstream-buttons { justify-content: flex-end; }
+
+/* The modal is a fixed-height frame and only the body scrolls, so the title,
+   toolbar and column header stay put while a long list moves. */
+.workstreams-modal {
+  max-width: none;
+  height: 90vh;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.workstreams-modal .modal-body { flex: 1 1 0; min-height: 0; overflow-y: auto; }
+.workstreams-modal .settings-hint { font-size: var(--fs-base); color: var(--fg-faint); margin: 0 0 10px; }
+
+/* ---- Workstreams manager: one first-line centre for every column ----------
+   Each cell is 28px tall with its content centred, and the title and the dates
+   are padded so THEIR first line centres on the same y. Before this every
+   column carried its own `margin-top` nudge, and no two agreed. */
+.workstream-head { --row-h: 28px; }
+.workstream-head > * { margin-top: 0; }
+.workstream-head > .workstream-toggle,
+.workstream-head > .workstream-stage,
+.workstream-head > .workstream-progress,
+.workstream-head > .workstream-onstage,
+.workstream-head .workstream-buttons {
+  height: var(--row-h);
+  display: flex;
+  align-items: center;
+  padding-top: 0;
+  padding-bottom: 0;
+  box-sizing: border-box;
+}
+.workstream-head > .workstream-progress { justify-content: flex-end; }
+.workstream-head .workstream-buttons { justify-content: flex-end; gap: 6px; }
+.workstream-head .workstream-buttons > button {
+  height: var(--row-h);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.workstream-head .workstream-act { width: var(--row-h); padding: 0; }
+/* Title: 20px lines, 4px above, so the first line centres at 14px. */
+.workstream-title-text { line-height: 20px; padding-top: 4px; }
+.workstream-main .workstream-name { height: var(--row-h); box-sizing: border-box; }
+/* Dates: 18px lines, 5px above, same centre. */
+.workstream-date { margin-top: 0; padding-top: 5px; line-height: 18px; }
+
+/* Header cells follow what sits under them: a select's text starts after its
+   padding, and a number column is right-aligned all the way up. */
+.workstream-colhead > :nth-child(3) { padding-left: 10px; }
+.workstream-colhead > :nth-child(4) { text-align: right; }
+
+/* Scope: one segmented control instead of a checkbox pair. */
+.workstream-scope {
+  display: inline-flex;
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.workstream-scope button {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--fg-muted);
+  font-size: var(--fs-base);
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.workstream-scope button + button { border-left: 1px solid var(--node-border); }
+.workstream-scope button.is-on { background: var(--accent); color: var(--accent-fg); }
