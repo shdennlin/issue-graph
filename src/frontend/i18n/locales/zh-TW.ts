@@ -642,6 +642,7 @@ export const zhTW: Dict = {
     contributes: '不會關閉議題',
     conflicts: '有衝突',
     blocking: '卡住 {target}',
+    blockedByMember: '被 {by} 擋住',
     // 提醒。evidence 的措辭只陳述不一致，不提出建議：這裡不會自動推進任何
     // stage，而且就算 Linear 不同意，設定 stage 的人也是合法的寫入者。
     nudgeEvidence: '所有 issue 都完成了，但還停在「{stage}」',

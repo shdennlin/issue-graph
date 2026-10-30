@@ -665,6 +665,7 @@ export const en = {
     contributes: 'does not close',
     conflicts: 'conflicts',
     blocking: 'blocking {target}',
+    blockedByMember: 'blocked by {by}',
     // Nudges. The evidence wording states the discrepancy and proposes nothing:
     // nothing here advances a stage, and the person who set it is a legitimate
     // writer even when Linear disagrees.

@@ -564,17 +564,101 @@ describe('blocker', () => {
     },
   )
 
-  it('lists one blocker once per issue it blocks', () => {
+  it('merges the issues one blocker holds up into a single chip', () => {
+    // It used to be one row per target, so a blocker with three targets cost
+    // three rows of the same identifier.
     const b = mk('B-9', { blocks: ['A-1', 'A-2'] })
     const c = ctx({
       members: [mk('A-1'), mk('A-2')],
       stage: shows,
       blockedBy: indexBlockedBy([b]),
     })
-    expect(renderStage(c, t).map((i) => i.hints[0])).toEqual([
-      'stage.blocking:A-1',
-      'stage.blocking:A-2',
-    ])
+    const items = renderStage(c, t)
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ text: 'B-9', hints: ['stage.blocking:A-1, A-2'] })
+  })
+
+  describe('placed with the blocked issue', () => {
+    // Two stages that both list `blocker`, over different Linear states — the
+    // shape that used to draw the same warning on both.
+    const todo = stage({ id: 1, key: 'a', name: 'A', states: ['Todo'], fields: ['blocker'], sortOrder: 0 })
+    const doing = stage({ id: 2, key: 'b', name: 'B', states: ['In Progress'], fields: ['blocker'], sortOrder: 1 })
+    const pipeline = [todo, doing]
+    const render = (stg: typeof todo, members: ReturnType<typeof mk>[], blockers: ReturnType<typeof mk>[], at = 'a') =>
+      renderStage(
+        ctx({
+          members,
+          stage: stg,
+          pipeline,
+          workstream: ws({ members: members.map((m) => m.identifier), stage: at }),
+          blockedBy: indexBlockedBy([...blockers, ...members]),
+        }),
+        t,
+      )
+
+    it('draws a blocker only on the stage where the blocked issue lives', () => {
+      const a1 = mk('A-1', { state: 'Todo' })
+      const outsider = mk('B-9', { blocks: ['A-1'], state: 'Backlog', type: 'backlog' })
+      expect(texts(render(todo, [a1], [outsider]))).toEqual(['B-9'])
+      expect(render(doing, [a1], [outsider])).toEqual([])
+    })
+
+    it('draws a blocker on each stage that holds something it blocks, with only those targets', () => {
+      const a1 = mk('A-1', { state: 'Todo' })
+      const a2 = mk('A-2', { state: 'In Progress' })
+      const outsider = mk('B-9', { blocks: ['A-1', 'A-2'], state: 'Backlog', type: 'backlog' })
+      expect(render(todo, [a1, a2], [outsider])[0]?.hints).toEqual(['stage.blocking:A-1'])
+      expect(render(doing, [a1, a2], [outsider])[0]?.hints).toEqual(['stage.blocking:A-2'])
+    })
+
+    it("follows the issue's fallback: an unmapped state is drawn on the workstream's current stage", () => {
+      const a1 = mk('A-1', { state: 'Paused' })
+      const outsider = mk('B-9', { blocks: ['A-1'], state: 'Backlog', type: 'backlog' })
+      expect(texts(render(todo, [a1], [outsider], 'a'))).toEqual(['B-9'])
+      expect(render(doing, [a1], [outsider], 'a')).toEqual([])
+    })
+  })
+
+  describe('a block between two members', () => {
+    // `states` set so both members are MAPPED here; an unmapped issue would add
+    // its own `unmappedState` hint and muddy what these tests are about.
+    const both = stage({ states: ['In Progress'], fields: ['issue', 'blocker'] })
+    const blocker = mk('A-1', { blocks: ['A-2'] })
+    const blocked = mk('A-2')
+    const run = (over: Partial<StageContext> = {}) =>
+      renderStage(
+        ctx({
+          members: [blocker, blocked],
+          stage: both,
+          blockedBy: indexBlockedBy([blocker, blocked]),
+          ...over,
+        }),
+        t,
+      )
+
+    it('is a hint on the blocked issue, not a second warning chip', () => {
+      const items = run()
+      expect(items.filter((i) => i.token === 'blocker')).toEqual([])
+      expect(items.find((i) => i.text.startsWith('A-2'))?.hints).toEqual(['stage.blockedByMember:A-1'])
+      expect(items.find((i) => i.text.startsWith('A-1'))?.hints).toEqual([])
+    })
+
+    it('is not said on a stage that does not list blocker', () => {
+      const items = run({ stage: stage({ states: ['In Progress'], fields: ['issue'] }) })
+      expect(items.find((i) => i.text.startsWith('A-2'))?.hints).toEqual([])
+    })
+
+    it('is not said once the blocking member is finished', () => {
+      const done = mk('A-1', { blocks: ['A-2'], type: 'completed', state: 'Done' })
+      const items = run({ members: [done, blocked], blockedBy: indexBlockedBy([done, blocked]) })
+      expect(items.find((i) => i.text.startsWith('A-2'))?.hints).toEqual([])
+    })
+
+    it('still draws a chip for an outside blocker of the same issue', () => {
+      const outsider = mk('B-9', { blocks: ['A-2'], state: 'Backlog', type: 'backlog' })
+      const items = run({ blockedBy: indexBlockedBy([blocker, blocked, outsider]) })
+      expect(items.filter((i) => i.token === 'blocker').map((i) => i.text)).toEqual(['B-9'])
+    })
   })
 })
 

@@ -249,18 +249,28 @@ function renderIssues(ctx: StageContext, t: Translate): StageItem[] {
   // stage rather than vanishing: an unmapped state is a gap in the pipeline
   // config, and the issue still has to be somewhere you can see it.
   const currentIsFallback = ctx.workstream.stage === ctx.stage.key
+  // A block BETWEEN two members is a fact about the blocked issue, so it is said
+  // on that issue's own chip. It used to be drawn as a separate warning chip on
+  // every stage that listed `blocker`, repeating an issue the box already showed.
+  // Only when this stage asks for blockers: the field list decides what a stage
+  // shows, and an issue chip is not an exception to it.
+  const showsBlockers = ctx.stage.fields.includes('blocker')
   for (const m of ctx.members) {
     const home = stageForIssue(m, ctx.pipeline, ctx.workstream.stage)
     const belongsHere = home ? home.key === ctx.stage.key : currentIsFallback
     if (!belongsHere) continue
+    const heldUpBy = showsBlockers ? memberBlockers(ctx, m) : []
     out.push(
       item({
         token: 'issue',
         text: `${m.identifier} \u00b7 ${m.state.name}`,
-        // Only said on the fallback path, where it is true and useful: this
-        // issue's state is in nobody's `states`, so the pipeline cannot place
-        // it and somebody should widen a stage.
-        hints: home ? [] : [t('stage.unmappedState')],
+        // The unmapped-state hint is only said on the fallback path, where it
+        // is true and useful: this issue's state is in nobody's `states`, so
+        // the pipeline cannot place it and somebody should widen a stage.
+        hints: [
+          ...(home ? [] : [t('stage.unmappedState')]),
+          ...(heldUpBy.length > 0 ? [t('stage.blockedByMember', { by: heldUpBy.join(', ') })] : []),
+        ],
         tone: home ? 'ok' : 'warn',
         issue: m.identifier,
       }),
@@ -465,30 +475,60 @@ function renderNote(ctx: StageContext, _t: Translate): StageItem[] {
   return out
 }
 
+/** Linear leaves a relation in place after the work is done, so a finished
+ *  blocker blocks nothing and must not be drawn as if it did. */
+function isFinished(i: NormalizedIssue): boolean {
+  return i.state.type === 'completed' || i.state.type === 'canceled'
+}
+
+/** The still-open blockers of `m` that are themselves members of this
+ *  workstream, by identifier. */
+function memberBlockers(ctx: StageContext, m: NormalizedIssue): string[] {
+  const members = new Set(ctx.workstream.members)
+  return (ctx.blockedBy.get(m.identifier) ?? [])
+    .filter((b) => members.has(b.identifier) && !isFinished(b))
+    .map((b) => b.identifier)
+}
+
+/**
+ * Blockers from OUTSIDE the workstream, drawn on the stage where the blocked
+ * issue lives — the same rule, and the same unmapped-state fallback, as the
+ * issue chips themselves.
+ *
+ * This used to ignore the stage entirely: it returned the whole workstream's
+ * blockers for every stage that listed `blocker`, so a pipeline that listed it
+ * on six stages drew the same three warnings six times. It also drew blockers
+ * that were members (already on the board as issues) and gave one blocker a row
+ * per issue it blocked. Now each blocker is one chip per stage, naming every
+ * issue it holds up on THAT stage; a blocker holding up issues on two stages
+ * appears once on each, with only the targets that live there.
+ *
+ * A block between two members is not drawn here — it is a hint on the blocked
+ * issue's chip (see `renderIssues`).
+ */
 function renderBlockers(ctx: StageContext, t: Translate): StageItem[] {
-  const out: StageItem[] = []
-  const seen = new Set<string>()
+  const members = new Set(ctx.workstream.members)
+  const currentIsFallback = ctx.workstream.stage === ctx.stage.key
+  const byBlocker = new Map<string, { blocker: NormalizedIssue; targets: string[] }>()
   for (const m of ctx.members) {
+    const home = stageForIssue(m, ctx.pipeline, ctx.workstream.stage)
+    if (!(home ? home.key === ctx.stage.key : currentIsFallback)) continue
     for (const b of ctx.blockedBy.get(m.identifier) ?? []) {
-      // A finished blocker blocks nothing. Linear leaves the relation in place
-      // after the work is done, so without this every stage would accumulate
-      // blockers that stopped mattering months ago.
-      if (b.state.type === 'completed' || b.state.type === 'canceled') continue
-      const key = `${b.identifier}→${m.identifier}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      out.push(
-        item({
-          token: 'blocker',
-          text: b.identifier,
-          hints: [t('stage.blocking', { target: m.identifier })],
-          tone: 'warn',
-          issue: b.identifier,
-        }),
-      )
+      if (isFinished(b) || members.has(b.identifier)) continue
+      const entry = byBlocker.get(b.identifier) ?? { blocker: b, targets: [] }
+      if (!entry.targets.includes(m.identifier)) entry.targets.push(m.identifier)
+      byBlocker.set(b.identifier, entry)
     }
   }
-  return out
+  return [...byBlocker.values()].map(({ blocker, targets }) =>
+    item({
+      token: 'blocker',
+      text: blocker.identifier,
+      hints: [t('stage.blocking', { target: targets.join(', ') })],
+      tone: 'warn',
+      issue: blocker.identifier,
+    }),
+  )
 }
 
 /**
