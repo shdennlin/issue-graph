@@ -4,6 +4,7 @@ import DOMPurify from 'dompurify'
 import type { NormalizedIssue } from '@shared/types.js'
 import { toggleChecklistAt } from '../../lib/checklist'
 import { highlightTextNodes } from '../../lib/highlightDom'
+import { convertBoxTables } from '../../lib/boxTables'
 import { decorateIssueLinksWithStatus, linkifyIssueIds } from '../../lib/issueLinks'
 import { useGraphStore } from '../../store/graphStore'
 import { useViewStore } from '../../store/viewStore'
@@ -84,7 +85,7 @@ export function NotePreview({
   useLayoutEffect(() => {
     const el = containerRef.current
     if (!el) return
-    const html = marked.parse(body || '*Empty note*', { async: false }) as string
+    const html = marked.parse(convertBoxTables(body || '*Empty note*'), { async: false }) as string
     const safe = DOMPurify.sanitize(html, { ADD_ATTR: ['target', 'rel'] })
     const parsed = new DOMParser().parseFromString(safe, 'text/html')
     el.replaceChildren(...Array.from(parsed.body.childNodes))

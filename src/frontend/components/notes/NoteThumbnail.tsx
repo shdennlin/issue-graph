@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import { convertBoxTables } from '../../lib/boxTables'
 import { highlightTextNodes } from '../../lib/highlightDom'
 
 interface Props {
@@ -33,7 +34,7 @@ export function NoteThumbnail({ body, highlight = '' }: Props) {
       el.replaceChildren()
       return
     }
-    const html = marked.parse(rest, { async: false }) as string
+    const html = marked.parse(convertBoxTables(rest), { async: false }) as string
     const safe = DOMPurify.sanitize(html, { ADD_ATTR: ['target', 'rel'] })
     const parsed = new DOMParser().parseFromString(safe, 'text/html')
     el.replaceChildren(...Array.from(parsed.body.childNodes))

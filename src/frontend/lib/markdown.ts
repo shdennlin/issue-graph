@@ -1,5 +1,6 @@
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
+import { convertBoxTables } from './boxTables'
 import { wireImagesIn, wireMermaidDiagram } from './mermaidPanZoom'
 
 const KEYWORDS_BY_LANGUAGE: Record<string, Set<string>> = {
@@ -168,7 +169,7 @@ export async function renderMermaidIn(root: ParentNode): Promise<void> {
 }
 
 export function renderMarkdownHtml(body: string, fallback = ''): string {
-  const html = marked.parse(body || fallback, { async: false }) as string
+  const html = marked.parse(convertBoxTables(body || fallback), { async: false }) as string
   const safe = DOMPurify.sanitize(html, {
     ADD_ATTR: ['target', 'rel', 'class', 'data-language'],
   })
