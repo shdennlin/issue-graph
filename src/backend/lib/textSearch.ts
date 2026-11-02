@@ -27,10 +27,27 @@ function terms(query: string): string[] {
   return query.toLowerCase().split(/\s+/).filter(Boolean)
 }
 
-/** Collapse whitespace so a snippet is one line, remembering nothing about the
- *  original offsets — the snippet is cut from the collapsed text. */
+/**
+ * Make a description readable as one line of plain text.
+ *
+ * Descriptions are markdown, and a snippet is shown raw: without this a hit
+ * read "**L1 re-calls** `todo_write`", "\~22 s" and "| -- | -- |" — syntax that
+ * is noise in a one-line preview. Applied before matching as well, so what is
+ * searched is what is shown and the highlight ranges line up.
+ *
+ * Deliberately shallow (emphasis, code ticks, escapes, heading markers, table
+ * rules): a single underscore or asterisk can be part of a real identifier
+ * such as `todo_write`, so those are left alone.
+ */
 function flatten(text: string): string {
-  return text.replace(/\s+/g, ' ').trim()
+  return text
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/(\|\s*:?-{2,}:?\s*)+\|?/g, ' ')
+    .replace(/\*\*|__/g, '')
+    .replace(/`/g, '')
+    .replace(/\\([\\*_{}[\]()#+\-.!~|>])/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 export function searchDescriptions(rows: TextRow[], query: string, limit = 30): TextHit[] {

@@ -53,6 +53,23 @@ describe('searchDescriptions', () => {
     expect(hit!.snippet.slice(s, e)).toBe('NEEDLE')
   })
 
+  it('shows plain text, not markdown syntax, and highlights the plain text', () => {
+    const md = [{
+      identifier: 'M',
+      description: 'So a todo only advances when **L1 re-calls** `todo_write`. About \\~22 s.\n| a | b |\n| -- | -- |',
+    }]
+    const [hit] = searchDescriptions(md, 're-calls')
+    expect(hit!.snippet).not.toMatch(/\*\*|`|\\~|\| -- \|/)
+    expect(hit!.snippet).toContain('L1 re-calls todo_write')
+    const [s, e] = hit!.ranges[0]!
+    expect(hit!.snippet.slice(s, e)).toBe('re-calls')
+  })
+
+  it('leaves a single underscore alone so identifiers stay searchable', () => {
+    const [hit] = searchDescriptions([{ identifier: 'U', description: 'call `todo_write` again' }], 'todo_write')
+    expect(hit!.snippet).toContain('todo_write')
+  })
+
   it('caps the number of results', () => {
     const many = Array.from({ length: 50 }, (_, i) => ({ identifier: `I-${i}`, description: 'has jq in it' }))
     expect(searchDescriptions(many, 'jq', 10)).toHaveLength(10)

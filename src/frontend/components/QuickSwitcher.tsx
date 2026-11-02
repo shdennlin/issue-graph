@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { FileText } from 'lucide-react'
 import { useQuickSwitcherStore } from '../store/quickSwitcherStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { useGraphStore } from '../store/graphStore'
@@ -184,55 +185,40 @@ export function QuickSwitcher({ onActivate }: Props) {
   const showingRecents = query.trim() === ''
   const indexingNote = !showingRecents && descResult?.query === query.trim() && descResult.indexing
 
+  // The workspace tag only earns its space when it tells rows apart.
+  const showScope = new Set(candidates.map((c) => c.scopeLabel).filter(Boolean)).size > 1
+
   return (
     <div
+      className="qs-backdrop"
       role="dialog"
       aria-modal="true"
       aria-label="Quick switcher"
       onMouseDown={(e: React.MouseEvent<HTMLDivElement>) => { if (e.target === e.currentTarget) close() }}
-      style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
-        zIndex: 10000, display: 'flex', alignItems: 'flex-start',
-        justifyContent: 'center', paddingTop: '9vh',
-      }}
     >
-      <div
-        className="quick-switcher-panel"
-        style={{
-          width: 'min(960px, 92vw)', maxWidth: '92vw', maxHeight: '78vh',
-          background: 'var(--panel-bg, #1e1e1e)', color: 'var(--text, #eee)',
-          borderRadius: 8, boxShadow: '0 12px 40px rgba(0,0,0,0.4)',
-          display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        }}
-      >
+      <div className="qs-panel">
         <input
           ref={inputRef}
+          className="qs-input"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder="Search issues, notes, tabs…"
-          style={{
-            border: 'none', outline: 'none', padding: '14px 18px',
-            fontSize: 18, background: 'transparent', color: 'inherit',
-          }}
         />
-        <div
-          ref={listRef}
-          style={{ overflowY: 'auto', borderTop: '1px solid var(--border, #333)' }}
-        >
+        <div ref={listRef} className="qs-list">
           {indexingNote && (
-            <div style={{ padding: '6px 14px', fontSize: 12, opacity: 0.65 }}>
+            <div className="qs-note">
               Indexing issue descriptions (first sync) — description matches will appear shortly. Retype to refresh.
             </div>
           )}
           {flat.length === 0 && (
-            <div style={{ padding: 16, opacity: 0.6 }}>
+            <div className="qs-empty">
               {showingRecents ? 'No recents yet — start typing.' : 'No matches.'}
             </div>
           )}
           {showingRecents
             ? flat.map((c, i) => (
-                <Row key={c.id} idx={i} c={c} selected={i === selectedIdx}
+                <Row key={c.id} idx={i} c={c} selected={i === selectedIdx} showScope={showScope}
                      onClick={() => activate(i, false)} groupHeader={i === 0 ? 'Recent' : null} query="" descHit={null} />
               ))
             : GROUP_ORDER.flatMap((kind) => {
@@ -247,6 +233,7 @@ export function QuickSwitcher({ onActivate }: Props) {
                     idx={offset + i}
                     c={c}
                     selected={offset + i === selectedIdx}
+                    showScope={showScope}
                     onClick={() => activate(offset + i, false)}
                     groupHeader={i === 0 ? GROUP_LABEL[kind] : null}
                     query={query}
@@ -279,9 +266,7 @@ function Highlighted({ text, query }: { text: string; query: string }) {
     let j = i
     while (j < text.length && hit.has(j) === on) j++
     const run = text.slice(i, j)
-    out.push(on
-      ? <mark key={i} style={{ background: 'rgba(255, 200, 60, 0.35)', color: 'inherit', borderRadius: 2 }}>{run}</mark>
-      : <span key={i}>{run}</span>)
+    out.push(on ? <mark key={i}>{run}</mark> : <span key={i}>{run}</span>)
     i = j
   }
   return <>{out}</>
@@ -293,17 +278,15 @@ function Ranges({ text, ranges }: { text: string; ranges: [number, number][] }) 
   let at = 0
   ranges.forEach(([s, e], k) => {
     if (s > at) out.push(<span key={`t${k}`}>{text.slice(at, s)}</span>)
-    out.push(<mark key={`m${k}`} style={{ background: 'rgba(255, 200, 60, 0.35)', color: 'inherit', borderRadius: 2 }}>{text.slice(s, e)}</mark>)
+    out.push(<mark key={`m${k}`}>{text.slice(s, e)}</mark>)
     at = e
   })
   if (at < text.length) out.push(<span key="tail">{text.slice(at)}</span>)
   return <>{out}</>
 }
 
-const META_STYLE: React.CSSProperties = { fontSize: 12, opacity: 0.6, whiteSpace: 'nowrap' }
-
 function Row({
-  idx, c, selected, onClick, groupHeader, query, descHit,
+  idx, c, selected, onClick, groupHeader, query, descHit, showScope,
 }: {
   idx: number
   c: Candidate
@@ -312,75 +295,56 @@ function Row({
   groupHeader: string | null
   query: string
   descHit: SearchHit | null
+  showScope: boolean
 }) {
   const locale = useLocale()
-  const issueState = c.kind === 'issue' ? c.state : null
-  // Second line: everything that tells two similar titles apart.
-  const meta: string[] = []
+
+  // One line of facts, always in the same order: state, who, where, how urgent,
+  // how fresh. Labels are not here — a comma-joined run of them was the noisiest
+  // thing on the row and is no help picking between two issues.
+  const facts: React.ReactNode[] = []
   if (c.kind === 'issue') {
-    if (c.assignee) meta.push(c.assignee)
-    if (c.project) meta.push(c.project)
-    if (c.priority) meta.push(priorityLabelFor(c.priority, locale))
-    if (c.updatedAt && Number.isFinite(c.updatedAt)) meta.push(formatRelative(c.updatedAt))
+    if (c.state) {
+      facts.push(
+        <span key="state" className="qs-state" style={{ color: stateColorVar(c.state.type) }}>
+          <span aria-hidden>{stateIcon(c.state.type)}</span>
+          {c.state.name}
+        </span>,
+      )
+    }
+    if (c.assignee) facts.push(<span key="who">{c.assignee}</span>)
+    if (c.project) facts.push(<span key="proj">{c.project}</span>)
+    if (c.priority) facts.push(<span key="prio">{priorityLabelFor(c.priority, locale)}</span>)
+    if (c.updatedAt && Number.isFinite(c.updatedAt)) facts.push(<span key="when">{formatRelative(c.updatedAt)}</span>)
+  } else if (c.hint) {
+    facts.push(<span key="hint">{c.hint}</span>)
   }
+
   return (
     <>
-      {groupHeader && (
-        <div style={{ padding: '6px 14px', fontSize: 11, opacity: 0.55, textTransform: 'uppercase' }}>
-          {groupHeader}
-        </div>
-      )}
+      {groupHeader && <div className="qs-group">{groupHeader}</div>}
       <div
         data-idx={idx}
+        className={`qs-row${selected ? ' is-selected' : ''}`}
         onMouseDown={(e) => { e.preventDefault(); onClick() }}
-        style={{
-          padding: '8px 14px', cursor: 'pointer',
-          background: selected ? 'var(--row-selected, #2a4a6a)' : 'transparent',
-          display: 'flex', alignItems: 'flex-start', gap: 10,
-        }}
       >
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <span
-            style={{
-              fontSize: 14, lineHeight: 1.35, overflow: 'hidden',
-              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-              wordBreak: 'break-word',
-            }}
-          >
+        <div className="qs-main">
+          <span className="qs-title">
             <Highlighted text={c.label} query={query} />
           </span>
           {descHit && (
-            <span style={{ fontSize: 12, opacity: 0.8, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', wordBreak: 'break-word' }}>
-              <span style={{ opacity: 0.6, marginRight: 6, fontSize: 10, textTransform: 'uppercase' }}>description</span>
-              <Ranges text={descHit.snippet} ranges={descHit.ranges} />
-            </span>
+            <div className="qs-snippet">
+              <FileText size={13} aria-label="Description" />
+              <span><Ranges text={descHit.snippet} ranges={descHit.ranges} /></span>
+            </div>
           )}
-          {(meta.length > 0 || c.hint) && (
-            <span style={{ ...META_STYLE, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {[...meta, c.hint].filter(Boolean).join(' · ')}
-            </span>
+          {facts.length > 0 && (
+            <div className="qs-facts">
+              {facts.flatMap((f, i) => (i === 0 ? [f] : [<span key={`sep${i}`} className="qs-sep" aria-hidden>·</span>, f]))}
+            </div>
           )}
         </div>
-        {issueState && (
-          <span
-            title={issueState.name}
-            style={{
-              fontSize: 11, padding: '1px 6px', borderRadius: 4,
-              display: 'inline-flex', alignItems: 'center', gap: 4,
-              color: stateColorVar(issueState.type),
-              border: `1px solid ${stateColorVar(issueState.type)}`,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <span aria-hidden>{stateIcon(issueState.type)}</span>
-            <span>{issueState.name}</span>
-          </span>
-        )}
-        {c.scopeLabel && (
-          <span style={{ fontSize: 11, opacity: 0.7, padding: '1px 6px', border: '1px solid var(--border, #444)', borderRadius: 4, whiteSpace: 'nowrap' }}>
-            {c.scopeLabel}
-          </span>
-        )}
+        {showScope && c.scopeLabel && <span className="qs-scope">{c.scopeLabel}</span>}
       </div>
     </>
   )
