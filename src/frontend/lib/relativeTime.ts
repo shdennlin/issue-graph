@@ -29,6 +29,24 @@ export function formatAbsolute(ts: number): string {
   return ABS_FORMATTER.format(new Date(ts))
 }
 
+/**
+ * Absolute date AND time, for tooltips where `formatAbsolute`'s date alone
+ * cannot tell two edits on the same day apart. 24-hour clock (`h23`, so
+ * midnight is 00 rather than 24). `locale` and `timeZone` are injectable so the
+ * output is testable; omitted, both come from the browser.
+ */
+export function formatDateTime(ts: number, locale?: string, timeZone?: string): string {
+  return new Intl.DateTimeFormat(locale, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    timeZone,
+  }).format(new Date(ts))
+}
+
 /** A coarse age, as a number plus the unit it is counted in. */
 export interface CompactAge {
   value: number

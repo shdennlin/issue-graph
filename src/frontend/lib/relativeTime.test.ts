@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { compactAge, formatRelative } from './relativeTime'
+import { compactAge, formatDateTime, formatRelative } from './relativeTime'
 
 const NOW = new Date('2026-05-11T18:00:00Z').getTime()
 
@@ -53,5 +53,26 @@ describe('compactAge', () => {
 
   it('clamps a future timestamp to zero rather than going negative', () => {
     expect(compactAge(NOW + DAY, NOW)).toEqual({ value: 0, unit: 'm' })
+  })
+})
+
+describe('formatDateTime', () => {
+  const TS = Date.UTC(2026, 10, 2, 11, 20) // 2026-11-02 11:20 UTC
+
+  it('carries the time of day, not just the date', () => {
+    const out = formatDateTime(TS, 'en-US', 'UTC')
+    expect(out).toContain('Nov')
+    expect(out).toContain('2026')
+    expect(out).toContain('11:20')
+  })
+
+  it('tells two edits on the same day apart', () => {
+    expect(formatDateTime(TS, 'en-US', 'UTC')).not.toBe(formatDateTime(TS + 60 * 60_000, 'en-US', 'UTC'))
+  })
+
+  it('uses a 24-hour clock, with midnight as 00', () => {
+    const midnight = Date.UTC(2026, 10, 2, 0, 5)
+    expect(formatDateTime(midnight, 'en-US', 'UTC')).toContain('00:05')
+    expect(formatDateTime(Date.UTC(2026, 10, 2, 15, 0), 'en-US', 'UTC')).toContain('15:00')
   })
 })

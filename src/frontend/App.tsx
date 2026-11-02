@@ -24,6 +24,7 @@ import { GraphCanvas } from './components/GraphCanvas'
 import { TabBar } from './components/TabBar'
 import { Toolbar } from './components/Toolbar'
 import { FacetBar } from './components/facets/FacetBar'
+import { IssueListPanel } from './components/IssueListPanel'
 import { SyncBanner } from './components/SyncBanner'
 import { SavedViewSync } from './components/SavedViewSync'
 import { Onboarding } from './components/Onboarding'
@@ -71,6 +72,7 @@ export function App() {
   const shortcutsOpen = useViewStore((s) => s.shortcutsOpen)
   const notesOpen = useViewStore((s) => s.notesOpen)
   const workstreamsOpen = useViewStore((s) => s.workstreamsOpen)
+  const leftRailWidth = useViewStore((s) => s.leftRailWidth)
   const lifecycleEditorOpen = useViewStore((s) => s.lifecycleEditorOpen)
   const stagePanel = useViewStore((s) => s.stagePanel)
   const workstreamPanelId = useViewStore((s) => s.workstreamPanelId)
@@ -798,7 +800,18 @@ export function App() {
             A control that does nothing is worse than an absent one — it
             invites you to reach for it. The jump list takes the corner
             instead, which is the thing you actually pick from here. */}
-        {activeViewId !== 'workstream' && <FacetBar />}
+        {/* One rail for both, so the list sits directly under however tall the
+            filter panel currently is — FacetBar used to position itself
+            absolutely, and a second absolute panel could not know its height.
+            Same gate as the filter panel: the workstream view draws stages,
+            not the filtered issues, so a list of them would name cards that
+            are not on screen. */}
+        {activeViewId !== 'workstream' && (
+          <div className="left-rail" style={{ width: leftRailWidth }}>
+            <FacetBar />
+            <IssueListPanel />
+          </div>
+        )}
         {/* Beside FacetBar so its `position: absolute` resolves against the
             canvas, not the page — at the app root it sat under the toolbar.
             Only over the view it configures: a pipeline editor floating over

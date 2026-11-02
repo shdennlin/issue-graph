@@ -1,3 +1,4 @@
+import { clampListHeight, clampRailWidth, RAIL_WIDTH_DEFAULT } from '../lib/issueList'
 import { create } from 'zustand'
 import type { IssueStateType } from '@shared/types.js'
 import {
@@ -224,6 +225,30 @@ export interface ViewState {
   visibleIssueCount: number | null
   setVisibleIssueCount: (n: number | null) => void
   /**
+   * Identifiers of the issue cards the canvas drew, published alongside the
+   * count for the issue-list sidebar. Derived, so not part of the per-tab
+   * snapshot either.
+   */
+  visibleIssueIds: string[]
+  setVisibleIssueIds: (ids: string[]) => void
+  /**
+   * The issue whose row the pointer is over in the sidebar. GraphCanvas folds
+   * it into the same highlight a hovered card gets, so the list and the canvas
+   * answer "which one is this" the same way. Ephemeral and never persisted.
+   */
+  listHoverId: string | null
+  setListHoverId: (id: string | null) => void
+  /** Whether the issue list stays open. Unpinned it collapses to a handle and
+   *  expands on hover, same as the filter panel above it. Per-browser. */
+  issueListPinned: boolean
+  toggleIssueListPinned: () => void
+  /** Width of the left rail (filter panel + list), px. Per-browser. */
+  leftRailWidth: number
+  setLeftRailWidth: (w: number) => void
+  /** Explicit list height in px, or null to fill the space under the filter panel. */
+  issueListHeight: number | null
+  setIssueListHeight: (h: number | null) => void
+  /**
    * Whether the filter panel stays open. Unpinned it collapses to a handle
    * and expands on hover, giving the graph the corner back.
    *
@@ -437,6 +462,45 @@ export const useViewStore = create<ViewState>((set) => ({
   setAppliedSavedViewId: (id) => set({ appliedSavedViewId: id }),
   visibleIssueCount: null,
   setVisibleIssueCount: (n) => set({ visibleIssueCount: n }),
+  visibleIssueIds: [],
+  setVisibleIssueIds: (ids) => set({ visibleIssueIds: ids }),
+  listHoverId: null,
+  setListHoverId: (id) => set((s) => (s.listHoverId === id ? s : { listHoverId: id })),
+  leftRailWidth: (() => {
+    if (typeof window === 'undefined') return RAIL_WIDTH_DEFAULT
+    const raw = window.localStorage?.getItem('ig-left-rail-width')
+    return raw ? clampRailWidth(Number(raw)) : RAIL_WIDTH_DEFAULT
+  })(),
+  setLeftRailWidth: (w) => {
+    const next = clampRailWidth(w)
+    if (typeof window !== 'undefined') window.localStorage?.setItem('ig-left-rail-width', String(next))
+    set({ leftRailWidth: next })
+  },
+  issueListHeight: (() => {
+    if (typeof window === 'undefined') return null
+    const raw = window.localStorage?.getItem('ig-issue-list-height')
+    return raw ? clampListHeight(Number(raw), window.innerHeight) : null
+  })(),
+  setIssueListHeight: (h) => {
+    const next = h === null ? null : clampListHeight(h, typeof window === 'undefined' ? 900 : window.innerHeight)
+    if (typeof window !== 'undefined') {
+      if (next === null) window.localStorage?.removeItem('ig-issue-list-height')
+      else window.localStorage?.setItem('ig-issue-list-height', String(next))
+    }
+    set({ issueListHeight: next })
+  },
+  issueListPinned:
+    typeof window !== 'undefined' && window.localStorage?.getItem('ig-issue-list-pinned') === '0'
+      ? false
+      : true,
+  toggleIssueListPinned: () =>
+    set((s) => {
+      const next = !s.issueListPinned
+      if (typeof window !== 'undefined') {
+        window.localStorage?.setItem('ig-issue-list-pinned', next ? '1' : '0')
+      }
+      return { issueListPinned: next }
+    }),
   filterPanelPinned:
     typeof window !== 'undefined' && window.localStorage?.getItem('ig-filter-pinned') === '0'
       ? false

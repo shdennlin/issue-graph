@@ -121,14 +121,21 @@ function CanvasInner() {
   // Published for the filter panel to report. Counted here rather than derived
   // from applyFilters because container views add non-issue nodes and chain
   // isolation trims the set, so only the built graph knows what is on screen.
-  const issueNodeCount = useMemo(
-    () => built.nodes.reduce((n, node) => (node.type === 'issue' ? n + 1 : n), 0),
+  const issueNodeIds = useMemo(
+    () => built.nodes.filter((node) => node.type === 'issue').map((node) => node.id),
     [built.nodes],
   )
+  const issueNodeCount = issueNodeIds.length
   const setVisibleIssueCount = useViewStore((s) => s.setVisibleIssueCount)
+  const setVisibleIssueIds = useViewStore((s) => s.setVisibleIssueIds)
   useEffect(() => {
     setVisibleIssueCount(issueNodeCount)
   }, [issueNodeCount, setVisibleIssueCount])
+  // Same set, as ids, for the sidebar list. Kept in its own effect so a layout
+  // that moves nodes without changing membership still republishes cheaply.
+  useEffect(() => {
+    setVisibleIssueIds(issueNodeIds)
+  }, [issueNodeIds, setVisibleIssueIds])
 
   const [nodes, setNodes] = useState<RFNode[]>(built.nodes)
   // Include `measuredHeights ? 'm' : 'e'` so the post-measure re-layout pass is
@@ -783,13 +790,15 @@ function CanvasInner() {
   // Resolves to a single node OR edge id; the same set-builder below handles
   // both cases.
   const effectiveEdgeId = hoveredEdgeId ?? highlightedEdgeId
-  const effectiveNodeId = hoveredNodeId ?? highlightedNodeId ?? focusedId
+  // A row hovered in the sidebar counts as a hovered card (see listHoverId).
+  const listHoverId = useViewStore((s) => s.listHoverId)
+  const effectiveNodeId = hoveredNodeId ?? listHoverId ?? highlightedNodeId ?? focusedId
   // Highlight strength: 'soft' for transient hover or focus-based dim;
   // 'strong' for explicit click-pin isolation. Strong mode is for the user
   // who's actively tracing a chain — drops unrelated cards to near-invisible
   // and hides unrelated edges entirely so the chain reads cleanly. Hover
   // stays soft so quick scanning doesn't feel violent.
-  const isHovering = Boolean(hoveredEdgeId || hoveredNodeId)
+  const isHovering = Boolean(hoveredEdgeId || hoveredNodeId || listHoverId)
   const isPinned = !isHovering && Boolean(highlightedEdgeId || highlightedNodeId)
   const highlightStrength: 'soft' | 'strong' = isPinned ? 'strong' : 'soft'
 
