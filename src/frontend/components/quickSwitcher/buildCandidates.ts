@@ -58,6 +58,10 @@ export function buildCandidates(args: Args): Candidate[] {
           title: string
           labels: { name: string }[]
           state?: { name: string; type: string }
+          assignee?: { displayName: string } | null
+          project?: { name: string } | null
+          priority?: number
+          updatedAt?: string
         }[]
       | undefined
     if (!issues) continue
@@ -75,6 +79,10 @@ export function buildCandidates(args: Args): Candidate[] {
         scopeLabel,
         hint: i.labels.map((l) => l.name).join(', '),
         state: i.state ? { name: i.state.name, type: i.state.type } : undefined,
+        assignee: i.assignee?.displayName ?? null,
+        project: i.project?.name ?? null,
+        priority: i.priority,
+        updatedAt: i.updatedAt ? Date.parse(i.updatedAt) : undefined,
       }
       out.push(cand)
     }

@@ -32,6 +32,25 @@ describe('buildCandidates', () => {
     expect(issues.find((c) => c.label.includes('TWO-1'))?.scopeLabel).toBe('Beta')
   })
 
+  it('carries the context shown on the second line of a row', () => {
+    const i = {
+      ...issue('a', 'ONE-1', 'Fix login'),
+      assignee: { displayName: 'Shawn' },
+      project: { id: 'p', name: 'Auth' },
+      priority: 2,
+      updatedAt: '2026-01-02T00:00:00.000Z',
+    } as unknown as NormalizedIssue
+    const [c] = buildCandidates({
+      tabs: [{ id: 't1', workspaceId: 'w1' }],
+      activeTabId: 't1',
+      workspaceName: () => 'Alpha',
+      activeGraph: graph([i]),
+      snapshotGraph: () => null,
+      notesByTab: {},
+    }).filter((x) => x.kind === 'issue')
+    expect(c).toMatchObject({ assignee: 'Shawn', project: 'Auth', priority: 2, updatedAt: Date.parse('2026-01-02T00:00:00.000Z') })
+  })
+
   it('emits a tab candidate for each open tab', () => {
     const candidates = buildCandidates({
       tabs: [{ id: 't1', workspaceId: 'w1' }],

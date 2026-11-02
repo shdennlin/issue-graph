@@ -17,6 +17,13 @@ export interface IssueCandidate {
   hint: string
   /** Workflow state (name + type). Omitted when restored from recents. */
   state?: { name: string; type: string }
+  /** Context shown on the second line of the row. All optional: recents are
+   *  restored from a label-only record and get these back from the live graph. */
+  assignee?: string | null
+  project?: string | null
+  priority?: number
+  /** Epoch ms of the last update. */
+  updatedAt?: number
 }
 
 export interface NoteCandidate {

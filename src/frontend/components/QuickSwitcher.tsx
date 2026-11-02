@@ -5,10 +5,12 @@ import { useGraphStore } from '../store/graphStore'
 import { useNotesStore } from '../store/notesStore'
 import { getTabGraph } from '../store/tabStateStore'
 import { buildCandidates } from './quickSwitcher/buildCandidates'
-import { fuzzyMatch } from './quickSwitcher/fuzzyMatch'
+import { fuzzyIndices, fuzzyMatch } from './quickSwitcher/fuzzyMatch'
 import { rankCandidates } from './quickSwitcher/rankCandidates'
 import type { Candidate, RecentItem } from './quickSwitcher/types'
-import { stateColorVar, stateIcon } from '../lib/colors'
+import { priorityLabelFor, stateColorVar, stateIcon } from '../lib/colors'
+import { formatRelative } from '../lib/relativeTime'
+import { useLocale } from '../i18n'
 
 const GROUP_ORDER: Candidate['kind'][] = ['issue', 'note', 'tab']
 const PER_GROUP_CAP = 20
@@ -74,10 +76,13 @@ export function QuickSwitcher({ onActivate }: Props) {
 
   const flat = useMemo<Candidate[]>(() => {
     if (query.trim() === '') {
-      return recents.map<Candidate>((r) => recentToCandidate(r))
+      // A recent is stored as a label-only record. Prefer the live candidate
+      // with the same id so the row shows current state/assignee/etc.
+      const live = new Map(candidates.map((c) => [c.id, c]))
+      return recents.map<Candidate>((r) => live.get(r.id) ?? recentToCandidate(r))
     }
     return GROUP_ORDER.flatMap((k) => grouped[k])
-  }, [query, grouped, recents])
+  }, [query, grouped, recents, candidates])
 
   // react-hooks/set-state-in-effect: reset selection cursor whenever the
   // candidate list materially changes so the highlight doesn't point past
@@ -146,13 +151,13 @@ export function QuickSwitcher({ onActivate }: Props) {
       style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
         zIndex: 10000, display: 'flex', alignItems: 'flex-start',
-        justifyContent: 'center', paddingTop: '12vh',
+        justifyContent: 'center', paddingTop: '9vh',
       }}
     >
       <div
         className="quick-switcher-panel"
         style={{
-          width: 640, maxWidth: '92vw', maxHeight: '70vh',
+          width: 'min(960px, 92vw)', maxWidth: '92vw', maxHeight: '78vh',
           background: 'var(--panel-bg, #1e1e1e)', color: 'var(--text, #eee)',
           borderRadius: 8, boxShadow: '0 12px 40px rgba(0,0,0,0.4)',
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
@@ -166,7 +171,7 @@ export function QuickSwitcher({ onActivate }: Props) {
           placeholder="Search issues, notes, tabs…"
           style={{
             border: 'none', outline: 'none', padding: '14px 18px',
-            fontSize: 16, background: 'transparent', color: 'inherit',
+            fontSize: 18, background: 'transparent', color: 'inherit',
           }}
         />
         <div
@@ -181,7 +186,7 @@ export function QuickSwitcher({ onActivate }: Props) {
           {showingRecents
             ? flat.map((c, i) => (
                 <Row key={c.id} idx={i} c={c} selected={i === selectedIdx}
-                     onClick={() => activate(i, false)} groupHeader={i === 0 ? 'Recent' : null} />
+                     onClick={() => activate(i, false)} groupHeader={i === 0 ? 'Recent' : null} query="" />
               ))
             : GROUP_ORDER.flatMap((kind) => {
                 const list = grouped[kind]
@@ -197,6 +202,7 @@ export function QuickSwitcher({ onActivate }: Props) {
                     selected={offset + i === selectedIdx}
                     onClick={() => activate(offset + i, false)}
                     groupHeader={i === 0 ? GROUP_LABEL[kind] : null}
+                    query={query}
                   />
                 ))
               })}
@@ -212,16 +218,49 @@ const GROUP_LABEL: Record<Candidate['kind'], string> = {
   tab: 'Tabs',
 }
 
+/** Split `text` into runs, marking the characters the query matched on. */
+function Highlighted({ text, query }: { text: string; query: string }) {
+  const q = query.trim()
+  const idx = q ? fuzzyIndices(q, text) : null
+  if (!idx || idx.length === 0) return <>{text}</>
+  const hit = new Set(idx)
+  const out: React.ReactNode[] = []
+  let i = 0
+  while (i < text.length) {
+    const on = hit.has(i)
+    let j = i
+    while (j < text.length && hit.has(j) === on) j++
+    const run = text.slice(i, j)
+    out.push(on
+      ? <mark key={i} style={{ background: 'rgba(255, 200, 60, 0.35)', color: 'inherit', borderRadius: 2 }}>{run}</mark>
+      : <span key={i}>{run}</span>)
+    i = j
+  }
+  return <>{out}</>
+}
+
+const META_STYLE: React.CSSProperties = { fontSize: 12, opacity: 0.6, whiteSpace: 'nowrap' }
+
 function Row({
-  idx, c, selected, onClick, groupHeader,
+  idx, c, selected, onClick, groupHeader, query,
 }: {
   idx: number
   c: Candidate
   selected: boolean
   onClick: () => void
   groupHeader: string | null
+  query: string
 }) {
+  const locale = useLocale()
   const issueState = c.kind === 'issue' ? c.state : null
+  // Second line: everything that tells two similar titles apart.
+  const meta: string[] = []
+  if (c.kind === 'issue') {
+    if (c.assignee) meta.push(c.assignee)
+    if (c.project) meta.push(c.project)
+    if (c.priority) meta.push(priorityLabelFor(c.priority, locale))
+    if (c.updatedAt && Number.isFinite(c.updatedAt)) meta.push(formatRelative(c.updatedAt))
+  }
   return (
     <>
       {groupHeader && (
@@ -235,12 +274,25 @@ function Row({
         style={{
           padding: '8px 14px', cursor: 'pointer',
           background: selected ? 'var(--row-selected, #2a4a6a)' : 'transparent',
-          display: 'flex', alignItems: 'center', gap: 8,
+          display: 'flex', alignItems: 'flex-start', gap: 10,
         }}
       >
-        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {c.label}
-        </span>
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <span
+            style={{
+              fontSize: 14, lineHeight: 1.35, overflow: 'hidden',
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+              wordBreak: 'break-word',
+            }}
+          >
+            <Highlighted text={c.label} query={query} />
+          </span>
+          {(meta.length > 0 || c.hint) && (
+            <span style={{ ...META_STYLE, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {[...meta, c.hint].filter(Boolean).join(' · ')}
+            </span>
+          )}
+        </div>
         {issueState && (
           <span
             title={issueState.name}
@@ -256,13 +308,8 @@ function Row({
             <span>{issueState.name}</span>
           </span>
         )}
-        {c.hint && (
-          <span style={{ fontSize: 11, opacity: 0.55, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {c.hint}
-          </span>
-        )}
         {c.scopeLabel && (
-          <span style={{ fontSize: 11, opacity: 0.7, padding: '1px 6px', border: '1px solid var(--border, #444)', borderRadius: 4 }}>
+          <span style={{ fontSize: 11, opacity: 0.7, padding: '1px 6px', border: '1px solid var(--border, #444)', borderRadius: 4, whiteSpace: 'nowrap' }}>
             {c.scopeLabel}
           </span>
         )}

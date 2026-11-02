@@ -19,6 +19,7 @@ import { arrivedViaBareDeepLink, arrivedWithEmptyUrl, consumeJumpEntry, useUrlSy
 import { useTheme } from './hooks/useTheme'
 import { useFontSize } from './hooks/useFontSize'
 import { api } from './lib/api'
+import { findTarget } from './lib/findTarget'
 import { isTypingTarget } from './lib/isTypingTarget'
 import { GraphCanvas } from './components/GraphCanvas'
 import { TabBar } from './components/TabBar'
@@ -693,8 +694,17 @@ export function App() {
         const canvas = document.querySelector('.canvas') as HTMLElement | null
         if (!canvas) return
         const active = document.activeElement
+        const panel = document.querySelector('aside.detail-panel')
         const focusInCanvas = active === canvas || (active && canvas.contains(active)) || active === document.body
-        if (focusInCanvas) {
+        // See lib/findTarget.ts: focus alone mistakes "reading the panel" for
+        // "looking at the canvas", because clicking panel text leaves body focused.
+        const target = findTarget({
+          panelOpen: panel !== null,
+          pointerOverPanel: panel?.matches(':hover') ?? false,
+          focusInPanel: !!(panel && active && panel.contains(active)),
+          focusInCanvas: !!focusInCanvas,
+        })
+        if (target === 'canvas') {
           e.preventDefault()
           const s = useViewStore.getState()
           if (s.inlineSearch.open) {
