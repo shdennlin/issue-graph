@@ -9,6 +9,9 @@ import {
   chipsFromFilters,
   clearFacetPatch,
   groupFacets,
+  handleCountLabel,
+  handleSummary,
+  HANDLE_LABEL_MAX,
   isNegated,
   toggleNegated,
   locateOption,
@@ -585,5 +588,93 @@ describe('groupFacets', () => {
   it('covers every facet exactly once', () => {
     const grouped = groupFacets(facets, t).flatMap((s) => s.facets.map((f) => f.id))
     expect(grouped.sort()).toEqual(facets.map((f) => f.id).sort())
+  })
+})
+
+describe('handleSummary — the collapsed handle names only what was moved', () => {
+  const facets = buildFacets(input({ showDueFilter: true }))
+  const summary = (f: Filters, max?: number) => handleSummary(f, facets, defaultFilters, t, max)
+
+  // The bug it replaces: the handle read "1" on a panel nobody had touched,
+  // because the State facet constrains at its default and so produces a chip.
+  it('says nothing when every filter is at its default', () => {
+    expect(chipsFromFilters(defaultFilters, facets, t)).not.toHaveLength(0)
+    expect(summary(defaultFilters)).toBeNull()
+  })
+
+  it('names a single moved filter by its value, with no remainder', () => {
+    // Limit lifted: the identity translator returns long key paths, and the
+    // truncation has its own tests below.
+    const s = summary(filters({ dueFilter: 'overdue' }), 200)
+    expect(s?.label).toBe('filterPanel.dueDateOverdue')
+    expect(s?.extra).toBe(0)
+  })
+
+  it('counts the other moved filters as a remainder', () => {
+    const s = summary(filters({ priorities: [1], dueFilter: 'overdue', myIssuesOnly: true }))
+    expect(s?.extra).toBe(2)
+  })
+
+  it('does not count the default State chip toward the remainder', () => {
+    // `state` shows up in chipsFromFilters here (it constrains at default) but
+    // was not moved, so it must not inflate "+N".
+    const s = summary(filters({ priorities: [1], dueFilter: 'overdue' }))
+    expect(s?.extra).toBe(1)
+  })
+
+  it('reports a changed State that now excludes something', () => {
+    expect(summary(filters({ stateTypes: ['started'] }))).not.toBeNull()
+  })
+
+  it('does not report State widened to every type, which excludes nothing', () => {
+    const all: Filters['stateTypes'] = ['started', 'unstarted', 'backlog', 'triage', 'completed', 'canceled']
+    expect(summary(filters({ stateTypes: all }))).toBeNull()
+  })
+
+  it('falls back to the title for a toggle filter, which has no value', () => {
+    const s = summary(filters({ myIssuesOnly: true }), 200)
+    expect(s?.label).toBe(byId(facets, 'quick:mine').title)
+  })
+
+  it('cuts a long value to the limit with an ellipsis', () => {
+    const s = summary(filters({ priorities: [1, 2] }), 8)
+    expect(Array.from(s?.label ?? '')).toHaveLength(8)
+    expect(s?.label.endsWith('…')).toBe(true)
+  })
+
+  it('leaves a value that already fits alone', () => {
+    expect(summary(filters({ dueFilter: 'overdue' }), 200)?.label).toBe('filterPanel.dueDateOverdue')
+  })
+
+  it('does not cut a character in half', () => {
+    const cjk = { ...byId(facets, 'quick:mine'), title: '👍👍👍👍👍👍' }
+    const f = filters({ myIssuesOnly: true })
+    const s = handleSummary(f, facets.map((x) => (x.id === cjk.id ? cjk : x)), defaultFilters, t, 4)
+    expect(s?.label).toBe('👍👍👍…')
+  })
+
+  it('lists every moved filter in full for the tooltip', () => {
+    const s = summary(filters({ dueFilter: 'overdue', myIssuesOnly: true }))
+    expect(s?.title).toContain('filterPanel.dueDateOverdue')
+    expect(s?.title).toContain(byId(facets, 'quick:mine').title)
+  })
+
+  it('has a sensible default limit', () => {
+    expect(HANDLE_LABEL_MAX).toBe(14)
+  })
+})
+
+describe('handleCountLabel', () => {
+  it('shows visible/total when something is hidden', () => {
+    expect(handleCountLabel(9, 266)).toBe('9/266')
+  })
+
+  it('is silent when nothing is hidden, since equal numbers repeat themselves', () => {
+    expect(handleCountLabel(266, 266)).toBeNull()
+  })
+
+  it('is silent before the canvas has reported', () => {
+    expect(handleCountLabel(null, 266)).toBeNull()
+    expect(handleCountLabel(9, null)).toBeNull()
   })
 })

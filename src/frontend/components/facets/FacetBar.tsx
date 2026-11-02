@@ -33,6 +33,8 @@ import {
   chipsFromFilters,
   clearFacetPatch,
   groupFacets,
+  handleCountLabel,
+  handleSummary,
   isFacetAtDefault,
   isNegated,
   partitionPinned,
@@ -217,6 +219,15 @@ export function FacetBar() {
     [filters, facets, t],
   )
 
+  // Only used by the collapsed handle, but computed up here with the other
+  // hooks: it sits before the early return below.
+  const handleInfo = useMemo(
+    () => handleSummary(filters, facets, defaultFilters, t),
+    [filters, facets, t],
+  )
+
+  const handleCount = handleCountLabel(visibleCount, totalCount)
+
   const facetById = (id: string) => facets.find((f) => f.id === id)
 
   const clearFacet = (facet: FacetDef) => {
@@ -254,7 +265,16 @@ export function FacetBar() {
             which saved view you are in — the tab strip names it too, but only
             once you look up there. */}
         <ActiveViewLabel />
-        {chips.length > 0 && <span className="facet-handle-count">{chips.length}</span>}
+        {/* Only filters moved off their default are named; all-default leaves
+            the icon bare. The visible/total beside it is what still reports a
+            default that hides things (the State filter does). */}
+        {handleInfo && (
+          <span className="facet-handle-info" title={handleInfo.title}>
+            <span className="facet-handle-info-text">{handleInfo.label}</span>
+            {handleInfo.extra > 0 && <span className="facet-handle-more">+{handleInfo.extra}</span>}
+          </span>
+        )}
+        {handleCount && <span className="facet-handle-count">{handleCount}</span>}
       </button>
     )
   }

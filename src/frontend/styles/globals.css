@@ -3947,6 +3947,18 @@ label + .settings-help {
 }
 .facet-handle:hover .facet-handle-view { color: inherit; }
 
+.facet-handle-info {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  font-size: var(--fs-meta);
+  color: var(--fg);
+}
+.facet-handle-info-text { font-weight: 600; white-space: nowrap; }
+.facet-handle-more { color: var(--fg-muted); font-variant-numeric: tabular-nums; }
+.facet-handle:hover .facet-handle-info { color: inherit; }
+
 .facet-handle-count {
   padding: 0 5px;
   border-radius: 999px;

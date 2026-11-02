@@ -548,6 +548,65 @@ export function isFacetAtDefault(filters: Filters, facet: FacetDef, defaults: Fi
   return selectedValues(filters, facet).length === 0
 }
 
+/** Longest value the collapsed handle will show before cutting it with "…". */
+export const HANDLE_LABEL_MAX = 14
+
+export interface HandleSummary {
+  /** First away-from-default value, cut to fit the handle. */
+  label: string
+  /** How many further away-from-default filters it stands in for. */
+  extra: number
+  /** Every one of them in full, for the tooltip. */
+  title: string
+}
+
+/**
+ * What the COLLAPSED filter handle says about the filters.
+ *
+ * Only filters the user moved off their default count. That is deliberately a
+ * different test from `chipsFromFilters`' "is this excluding anything": the
+ * State facet constrains at its default, so counting it made a panel nobody had
+ * touched read "1". The constraint a default still applies is not lost — the
+ * handle's `visible/total` (see handleCountLabel) is measured, not inferred
+ * from which values differ.
+ *
+ * Intersects with the chips so a facet that was changed but no longer excludes
+ * anything (State set to all six types) is not reported as filtering.
+ */
+export function handleSummary(
+  filters: Filters,
+  facets: FacetDef[],
+  defaults: Filters,
+  t: Translate,
+  maxChars: number = HANDLE_LABEL_MAX,
+): HandleSummary | null {
+  const moved = new Set(
+    facets.filter((f) => !isFacetAtDefault(filters, f, defaults)).map((f) => f.id),
+  )
+  const chips = chipsFromFilters(filters, facets, t).filter((c) => moved.has(c.facetId))
+  const first = chips[0]
+  if (!first) return null
+  // A toggle chip has no value to show; its title is the whole message.
+  const text = first.summary || first.title
+  // Code points, not UTF-16 units, so a CJK value or emoji is not cut in half.
+  const chars = Array.from(text)
+  const label = chars.length > maxChars ? `${chars.slice(0, maxChars - 1).join('')}…` : text
+  return {
+    label,
+    extra: chips.length - 1,
+    title: chips.map((c) => (c.summary ? `${c.title}: ${c.summary}` : c.title)).join(' · '),
+  }
+}
+
+/**
+ * "9/266" when something is hidden, null when everything is shown (or the
+ * canvas has not reported yet). Equal numbers would only repeat themselves.
+ */
+export function handleCountLabel(visible: number | null, total: number | null): string | null {
+  if (visible === null || total === null || visible === total) return null
+  return `${visible}/${total}`
+}
+
 /**
  * Chips for the current filter state — one per facet that is away from its
  * default. A facet at its default renders nothing, which is what makes an
