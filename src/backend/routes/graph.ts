@@ -12,8 +12,7 @@ import {
   readWorkstreamSummaries,
   readLifecycleStages,
   readMeta,
-  readLastSyncOutcome,
-} from '../cache.js'
+  readLastSyncOutcome, readIssueTextBackfilled } from '../cache.js'
 import type { WorkspaceChangeWarning } from '@shared/types.js'
 import { kickBackgroundSync, syncOnce, readViewerCached } from '../sync.js'
 import { getActiveDesignDocAdapter } from '../designdoc/factory.js'
@@ -29,7 +28,10 @@ graphRoutes.get('/api/graph', async (c) => {
   if (cacheEmpty && isAuthConfigured(cfg)) {
     // First-run blocking sync so the user sees data immediately.
     await syncOnce({ force: true })
-  } else if (!fresh) {
+  } else if (!fresh || !readIssueTextBackfilled()) {
+    // Also while descriptions have never been collected: a fresh cache says the
+    // ISSUES are current, not that search has anything to search. Without this
+    // the first full sync waited for the cache TTL or a manual Cmd+Alt+S.
     kickBackgroundSync()
   }
 

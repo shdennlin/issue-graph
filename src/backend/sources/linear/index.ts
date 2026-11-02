@@ -202,7 +202,13 @@ export class LinearBackend implements BackendAdapter {
     }
     for (let page = 0; page < 50; page++) {
       const data: IssuesResp = await this.gql<IssuesResp>(ISSUES_QUERY, { after, filter })
-      for (const raw of data.issues.nodes) out.push(normalizeIssue(raw))
+      for (const raw of data.issues.nodes) {
+        const issue = normalizeIssue(raw)
+        out.push(issue)
+        // null (cleared in Linear) is recorded as '' rather than skipped, so an
+        // incremental sync overwrites the old text instead of leaving it behind.
+        if (opts.descriptions) opts.descriptions.set(issue.identifier, String(raw.description ?? ''))
+      }
       if (!data.issues.pageInfo.hasNextPage) break
       after = data.issues.pageInfo.endCursor
     }

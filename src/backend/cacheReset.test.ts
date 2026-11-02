@@ -44,7 +44,9 @@ const { resetCache } = await import('./cache.js')
 
 /** Tables a cache reset is allowed to touch. Anything else appearing in a
  *  DELETE is a data-loss bug, not a new feature. */
-const DELETABLE = ['issue_cache', 'label_cache']
+// issue_text is rebuilt from Linear on the next sync (resetCache also clears
+// the backfill flag so that sync goes full), the same as issue_cache.
+const DELETABLE = ['issue_cache', 'issue_text', 'label_cache']
 
 /** User-authored tables that must survive. Add a row here whenever a new
  *  not-rebuildable table is introduced. */

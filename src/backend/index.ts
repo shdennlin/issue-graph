@@ -18,6 +18,7 @@ import { BUS_EVENT, publish } from './lib/eventBus.js'
 import { graphRoutes } from './routes/graph.js'
 import { syncRoutes } from './routes/sync.js'
 import { issueRoutes } from './routes/issue.js'
+import { searchRoutes } from './routes/search.js'
 import { projectRoutes } from './routes/project.js'
 import { labelsRoutes } from './routes/labels.js'
 import { healthRoutes } from './routes/health.js'
@@ -120,6 +121,7 @@ export function createApp(): Hono {
   app.route('/', graphRoutes)
   app.route('/', syncRoutes)
   app.route('/', issueRoutes)
+  app.route('/', searchRoutes)
   app.route('/', projectRoutes)
   app.route('/', labelsRoutes)
   app.route('/', annotationRoutes)

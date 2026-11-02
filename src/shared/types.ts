@@ -574,3 +574,12 @@ export interface DetectedSchema {
   orphans: NormalizedLabel[]
   otherGroups: Array<{ name: string; labels: NormalizedLabel[]; exclusive: boolean }>
 }
+
+/** One description-search hit from GET /api/search. The description itself
+ *  never leaves the server; only a one-line window around the match does. */
+export interface SearchHit {
+  identifier: string
+  snippet: string
+  /** Half-open [start, end) ranges inside `snippet` to highlight. */
+  ranges: [number, number][]
+}

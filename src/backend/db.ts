@@ -437,6 +437,14 @@ const MIGRATIONS: string[] = [
   // AgentSessionDTO.workstreamId. No foreign key: a deleted workstream leaves a
   // claim that matches nothing, which draws nothing, and the row is ephemeral.
   `ALTER TABLE agent_session ADD COLUMN workstream_id INTEGER;`,
+  // Issue descriptions for full-text search. Kept out of issue_cache.payload on
+  // purpose: that payload is what /api/graph ships to every browser, and
+  // descriptions are ~2.7x the rest of the issue combined. Like the rest of
+  // this file it is a rebuildable cache.
+  `CREATE TABLE IF NOT EXISTS issue_text (
+     identifier  TEXT PRIMARY KEY,
+     description TEXT NOT NULL
+   );`,
 ]
 
 // One Database instance per workspace id. Each profile has its own SQLITE_PATH

@@ -23,6 +23,7 @@ const META_EXTENDED_SCOPE = 'extended_scope_days'
 const META_LAST_ISSUE_UPDATED_AT = 'last_issue_updated_at'
 const META_LAST_SYNC_SCOPE_KEY = 'last_sync_scope_key'
 const META_LAST_RECONCILE_MS = 'last_reconcile_ms'
+const META_ISSUE_TEXT_BACKFILLED = 'issue_text_backfilled'
 
 interface IssueRow { identifier: string; payload: string; fetched_at: number }
 interface LabelRow { id: string; payload: string }
@@ -210,8 +211,48 @@ export function deleteIssuesNotIn(keep: string[]): number {
     `DELETE FROM issue_cache
      WHERE identifier NOT IN (SELECT value FROM json_each(?))`,
   ).run(JSON.stringify(keep))
+  db.prepare(
+    `DELETE FROM issue_text
+     WHERE identifier NOT IN (SELECT value FROM json_each(?))`,
+  ).run(JSON.stringify(keep))
   const after = countCachedIssues()
   return before - after
+}
+
+/**
+ * Descriptions live beside issue_cache, not inside its payload: the payload is
+ * what /api/graph ships to every browser. See migration `issue_text`.
+ */
+export function writeIssueText(texts: Map<string, string>): void {
+  if (texts.size === 0) return
+  const db = getDb()
+  const upsert = db.prepare(
+    `INSERT INTO issue_text(identifier, description) VALUES(?, ?)
+     ON CONFLICT(identifier) DO UPDATE SET description = excluded.description`,
+  )
+  db.transaction(() => {
+    for (const [id, text] of texts) upsert.run(id, text)
+  })()
+}
+
+export function readIssueTexts(): { identifier: string; description: string }[] {
+  return getDb().prepare('SELECT identifier, description FROM issue_text').all() as {
+    identifier: string
+    description: string
+  }[]
+}
+
+/**
+ * Whether every cached issue has had its description fetched at least once.
+ * Rows cached before descriptions were collected have none, and an incremental
+ * sync would never revisit them — so until this is set, sync goes full once.
+ */
+export function readIssueTextBackfilled(): boolean {
+  return readMeta(META_ISSUE_TEXT_BACKFILLED) === '1'
+}
+
+export function writeIssueTextBackfilled(): void {
+  writeMeta(META_ISSUE_TEXT_BACKFILLED, '1')
 }
 
 export function writeLabelCache(labels: NormalizedLabel[]): void {
@@ -252,6 +293,8 @@ export function resetCache(): { issues: number; labels: number } {
   const labels = labelRow.n
   db.transaction(() => {
     db.prepare('DELETE FROM issue_cache').run()
+    db.prepare('DELETE FROM issue_text').run()
+    writeMeta(META_ISSUE_TEXT_BACKFILLED, '0')
     db.prepare('DELETE FROM label_cache').run()
     // Also clear workspace-tied meta entries so the design-doc filter and
     // workflow-state info don't show stale data from the previous workspace.

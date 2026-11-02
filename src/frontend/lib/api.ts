@@ -140,6 +140,18 @@ export interface SnapshotDiff {
 }
 
 export const api = {
+  /** Description search. The workspace is explicit (`?w=`): the palette searches
+   *  every open tab's workspace, not just the current one. */
+  searchIssueText: async (
+    query: string,
+    workspaceId: string,
+    signal?: AbortSignal,
+  ): Promise<{ hits: import('@shared/types.js').SearchHit[]; indexing: boolean }> => {
+    const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&w=${encodeURIComponent(workspaceId)}`, { signal })
+    if (!res.ok) return { hits: [], indexing: false }
+    const json = (await res.json()) as { data?: { hits?: import('@shared/types.js').SearchHit[]; indexing?: boolean } }
+    return { hits: json.data?.hits ?? [], indexing: json.data?.indexing ?? false }
+  },
   fetchGraph: () => http<GraphResponse>('/api/graph'),
   forceSync: () => http<{ ok: boolean; count: number; durationMs: number }>('/api/sync', { method: 'POST' }),
   resetCache: () =>

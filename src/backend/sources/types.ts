@@ -16,6 +16,14 @@ export interface FetchOpts {
    * only contains issues changed since the last successful sync.
    */
   updatedAfter?: string
+  /**
+   * Out-parameter: when given, the adapter fills it with identifier → issue
+   * description for every issue it returns. Not part of the returned
+   * NormalizedIssue on purpose — descriptions run to kilobytes each and the
+   * issue objects ship to every browser on every load. Optional so adapters
+   * and test doubles that know nothing about search keep working.
+   */
+  descriptions?: Map<string, string>
 }
 
 export interface IssueDetail extends NormalizedIssue {

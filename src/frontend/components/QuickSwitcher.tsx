@@ -8,6 +8,9 @@ import { buildCandidates } from './quickSwitcher/buildCandidates'
 import { fuzzyIndices, fuzzyMatch } from './quickSwitcher/fuzzyMatch'
 import { rankCandidates } from './quickSwitcher/rankCandidates'
 import type { Candidate, RecentItem } from './quickSwitcher/types'
+import type { SearchHit } from '@shared/types.js'
+import { api } from '../lib/api'
+import { attachDescriptionHits, descriptionOnlyScore, type DescriptionMatch } from './quickSwitcher/descriptionHits'
 import { priorityLabelFor, stateColorVar, stateIcon } from '../lib/colors'
 import { formatRelative } from '../lib/relativeTime'
 import { useLocale } from '../i18n'
@@ -55,15 +58,53 @@ export function QuickSwitcher({ onActivate }: Props) {
     })
   }, [open, tabs, activeTabId, profiles, activeGraph, notes])
 
+  // Description search: titles are matched here, descriptions on the server
+  // (they are not in the graph payload by design). Debounced, one request per
+  // workspace that has an open tab, and keyed by the query it answered so a
+  // slow reply can never decorate the results of a later query.
+  const [descResult, setDescResult] = useState<{ query: string; byWorkspace: Record<string, SearchHit[]>; indexing: boolean } | null>(null)
+  const workspaceIds = useMemo(() => [...new Set(tabs.map((t) => t.workspaceId))], [tabs])
+  useEffect(() => {
+    const q = query.trim()
+    if (!open || q.length < 2) return
+    const ctl = new AbortController()
+    const timer = window.setTimeout(() => {
+      Promise.all(
+        workspaceIds.map((wid) =>
+          api.searchIssueText(q, wid, ctl.signal)
+            .then((r) => [wid, r] as const)
+            .catch(() => [wid, { hits: [] as SearchHit[], indexing: false }] as const),
+        ),
+      ).then((pairs) => {
+        if (ctl.signal.aborted) return
+        setDescResult({
+          query: q,
+          byWorkspace: Object.fromEntries(pairs.map(([w, r]) => [w, r.hits])),
+          indexing: pairs.some(([, r]) => r.indexing),
+        })
+      })
+    }, 180)
+    return () => { window.clearTimeout(timer); ctl.abort() }
+  }, [open, query, workspaceIds])
+
+  const descMatches = useMemo<Map<string, DescriptionMatch>>(() => {
+    if (!descResult || descResult.query !== query.trim()) return new Map()
+    const wsOfTab = (tabId: string) => tabs.find((t) => t.id === tabId)?.workspaceId
+    return attachDescriptionHits(candidates, wsOfTab, descResult.byWorkspace)
+  }, [descResult, query, candidates, tabs])
+
   // Score + group.
   const grouped = useMemo(() => {
     const out: Record<Candidate['kind'], Candidate[]> = { issue: [], note: [], tab: [] }
     if (query.trim() === '') {
       return out
     }
-    const ranked = rankCandidates(candidates, query, activeTabId, (c) =>
-      fuzzyMatch(query, { label: c.label, identifier: c.kind === 'issue' ? c.identifier : null }),
-    )
+    const ranked = rankCandidates(candidates, query, activeTabId, (c) => {
+      const title = fuzzyMatch(query, { label: c.label, identifier: c.kind === 'issue' ? c.identifier : null })
+      if (title !== null) return title
+      const d = descMatches.get(c.id)
+      return d ? descriptionOnlyScore(d.order) : null
+    })
     let total = 0
     for (const c of ranked) {
       if (total >= TOTAL_CAP) break
@@ -72,7 +113,7 @@ export function QuickSwitcher({ onActivate }: Props) {
       total++
     }
     return out
-  }, [candidates, query, activeTabId])
+  }, [candidates, query, activeTabId, descMatches])
 
   const flat = useMemo<Candidate[]>(() => {
     if (query.trim() === '') {
@@ -141,6 +182,7 @@ export function QuickSwitcher({ onActivate }: Props) {
   }
 
   const showingRecents = query.trim() === ''
+  const indexingNote = !showingRecents && descResult?.query === query.trim() && descResult.indexing
 
   return (
     <div
@@ -178,6 +220,11 @@ export function QuickSwitcher({ onActivate }: Props) {
           ref={listRef}
           style={{ overflowY: 'auto', borderTop: '1px solid var(--border, #333)' }}
         >
+          {indexingNote && (
+            <div style={{ padding: '6px 14px', fontSize: 12, opacity: 0.65 }}>
+              Indexing issue descriptions (first sync) — description matches will appear shortly. Retype to refresh.
+            </div>
+          )}
           {flat.length === 0 && (
             <div style={{ padding: 16, opacity: 0.6 }}>
               {showingRecents ? 'No recents yet — start typing.' : 'No matches.'}
@@ -186,7 +233,7 @@ export function QuickSwitcher({ onActivate }: Props) {
           {showingRecents
             ? flat.map((c, i) => (
                 <Row key={c.id} idx={i} c={c} selected={i === selectedIdx}
-                     onClick={() => activate(i, false)} groupHeader={i === 0 ? 'Recent' : null} query="" />
+                     onClick={() => activate(i, false)} groupHeader={i === 0 ? 'Recent' : null} query="" descHit={null} />
               ))
             : GROUP_ORDER.flatMap((kind) => {
                 const list = grouped[kind]
@@ -203,6 +250,7 @@ export function QuickSwitcher({ onActivate }: Props) {
                     onClick={() => activate(offset + i, false)}
                     groupHeader={i === 0 ? GROUP_LABEL[kind] : null}
                     query={query}
+                    descHit={descMatches.get(c.id)?.hit ?? null}
                   />
                 ))
               })}
@@ -239,10 +287,23 @@ function Highlighted({ text, query }: { text: string; query: string }) {
   return <>{out}</>
 }
 
+/** Paint explicit [start, end) ranges — the server already decided what matched. */
+function Ranges({ text, ranges }: { text: string; ranges: [number, number][] }) {
+  const out: React.ReactNode[] = []
+  let at = 0
+  ranges.forEach(([s, e], k) => {
+    if (s > at) out.push(<span key={`t${k}`}>{text.slice(at, s)}</span>)
+    out.push(<mark key={`m${k}`} style={{ background: 'rgba(255, 200, 60, 0.35)', color: 'inherit', borderRadius: 2 }}>{text.slice(s, e)}</mark>)
+    at = e
+  })
+  if (at < text.length) out.push(<span key="tail">{text.slice(at)}</span>)
+  return <>{out}</>
+}
+
 const META_STYLE: React.CSSProperties = { fontSize: 12, opacity: 0.6, whiteSpace: 'nowrap' }
 
 function Row({
-  idx, c, selected, onClick, groupHeader, query,
+  idx, c, selected, onClick, groupHeader, query, descHit,
 }: {
   idx: number
   c: Candidate
@@ -250,6 +311,7 @@ function Row({
   onClick: () => void
   groupHeader: string | null
   query: string
+  descHit: SearchHit | null
 }) {
   const locale = useLocale()
   const issueState = c.kind === 'issue' ? c.state : null
@@ -287,6 +349,12 @@ function Row({
           >
             <Highlighted text={c.label} query={query} />
           </span>
+          {descHit && (
+            <span style={{ fontSize: 12, opacity: 0.8, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', wordBreak: 'break-word' }}>
+              <span style={{ opacity: 0.6, marginRight: 6, fontSize: 10, textTransform: 'uppercase' }}>description</span>
+              <Ranges text={descHit.snippet} ranges={descHit.ranges} />
+            </span>
+          )}
           {(meta.length > 0 || c.hint) && (
             <span style={{ ...META_STYLE, overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {[...meta, c.hint].filter(Boolean).join(' · ')}

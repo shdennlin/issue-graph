@@ -19,6 +19,9 @@ import {
   readLastReconcileMs,
   writeLastReconcileMs,
   deleteIssuesNotIn,
+  writeIssueText,
+  readIssueTextBackfilled,
+  writeIssueTextBackfilled,
 } from './cache.js'
 import { getBackend } from './sources/factory.js'
 import { syncStatusForError } from './lib/syncStatus.js'
@@ -116,8 +119,14 @@ async function doSync({ force = false }: { force?: boolean } = {}): Promise<Sync
     const scopeChanged = !!prevScopeKey && prevScopeKey !== scopeKey
     // Incremental path: skipped on force=true (Cmd+Alt+S), first-ever sync,
     // and any scope/team/extended-days change so newly-in-scope issues come in.
-    const useIncremental = !force && !scopeChanged && !!prevCursor
+    // Also skipped until descriptions have been collected once: issues cached
+    // before issue_text existed have none, and the cursor would never revisit
+    // them. After that the cursor does the work — Linear bumps updatedAt on a
+    // description edit, so only changed issues re-download their text.
+    const textBackfilled = readIssueTextBackfilled()
+    const useIncremental = !force && !scopeChanged && !!prevCursor && textBackfilled
     const updatedAfter = useIncremental ? prevCursor : undefined
+    const descriptions = new Map<string, string>()
 
     const [issues, labels, viewer, workflowStates] = await Promise.all([
       backend.fetchAllIssues({
@@ -125,6 +134,7 @@ async function doSync({ force = false }: { force?: boolean } = {}): Promise<Sync
         teamId: cfg.LINEAR_TEAM_ID,
         extendedDays,
         updatedAfter,
+        descriptions,
       }),
       backend.fetchLabels(),
       backend.fetchViewer().catch(() => null),
@@ -150,6 +160,11 @@ async function doSync({ force = false }: { force?: boolean } = {}): Promise<Sync
     // small deltas, which would have made that warning fire constantly.
 
     writeIssueCache(issues)
+    writeIssueText(descriptions)
+    // Any full fetch counts, even for an adapter that supplies no descriptions —
+    // otherwise it would be stuck on full syncs forever waiting for text that
+    // is never coming.
+    if (!useIncremental) writeIssueTextBackfilled()
     writeLabelCache(labels)
     writeDesigndocsCached(designdocs)
     if (workflowStates.length > 0) writeWorkflowStatesCached(workflowStates)

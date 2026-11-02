@@ -8,6 +8,11 @@ export const ISSUES_QUERY = /* GraphQL */ `
         id
         identifier
         title
+        # Full-text search source. Measured 2026-11-02, one 100-issue page:
+        # complexity 97 -> 97, response 376KB -> 1013KB, median ~600 -> ~1200ms.
+        # Cheap for Linear, heavy for a browser — which is why sync routes it
+        # into issue_text and normalizeIssue never copies it onto the issue.
+        description
         url
         priority
         estimate
