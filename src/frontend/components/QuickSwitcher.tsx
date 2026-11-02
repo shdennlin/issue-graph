@@ -7,6 +7,7 @@ import { useNotesStore } from '../store/notesStore'
 import { getTabGraph } from '../store/tabStateStore'
 import { buildCandidates } from './quickSwitcher/buildCandidates'
 import { fuzzyIndices, fuzzyMatch } from './quickSwitcher/fuzzyMatch'
+import { resolveRecents } from './quickSwitcher/resolveRecents'
 import { rankCandidates } from './quickSwitcher/rankCandidates'
 import type { Candidate, RecentItem } from './quickSwitcher/types'
 import type { SearchHit } from '@shared/types.js'
@@ -118,10 +119,9 @@ export function QuickSwitcher({ onActivate }: Props) {
 
   const flat = useMemo<Candidate[]>(() => {
     if (query.trim() === '') {
-      // A recent is stored as a label-only record. Prefer the live candidate
-      // with the same id so the row shows current state/assignee/etc.
-      const live = new Map(candidates.map((c) => [c.id, c]))
-      return recents.map<Candidate>((r) => live.get(r.id) ?? recentToCandidate(r))
+      // A recent is a label-only record; resolve it to the live candidate so the
+      // row shows current state/assignee and the click lands in a tab that exists.
+      return resolveRecents(recents, candidates, recentToCandidate)
     }
     return GROUP_ORDER.flatMap((k) => grouped[k])
   }, [query, grouped, recents, candidates])
