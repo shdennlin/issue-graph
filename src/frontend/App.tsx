@@ -14,6 +14,7 @@ import {
   peekTabView,
   restoreViewportOnly,
   snapshotTab,
+  switchToTab,
 } from './store/tabStateStore'
 import { arrivedViaBareDeepLink, arrivedWithEmptyUrl, consumeJumpEntry, useUrlSync } from './store/urlSync'
 import { useTheme } from './hooks/useTheme'
@@ -517,9 +518,7 @@ export function App() {
         const targetTab = ws.tabs[idx]
         if (!targetTab) return
         e.preventDefault()
-        if (targetTab.id === ws.activeTabId) return
-        if (ws.activeTabId) snapshotTab(ws.activeTabId)
-        ws.setActiveTab(targetTab.id)
+        switchToTab(targetTab.id)
         return
       }
       // Space / Enter — open the DetailPanel for the currently-focused
@@ -732,7 +731,7 @@ export function App() {
 
   const onQuickSwitcherActivate = (c: Candidate, openInNewTab: boolean) => {
     if (c.kind === 'tab') {
-      useWorkspaceStore.getState().setActiveTab(c.tabId)
+      switchToTab(c.tabId)
       return
     }
     if (c.kind === 'issue') {
@@ -761,14 +760,14 @@ export function App() {
           return
         }
       }
-      useWorkspaceStore.getState().setActiveTab(c.tabId)
+      switchToTab(c.tabId)
       useViewStore.getState().setFocusedId(c.identifier)
       if (wasDetailOpen) useViewStore.getState().setDetailPanelOpen(true)
       useViewStore.getState().requestPanToFocused()
       return
     }
     if (c.kind === 'note') {
-      useWorkspaceStore.getState().setActiveTab(c.tabId)
+      switchToTab(c.tabId)
       useViewStore.getState().setNotesOpen(true)
       useViewStore.getState().setFocusedNoteId(c.noteId)
       return

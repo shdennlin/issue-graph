@@ -18,7 +18,7 @@ import ReactFlow, {
   type Viewport,
 } from 'reactflow'
 import { useGraphStore } from '../store/graphStore'
-import { useViewStore } from '../store/viewStore'
+import { useViewStore, type ViewId } from '../store/viewStore'
 import { useSchemaStore } from '../store/schemaStore'
 import { registerViewportBridge } from '../store/tabStateStore'
 import { registerHistoryViewportSink, storeViewportInHistory } from '../store/urlSync'
@@ -403,13 +403,25 @@ function CanvasInner() {
   // so timing works the same way: wait for measuredHeights to settle so
   // RF's mount-time auto-fit can't override our setViewport.
   const pendingViewportRestoreRef = useRef<Viewport | null>(null)
+  // The view a tab-switch restore just put in place. Producer 2 reads it so the
+  // activeView change that restore causes is not mistaken for the user
+  // switching views. Cleared by whichever comes first: Producer 2 consuming it,
+  // or the restore being applied.
+  const skipViewFitForRef = useRef<ViewId | null>(null)
   useEffect(() => {
     return registerViewportBridge(
       () => rf.getViewport(),
       (vp) => {
         pendingViewportRestoreRef.current = vp
-        // Restore wins over any auto-fit that other producers queued.
+        // null = this switch restores nothing, but a restore queued by an
+        // earlier one must not survive to land on a different tab.
+        if (!vp) return
+        // Restore wins over any auto-fit that other producers queued — and
+        // over the one Producer 2 is about to queue because this very switch
+        // changed activeView. Without the skip, the restore was applied and
+        // then overwritten by a 600ms fit once layout settled.
         pendingFitViewRef.current = null
+        skipViewFitForRef.current = useViewStore.getState().activeView
       },
       () => {
         // Tab switch just restored the view store. Sync per-tab refs so
@@ -471,6 +483,12 @@ function CanvasInner() {
   }, [])
   useEffect(() => {
     if (!measuredHeights) return  // wait until layout has settled
+    // measuredHeights can still be the PREVIOUS layout's for one render after a
+    // view/tab switch — the reset effect that nulls it runs after this one.
+    // measuredSigRef only matches the current layout once the measure pass for
+    // it has finished, so a mismatch means "settled for something else": acting
+    // now would restore or fit against positions that are about to move.
+    if (measuredSigRef.current !== `${activeView}|${density}|${built.nodes.length}`) return
 
     const fitReq = pendingFitViewRef.current
     const restoreVp = pendingViewportRestoreRef.current
@@ -569,6 +587,7 @@ function CanvasInner() {
     if (restoreVp) {
       pendingFitViewRef.current = null
       pendingViewportRestoreRef.current = null
+      skipViewFitForRef.current = null
       rf.setViewport(restoreVp, { duration: 0 })
       return
     }
@@ -583,7 +602,7 @@ function CanvasInner() {
       pendingFitViewRef.current = null
       fitToBuiltBounds({ padding: fitReq.padding, duration: 600, densityFit: true })
     }
-  }, [measuredHeights, rf, focusedId, built, fitToBuiltBounds, activeView, deepLinkFocusFallbackArmed, clearDeepLinkFocusFallback, setActiveView])
+  }, [measuredHeights, rf, focusedId, built, fitToBuiltBounds, activeView, density, deepLinkFocusFallbackArmed, clearDeepLinkFocusFallback, setActiveView])
 
   // Producer 1: first non-empty load. preserveFocus so that F5 / cold
   // start with a focusedId in the URL (or restored from tabStateStore)
@@ -610,6 +629,9 @@ function CanvasInner() {
   // the new view (e.g. focused issue has no design doc → not in
   // design-doc view).
   useEffect(() => {
+    const skip = skipViewFitForRef.current
+    skipViewFitForRef.current = null
+    if (skip === activeView) return
     if (nodes.length === 0) return
     pendingFitViewRef.current = { padding: 0.1, preserveFocus: true }
     // eslint-disable-next-line react-hooks/exhaustive-deps

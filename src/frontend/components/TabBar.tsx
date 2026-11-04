@@ -29,7 +29,7 @@ import { useWorkspaceStore, type Tab } from '../store/workspaceStore'
 import { useGraphStore } from '../store/graphStore'
 import { useViewStore } from '../store/viewStore'
 import { useHistoryAvailability } from '../store/urlSync'
-import { forgetTab, getTabGraph, peekTabLabelState, snapshotTab } from '../store/tabStateStore'
+import { forgetTab, getTabGraph, peekTabLabelState, snapshotTab, switchToTab } from '../store/tabStateStore'
 import { useSavedViewsStore } from '../store/savedViewsStore'
 import { MOD_GLYPH, formatShortcut } from '../lib/platform'
 import { tabLabel, workspaceHue, type TabLabel } from '../lib/tabLabel'
@@ -72,7 +72,6 @@ export function TabBar() {
   const activeTabId = useWorkspaceStore((s) => s.activeTabId)
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
   const defaultWorkspaceId = useWorkspaceStore((s) => s.defaultWorkspaceId)
-  const setActiveTab = useWorkspaceStore((s) => s.setActiveTab)
   const addTab = useWorkspaceStore((s) => s.addTab)
   const closeTab = useWorkspaceStore((s) => s.closeTab)
   const keepTab = useWorkspaceStore((s) => s.keepTab)
@@ -242,9 +241,7 @@ export function TabBar() {
   if (!initialized) return null
 
   const switchTo = (tabId: string) => {
-    if (tabId === activeTabId) return
-    if (activeTabId) snapshotTab(activeTabId)
-    setActiveTab(tabId)
+    switchToTab(tabId)
   }
 
   const handleClose = (tabId: string, e: React.MouseEvent) => {

@@ -25,6 +25,7 @@ import type { Viewport } from 'reactflow'
 import type { GraphResponse } from '@shared/types.js'
 import { useGraphStore } from './graphStore'
 import { defaultFilters, useViewStore, type Filters, type ViewId } from './viewStore'
+import { useWorkspaceStore } from './workspaceStore'
 
 interface PerTabView {
   activeView: ViewId
@@ -184,12 +185,12 @@ hydrate()
 // Without a registered bridge (e.g. the user is on the Settings page when
 // snapshotTab fires), capture is null and restore/postRestore are no-ops.
 let viewportGetter: (() => Viewport) | null = null
-let viewportRestoreCallback: ((vp: Viewport) => void) | null = null
+let viewportRestoreCallback: ((vp: Viewport | null) => void) | null = null
 let postRestoreCallback: (() => void) | null = null
 
 export function registerViewportBridge(
   getter: () => Viewport,
-  restoreCallback: (vp: Viewport) => void,
+  restoreCallback: (vp: Viewport | null) => void,
   postRestore?: () => void,
 ): () => void {
   viewportGetter = getter
@@ -233,6 +234,28 @@ export function snapshotTab(tabId: string): void {
     graph: useGraphStore.getState().graph,
   })
   persist()
+}
+
+/**
+ * The one way to change the active in-app tab. Saves the tab being left
+ * (view + live pan/zoom) and then activates the target.
+ *
+ * Every entry point used to do this itself, and one did not: the Quick
+ * Switcher called `setActiveTab` directly, so leaving a tab that way kept an
+ * OLDER snapshot and coming back restored a stale camera. Routing them all
+ * through here makes forgetting the snapshot impossible.
+ */
+export function switchToTab(tabId: string): void {
+  const ws = useWorkspaceStore.getState()
+  if (tabId === ws.activeTabId) return
+  if (!ws.tabs.some((t) => t.id === tabId)) return
+  if (ws.activeTabId) snapshotTab(ws.activeTabId)
+  ws.setActiveTab(tabId)
+}
+
+/** The viewport stored for a tab, without applying it. */
+export function peekTabViewport(tabId: string): Viewport | null {
+  return snapshots.get(tabId)?.viewport ?? null
 }
 
 /**
@@ -280,8 +303,11 @@ export function loadTab(tabId: string, opts: { viewport?: boolean } = {}): boole
     // would lose the pan/zoom they had carefully framed.
     // A jump into the preview tab passes viewport: false — it is about to fit
     // onto the linked issue, and an old pan restored after layout would win.
-    if (opts.viewport !== false && snap.viewport && viewportRestoreCallback) {
-      viewportRestoreCallback(snap.viewport)
+    // `null` is not "nothing to do": it tells the canvas to DROP any restore
+    // still queued from an earlier switch. Without it a queued viewport that
+    // was never consumed (graph still loading) would be applied to THIS tab.
+    if (viewportRestoreCallback) {
+      viewportRestoreCallback(opts.viewport !== false ? snap.viewport : null)
     }
     // Sync GraphCanvas's per-tab refs to the just-restored store values
     // so tab-switch state deltas don't masquerade as user actions.
@@ -295,6 +321,7 @@ export function loadTab(tabId: string, opts: { viewport?: boolean } = {}): boole
     error: null,
     syncing: false,
   })
+  viewportRestoreCallback?.(null)
   // Same as the warm-restore branch — sync refs to defaults.
   postRestoreCallback?.()
   return false
