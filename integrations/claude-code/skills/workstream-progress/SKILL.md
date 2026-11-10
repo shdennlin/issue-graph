@@ -105,11 +105,20 @@ Leaving a workstream a stage behind is a small, visible, self-correcting
 problem. Marking a stage done that is not done is invisible and misleads
 everyone reading the board.
 
+**After a move, check the issue's tracker state.** If an issue's state in the
+tracker this workspace is connected to is not one the new stage lists in its
+`states`, the two now disagree. Fix the tracker side with *that tracker's own*
+MCP (Linear's, Jira's, Asana's — whichever the issue lives in; the issue id
+and URL show which), never with this one. If no such MCP is connected, say so
+in the stage note and leave the tracker alone. A disagreement left in place is
+legitimate evidence, so only change it when the work really has moved.
+
 ## What this never does
 
 **It never changes a Linear state.** Those move through Linear's own MCP or
-its GitHub automation. An issue's stage is derived from its Linear state; a
-second writer on that field is the failure this whole design avoids.
+its GitHub automation (or the equivalent for whichever tracker the issue lives
+in). An issue's stage is derived from its tracker state; a second writer on
+that field is the failure this whole design avoids.
 
 It also does not report the session's presence — hooks already do that, on
 their own, with no tool call.
