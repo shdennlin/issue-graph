@@ -23,6 +23,7 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ['Cmd', 'Shift', 'F'], descriptionKey: 'shortcuts.items.focusToolbarSearch', group: 'Navigation' },
   { keys: ['Cmd', 'K'], descriptionKey: 'shortcuts.items.quickSwitcherOpen', group: 'Navigation' },
   { keys: ['Enter'], descriptionKey: 'shortcuts.items.findNext', group: 'Navigation' },
+  { keys: ['f'], descriptionKey: 'shortcuts.items.centerOnFocus', group: 'Navigation' },
   { keys: ['Esc'], descriptionKey: 'shortcuts.items.esc', group: 'Navigation' },
   { keys: ['?'], descriptionKey: 'shortcuts.items.cheatsheet', group: 'Navigation' },
   { keys: ['n'], descriptionKey: 'shortcuts.items.notesToggle', group: 'Notes' },

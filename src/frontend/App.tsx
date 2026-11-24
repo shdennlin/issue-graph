@@ -636,6 +636,17 @@ export function App() {
         s.setShowHierarchy(!s.showHierarchy)
         return
       }
+      // 'f' — center the camera on the focused issue. Pan only: no re-layout,
+      // no zoom change. Written as a guarded block rather than early returns,
+      // so Cmd/Ctrl+F (the canvas find, below) still reaches its own handler.
+      // With no focused issue or a typing target, the key falls through untouched.
+      if (e.key === 'f' && !e.metaKey && !e.ctrlKey && !e.altKey && !isTypingTarget(e.target as HTMLElement | null)) {
+        if (useViewStore.getState().focusedId) {
+          e.preventDefault()
+          useViewStore.getState().requestCenterOnFocus()
+          return
+        }
+      }
       // 'R' (Shift+R) — re-layout. Bumps layoutBump → dagre re-runs from
       // scratch (discards user-dragged positions) → camera follows. Works
       // in any view, doesn't require a focused issue.

@@ -245,6 +245,7 @@ export const en = {
       relatedToggle: 'Toggle Related-edges overlay (dashed gray, dependency view)',
       hierarchyToggle: 'Toggle sub-issue hierarchy overlay (violet, dependency view)',
       relayout: 'Re-layout from scratch; recenters on focused issue if any',
+      centerOnFocus: 'Center the camera on the focused issue (pan only: no re-layout, no zoom change)',
       refresh: 'Refresh — re-pull from the backend (same as the top-right Refresh button)',
       screenshot: 'Save canvas screenshot as PNG',
       quickSwitcherOpen: 'Open quick switcher (search issues, notes, tabs across all open tabs)',

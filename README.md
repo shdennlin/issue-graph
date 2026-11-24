@@ -326,6 +326,7 @@ Press `?` in the app for the full cheat sheet. Highlights:
 - `c` / `Shift + C` — isolate chain on focused issue (preserve / auto-layout)
 - `r` — toggle Related-edges overlay
 - `h` — toggle sub-issue hierarchy overlay (violet edges; also pulls 1-hop parent/children into chain isolation)
+- `f` — center the camera on the focused issue (pan only; no re-layout, no zoom change)
 - `Shift + R` — re-layout (re-run dagre, recenters on focused issue)
 - `Esc` — peel one layer: Find → context menu → focused issue → chain isolation
 - `Cmd/Ctrl + click` on a node — multi-select

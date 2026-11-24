@@ -239,6 +239,7 @@ export const zhTW: Dict = {
       relatedToggle: '切換「相關」連線顯示（灰色虛線，相依檢視）',
       hierarchyToggle: '切換子議題階層連線顯示（紫色，相依檢視）',
       relayout: '重新排版；若有聚焦議題會置中於該議題',
+      centerOnFocus: '將視角置中於聚焦議題（僅平移；不重新排版、不改變縮放）',
       refresh: '重新整理 — 重新向後端抓取資料（等同右上角的 Refresh 按鈕）',
       screenshot: '將目前畫布存成 PNG 截圖',
       quickSwitcherOpen: '開啟快速切換器（跨所有開啟分頁搜尋議題、筆記與分頁）',

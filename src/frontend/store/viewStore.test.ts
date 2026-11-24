@@ -215,3 +215,20 @@ describe('viewStore.appliedSavedViewId — per-tab view identity', () => {
     expect(useViewStore.getState().appliedSavedViewId).toBeNull()
   })
 })
+
+describe('viewStore.requestCenterOnFocus — the `f` key', () => {
+  it('bumps only centerOnFocusSeq, leaving layout and pan requests alone', () => {
+    const before = useViewStore.getState()
+    const seq = before.centerOnFocusSeq
+    const layout = before.layoutBump
+    const pan = before.panToFocusedSeq
+
+    useViewStore.getState().requestCenterOnFocus()
+    useViewStore.getState().requestCenterOnFocus()
+
+    const after = useViewStore.getState()
+    expect(after.centerOnFocusSeq).toBe(seq + 2)
+    expect(after.layoutBump).toBe(layout)
+    expect(after.panToFocusedSeq).toBe(pan)
+  })
+})

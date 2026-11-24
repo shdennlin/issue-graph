@@ -738,6 +738,25 @@ function CanvasInner() {
     }
   }, [panToFocusedSeq, focusedId, rf, storeApi])
 
+  // `f` key: center on the focused issue without touching layout or zoom.
+  // Unlike panToFocused above, this never raises zoom and never animates
+  // (house style: no animation on programmatic pan). Walks the parent chain
+  // for the same reason as the other focus paths: nested views (milestone →
+  // backdrop) would otherwise pan to the wrong place.
+  const centerOnFocusSeq = useViewStore((s) => s.centerOnFocusSeq)
+  const lastCenterSeqRef = useRef(centerOnFocusSeq)
+  useEffect(() => {
+    if (lastCenterSeqRef.current === centerOnFocusSeq) return
+    lastCenterSeqRef.current = centerOnFocusSeq
+    if (!focusedId) return
+    const node = rf.getNode(focusedId)
+    if (!node) return
+    const { x: absX, y: absY } = resolveAbsolutePosition(node, (id) => rf.getNode(id))
+    const w = node.width ?? 320
+    const h = node.height ?? 110
+    rf.setCenter(absX + w / 2, absY + h / 2, { zoom: rf.getZoom(), duration: 0 })
+  }, [centerOnFocusSeq, focusedId, rf])
+
   // Auto-bump layout when chain isolation is *cleared* (chainRootIds goes
   // non-empty → empty). Without this, exiting chain mode keeps the chain
   // members' tightly-packed positions and the previously-hidden nodes get

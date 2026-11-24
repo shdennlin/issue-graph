@@ -181,6 +181,9 @@ export interface ViewState {
   // focused issue. Useful when an external producer (e.g. a click on an issue
   // link inside a note) wants the camera to follow the focus change.
   panToFocusedSeq: number
+  /** Bumped by the `f` key: re-center the camera on the focused issue, keeping
+   *  zoom and layout. One-shot per bump, like panToFocusedSeq. */
+  centerOnFocusSeq: number
   // Monotonic counter — bumped when a focus deep link arrives (Raycast / direct
   // URL) and we KEEP the current view instead of resetting to dependency. The
   // camera no longer moves as a side effect of a view switch, so GraphCanvas
@@ -341,6 +344,7 @@ export interface ViewState {
   setFocusedNoteId: (id: number | null) => void
   setNoteFindOpen: (b: boolean) => void
   requestPanToFocused: () => void
+  requestCenterOnFocus: () => void
   /** Signal a view-preserving focus deep link: bump focusArrivalSeq so the
    *  camera follows, and arm the fallback when we kept a non-dependency view. */
   notifyDeepLinkFocus: (armed: boolean) => void
@@ -442,6 +446,7 @@ export const useViewStore = create<ViewState>((set) => ({
   focusedNoteId: null,
   noteFindOpen: false,
   panToFocusedSeq: 0,
+  centerOnFocusSeq: 0,
   focusArrivalSeq: 0,
   deepLinkFocusFallbackArmed: false,
   // Whether chain/dependency views include "related" (non-blocking) edges.
@@ -615,6 +620,7 @@ export const useViewStore = create<ViewState>((set) => ({
   setFocusedNoteId: (id) => set({ focusedNoteId: id, noteFindOpen: false }),
   setNoteFindOpen: (b) => set({ noteFindOpen: b }),
   requestPanToFocused: () => set((s) => ({ panToFocusedSeq: s.panToFocusedSeq + 1 })),
+  requestCenterOnFocus: () => set((s) => ({ centerOnFocusSeq: s.centerOnFocusSeq + 1 })),
   notifyDeepLinkFocus: (armed) =>
     set((s) => ({ focusArrivalSeq: s.focusArrivalSeq + 1, deepLinkFocusFallbackArmed: armed })),
   clearDeepLinkFocusFallback: () => set({ deepLinkFocusFallbackArmed: false }),
