@@ -2041,6 +2041,17 @@ body[data-detail-wide='1'] .inline-search { display: none; }
   color: var(--fg-muted);
   padding: 4px 0 2px;
 }
+.project-panel-milestone-issue-list { list-style: none; margin: 0; padding: 4px 0 2px; display: flex; flex-direction: column; gap: 3px; }
+.project-panel-milestone-issue {
+  display: grid;
+  grid-template-columns: max-content 1fr max-content;
+  gap: var(--sp-2);
+  align-items: baseline;
+  font-size: var(--fs-meta);
+}
+.project-panel-milestone-issue-id { color: var(--fg-muted); font-variant-numeric: tabular-nums; }
+.project-panel-milestone-issue-title { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-panel-milestone-issue-state { color: var(--fg-muted); }
 .project-panel-by-state { list-style: none; margin: 0; padding: 0; }
 .project-panel-by-state-row {
   display: flex;

@@ -765,6 +765,7 @@ export const en = {
     milestones: 'Milestones',
     noMilestones: 'No milestones',
     milestoneDetails: 'Details',
+    milestoneIssues: 'Issues ({count})',
     milestoneStatus: {
       done: 'Done',
       next: 'Next milestone',

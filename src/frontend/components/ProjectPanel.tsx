@@ -143,6 +143,9 @@ interface MilestoneRollup {
   linearProgress: number | null
   /** Linear's milestone status: 'done' | 'next' | 'overdue' | 'unstarted'. */
   status: string | null
+  /** The same counted issues `done`/`total` are computed from, so the list
+   *  under a milestone always agrees with its count. */
+  issues: NormalizedIssue[]
 }
 
 function computeMilestoneRollups(
@@ -162,14 +165,15 @@ function computeMilestoneRollups(
   // show up) and fold in issue counts. Issues with no milestone are grouped
   // under a synthetic '__none' entry only if any such issues exist.
   const counts = new Map<string, { done: number; total: number }>()
-  let noneTotal = 0
+  const byMilestone = new Map<string, NormalizedIssue[]>()
+  const noneIssues: NormalizedIssue[] = []
   let noneDone = 0
   for (const i of issues) {
     if (i.project?.id !== projectId) continue
     if (!isCountedInTotal(i.state.type)) continue
     const m = i.projectMilestone
     if (!m) {
-      noneTotal += 1
+      noneIssues.push(i)
       if (isDoneState(i.state.type)) noneDone += 1
       continue
     }
@@ -177,6 +181,9 @@ function computeMilestoneRollups(
     slot.total += 1
     if (isDoneState(i.state.type)) slot.done += 1
     counts.set(m.id, slot)
+    const list = byMilestone.get(m.id)
+    if (list) list.push(i)
+    else byMilestone.set(m.id, [i])
   }
 
   const sorted = [...declared].sort((a, b) => {
@@ -195,19 +202,21 @@ function computeMilestoneRollups(
     total: counts.get(m.id)?.total ?? 0,
     linearProgress: m.progress,
     status: m.status,
+    issues: byMilestone.get(m.id) ?? [],
   }))
 
-  if (noneTotal > 0) {
+  if (noneIssues.length > 0) {
     rollups.push({
       id: '__none',
       name: '(No milestone)',
       targetDate: null,
       description: null,
       done: noneDone,
-      total: noneTotal,
+      total: noneIssues.length,
       // Synthetic '(No milestone)' bucket has no Linear-side equivalent.
       linearProgress: null,
       status: null,
+      issues: noneIssues,
     })
   }
   return rollups
@@ -464,6 +473,24 @@ export function ProjectPanel() {
                           <div className="project-panel-milestone-description">
                             <MarkdownBody body={m.description} />
                           </div>
+                        </details>
+                      )}
+                      {m.issues.length > 0 && (
+                        <details className="project-panel-milestone-details project-panel-milestone-issues">
+                          <summary className="project-panel-milestone-details-summary">
+                            {t('projectPanel.milestoneIssues', { count: m.issues.length })}
+                          </summary>
+                          <ul className="project-panel-milestone-issue-list">
+                            {m.issues.map((issue) => (
+                              <li key={issue.id} className="project-panel-milestone-issue">
+                                <span className="project-panel-milestone-issue-id">{issue.identifier}</span>
+                                <span className="project-panel-milestone-issue-title">{issue.title}</span>
+                                <span className="project-panel-milestone-issue-state">
+                                  {t(ISSUE_STATE_DICT_KEY[issue.state.type])}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
                         </details>
                       )}
                     </li>

@@ -741,6 +741,7 @@ export const zhTW: Dict = {
     milestones: '里程碑',
     noMilestones: '無里程碑',
     milestoneDetails: '詳情',
+    milestoneIssues: '議題（{count}）',
     milestoneStatus: {
       done: '完成',
       next: '下一個里程碑',
