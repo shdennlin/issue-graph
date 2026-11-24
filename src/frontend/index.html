@@ -10,6 +10,23 @@
     <meta name="apple-mobile-web-app-title" content="Issues" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Issue Graph</title>
+    <!-- First-paint theme. A new document (a protocol-handler or Raycast jump
+         reloads the PWA page) paints before the app's JS runs, and until then
+         the window showed the browser's white default for a frame. Resolve the
+         stored theme here, before the body renders, so that frame is already the
+         right colour. Mirrors useTheme.ts; `?theme=` overrides are applied later. -->
+    <script>
+      (function () {
+        var t = 'auto';
+        try {
+          var raw = localStorage.getItem('ig-theme');
+          if (raw === 'light' || raw === 'dark' || raw === 'auto') t = raw;
+        } catch (e) {}
+        var dark = t === 'dark' || (t === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+        document.documentElement.style.backgroundColor = dark ? '#0d0e11' : '#fbfbfc';
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
