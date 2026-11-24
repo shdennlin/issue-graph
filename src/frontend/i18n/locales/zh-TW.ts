@@ -242,7 +242,7 @@ export const zhTW: Dict = {
       centerOnFocus: '將視角置中於聚焦議題（僅平移；不重新排版、不改變縮放）',
       refresh: '重新整理 — 重新向後端抓取資料（等同右上角的 Refresh 按鈕）',
       screenshot: '將目前畫布存成 PNG 截圖',
-      quickSwitcherOpen: '開啟快速切換器（跨所有開啟分頁搜尋議題、筆記與分頁）',
+      quickSwitcherOpen: '開啟快速切換器（跨所有開啟分頁搜尋議題、專案、筆記與分頁）',
       quickSwitcherDown: '選取下一項',
       quickSwitcherUp: '選取上一項',
       quickSwitcherOpenInNewTab: '在新分頁中開啟選取的議題',

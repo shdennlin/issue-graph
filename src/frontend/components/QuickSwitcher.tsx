@@ -17,7 +17,7 @@ import { priorityLabelFor, stateColorVar, stateIcon } from '../lib/colors'
 import { formatRelative } from '../lib/relativeTime'
 import { useLocale } from '../i18n'
 
-const GROUP_ORDER: Candidate['kind'][] = ['issue', 'note', 'tab']
+const GROUP_ORDER: Candidate['kind'][] = ['issue', 'project', 'note', 'tab']
 const PER_GROUP_CAP = 20
 const TOTAL_CAP = 50
 
@@ -97,7 +97,7 @@ export function QuickSwitcher({ onActivate }: Props) {
 
   // Score + group.
   const grouped = useMemo(() => {
-    const out: Record<Candidate['kind'], Candidate[]> = { issue: [], note: [], tab: [] }
+    const out: Record<Candidate['kind'], Candidate[]> = { issue: [], project: [], note: [], tab: [] }
     if (query.trim() === '') {
       return out
     }
@@ -203,7 +203,7 @@ export function QuickSwitcher({ onActivate }: Props) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Search issues, notes, tabs…"
+          placeholder="Search issues, projects, notes, tabs…"
         />
         <div ref={listRef} className="qs-list">
           {indexingNote && (
@@ -249,6 +249,7 @@ export function QuickSwitcher({ onActivate }: Props) {
 
 const GROUP_LABEL: Record<Candidate['kind'], string> = {
   issue: 'Issues',
+  project: 'Projects',
   note: 'Notes',
   tab: 'Tabs',
 }
@@ -357,13 +358,20 @@ function candidateToRecent(c: Candidate): RecentItem {
     label: c.label,
     tabId: c.tabId,
     scopeLabel: c.scopeLabel,
-    ref: c.kind === 'issue' ? c.identifier : c.kind === 'note' ? c.noteId : undefined,
+    ref:
+      c.kind === 'issue' ? c.identifier
+        : c.kind === 'project' ? c.projectId
+        : c.kind === 'note' ? c.noteId
+        : undefined,
   }
 }
 
 function recentToCandidate(r: RecentItem): Candidate {
   if (r.kind === 'issue') {
     return { kind: 'issue', id: r.id, label: r.label, identifier: String(r.ref ?? ''), tabId: r.tabId, scopeLabel: r.scopeLabel, hint: '' }
+  }
+  if (r.kind === 'project') {
+    return { kind: 'project', id: r.id, projectId: String(r.ref ?? ''), label: r.label, tabId: r.tabId, scopeLabel: r.scopeLabel, hint: '' }
   }
   if (r.kind === 'note') {
     return { kind: 'note', id: r.id, noteId: Number(r.ref ?? 0), label: r.label, tabId: r.tabId, scopeLabel: r.scopeLabel, hint: '' }

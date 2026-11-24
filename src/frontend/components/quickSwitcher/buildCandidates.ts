@@ -1,6 +1,6 @@
 import type { Tab } from '../../store/workspaceStore'
 import type { GraphResponse, NoteDTO } from '@shared/types.js'
-import type { Candidate, IssueCandidate, NoteCandidate, TabCandidate } from './types'
+import type { Candidate, IssueCandidate, NoteCandidate, ProjectCandidate, TabCandidate } from './types'
 
 interface Args {
   tabs: Tab[]
@@ -42,6 +42,10 @@ export function buildCandidates(args: Args): Candidate[] {
   // different workspaces really is two different issues — and there the scope
   // label does tell them apart.
   const seen = new Set<string>()
+  // Projects get the same workspace-level dedup and the same active-tab-first
+  // preference, under their own key space so a project and an issue can never
+  // collide.
+  const seenProjects = new Set<string>()
   // Active tab first so its copy is the one kept: opening an issue should land
   // in the tab you are already looking at. The rest keep their given order, so
   // the fallback is the first tab holding the issue, not an arbitrary one.
@@ -59,13 +63,40 @@ export function buildCandidates(args: Args): Candidate[] {
           labels: { name: string }[]
           state?: { name: string; type: string }
           assignee?: { displayName: string } | null
-          project?: { name: string } | null
+          project?: { id: string; name: string } | null
           priority?: number
           updatedAt?: string
         }[]
       | undefined
     if (!issues) continue
     const scopeLabel = args.workspaceName(tab.workspaceId)
+
+    // Projects — one row per Linear project present in this tab's graph. Issue
+    // count is taken from this same graph, so the hint matches what the tab
+    // shows. Issues without a project contribute nothing here.
+    const countByProject = new Map<string, { name: string; count: number }>()
+    for (const i of issues) {
+      if (!i.project) continue
+      const entry = countByProject.get(i.project.id)
+      if (entry) entry.count++
+      else countByProject.set(i.project.id, { name: i.project.name, count: 1 })
+    }
+    for (const [projectId, { name, count }] of countByProject) {
+      const key = `${tab.workspaceId}:project:${projectId}`
+      if (seenProjects.has(key)) continue
+      seenProjects.add(key)
+      const cand: ProjectCandidate = {
+        kind: 'project',
+        id: `${tab.id}:project:${projectId}`,
+        projectId,
+        label: name,
+        tabId: tab.id,
+        scopeLabel,
+        hint: `${count} ${count === 1 ? 'issue' : 'issues'}`,
+      }
+      out.push(cand)
+    }
+
     for (const i of issues) {
       const key = `${tab.workspaceId}:${i.identifier}`
       if (seen.has(key)) continue

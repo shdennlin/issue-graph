@@ -24,6 +24,7 @@ function stableKey(kind: Candidate['kind'], scopeLabel: string, ref: string | nu
 function candidateKey(c: Candidate): string {
   if (c.kind === 'issue') return stableKey('issue', c.scopeLabel, c.identifier, c.id)
   if (c.kind === 'note') return stableKey('note', c.scopeLabel, c.noteId, c.id)
+  if (c.kind === 'project') return stableKey('project', c.scopeLabel, c.projectId, c.id)
   return `id:${c.id}`
 }
 

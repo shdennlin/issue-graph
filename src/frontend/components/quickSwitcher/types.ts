@@ -26,6 +26,20 @@ export interface IssueCandidate {
   updatedAt?: number
 }
 
+export interface ProjectCandidate {
+  kind: 'project'
+  /** `${tabId}:project:${projectId}`. */
+  id: string
+  /** Linear project id — what ProjectPanel is keyed by. */
+  projectId: string
+  /** Project name, shown as the row title. */
+  label: string
+  tabId: string
+  scopeLabel: string
+  /** Muted secondary text: issue count in the graph. */
+  hint: string
+}
+
 export interface NoteCandidate {
   kind: 'note'
   /** `${tabId}:${noteId}`. */
@@ -49,7 +63,7 @@ export interface TabCandidate {
   hint: string
 }
 
-export type Candidate = IssueCandidate | NoteCandidate | TabCandidate
+export type Candidate = IssueCandidate | ProjectCandidate | NoteCandidate | TabCandidate
 
 export interface RecentItem {
   /** Mirrors `Candidate.id`. */

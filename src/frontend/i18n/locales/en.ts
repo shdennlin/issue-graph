@@ -248,7 +248,7 @@ export const en = {
       centerOnFocus: 'Center the camera on the focused issue (pan only: no re-layout, no zoom change)',
       refresh: 'Refresh — re-pull from the backend (same as the top-right Refresh button)',
       screenshot: 'Save canvas screenshot as PNG',
-      quickSwitcherOpen: 'Open quick switcher (search issues, notes, tabs across all open tabs)',
+      quickSwitcherOpen: 'Open quick switcher (search issues, projects, notes, tabs across all open tabs)',
       quickSwitcherDown: 'Move selection down',
       quickSwitcherUp: 'Move selection up',
       quickSwitcherOpenInNewTab: 'Open selected issue in a new tab',

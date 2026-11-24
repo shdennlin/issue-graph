@@ -777,6 +777,13 @@ export function App() {
       useViewStore.getState().requestPanToFocused()
       return
     }
+    if (c.kind === 'project') {
+      // Land in the tab that holds the project, then open its panel. The panel
+      // is mutex with the issue detail panel, and openProjectPanel handles that.
+      switchToTab(c.tabId)
+      useViewStore.getState().openProjectPanel(c.projectId)
+      return
+    }
     if (c.kind === 'note') {
       switchToTab(c.tabId)
       useViewStore.getState().setNotesOpen(true)

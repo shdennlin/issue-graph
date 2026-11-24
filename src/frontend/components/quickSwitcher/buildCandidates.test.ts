@@ -51,6 +51,45 @@ describe('buildCandidates', () => {
     expect(c).toMatchObject({ assignee: 'Shawn', project: 'Auth', priority: 2, updatedAt: Date.parse('2026-01-02T00:00:00.000Z') })
   })
 
+  it('emits one project candidate per project, carrying its project id and issue count', () => {
+    const withProject = (id: string, identifier: string, projectId: string, projectName: string) =>
+      ({ ...issue(id, identifier, identifier), project: { id: projectId, name: projectName } }) as unknown as NormalizedIssue
+    const candidates = buildCandidates({
+      tabs: [{ id: 't1', workspaceId: 'w1' }],
+      activeTabId: 't1',
+      workspaceName: () => 'Alpha',
+      activeGraph: graph([
+        withProject('a', 'ONE-1', 'p1', 'Auth'),
+        withProject('b', 'ONE-2', 'p1', 'Auth'),
+        withProject('c', 'ONE-3', 'p2', 'Billing'),
+        issue('d', 'ONE-4', 'No project'),
+      ]),
+      snapshotGraph: () => null,
+      notesByTab: {},
+    })
+    const projects = candidates.filter((c) => c.kind === 'project')
+    expect(projects).toHaveLength(2)
+    expect(projects.find((c) => c.label === 'Auth')).toMatchObject({
+      kind: 'project', projectId: 'p1', tabId: 't1', scopeLabel: 'Alpha', hint: '2 issues',
+    })
+    expect(projects.find((c) => c.label === 'Billing')).toMatchObject({ projectId: 'p2', hint: '1 issue' })
+  })
+
+  it('dedups a project shared by two tabs on the same workspace, keeping the active tab copy', () => {
+    const p = { ...issue('a', 'ONE-1', 'x'), project: { id: 'p1', name: 'Auth' } } as unknown as NormalizedIssue
+    const candidates = buildCandidates({
+      tabs: [{ id: 't1', workspaceId: 'w1' }, { id: 't2', workspaceId: 'w1' }],
+      activeTabId: 't2',
+      workspaceName: () => 'Alpha',
+      activeGraph: graph([p]),
+      snapshotGraph: (tid) => (tid === 't1' ? graph([p]) : null),
+      notesByTab: {},
+    })
+    const projects = candidates.filter((c) => c.kind === 'project')
+    expect(projects).toHaveLength(1)
+    expect(projects[0]).toMatchObject({ tabId: 't2', projectId: 'p1' })
+  })
+
   it('emits a tab candidate for each open tab', () => {
     const candidates = buildCandidates({
       tabs: [{ id: 't1', workspaceId: 'w1' }],
